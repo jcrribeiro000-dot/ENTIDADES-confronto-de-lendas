@@ -7,9 +7,9 @@
         Sume: "https://i.imgur.com/qoKCarB.gif",
         Caipora: "https://i.imgur.com/eBfmPl5.gif",
         BOITATA: "https://i.imgur.com/4PEG3BL.gif",
-        MAPINGUARI: "https://i.imgur.com/WAzhnwj.gif",
+        MAPINGUARI: "https://i.imgur.com/TWRsZmS.gif",
         SACI: "https://i.imgur.com/zpVmIss.gif",
-        IARA: "https://i.imgur.com/sGTgi5h.gif",
+        IARA: "https://i.imgur.com/NxMl4Cj.gif",
         // SEGUNDO DESAFIO
         MULA: "https://i.imgur.com/f47hpFR.gif",
         CORPOSECO: "https://i.imgur.com/5Tkoqxg.gif",
