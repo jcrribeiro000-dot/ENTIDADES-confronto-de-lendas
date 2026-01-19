@@ -3,24 +3,24 @@
     let currentScreen = 'intro'; // intro, title, config, mode, players, game
     let COLORS = ['FOGO', 'AGUA', 'TERRA', 'AR'];
     let SPRITES = {
-        Tupa: "https://i.imgur.com/7MkwCT3.gif",
-        Sume: "https://i.imgur.com/pHNpfBB.gif",
-        Caipora: "https://i.imgur.com/vTyr0Hx.gif",
-        BOITATA: "https://i.imgur.com/jJMFcNN.gif",
+        Tupa: "https://i.imgur.com/L5V84tS.gif",
+        Sume: "https://i.imgur.com/qoKCarB.gif",
+        Caipora: "https://i.imgur.com/eBfmPl5.gif",
+        BOITATA: "https://i.imgur.com/4PEG3BL.gif",
         MAPINGUARI: "https://i.imgur.com/WAzhnwj.gif",
-        SACI: "https://i.imgur.com/M1vtbH9.gif",
+        SACI: "https://i.imgur.com/zpVmIss.gif",
         IARA: "https://i.imgur.com/sGTgi5h.gif",
         // SEGUNDO DESAFIO
         MULA: "https://i.imgur.com/f47hpFR.gif",
-        CORPOSECO: "https://i.imgur.com/9eKcx2t.gif",
+        CORPOSECO: "https://i.imgur.com/5Tkoqxg.gif",
         LOBISOMEM: "https://i.imgur.com/SHPVBJp.gif",
         CUCA: "https://i.imgur.com/oxrLSyq.gif",
         // TERCEIRO DESAFIO - NOVOS BOSSES
         BOTO: "https://i.imgur.com/oTvMuWh.gif",
         BOI: "https://i.imgur.com/K5ZgINo.gif",
-        JACI: "https://i.imgur.com/ap2ZeNQ.gif",
-        GUARACI: "https://i.imgur.com/4M9Gliy.gif",
-        ANHANGA: "https://i.imgur.com/NYPlFdW.gif",
+        JACI: "https://i.imgur.com/gNYUSnN.gif",
+        GUARACI: "https://i.imgur.com/1KgouGv.gif",
+        ANHANGA: "https://i.imgur.com/BfWrmfP.gif",
         
         Muiraquita: "https://i.imgur.com/WAWqKeB.png",
         VortexFX: "https://i.imgur.com/XHq6PVm.png",
