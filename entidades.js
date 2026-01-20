@@ -11,15 +11,15 @@
         SACI: "https://i.imgur.com/zpVmIss.gif",
         IARA: "https://i.imgur.com/NxMl4Cj.gif",
         // SEGUNDO DESAFIO
-        MULA: "https://i.imgur.com/f47hpFR.gif",
+        MULA: "https://i.imgur.com/SpEsN9P.gif",
         CORPOSECO: "https://i.imgur.com/5Tkoqxg.gif",
-        LOBISOMEM: "https://i.imgur.com/SHPVBJp.gif",
-        CUCA: "https://i.imgur.com/oxrLSyq.gif",
+        LOBISOMEM: "https://i.imgur.com/9DJBxmg.gif",
+        CUCA: "https://i.imgur.com/v6SowAl.gif",
         // TERCEIRO DESAFIO - NOVOS BOSSES
-        BOTO: "https://i.imgur.com/oTvMuWh.gif",
-        BOI: "https://i.imgur.com/K5ZgINo.gif",
-        JACI: "https://i.imgur.com/gNYUSnN.gif",
-        GUARACI: "https://i.imgur.com/1KgouGv.gif",
+        BOTO: "https://i.imgur.com/InSAq1W.gif",
+        BOI: "https://i.imgur.com/tP2hyxJ.gif",
+        JACI: "https://i.imgur.com/vnRilxj.gif",
+        GUARACI: "https://i.imgur.com/ThXOwpQ.gif",
         ANHANGA: "https://i.imgur.com/BfWrmfP.gif",
         
         Muiraquita: "https://i.imgur.com/WAWqKeB.png",
@@ -1927,9 +1927,9 @@
         boi_skill1: new Audio("boi_skill1.mp3"), // Será referenciado a garras
         boi_skill2: new Audio("boi_skill2.mp3"), // Será referenciado a iara1
         jaci_skill1: null, // Será referenciado a saci1
-        jaci_skill2: null, // Será referenciado a cucask1
+        jaci_skill2: new Audio("jaciskill2.mp3"), // Será referenciado a cucask1
         guaraci_skill1: null, // Será referenciado a skill1
-        guaraci_skill2: null, // Será referenciado a iara1
+        guaraci_skill2: new Audio("guaraciskill2.mp3"), // Será referenciado a iara1
         // TEMAS DOS NOVOS BOSSES
         bototema: new Audio("boto.mp3"),
         boitema: new Audio("boi.mp3"),
@@ -1947,10 +1947,8 @@
     sfx.boto_skill2 = sfx.iara2;
     //sfx.boi_skill1 = sfx.garras;
     //sfx.boi_skill2 = sfx.iara1;
-    sfx.jaci_skill1 = sfx.saci1;
-    sfx.jaci_skill2 = sfx.cucask1;
+    sfx.jaci_skill1 = sfx.saci1; 
     sfx.guaraci_skill1 = sfx.skill1;
-    sfx.guaraci_skill2 = sfx.iara1;
     sfx.anhanga_skill1 = sfx.skill1;
     sfx.anhanga_skill2 = sfx.cucask2;
 
