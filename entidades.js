@@ -575,7 +575,7 @@
         updatePlayersUI();
     }
     
-    function updatePlayersUI() {
+    function updatePlayersUI_old() {
         const grid = document.getElementById('playersGrid');
         grid.innerHTML = '';
         

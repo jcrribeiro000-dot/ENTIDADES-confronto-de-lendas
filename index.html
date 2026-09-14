@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <title>ENTIDADES: Confronto de Lendas - V10.2</title>
+    <title>ENTIDADES: Confronto de Lendas - V10.3</title>
     <style>
         /* ================= RESET & VARIÁVEIS ================= */
         :root {
@@ -567,6 +567,59 @@
             font-size: 1.2rem;
         }
         
+        /* ================= NOVO: SELEÇÃO VISUAL DE HERÓI ================= */
+        .hero-picker {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-top: 4px;
+        }
+        
+        .hero-option {
+            background: rgba(0, 0, 0, 0.35);
+            border-radius: 10px;
+            padding: 10px 6px;
+            border: 3px solid transparent;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.25s ease;
+        }
+        
+        .hero-option:hover {
+            transform: translateY(-3px);
+            background: rgba(0, 0, 0, 0.55);
+            border-color: #555;
+        }
+        
+        .hero-option.selected {
+            border-color: var(--color-accent);
+            background: rgba(241, 196, 15, 0.15);
+            box-shadow: 0 0 15px rgba(241, 196, 15, 0.4);
+        }
+        
+        .hero-option.disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+        
+        .hero-option .hero-sprite {
+            width: 100%;
+            max-width: 70px;
+            height: 70px;
+            object-fit: contain;
+            display: block;
+            margin: 0 auto;
+            filter: drop-shadow(0 0 4px #000);
+        }
+        
+        .hero-option .hero-label {
+            color: #eee;
+            font-size: 0.8rem;
+            margin-top: 6px;
+            font-weight: bold;
+        }
+        
         /* ================= SELEÇÃO DE MODO ================= */
         #modeScreen {
             position: fixed;
@@ -931,7 +984,7 @@
             font-weight: bold;
         }
         
-        /* Área principal do jogo - REORGANIZADA */
+        /* Área principal do jogo */
         .game-main {
             display: flex;
             padding: 20px;
@@ -1054,7 +1107,6 @@
             margin: 0 10px;
         }
         
-        /* Botões de ação integrados ao tabuleiro */
         .action-buttons-sidebar {
             display: flex;
             flex-direction: column;
@@ -1102,7 +1154,6 @@
             cursor: not-allowed;
         }
         
-        /* Layout para desktop: botões ao lado do tabuleiro */
         @media (min-width: 1025px) {
             .board-area {
                 flex-direction: row;
@@ -1118,7 +1169,6 @@
             }
         }
         
-        /* Layout para mobile: botões abaixo do tabuleiro */
         @media (max-width: 1024px) {
             .board-area {
                 flex-direction: column;
@@ -1138,7 +1188,6 @@
             }
         }
         
-        /* Layout para mobile pequeno */
         @media (max-width: 600px) {
             .action-buttons-sidebar {
                 flex-direction: column;
@@ -1306,12 +1355,10 @@
             transform-origin: center;
         }
         
-        /* Animação de respiração para sprites normais (olhando para direita) */
         .token img.normal {
             animation: breatheNormal 2s infinite ease-in-out;
         }
         
-        /* Animação de respiração para sprites virados (olhando para esquerda) */
         .token img.flipped {
             animation: breatheFlipped 2s infinite ease-in-out;
         }
@@ -1334,7 +1381,6 @@
             }
         }
         
-        /* Animação de respiração para boss IARA (que já olha para esquerda) */
         .token img.iara-normal {
             animation: breatheIaraNormal 2s infinite ease-in-out;
         }
@@ -1348,7 +1394,6 @@
             }
         }
         
-        /* Animação de respiração para boss IARA virada (olhando para direita) */
         .token img.iara-flipped {
             animation: breatheIaraFlipped 2s infinite ease-in-out;
         }
@@ -1407,10 +1452,9 @@
             100% { opacity: 0; transform: translateY(-100px) scale(1.6); }
         }
         
-        /* Efeitos de habilidade - ANIMAÇÃO DO BOITATÁ CORRIGIDA */
         .fire-column {
             position: absolute;
-            width: var(--tile-size); /* Largura completa do tile */
+            width: var(--tile-size);
             height: 100%;
             background: linear-gradient(to bottom, #ff3300, #ff9900, #ff3300);
             border-radius: 6px;
@@ -1428,7 +1472,7 @@
         
         .fire-row {
             position: absolute;
-            height: var(--tile-size); /* Altura completa do tile */
+            height: var(--tile-size);
             width: 100%;
             background: linear-gradient(to right, #ff3300, #ff9900, #ff3300);
             border-radius: 6px;
@@ -1501,8 +1545,6 @@
             100% { transform: translateX(100%); opacity: 0; }
         }
         
-        /* ================= NOVOS EFEITOS VISUAIS ================= */
-        /* Efeito de vórtice melhorado - mais rápido para SACI */
         .vortex-fx {
             position: absolute;
             animation: vortexAnimEnhanced 0.3s linear infinite;
@@ -1516,7 +1558,6 @@
             100% { transform: rotate(360deg) scale(1); opacity: 1; }
         }
         
-        /* Efeito de pororoca - onda redonda do centro para as bordas */
         .pororoca-fx {
             position: absolute;
             top: 50%;
@@ -1546,13 +1587,12 @@
                 opacity: 1; 
             }
             100% { 
-                width: calc(var(--tile-size) * 10); /* Cobre todo o tabuleiro */
+                width: calc(var(--tile-size) * 10);
                 height: calc(var(--tile-size) * 10);
                 opacity: 0;
             }
         }
         
-        /* Efeito de jato d'água em cruz - melhorado para mostrar linha e coluna */
         .water-cross-fx {
             position: absolute;
             background: linear-gradient(0deg, 
@@ -1570,13 +1610,13 @@
         .water-cross-fx.vertical {
             width: var(--tile-size);
             height: 100%;
-            left: calc(var(--tile-size) * 3.5 + var(--gap) * 3.5); /* Centro do tabuleiro */
+            left: calc(var(--tile-size) * 3.5 + var(--gap) * 3.5);
         }
         
         .water-cross-fx.horizontal {
             height: var(--tile-size);
             width: 100%;
-            top: calc(var(--tile-size) * 3.5 + var(--gap) * 3.5); /* Centro do tabuleiro */
+            top: calc(var(--tile-size) * 3.5 + var(--gap) * 3.5);
         }
         
         @keyframes waterCrossAnim {
@@ -1598,7 +1638,6 @@
             }
         }
         
-        /* Efeito de onda circular para a pororoca */
         .circular-wave-fx {
             position: absolute;
             top: 50%;
@@ -1672,7 +1711,6 @@
             filter: drop-shadow(0 0 3px #000) hue-rotate(90deg);
         }
         
-        /* ================= NOVO: ANIMAÇÃO DO BRAVELY CHAIN ================= */
         .bravely-animation-overlay {
             position: absolute;
             top: 0;
@@ -1702,7 +1740,6 @@
             50% { transform: scale(1.05); }
         }
         
-        /* ================= NOVOS EFEITOS PARA OS NOVOS BOSSES ================= */
         .fireball-fx {
             position: absolute;
             width: var(--tile-size);
@@ -1781,7 +1818,6 @@
             20%, 40%, 60%, 80% { transform: translateX(5px); }
         }
         
-        /* ================= NOVOS EFEITOS PARA O TERCEIRO DESAFIO ================= */
         .broken-heart-fx {
             position: absolute;
             width: calc(var(--tile-size) * 2.5);
@@ -1947,7 +1983,6 @@
             overflow-y: auto;
         }
         
-        /* Modal de Títulos Melhorado */
         .titles-content {
             background: #111;
             color: #fff;
@@ -2110,7 +2145,6 @@
             transition: width 0.3s;
         }
         
-        /* Modal de Bestiário */
         .bestiary-content {
             background: #111;
             color: #fff;
@@ -2233,25 +2267,6 @@
             text-align: left;
         }
         
-        .bestiary-locked {
-            background: #1a1a1a;
-            border-radius: 8px;
-            padding: 30px;
-            text-align: center;
-            margin-top: 30px;
-            border: 2px dashed #7f8c8d;
-        }
-        
-        .bestiary-locked-title {
-            color: #f1c40f;
-            font-size: 1.3rem;
-            margin-bottom: 10px;
-        }
-        
-        .bestiary-locked-text {
-            color: #aaa;
-        }
-        
         .bestiary-close-btn {
             display: block;
             margin: 30px auto 0;
@@ -2265,7 +2280,6 @@
             font-size: 1rem;
         }
         
-        /* Ranking Table */
         .ranking-table {
             width: 100%;
             border-collapse: collapse;
@@ -2339,7 +2353,6 @@
             font-weight: bold;
         }
         
-        /* ================= NOVO: ESTILO DO POP DE DIALOGO ================= */
         .boss-dialog-overlay {
             position: fixed;
             top: 0;
@@ -2429,7 +2442,6 @@
             box-shadow: 0 5px 20px rgba(192, 57, 43, 0.5);
         }
         
-        /* Responsividade */
         @media (max-width: 1024px) {
             .game-main {
                 flex-direction: column;
@@ -2564,7 +2576,7 @@
     <div id="titleScreen">
         <img src="https://i.imgur.com/LbVLpE8.png" class="title-logo-image" alt="ENTIDADES Logo">
         <div class="title-logo">ENTIDADES</div>
-        <div class="title-subtitle">Confronto de Lendas - V10.2</div>
+        <div class="title-subtitle">Confronto de Lendas - V10.3</div>
         
         <div class="title-buttons">
             <button class="title-btn" onclick="startGame()">INICIAR JOGO</button>
@@ -2574,7 +2586,7 @@
             <button class="title-btn secondary" onclick="showBestiaryModal()">BESTIÁRIO</button>
         </div>
         
-        <div class="version-tag">VERSÃO 10.2 - BOTÕES INTEGRADOS</div>
+        <div class="version-tag">VERSÃO 10.3 - SELEÇÃO VISUAL</div>
     </div>
     
     <!-- TELA DE CONFIGURAÇÕES -->
@@ -2677,7 +2689,7 @@
         <div class="players-container">
             <div class="players-header">
                 <h1 class="players-title">CONFIGURAÇÃO DE JOGADORES</h1>
-                <p class="players-subtitle">Configure os jogadores que participarão da batalha</p>
+                <p class="players-subtitle">Escolha o herói pelo sprite</p>
             </div>
             
             <div class="players-controls">
@@ -2761,7 +2773,6 @@
                 <p class="challenge-subtitle" id="challengeSubtitle">Selecione o boss que deseja enfrentar</p>
             </div>
             
-            <!-- Seletor de Dificuldade -->
             <div class="difficulty-selector">
                 <h3 class="difficulty-title">NÍVEL DE DIFICULDADE</h3>
                 <div class="difficulty-buttons">
@@ -2775,7 +2786,6 @@
                 </div>
             </div>
             
-            <!-- Grid de Bosses -->
             <div id="challengeGrid" class="challenge-grid">
                 <!-- Os cards de desafio serão gerados dinamicamente aqui -->
             </div>
@@ -2800,7 +2810,6 @@
         </div>
         
         <div class="game-main">
-            <!-- Painel do Jogador -->
             <div class="player-panel">
                 <div id="turnP_Active" class="turn-indicator">TURNO ATIVO</div>
                 
@@ -2821,22 +2830,18 @@
                 </div>
             </div>
             
-            <!-- ÁREA CENTRAL - Tabuleiro com Botões de Ação -->
             <div class="board-area">
-                <!-- Tabuleiro -->
                 <div class="board-wrapper" id="board">
                     <div class="grid" id="grid"></div>
                     <div id="bravelyPop" style="display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0); color: gold; font-size: 60px; font-weight: 900; text-shadow: 0 0 20px #000; z-index: 2000; pointer-events: none; white-space: nowrap;">BRAVELY CHAIN!</div>
                 </div>
                 
-                <!-- Botões de Ação Integrados -->
                 <div class="action-buttons-sidebar">
                     <button id="btnSkill" class="skill-btn" onclick="activateSkill()">ULTIMATE (1x)</button>
                     <button id="btnPlay" class="play-btn" onclick="executeAction()">JOGAR TURNO</button>
                 </div>
             </div>
             
-            <!-- Painel do Boss/Log -->
             <div class="boss-panel">
                 <div id="turnBoss" class="boss-indicator">BOSS</div>
                 
@@ -3008,7 +3013,6 @@
                 </div>
             </div>
             
-            <!-- NOVOS BOSSES DO SEGUNDO DESAFIO -->
             <div class="bestiary-entry locked-entry" id="mulaEntry" style="display: none;">
                 <div class="bestiary-entry-content">
                     <img src="https://i.imgur.com/f47hpFR.gif" class="bestiary-boss-image">
@@ -3073,7 +3077,6 @@
                 </div>
             </div>
             
-            <!-- NOVOS BOSSES DO TERCEIRO DESAFIO -->
             <div class="bestiary-entry locked-entry" id="botoEntry" style="display: none;">
                 <div class="bestiary-entry-content">
                     <img src="https://i.imgur.com/oTvMuWh.gif" class="bestiary-boss-image">
@@ -3163,7 +3166,7 @@
         // ================= VARIÁVEIS GLOBAIS =================
         let selectedMode = "BOSS";
         let currentBoss = "BOITATA";
-        let currentDifficulty = "easy"; // easy, medium, hard, insane
+        let currentDifficulty = "easy";
         let difficultySettings = {
             easy: { hp: 30, atk: 4 },
             medium: { hp: 40, atk: 5 },
@@ -3176,10 +3179,8 @@
             selectedMode = mode;
             
             if (mode === "BOSS" || mode === "ARCADE") {
-                // Mostrar tela de seleção de desafio
                 showChallengeScreen();
             } else {
-                // Para PVP, ir direto para seleção de jogadores
                 showPlayersScreen();
             }
         }
@@ -3188,7 +3189,6 @@
             document.getElementById("modeScreen").style.display = "none";
             document.getElementById("challengeScreen").style.display = "block";
             
-            // Atualizar título baseado no modo
             const title = document.getElementById("challengeTitle");
             const subtitle = document.getElementById("challengeSubtitle");
             
@@ -3200,33 +3200,26 @@
                 subtitle.textContent = "Enfrente todos os bosses em sequência épica";
             }
             
-            // Gerar grid de desafios
             generateChallengeGrid();
-            
-            // Atualizar info de dificuldade
             updateDifficultyInfo();
         }
 
         function setDifficulty(difficulty) {
             currentDifficulty = difficulty;
             
-            // Atualizar botões ativos
             document.querySelectorAll(".difficulty-btn").forEach(btn => {
                 btn.classList.remove("active");
             });
             document.querySelector(`.difficulty-btn.${difficulty}`).classList.add("active");
             
-            // Atualizar info
             updateDifficultyInfo();
             
-            // Atualizar configuração de HP do boss
             const hpInput = document.getElementById("hp_BOSS_cfg");
             const atkInput = document.getElementById("atk_BOSS_cfg");
             
             hpInput.value = difficultySettings[difficulty].hp;
             atkInput.value = difficultySettings[difficulty].atk;
             
-            // Salvar configuração automaticamente
             saveConfig();
         }
 
@@ -3256,7 +3249,6 @@
             ];
             
             if (selectedMode === "ARCADE") {
-                // Para modo Arcade, mostrar apenas o card de iniciar
                 const arcadeCard = document.createElement("div");
                 arcadeCard.className = "challenge-card";
                 arcadeCard.style.gridColumn = "1 / -1";
@@ -3275,7 +3267,6 @@
                 
                 grid.appendChild(arcadeCard);
             } else {
-                // Para modo Boss, mostrar todos os bosses individualmente
                 bosses.forEach(boss => {
                     const card = document.createElement("div");
                     card.className = "challenge-card";
@@ -3301,28 +3292,115 @@
         }
 
         function startArcadeMode() {
-            currentBoss = "SACI"; // Começar com o primeiro boss
+            currentBoss = "SACI";
             showPlayersScreen();
         }
 
-        // ================= FUNÇÕES EXISTENTES (MODIFICADAS) =================
+        // ================= SELEÇÃO DE JOGADORES (AGORA COM SPRITES) =================
         function showPlayersScreen() {
             document.getElementById("challengeScreen").style.display = "none";
             document.getElementById("playersScreen").style.display = "block";
-            
-            // A configuração de dificuldade já foi aplicada aos inputs via setDifficulty()
+            updatePlayersUI();
         }
 
         function backToModeSelection() {
             document.getElementById("challengeScreen").style.display = "none";
+            document.getElementById("playersScreen").style.display = "none";
             document.getElementById("modeScreen").style.display = "block";
         }
 
+        // ===== NOVO: dados dos heróis (sprite + nome) =====
+        const HERO_DATA = {
+            Tupa:    { sprite: "https://i.imgur.com/L5V84tS.gif", label: "Tupã" },
+            Sume:    { sprite: "https://i.imgur.com/qoKCarB.gif", label: "Sumé" },
+            Caipora: { sprite: "https://i.imgur.com/eBfmPl5.gif", label: "Caipora" }
+        };
+
+        // ===== NOVO: função chamada ao clicar no sprite =====
+        function selectHero(playerIndex, className) {
+            if (!playerConfigs[playerIndex] || !playerConfigs[playerIndex].active) return;
+            playerConfigs[playerIndex].class = className;
+            updatePlayersUI();
+        }
+
+        // ===== ATUALIZADO: agora renderiza sprites =====
+        function updatePlayersUI() {
+            const grid = document.getElementById("playersGrid");
+            grid.innerHTML = "";
+            
+            for (let i = 0; i < 4; i++) {
+                const config = playerConfigs[i];
+                const isActive = config.active;
+                
+                const card = document.createElement("div");
+                card.className = `player-card ${isActive ? "active" : ""}`;
+                
+                // Monta os 3 botões de herói
+                let heroButtonsHTML = "";
+                for (const cls in HERO_DATA) {
+                    const hero = HERO_DATA[cls];
+                    const isSelected = config.class === cls ? "selected" : "";
+                    const disabled = isActive ? "" : "disabled";
+                    heroButtonsHTML += `
+                        <div class="hero-option ${isSelected} ${disabled}" 
+                             onclick="${isActive ? `selectHero(${i}, '${cls}')` : ""}">
+                            <img src="${hero.sprite}" class="hero-sprite" alt="${hero.label}">
+                            <div class="hero-label">${hero.label}</div>
+                        </div>
+                    `;
+                }
+                
+                card.innerHTML = `
+                    <div class="player-card-header">
+                        <div class="player-number">JOGADOR ${i + 1}</div>
+                        <div class="player-status ${isActive ? "" : "inactive"}">
+                            ${isActive ? "ATIVO" : "INATIVO"}
+                        </div>
+                    </div>
+                    <div class="player-form">
+                        <input type="text" 
+                               class="player-input player-name" 
+                               value="${config.name}" 
+                               placeholder="Nome do Jogador"
+                               ${!isActive ? "disabled" : ""}
+                               oninput="updatePlayerConfig(${i}, 'name', this.value)">
+                        
+                        <div class="hero-picker">
+                            ${heroButtonsHTML}
+                        </div>
+                        
+                        ${isActive ? `
+                            <div class="player-stats-preview">
+                                <div class="stat-row">
+                                    <span>HP:</span>
+                                    <span id="player${i}HP">${CLASS_DB[config.class]?.hp || 0}</span>
+                                </div>
+                                <div class="stat-row">
+                                    <span>ATK:</span>
+                                    <span id="player${i}ATK">${CLASS_DB[config.class]?.atk || 0}</span>
+                                </div>
+                            </div>
+                        ` : ""}
+                    </div>
+                `;
+                
+                grid.appendChild(card);
+            }
+            
+            updateClassBase();
+            for (let i = 0; i < 4; i++) {
+                const config = playerConfigs[i];
+                if (config.active && CLASS_DB[config.class]) {
+                    const hpEl = document.getElementById(`player${i}HP`);
+                    const atkEl = document.getElementById(`player${i}ATK`);
+                    if (hpEl) hpEl.textContent = CLASS_DB[config.class].hp;
+                    if (atkEl) atkEl.textContent = CLASS_DB[config.class].atk;
+                }
+            }
+        }
+
         // ================= INICIALIZAÇÃO =================
-        // Adicionar ao final do arquivo JavaScript existente
-        // Inicializar com dificuldade fácil
         document.addEventListener("DOMContentLoaded", function() {
-            // Garantir que a configuração inicial seja fácil
             setDifficulty("easy");
         });
     </script>
