@@ -1,6 +1,5 @@
-
-    // ================= VARIÁVEIS GLOBAIS =================
-    let currentScreen = 'intro'; // intro, title, config, mode, players, game
+// ================= VARIÁVEIS GLOBAIS =================
+    let currentScreen = 'intro';
     let COLORS = ['FOGO', 'AGUA', 'TERRA', 'AR'];
     let SPRITES = {
         Tupa: "https://i.imgur.com/L5V84tS.gif",
@@ -10,12 +9,10 @@
         MAPINGUARI: "https://i.imgur.com/TWRsZmS.gif",
         SACI: "https://i.imgur.com/zpVmIss.gif",
         IARA: "https://i.imgur.com/NxMl4Cj.gif",
-        // SEGUNDO DESAFIO
         MULA: "https://i.imgur.com/SpEsN9P.gif",
         CORPOSECO: "https://i.imgur.com/5Tkoqxg.gif",
         LOBISOMEM: "https://i.imgur.com/9DJBxmg.gif",
         CUCA: "https://i.imgur.com/v6SowAl.gif",
-        // TERCEIRO DESAFIO - NOVOS BOSSES
         BOTO: "https://i.imgur.com/InSAq1W.gif",
         BOI: "https://i.imgur.com/tP2hyxJ.gif",
         JACI: "https://i.imgur.com/vnRilxj.gif",
@@ -29,21 +26,29 @@
         MagicFX: "https://cdn-icons-png.flaticon.com/128/4325/4325956.png",
         BiteFX: "https://cdn-icons-png.flaticon.com/512/3504/3504404.png",
         RockFX: "https://cdn-icons-png.flaticon.com/128/12912/12912366.png",
-        // EFEITOS VISUAIS
         FireballFX: "https://cdn-icons-png.flaticon.com/512/1163/1163657.png",
         ClawFX: "https://cdn-icons-png.flaticon.com/512/4600/4600704.png",
         PotionFX: "https://i.imgur.com/1ngilGX.png",
         PoisonFX: "https://i.imgur.com/1ngilGX.png",
-        // NOVOS EFEITOS PARA TERCEIRO DESAFIO
         BrokenHeartFX: "https://i.imgur.com/gFlYuI5.png",
         ScaryFaceFX: "https://i.imgur.com/ao8mHA6.png",
         MoonFX: "https://i.imgur.com/fFNsTAu.png",
         SunFX: "https://i.imgur.com/CKWHQa3.png",
-        // ANIMAÇÕES DO BRAVELY CHAIN
         BRAVELY_TUPA: "https://i.imgur.com/pCrboAh.gif",
         BRAVELY_SUME: "https://i.imgur.com/jDxEk8j.gif",
         BRAVELY_CAIPORA: "https://i.imgur.com/xPUhbKG.gif"
     };
+    
+    const BOSS_DISPLAY_NAMES = {
+        'SACI': 'Saci', 'MAPINGUARI': 'Mapinguari', 'IARA': 'Iara', 'BOITATA': 'Boitatá',
+        'MULA': 'Mula sem Cabeça', 'CORPOSECO': 'Corpo Seco', 'LOBISOMEM': 'Lobisomem',
+        'CUCA': 'Cuca', 'BOTO': 'Boto Rosa', 'BOI': 'Boi da Cara Preta',
+        'JACI': 'Jaci', 'GUARACI': 'Guaraci', 'ANHANGA': 'Anhangá'
+    };
+    
+    function getBossDisplayName(bossType) {
+        return BOSS_DISPLAY_NAMES[bossType] || bossType;
+    }
     
     // ================= VARIÁVEIS DO JOGO =================
     let audioUnlocked = false;
@@ -51,20 +56,37 @@
     let boss = { x: 4, y: 0, hp: 0, maxHp: 0, type: 'BOITATA', dead: false };
     let currentPlayerIdx = 0, editingIdx = 0, gameActive = true, mode = "BOSS", skillActive = false;
     
-    // ================= SISTEMA DE ARCADE ATUALIZADO =================
-    const ARCADE_ORDER_FIRST = ['SACI', 'MAPINGUARI', 'IARA', 'BOITATA'];  // Primeiro desafio
-    const ARCADE_ORDER_SECOND = ['MULA', 'CORPOSECO', 'LOBISOMEM', 'CUCA']; // Segundo desafio
-    const ARCADE_ORDER_THIRD = ['BOTO', 'BOI', 'JACI', 'GUARACI']; // Terceiro desafio - NOVO
+    // 🎓 Variáveis do tutorial
+    let tutorialMode = false;
+    let tutorialLessonIndex = 0;
+    let tutorialHighlightTimeout = null;
+    let tutorialCompleted = false;
+    
+    window._tutorialBravelyTriggered = false;
+    window._tutorialSoloSagradoUsed = false;
+    window._tutorialAmuletCollected = false;
+    window._tutorialMoveExecuted = false;
+    window._tutorialPathExecuted = false;
+    window._tutorialFormExecuted = null;
+    
+    // 🛡️ IMPORTANTE: Sempre que precisar iterar sobre os tiles do JOGO REAL,
+    // use o seletor '#grid .tile' (NUNCA '.tile'). Isso evita pegar os tiles
+    // do tutorial por engano quando ambos estão no DOM.
+    
+    // ================= SISTEMA DE ARCADE =================
+    const ARCADE_ORDER_FIRST = ['SACI', 'MAPINGUARI', 'IARA', 'BOITATA'];
+    const ARCADE_ORDER_SECOND = ['MULA', 'CORPOSECO', 'LOBISOMEM', 'CUCA'];
+    const ARCADE_ORDER_THIRD = ['BOTO', 'BOI', 'JACI', 'GUARACI'];
     
     let arcadeCurrentOrder = ARCADE_ORDER_FIRST;
     let arcadeIndex = 0;
     let bossAIIsRunning = false;
     let arcadeBossTransition = false;
     let isExecutingAction = false;
-    let currentArcadeChallenge = 1; // 1 = primeiro desafio, 2 = segundo desafio, 3 = terceiro desafio
+    let currentArcadeChallenge = 1;
     
     // ================= SISTEMA DE JOGADORES =================
-    let playerCount = 1; // Padrão: 1 jogador
+    let playerCount = 1;
     let playerConfigs = [
         { name: 'Jogador 1', class: 'Tupa', active: true },
         { name: 'Jogador 2', class: 'Tupa', active: false },
@@ -72,101 +94,31 @@
         { name: 'Jogador 4', class: 'Tupa', active: false }
     ];
     
-    // ================= LORE & NARRATIVA ATUALIZADA =================
+    // ================= LORE & NARRATIVA =================
     const LORE = {
         currentStage: 1,
         anhangáRevealed: false,
         bossLore: {
-            'SACI': {
-                title: 'O Travesso Corrompido',
-                intro: 'O Saci, sempre brincalhão, ouviu os sussurros de Anhangá: "Você é apenas uma piada, ninguém te leva a sério". Agora, sua diversão se transformou em fúria cega.',
-                clue: '...cuidado com as águas escuras...',
-                dialog: 'SACI: "Risos? Não ouço mais risos... só sussurros. Ele me disse que sou uma piada, que ninguém me leva a sério. Agora vou mostrar que não sou piada nenhuma!"'
-            },
-            'MAPINGUARI': {
-                title: 'O Devorador Despertado',
-                intro: 'O gigante protetor das árvores foi consumido pela frustração. "Você é fraco, a floresta morre e você não pode impedir", ecoou em sua mente. Agora, ele devora o que jurado proteger.',
-                clue: '...o fogo serpente queima com ódio puro...',
-                dialog: 'MAPINGUARI: "As árvores choram... a floresta morre... e eu sou impotente! Anhangá mostrou que minha força pode ser usada para devorar, não para proteger. Agora vou devorar tudo!"'
-            },
-            'IARA': {
-                title: 'O Canto da Perdição', 
-                intro: 'Iara, sedutora dos rios, foi envenenada pela raiva. "Os humanos poluem seu reino e riem de você", sussurrou a sombra. Suas águas agora afogam sem piedade.',
-                clue: '...o devorador da floresta ruge com fome...',
-                dialog: 'IARA: "Meus rios... tão sujos... tão poluídos... Os humanos riem de mim enquanto destroem meu lar. Anhangá me deu força para afogar todos eles. Venham, dancem em minhas águas!"'
-            },
-            'BOITATA': {
-                title: 'A Serpente de Fogo',
-                intro: 'Anhangá ofereceu poder ao Boitatá: "Seu fogo é fraco, apenas luzinhas na noite". A serpente aceitou, tornando-se um inferno ambulante que consome tudo.',
-                clue: '...ele vem... a sombra por trás de tudo...',
-                dialog: 'BOITATÁ: "Meu fogo era fraco... apenas luzes na escuridão. Anhangá me deu o verdadeiro poder do inferno! Agora vou consumir tudo que encontrar em meu caminho!"'
-            },
-            // SEGUNDO DESAFIO
-            'MULA': {
-                title: 'O Relincho da Noite',
-                intro: 'A Mula sem Cabeça, amaldiçoada por seus pecados, foi consumida pela fúria de Anhangá. "Sua forma é um castigo, aceite seu destino de destruição", sussurrou a sombra. Agora, ela relincha fogo e dor.',
-                clue: '...a secura consome tudo...',
-                dialog: 'MULA SEM CABEÇA: "Relincho de dor... este é meu destino? Anhangá me mostrou que minha maldição pode ser minha força. Agora levarei fogo e dor a todos!"'
-            },
-            'CORPOSECO': {
-                title: 'O Devorador de Almas',
-                intro: 'O Corpo Seco, esqueleto faminto, foi tentado por Anhangá: "Sua fome nunca será saciada, a menos que devore tudo ao seu redor". Agora, sua fome é infinita.',
-                clue: '...o lobo uiva na lua cheia...',
-                dialog: 'CORPO SECO: "Fome... tanta fome... Anhangá me prometeu que se eu devorasse tudo, minha fome seria saciada. Vou devorar suas almas!"'
-            },
-            'LOBISOMEM': {
-                title: 'A Maldição da Lua',
-                intro: 'O Lobisomem, amaldiçoado a se transformar, ouviu Anhangá: "Sua forma bestial é seu verdadeiro eu, liberte a fera". A lua agora desperta apenas ódio.',
-                clue: '...a bruxa prepara suas poções...',
-                dialog: 'LOBISOMEM: "A lua me amaldiçoa... mas Anhangá me mostrou que esta forma bestial é minha verdadeira natureza. Deixem a fera dentro de mim se libertar!"'
-            },
-            'CUCA': {
-                title: 'A Bruxa da Floresta',
-                intro: 'Cuca, a velha bruxa, foi corrompida por Anhangá: "Seu conhecimento é fraco, apenas a destruição traz poder real". Suas poções agora são veneno puro.',
-                clue: '...Anhangá aguarda no final...',
-                dialog: 'CUCA: "Meus conhecimentos eram fracos... poções de cura? Para quê? Anhangá me ensinou que apenas a destruição traz poder real. Prove minhas novas poções!"'
-            },
-            // TERCEIRO DESAFIO - NOVOS BOSSES
-            'BOTO': {
-                title: 'O Sedutor das Águas',
-                intro: 'O Boto Rosa, sedutor das águas doces, foi corrompido pela luxúria de Anhangá. "Seu poder de sedução é fraco, use-o para destruir em vez de conquistar", sussurrou a sombra. Agora, seus encantos são mortalmente perigosos.',
-                clue: '...o boi da cara preta observa...',
-                dialog: 'BOTO ROSA: "As águas eram meu refúgio... minha beleza, minha arma. Anhangá mostrou que posso ser mais que um sedutor. Posso ser um destruidor! Sintam o poder das águas corrompidas!"'
-            },
-            'BOI': {
-                title: 'O Terrível das Sombras',
-                intro: 'O Boi da Cara Preta, guardião das trevas, foi consumido pelo medo. "Seu rosto assusta, mas é apenas máscara", riu Anhangá. Agora, seu verdadeiro terror se revela.',
-                clue: '...a lua de Jaci brilha no céu...',
-                dialog: 'BOI DA CARA PRETA: "Minha face escura sempre assustou... mas era apenas casca. Anhangá me revelou meu verdadeiro poder: o terror puro! Sintam o medo que habita nas sombras!"'
-            },
-            'JACI': {
-                title: 'A Deusa da Lua Corrompida',
-                intro: 'Jaci, deusa da lua, foi envenenada pela melancolia. "Sua luz é fria e inútil", zombou Anhangá. Agora, seus raios lunares queimam em vez de iluminar.',
-                clue: '...o sol de Guaraci queima tudo...',
-                dialog: 'JACI: "Minha luz deveria guiar... acalmar... iluminar. Mas Anhangá mostrou que minha luz pode queimar em vez de iluminar. Sintam o frio ardente da lua corrompida!"'
-            },
-            'GUARACI': {
-                title: 'O Sol Devorador',
-                intro: 'Guaraci, deus do sol, foi consumido pela arrogância. "Seu calor acolhedor é fraco", desafiou Anhangá. "Torne-se um inferno ambulante". Agora, seu sol queima sem piedade.',
-                clue: '...ele vem... o verdadeiro mal...',
-                dialog: 'GUARACI: "Meu sol aquecia... nutria... dava vida. Anhangá me ensinou que meu verdadeiro poder é queimar, não aquecer. Sintam o inferno solar que agora trago!"'
-            },
-            // BOSS FINAL
-            'ANHANGA': {
-                title: 'O Espírito do Mal',
-                intro: 'Anhangá, a contraparte maligna de Tupã, é o espírito do mal na mitologia tupi-guaraní. Após corromper todos os outros seres da floresta, ele finalmente se revela para enfrentar os heróis pessoalmente.',
-                clue: '...a escuridão sempre retorna...',
-                dialog: 'ANHANGÁ: "Por séculos observei a destruição que vocês, mortais, causam. Florestas queimadas, rios poluídos, ar contaminado... A natureza grita por vingança! Eu apenas dei voz ao seu ódio. Aqueles que corrompi eram apenas ferramentas. Agora enfrentem o verdadeiro espírito da destruição!"'
-            }
+            'SACI': { title: 'O Travesso Corrompido', intro: 'O Saci, sempre brincalhão, ouviu os sussurros de Anhangá.', clue: '...cuidado com as águas escuras...', dialog: 'SACI: "Risos? Não ouço mais risos... só sussurros. Ele me disse que sou uma piada, que ninguém me leva a sério. Agora vou mostrar que não sou piada nenhuma!"' },
+            'MAPINGUARI': { title: 'O Devorador Despertado', intro: 'O gigante protetor das árvores foi consumido pela frustração.', clue: '...o fogo serpente queima com ódio puro...', dialog: 'MAPINGUARI: "As árvores choram... a floresta morre... e eu sou impotente! Anhangá mostrou que minha força pode ser usada para devorar, não para proteger. Agora vou devorar tudo!"' },
+            'IARA': { title: 'O Canto da Perdição', intro: 'Iara, sedutora dos rios, foi envenenada pela raiva.', clue: '...o devorador da floresta ruge com fome...', dialog: 'IARA: "Meus rios... tão sujos... tão poluídos... Os humanos riem de mim enquanto destroem meu lar. Anhangá me deu força para afogar todos eles. Venham, dancem em minhas águas!"' },
+            'BOITATA': { title: 'A Serpente de Fogo', intro: 'Anhangá ofereceu poder ao Boitatá.', clue: '...ele vem... a sombra por trás de tudo...', dialog: 'BOITATÁ: "Meu fogo era fraco... apenas luzes na escuridão. Anhangá me deu o verdadeiro poder do inferno! Agora vou consumir tudo que encontrar em meu caminho!"' },
+            'MULA': { title: 'O Relincho da Noite', intro: 'A Mula sem Cabeça foi consumida pela fúria de Anhangá.', clue: '...a secura consome tudo...', dialog: 'MULA SEM CABEÇA: "Relincho de dor... este é meu destino? Anhangá me mostrou que minha maldição pode ser minha força. Agora levarei fogo e dor a todos!"' },
+            'CORPOSECO': { title: 'O Devorador de Almas', intro: 'O Corpo Seco foi tentado por Anhangá.', clue: '...o lobo uiva na lua cheia...', dialog: 'CORPO SECO: "Fome... tanta fome... Anhangá me prometeu que se eu devorasse tudo, minha fome seria saciada. Vou devorar suas almas!"' },
+            'LOBISOMEM': { title: 'A Maldição da Lua', intro: 'O Lobisomem ouviu Anhangá.', clue: '...a bruxa prepara suas poções...', dialog: 'LOBISOMEM: "A lua me amaldiçoa... mas Anhangá me mostrou que esta forma bestial é minha verdadeira natureza. Deixem a fera dentro de mim se libertar!"' },
+            'CUCA': { title: 'A Bruxa da Floresta', intro: 'Cuca foi corrompida por Anhangá.', clue: '...Anhangá aguarda no final...', dialog: 'CUCA: "Meus conhecimentos eram fracos... poções de cura? Para quê? Anhangá me ensinou que apenas a destruição traz poder real. Prove minhas novas poções!"' },
+            'BOTO': { title: 'O Sedutor das Águas', intro: 'O Boto Rosa foi corrompido pela luxúria de Anhangá.', clue: '...o boi da cara preta observa...', dialog: 'BOTO ROSA: "As águas eram meu refúgio... minha beleza, minha arma. Anhangá mostrou que posso ser mais que um sedutor. Posso ser um destruidor! Sintam o poder das águas corrompidas!"' },
+            'BOI': { title: 'O Terrível das Sombras', intro: 'O Boi da Cara Preta foi consumido pelo medo.', clue: '...a lua de Jaci brilha no céu...', dialog: 'BOI DA CARA PRETA: "Minha face escura sempre assustou... mas era apenas casca. Anhangá me revelou meu verdadeiro poder: o terror puro! Sintam o medo que habita nas sombras!"' },
+            'JACI': { title: 'A Deusa da Lua Corrompida', intro: 'Jaci foi envenenada pela melancolia.', clue: '...o sol de Guaraci queima tudo...', dialog: 'JACI: "Minha luz deveria guiar... acalmar... iluminar. Mas Anhangá mostrou que minha luz pode queimar em vez de iluminar. Sintam o frio ardente da lua corrompida!"' },
+            'GUARACI': { title: 'O Sol Devorador', intro: 'Guaraci foi consumido pela arrogância.', clue: '...ele vem... o verdadeiro mal...', dialog: 'GUARACI: "Meu sol aquecia... nutria... dava vida. Anhangá me ensinou que meu verdadeiro poder é queimar, não aquecer. Sintam o inferno solar que agora trago!"' },
+            'ANHANGA': { title: 'O Espírito do Mal', intro: 'Anhangá é a contraparte maligna de Tupã.', clue: '...a escuridão sempre retorna...', dialog: 'ANHANGÁ: "Por séculos observei a destruição que vocês, mortais, causam. Florestas queimadas, rios poluídos, ar contaminado... A natureza grita por vingança! Eu apenas dei voz ao seu ódio. Aqueles que corrompi eram apenas ferramentas. Agora enfrentem o verdadeiro espírito da destruição!"' }
         },
         anhangáImage: 'https://i.ibb.co/cSr7cZG2/anhanga.png'
     };
     
-    // ================= RANKING SYSTEM =================
+    // ================= RANKING =================
     const RANKING = {
-        turns: 0,
-        ultimates: 0,
-        amulets: 0,
+        turns: 0, ultimates: 0, amulets: 0,
         shapes: { LINHA:0, L:0, ZIGZAG:0, QUADRADO:0 },
         sent: false
     };
@@ -177,255 +129,45 @@
 
     // ================= SISTEMA DE TÍTULOS =================
     const TITLES = {
-        'novato': {
-            name: 'Novato da Floresta',
-            icon: '🌱',
-            description: 'Complete 3 jogos',
-            bonus: { type: 'ATK', value: 0.5 },
-            requirement: { type: 'games_played', target: 3 },
-            category: 'basic',
-            unlocked: false,
-            progress: 0
-        },
-        
-        'sobrevivente': {
-            name: 'Sobrevivente',
-            icon: '🛡️',
-            description: 'Sobreviva com 1 HP em 3 jogos',
-            bonus: { type: 'MAX_HP', value: 1 },
-            requirement: { type: 'survive_1hp', target: 3 },
-            category: 'basic',
-            unlocked: false,
-            progress: 0
-        },
-        
-        'colecionador_basico': {
-            name: 'Colecionador',
-            icon: '💎',
-            description: 'Colete 15 Muiraquitãs no total',
-            bonus: { type: 'ATK', value: 0.5 },
-            requirement: { type: 'total_amulets', target: 15 },
-            category: 'basic',
-            unlocked: false,
-            progress: 0
-        },
-        
-        'veterano': {
-            name: 'Veterano',
-            icon: '🎖️',
-            description: 'Jogue 10 partidas',
-            bonus: { type: 'MAX_HP', value: 2 },
-            requirement: { type: 'games_played', target: 10 },
-            category: 'basic',
-            unlocked: false,
-            progress: 0
-        },
-        
-        'estrategista': {
-            name: 'Estrategista',
-            icon: '🧠',
-            description: 'Execute 5 Bravely Chains',
-            bonus: { type: 'ATK', value: 1 },
-            requirement: { type: 'bravely_chains', target: 5 },
-            category: 'basic',
-            unlocked: false,
-            progress: 0
-        },
-        
-        'curandeiro': {
-            name: 'Curandeiro',
-            icon: '💚',
-            description: 'Cure 30 HP total',
-            bonus: { type: 'MAX_HP', value: 1 },
-            requirement: { type: 'total_healing', target: 30 },
-            category: 'basic',
-            unlocked: false,
-            progress: 0
-        },
-        
-        'filho_do_fogo': {
-            name: 'Filho do Fogo',
-            icon: '🔥',
-            description: 'Cause 30 dano com tiles de FOGO',
-            bonus: { 
-                type: 'ELEMENTAL_RESIST', 
-                value: -1,
-                element: 'FOGO'
-            },
-            requirement: { type: 'element_damage', element: 'FOGO', target: 30 },
-            category: 'elemental',
-            unlocked: false,
-            progress: 0
-        },
-        
-        'filho_da_agua': {
-            name: 'Filho da Água',
-            icon: '💧',
-            description: 'Cure 15 HP com forma L (ÁGUA)',
-            bonus: { 
-                type: 'ELEMENTAL_RESIST', 
-                value: -1,
-                element: 'AGUA'
-            },
-            requirement: { type: 'water_healing', target: 15 },
-            category: 'elemental',
-            unlocked: false,
-            progress: 0
-        },
-        
-        'filho_da_terra': {
-            name: 'Filho da Terra',
-            icon: '🌍',
-            description: 'Fortifique 10 tiles de TERRA',
-            bonus: { 
-                type: 'ELEMENTAL_RESIST', 
-                value: -1,
-                element: 'TERRA'
-            },
-            requirement: { type: 'earth_tiles', target: 10 },
-            category: 'elemental',
-            unlocked: false,
-            progress: 0
-        },
-        
-        'filho_do_ar': {
-            name: 'Filho do Ar',
-            icon: '💨',
-            description: 'Mova-se por 30 tiles de AR',
-            bonus: { 
-                type: 'ELEMENTAL_RESIST', 
-                value: -1,
-                element: 'AR'
-            },
-            requirement: { type: 'air_tiles', target: 30 },
-            category: 'elemental',
-            unlocked: false,
-            progress: 0
-        },
-        
-        'aprendiz_tupa': {
-            name: 'Aprendiz de Tupã',
-            icon: '⚡',
-            description: 'Cause 50 dano corpo-a-corpo como Tupã',
-            bonus: { 
-                type: 'CLASS_BONUS',
-                value: 'tupa_melee',
-                class: 'Tupa',
-                desc: '+0.5 ATK corpo-a-corpo (Tupã)'
-            },
-            requirement: { type: 'class_damage', class: 'Tupa', target: 50 },
-            category: 'class',
-            unlocked: false,
-            progress: 0
-        },
-        
-        'aprendiz_sume': {
-            name: 'Aprendiz de Sumé',
-            icon: '📜',
-            description: 'Cause 40 dano à distância como Sumé',
-            bonus: { 
-                type: 'CLASS_BONUS',
-                value: 'sume_range',
-                class: 'Sume',
-                desc: '+0.5 ATK à distância (Sumé)'
-            },
-            requirement: { type: 'class_damage', class: 'Sume', target: 40 },
-            category: 'class',
-            unlocked: false,
-            progress: 0
-        },
-        
-        'aprendiz_caipora': {
-            name: 'Aprendiz da Caipora',
-            icon: '🏹',
-            description: 'Cause 45 dano com flechas como Caipora',
-            bonus: { 
-                type: 'CLASS_BONUS',
-                value: 'caipora_arrow',
-                class: 'Caipora',
-                desc: '+0.5 dano com flechas (Caipora)'
-            },
-            requirement: { type: 'class_damage', class: 'Caipora', target: 45 },
-            category: 'class',
-            unlocked: false,
-            progress: 0
-        },
-        
-        'cacador_de_bosses': {
-            name: 'Caçador de Bosses',
-            icon: '👹',
-            description: 'Derrote 2 bosses diferentes',
-            bonus: { 
-                type: 'UNIQUE',
-                value: 'boss_hunter',
-                desc: '+1 ATK contra bosses'
-            },
-            requirement: { type: 'bosses_defeated', target: 2 },
-            category: 'unique',
-            unlocked: false,
-            progress: 0
-        },
-        
-        'mestre_das_formas': {
-            name: 'Mestre das Formas',
-            icon: '🔷',
-            description: 'Execute todas as 4 formas especiais',
-            bonus: { 
-                type: 'UNIQUE',
-                value: 'shape_master',
-                desc: 'Formas dão +1 bônus extra'
-            },
-            requirement: { type: 'all_shapes', target: 1 },
-            category: 'unique',
-            unlocked: false,
-            progress: 0
-        },
-        
-        'rei_do_arcane': {
-            name: 'Rei do Arcane',
-            icon: '👑',
-            description: 'Use 10 ultimates no total',
-            bonus: { 
-                type: 'UNIQUE',
-                value: 'arcane_king',
-                desc: 'Ultimate recarrega 1 turno mais rápido'
-            },
-            requirement: { type: 'ultimates_used', target: 10 },
-            category: 'unique',
-            unlocked: false,
-            progress: 0
-        }
+        'novato': { name: 'Novato da Floresta', icon: '🌱', description: 'Complete 3 jogos', bonus: { type: 'ATK', value: 0.5 }, requirement: { type: 'games_played', target: 3 }, category: 'basic', unlocked: false, progress: 0 },
+        'sobrevivente': { name: 'Sobrevivente', icon: '🛡️', description: 'Sobreviva com 1 HP em 3 jogos', bonus: { type: 'MAX_HP', value: 1 }, requirement: { type: 'survive_1hp', target: 3 }, category: 'basic', unlocked: false, progress: 0 },
+        'colecionador_basico': { name: 'Colecionador', icon: '💎', description: 'Colete 15 Muiraquitãs no total', bonus: { type: 'ATK', value: 0.5 }, requirement: { type: 'total_amulets', target: 15 }, category: 'basic', unlocked: false, progress: 0 },
+        'veterano': { name: 'Veterano', icon: '🎖️', description: 'Jogue 10 partidas', bonus: { type: 'MAX_HP', value: 2 }, requirement: { type: 'games_played', target: 10 }, category: 'basic', unlocked: false, progress: 0 },
+        'estrategista': { name: 'Estrategista', icon: '🧠', description: 'Execute 5 Poderes Ancestrais', bonus: { type: 'ATK', value: 1 }, requirement: { type: 'bravely_chains', target: 5 }, category: 'basic', unlocked: false, progress: 0 },
+        'curandeiro': { name: 'Curandeiro', icon: '💚', description: 'Cure 30 HP total', bonus: { type: 'MAX_HP', value: 1 }, requirement: { type: 'total_healing', target: 30 }, category: 'basic', unlocked: false, progress: 0 },
+        'filho_do_fogo': { name: 'Filho do Fogo', icon: '🔥', description: 'Cause 30 dano com tiles de FOGO', bonus: { type: 'ELEMENTAL_RESIST', value: -1, element: 'FOGO' }, requirement: { type: 'element_damage', element: 'FOGO', target: 30 }, category: 'elemental', unlocked: false, progress: 0 },
+        'filho_da_agua': { name: 'Filho da Água', icon: '💧', description: 'Vença 3 batalhas como Sumé', bonus: { type: 'ELEMENTAL_RESIST', value: -1, element: 'AGUA' }, requirement: { type: 'wins_as_class', class: 'Sume', target: 3 }, category: 'elemental', unlocked: false, progress: 0 },
+        'filho_da_terra': { name: 'Filho da Terra', icon: '⛰️', description: 'Fortifique 10 tiles de TERRA', bonus: { type: 'ELEMENTAL_RESIST', value: -1, element: 'TERRA' }, requirement: { type: 'earth_tiles', target: 10 }, category: 'elemental', unlocked: false, progress: 0 },
+        'filho_do_ar': { name: 'Filho do Ar', icon: '🌪️', description: 'Mova-se por 30 tiles de AR', bonus: { type: 'ELEMENTAL_RESIST', value: -1, element: 'AR' }, requirement: { type: 'air_tiles', target: 30 }, category: 'elemental', unlocked: false, progress: 0 },
+        'aprendiz_tupa': { name: 'Aprendiz de Tupã', icon: '⚡', description: 'Cause 50 dano corpo-a-corpo como Tupã', bonus: { type: 'CLASS_BONUS', value: 'tupa_melee', class: 'Tupa', desc: '+0.5 ATK corpo-a-corpo (Tupã)' }, requirement: { type: 'class_damage', class: 'Tupa', target: 50 }, category: 'class', unlocked: false, progress: 0 },
+        'aprendiz_sume': { name: 'Aprendiz de Sumé', icon: '📜', description: 'Cause 40 dano à distância como Sumé', bonus: { type: 'CLASS_BONUS', value: 'sume_range', class: 'Sume', desc: '+0.5 ATK à distância (Sumé)' }, requirement: { type: 'class_damage', class: 'Sume', target: 40 }, category: 'class', unlocked: false, progress: 0 },
+        'aprendiz_caipora': { name: 'Aprendiz da Caipora', icon: '🏹', description: 'Cause 45 dano com flechas como Caipora', bonus: { type: 'CLASS_BONUS', value: 'caipora_arrow', class: 'Caipora', desc: '+0.5 dano com flechas (Caipora)' }, requirement: { type: 'class_damage', class: 'Caipora', target: 45 }, category: 'class', unlocked: false, progress: 0 },
+        'cacador_de_bosses': { name: 'Caçador de Bosses', icon: '👹', description: 'Derrote 2 bosses diferentes', bonus: { type: 'UNIQUE', value: 'boss_hunter', desc: '+1 ATK contra bosses' }, requirement: { type: 'bosses_defeated', target: 2 }, category: 'unique', unlocked: false, progress: 0 },
+        'mestre_das_formas': { name: 'Mestre das Formas', icon: '🔷', description: 'Execute todas as 4 formas especiais', bonus: { type: 'UNIQUE', value: 'shape_master', desc: 'Formas dão +1 bônus extra' }, requirement: { type: 'all_shapes', target: 1 }, category: 'unique', unlocked: false, progress: 0 },
+        'rei_do_arcane': { name: 'Rei do Solo Sagrado', icon: '👑', description: 'Use 10 Solos Sagrados no total', bonus: { type: 'UNIQUE', value: 'arcane_king', desc: 'Solo Sagrado recarrega 1 turno mais rápido' }, requirement: { type: 'ultimates_used', target: 10 }, category: 'unique', unlocked: false, progress: 0 }
     };
 
-    // Estatísticas do jogador para títulos
     let PLAYER_STATS = {
-        games_played: 0,
-        survive_1hp: 0,
-        total_amulets: 0,
-        bravely_chains: 0,
+        games_played: 0, survive_1hp: 0, total_amulets: 0, bravely_chains: 0,
         total_healing: 0,
         element_damage: { FOGO: 0, AGUA: 0, TERRA: 0, AR: 0 },
-        water_healing: 0,
-        earth_tiles: 0,
-        air_tiles: 0,
+        water_healing: 0, earth_tiles: 0, air_tiles: 0,
         class_damage: { Tupa: 0, Sume: 0, Caipora: 0 },
-        bosses_defeated: [],
-        all_shapes: false,
-        ultimates_used: 0,
+        wins_as_class: { Tupa: 0, Sume: 0, Caipora: 0 },
+        bosses_defeated: [], all_shapes: false, ultimates_used: 0,
         shapes_executed: { LINHA: 0, L: 0, QUADRADO: 0, ZIGZAG: 0 }
     };
 
-    // Título ativo do jogador
     let ACTIVE_TITLE = null;
 
-    // ================= NOVA FUNÇÃO: MOSTRAR DIALOGO DO BOSS =================
+    // ================= DIÁLOGO DO BOSS =================
     async function showBossIntroDialog(bossType) {
         return new Promise((resolve) => {
             const lore = LORE.bossLore[bossType];
-            if (!lore) {
-                resolve();
-                return;
-            }
+            if (!lore) { resolve(); return; }
+            
+            const existing = document.getElementById('bossDialogOverlay');
+            if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
             
             const overlay = document.createElement('div');
             overlay.className = 'boss-dialog-overlay';
@@ -438,7 +180,7 @@
                 <div class="boss-dialog-header">
                     <img src="${SPRITES[bossType]}" class="boss-dialog-image" alt="${bossType}">
                     <div>
-                        <h2 class="boss-dialog-title">${bossType}</h2>
+                        <h2 class="boss-dialog-title">${getBossDisplayName(bossType)}</h2>
                         <div class="boss-dialog-subtitle">${lore.title}</div>
                     </div>
                 </div>
@@ -453,30 +195,26 @@
             overlay.appendChild(dialog);
             document.body.appendChild(overlay);
             
-            // Adicionar função para fechar o diálogo
-            window.closeBossDialog = function() {
-                const overlay = document.getElementById('bossDialogOverlay');
-                if (overlay) {
-                    overlay.style.opacity = '0';
-                    overlay.style.transition = 'opacity 0.3s ease';
-                    
+            const closeHandler = function() {
+                const ov = document.getElementById('bossDialogOverlay');
+                if (ov) {
+                    ov.style.opacity = '0';
+                    ov.style.transition = 'opacity 0.3s ease';
                     setTimeout(() => {
-                        if (overlay.parentNode) {
-                            overlay.parentNode.removeChild(overlay);
-                        }
+                        if (ov.parentNode) ov.parentNode.removeChild(ov);
                         resolve();
                     }, 300);
+                } else {
+                    resolve();
                 }
             };
             
-            // Permitir fechar com ESC
+            window.closeBossDialog = closeHandler;
+            
             overlay.addEventListener('keydown', function(e) {
-                if (e.key === 'Escape') {
-                    closeBossDialog();
-                }
+                if (e.key === 'Escape') closeHandler();
             });
             
-            // Focar no botão para permitir fechar com Enter
             setTimeout(() => {
                 const button = dialog.querySelector('.boss-dialog-continue');
                 if (button) button.focus();
@@ -484,34 +222,33 @@
         });
     }
 
-    // ================= FUNÇÕES DE INTRODUÇÃO =================
+    // ================= INTRODUÇÃO =================
     function showIntro() {
-    const introScreen = document.getElementById('introScreen');
-    const titleScreen = document.getElementById('titleScreen');
-    
-    introScreen.style.display = 'flex';
-    titleScreen.style.display = 'none';
-    
-    // 🔉 TOCAR SOM DA INTRO
-    if (sfx.intro) {
-        sfx.intro.volume = 0.4; // Volume mais baixo
-        sfx.intro.currentTime = 0; // Reiniciar o som
-        sfx.intro.play();
-    }
-    
-    setTimeout(() => {
-        introScreen.style.opacity = '0';
+        const introScreen = document.getElementById('introScreen');
+        const titleScreen = document.getElementById('titleScreen');
+        
+        introScreen.style.display = 'flex';
+        titleScreen.style.display = 'none';
+        
+        if (sfx.intro) {
+            sfx.intro.volume = 0.4;
+            sfx.intro.currentTime = 0;
+            sfx.intro.play().catch(() => {});
+        }
         
         setTimeout(() => {
-            introScreen.style.display = 'none';
-            titleScreen.style.display = 'flex';
-            currentScreen = 'title';
-            unlockAudio();
-        }, 800);
-    }, 3000);
-}
+            introScreen.style.opacity = '0';
+            
+            setTimeout(() => {
+                introScreen.style.display = 'none';
+                titleScreen.style.display = 'flex';
+                currentScreen = 'title';
+                unlockAudio();
+            }, 800);
+        }, 3000);
+    }
 
-    // ================= FUNÇÕES DE NAVEGAÇÃO =================
+    // ================= NAVEGAÇÃO =================
     function startGame() {
         hideScreen('titleScreen');
         showScreen('modeScreen');
@@ -526,8 +263,12 @@
     
     function hideConfig() {
         hideScreen('configScreen');
-        showScreen('titleScreen');
-        currentScreen = 'title';
+        if (currentScreen === 'game') {
+            showScreen('gameScreen');
+        } else {
+            showScreen('titleScreen');
+            currentScreen = 'title';
+        }
     }
     
     function selectMode(selectedMode) {
@@ -546,94 +287,38 @@
     
     function showPlayersScreen() {
         hideScreen('modeScreen');
+        hideScreen('challengeScreen');
+        hideScreen('titleScreen');
+        hideScreen('tutorialScreen');
+        const tut = document.getElementById('tutorialScreen');
+        if (tut) tut.classList.remove('active');
         showScreen('playersScreen');
         currentScreen = 'players';
-        updatePlayersUI();
+        if (typeof updatePlayersUI === 'function') updatePlayersUI();
     }
     
     function backToModeSelection() {
         hideScreen('playersScreen');
+        hideScreen('challengeScreen');
         showScreen('modeScreen');
         currentScreen = 'mode';
     }
     
     function setPlayerCount(count) {
+        if (mode === "PVP" && count !== 2) return;
+        
         playerCount = count;
         
         document.querySelectorAll('.player-count-btn').forEach((btn, index) => {
-            if (index + 1 === count) {
-                btn.classList.add('active');
-            } else {
-                btn.classList.remove('active');
-            }
+            if (index + 1 === count) btn.classList.add('active');
+            else btn.classList.remove('active');
         });
         
         for (let i = 0; i < 4; i++) {
             playerConfigs[i].active = (i < count);
         }
         
-        updatePlayersUI();
-    }
-    
-    function updatePlayersUI_old() {
-        const grid = document.getElementById('playersGrid');
-        grid.innerHTML = '';
-        
-        for (let i = 0; i < 4; i++) {
-            const config = playerConfigs[i];
-            const isActive = config.active;
-            
-            const card = document.createElement('div');
-            card.className = `player-card ${isActive ? 'active' : ''}`;
-            card.innerHTML = `
-                <div class="player-card-header">
-                    <div class="player-number">JOGADOR ${i + 1}</div>
-                    <div class="player-status ${isActive ? '' : 'inactive'}">
-                        ${isActive ? 'ATIVO' : 'INATIVO'}
-                    </div>
-                </div>
-                <div class="player-form">
-                    <input type="text" 
-                           class="player-input player-name" 
-                           value="${config.name}" 
-                           placeholder="Nome do Jogador"
-                           ${!isActive ? 'disabled' : ''}
-                           oninput="updatePlayerConfig(${i}, 'name', this.value)">
-                    
-                    <select class="player-select player-class"
-                            ${!isActive ? 'disabled' : ''}
-                            onchange="updatePlayerConfig(${i}, 'class', this.value)">
-                        <option value="Tupa" ${config.class === 'Tupa' ? 'selected' : ''}>Tupã</option>
-                        <option value="Sume" ${config.class === 'Sume' ? 'selected' : ''}>Sumé</option>
-                        <option value="Caipora" ${config.class === 'Caipora' ? 'selected' : ''}>Caipora</option>
-                    </select>
-                    
-                    ${isActive ? `
-                        <div class="player-stats-preview">
-                            <div class="stat-row">
-                                <span>HP:</span>
-                                <span id="player${i}HP">${CLASS_DB[config.class]?.hp || 0}</span>
-                            </div>
-                            <div class="stat-row">
-                                <span>ATK:</span>
-                                <span id="player${i}ATK">${CLASS_DB[config.class]?.atk || 0}</span>
-                            </div>
-                        </div>
-                    ` : ''}
-                </div>
-            `;
-            
-            grid.appendChild(card);
-        }
-        
-        updateClassBase();
-        for (let i = 0; i < 4; i++) {
-            const config = playerConfigs[i];
-            if (config.active && CLASS_DB[config.class]) {
-                document.getElementById(`player${i}HP`).textContent = CLASS_DB[config.class].hp;
-                document.getElementById(`player${i}ATK`).textContent = CLASS_DB[config.class].atk;
-            }
-        }
+        if (typeof updatePlayersUI === 'function') updatePlayersUI();
     }
     
     function updatePlayerConfig(index, field, value) {
@@ -659,42 +344,53 @@
         } else if (mode === "PVP") {
             hideScreen('playersScreen');
             showScreen('gameScreen');
+            const gs = document.getElementById('gameScreen');
+            if (gs) gs.classList.add('active');
             currentScreen = 'game';
             initGameWithPlayers();
         }
     }
     
+    function selectBoss(bossType) {
+        boss.type = bossType;
+        hideScreen('playersScreen');
+        showScreen('gameScreen');
+        const gs = document.getElementById('gameScreen');
+        if (gs) gs.classList.add('active');
+        currentScreen = 'game';
+        initGameWithPlayers();
+    }
+    
     function showBossSelection() {
         const modal = document.createElement('div');
+        modal.id = 'bossSelectionModal';
         modal.style.cssText = `
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.95); z-index: 10001;
             display: flex; flex-direction: column; justify-content: center;
-            align-items: center; color: white;
+            align-items: center; color: white; overflow-y: auto; padding: 20px;
         `;
         
-        // Obter bosses disponíveis (todos incluindo os novos)
         let bossesHTML = '';
         const allBosses = [
-            { type: 'BOITATA', name: 'BOITATÁ', desc: 'A Serpente de Fogo', color: '#e74c3c', sprite: SPRITES.BOITATA },
-            { type: 'MAPINGUARI', name: 'MAPINGUARI', desc: 'O Devorador', color: '#27ae60', sprite: SPRITES.MAPINGUARI },
-            { type: 'SACI', name: 'SACI', desc: 'O Travesso', color: '#9b59b6', sprite: SPRITES.SACI },
-            { type: 'IARA', name: 'IARA', desc: 'A Sedutora', color: '#3498db', sprite: SPRITES.IARA },
-            { type: 'MULA', name: 'MULA', desc: 'O Relincho da Noite', color: '#e67e22', sprite: SPRITES.MULA },
-            { type: 'CORPOSECO', name: 'CORPO SECO', desc: 'O Devorador de Almas', color: '#95a5a6', sprite: SPRITES.CORPOSECO },
-            { type: 'LOBISOMEM', name: 'LOBISOMEM', desc: 'A Maldição da Lua', color: '#34495e', sprite: SPRITES.LOBISOMEM },
-            { type: 'CUCA', name: 'CUCA', desc: 'A Bruxa da Floresta', color: '#8e44ad', sprite: SPRITES.CUCA },
-            // NOVOS BOSSES DO TERCEIRO DESAFIO
-            { type: 'BOTO', name: 'BOTO ROSA', desc: 'O Sedutor das Águas', color: '#e84393', sprite: SPRITES.BOTO },
-            { type: 'BOI', name: 'BOI DA CARA PRETA', desc: 'O Terrível', color: '#2c3e50', sprite: SPRITES.BOI },
-            { type: 'JACI', name: 'JACI', desc: 'A Deusa da Lua', color: '#f1c40f', sprite: SPRITES.JACI },
-            { type: 'GUARACI', name: 'GUARACI', desc: 'O Deus do Sol', color: '#e67e22', sprite: SPRITES.GUARACI }
+            { type: 'BOITATA', name: 'Boitatá', desc: 'A Serpente de Fogo', color: '#e74c3c', sprite: SPRITES.BOITATA },
+            { type: 'MAPINGUARI', name: 'Mapinguari', desc: 'O Devorador', color: '#27ae60', sprite: SPRITES.MAPINGUARI },
+            { type: 'SACI', name: 'Saci', desc: 'O Travesso', color: '#9b59b6', sprite: SPRITES.SACI },
+            { type: 'IARA', name: 'Iara', desc: 'A Sedutora', color: '#3498db', sprite: SPRITES.IARA },
+            { type: 'MULA', name: 'Mula sem Cabeça', desc: 'O Relincho da Noite', color: '#e67e22', sprite: SPRITES.MULA },
+            { type: 'CORPOSECO', name: 'Corpo Seco', desc: 'O Devorador de Almas', color: '#95a5a6', sprite: SPRITES.CORPOSECO },
+            { type: 'LOBISOMEM', name: 'Lobisomem', desc: 'A Maldição da Lua', color: '#34495e', sprite: SPRITES.LOBISOMEM },
+            { type: 'CUCA', name: 'Cuca', desc: 'A Bruxa da Floresta', color: '#8e44ad', sprite: SPRITES.CUCA },
+            { type: 'BOTO', name: 'Boto Rosa', desc: 'O Sedutor das Águas', color: '#e84393', sprite: SPRITES.BOTO },
+            { type: 'BOI', name: 'Boi da Cara Preta', desc: 'O Terrível', color: '#2c3e50', sprite: SPRITES.BOI },
+            { type: 'JACI', name: 'Jaci', desc: 'A Deusa da Lua', color: '#f1c40f', sprite: SPRITES.JACI },
+            { type: 'GUARACI', name: 'Guaraci', desc: 'O Deus do Sol', color: '#e67e22', sprite: SPRITES.GUARACI }
         ];
         
         allBosses.forEach(bossInfo => {
             bossesHTML += `
                 <div style="background: #2c3e50; padding: 20px; border-radius: 10px; text-align: center; cursor: pointer; transition: all 0.3s; border: 2px solid #444;"
-                     onclick="selectBoss('${bossInfo.type}'); this.parentElement.parentElement.remove();">
+                     onclick="selectBoss('${bossInfo.type}'); document.getElementById('bossSelectionModal').remove();">
                     <img src="${bossInfo.sprite}" style="width: 100px; height: 100px; margin-bottom: 10px;">
                     <h3 style="color: ${bossInfo.color}; margin-bottom: 5px;">${bossInfo.name}</h3>
                     <p style="color: #ccc; font-size: 0.9rem;">${bossInfo.desc}</p>
@@ -709,7 +405,7 @@
                     ${bossesHTML}
                 </div>
             </div>
-            <button onclick="this.parentElement.remove();" 
+            <button onclick="document.getElementById('bossSelectionModal').remove();" 
                     style="padding: 12px 25px; background: #e74c3c; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; margin-top: 20px;">
                 CANCELAR
             </button>
@@ -720,14 +416,14 @@
     
     function showArcadeChallengeSelection() {
         const modal = document.createElement('div');
+        modal.id = 'arcadeSelectionModal';
         modal.style.cssText = `
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.95); z-index: 10001;
             display: flex; flex-direction: column; justify-content: center;
-            align-items: center; color: white;
+            align-items: center; color: white; overflow-y: auto; padding: 20px;
         `;
         
-        // Verificar progresso salvo
         const savedData = localStorage.getItem('entity_titles_data');
         let secondChallengeAvailable = false;
         let thirdChallengeAvailable = false;
@@ -736,12 +432,8 @@
             try {
                 const data = JSON.parse(savedData);
                 const bossesDefeated = data.stats?.bosses_defeated || [];
-                
-                // Verificar primeiro desafio
                 const firstChallengeBosses = ['SACI', 'MAPINGUARI', 'IARA', 'BOITATA'];
                 secondChallengeAvailable = firstChallengeBosses.every(boss => bossesDefeated.includes(boss));
-                
-                // Verificar segundo desafio
                 const secondChallengeBosses = ['MULA', 'CORPOSECO', 'LOBISOMEM', 'CUCA'];
                 thirdChallengeAvailable = secondChallengeBosses.every(boss => bossesDefeated.includes(boss));
             } catch (e) {
@@ -753,31 +445,19 @@
             <h2 style="color: #f1c40f; font-size: 2.5rem; margin-bottom: 30px; text-align: center;">ESCOLHA O DESAFIO ARCADE</h2>
             <div style="display: grid; grid-template-columns: ${secondChallengeAvailable ? '1fr 1fr 1fr' : '1fr'}; gap: 20px; width: 90%; max-width: 1000px; margin-bottom: 30px;">
                 <div style="background: #2c3e50; padding: 25px; border-radius: 10px; text-align: center; cursor: pointer; transition: all 0.3s; border: 2px solid #444;"
-                     onclick="selectArcadeChallenge(1); this.parentElement.parentElement.remove();">
+                     onclick="selectArcadeChallenge(1); document.getElementById('arcadeSelectionModal').remove();">
                     <div style="font-size: 3rem; margin-bottom: 15px;">🏆</div>
                     <h3 style="color: #f1c40f; margin-bottom: 5px;">DESAFIO 1</h3>
                     <p style="color: #ccc; font-size: 0.9rem; margin-bottom: 15px;">Enfrente os 4 bosses iniciais</p>
-                    <div style="display: flex; justify-content: center; gap: 10px; margin-bottom: 15px;">
-                        <img src="${SPRITES.SACI}" style="width: 40px; height: 40px; border-radius: 5px;" title="SACI">
-                        <img src="${SPRITES.MAPINGUARI}" style="width: 40px; height: 40px; border-radius: 5px;" title="MAPINGUARI">
-                        <img src="${SPRITES.IARA}" style="width: 40px; height: 40px; border-radius: 5px;" title="IARA">
-                        <img src="${SPRITES.BOITATA}" style="width: 40px; height: 40px; border-radius: 5px;" title="BOITATÁ">
-                    </div>
                     <div style="color: #2ecc71; font-size: 0.8rem;">✅ DISPONÍVEL</div>
                 </div>
                 
                 ${secondChallengeAvailable ? `
                 <div style="background: #2c3e50; padding: 25px; border-radius: 10px; text-align: center; cursor: pointer; transition: all 0.3s; border: 2px solid #9b59b6;"
-                     onclick="selectArcadeChallenge(2); this.parentElement.parentElement.remove();">
+                     onclick="selectArcadeChallenge(2); document.getElementById('arcadeSelectionModal').remove();">
                     <div style="font-size: 3rem; margin-bottom: 15px;">👑</div>
                     <h3 style="color: #9b59b6; margin-bottom: 5px;">DESAFIO 2</h3>
                     <p style="color: #ccc; font-size: 0.9rem; margin-bottom: 15px;">Enfrente os 4 novos bosses lendários</p>
-                    <div style="display: flex; justify-content: center; gap: 10px; margin-bottom: 15px;">
-                        <img src="${SPRITES.MULA}" style="width: 40px; height: 40px; border-radius: 5px;" title="MULA SEM CABEÇA">
-                        <img src="${SPRITES.CORPOSECO}" style="width: 40px; height: 40px; border-radius: 5px;" title="CORPO SECO">
-                        <img src="${SPRITES.LOBISOMEM}" style="width: 40px; height: 40px; border-radius: 5px;" title="LOBISOMEM">
-                        <img src="${SPRITES.CUCA}" style="width: 40px; height: 40px; border-radius: 5px;" title="CUCA">
-                    </div>
                     <div style="color: #9b59b6; font-size: 0.8rem;">⭐ DESBLOQUEADO</div>
                 </div>
                 ` : `
@@ -785,28 +465,16 @@
                     <div style="font-size: 3rem; margin-bottom: 15px;">🔒</div>
                     <h3 style="color: #7f8c8d; margin-bottom: 5px;">DESAFIO 2</h3>
                     <p style="color: #aaa; font-size: 0.9rem; margin-bottom: 15px;">Complete o Desafio 1 para desbloquear</p>
-                    <div style="display: flex; justify-content: center; gap: 10px; margin-bottom: 15px; opacity: 0.5;">
-                        <img src="${SPRITES.MULA}" style="width: 40px; height: 40px; border-radius: 5px; filter: grayscale(100%);" title="MULA SEM CABEÇA">
-                        <img src="${SPRITES.CORPOSECO}" style="width: 40px; height: 40px; border-radius: 5px; filter: grayscale(100%);" title="CORPO SECO">
-                        <img src="${SPRITES.LOBISOMEM}" style="width: 40px; height: 40px; border-radius: 5px; filter: grayscale(100%);" title="LOBISOMEM">
-                        <img src="${SPRITES.CUCA}" style="width: 40px; height: 40px; border-radius: 5px; filter: grayscale(100%);" title="CUCA">
-                    </div>
                     <div style="color: #e74c3c; font-size: 0.8rem;">🔒 BLOQUEADO</div>
                 </div>
                 `}
                 
                 ${thirdChallengeAvailable ? `
                 <div style="background: #2c3e50; padding: 25px; border-radius: 10px; text-align: center; cursor: pointer; transition: all 0.3s; border: 2px solid #e67e22;"
-                     onclick="selectArcadeChallenge(3); this.parentElement.parentElement.remove();">
+                     onclick="selectArcadeChallenge(3); document.getElementById('arcadeSelectionModal').remove();">
                     <div style="font-size: 3rem; margin-bottom: 15px;">🔥</div>
                     <h3 style="color: #e67e22; margin-bottom: 5px;">DESAFIO 3</h3>
                     <p style="color: #ccc; font-size: 0.9rem; margin-bottom: 15px;">Enfrente os 4 bosses divinos corrompidos</p>
-                    <div style="display: flex; justify-content: center; gap: 10px; margin-bottom: 15px;">
-                        <img src="${SPRITES.BOTO}" style="width: 40px; height: 40px; border-radius: 5px;" title="BOTO ROSA">
-                        <img src="${SPRITES.BOI}" style="width: 40px; height: 40px; border-radius: 5px;" title="BOI DA CARA PRETA">
-                        <img src="${SPRITES.JACI}" style="width: 40px; height: 40px; border-radius: 5px;" title="JACI">
-                        <img src="${SPRITES.GUARACI}" style="width: 40px; height: 40px; border-radius: 5px;" title="GUARACI">
-                    </div>
                     <div style="color: #e67e22; font-size: 0.8rem;">🔥 DESAFIO FINAL</div>
                 </div>
                 ` : `
@@ -814,17 +482,11 @@
                     <div style="font-size: 3rem; margin-bottom: 15px;">🔒</div>
                     <h3 style="color: #e67e22; margin-bottom: 5px;">DESAFIO 3</h3>
                     <p style="color: #aaa; font-size: 0.9rem; margin-bottom: 15px;">Complete o Desafio 2 para desbloquear</p>
-                    <div style="display: flex; justify-content: center; gap: 10px; margin-bottom: 15px; opacity: 0.5;">
-                        <img src="${SPRITES.BOTO}" style="width: 40px; height: 40px; border-radius: 5px; filter: grayscale(100%);" title="BOTO ROSA">
-                        <img src="${SPRITES.BOI}" style="width: 40px; height: 40px; border-radius: 5px; filter: grayscale(100%);" title="BOI DA CARA PRETA">
-                        <img src="${SPRITES.JACI}" style="width: 40px; height: 40px; border-radius: 5px; filter: grayscale(100%);" title="JACI">
-                        <img src="${SPRITES.GUARACI}" style="width: 40px; height: 40px; border-radius: 5px; filter: grayscale(100%);" title="GUARACI">
-                    </div>
                     <div style="color: #e74c3c; font-size: 0.8rem;">🔒 BLOQUEADO</div>
                 </div>
                 `}
             </div>
-            <button onclick="this.parentElement.remove();" 
+            <button onclick="document.getElementById('arcadeSelectionModal').remove();" 
                     style="padding: 12px 25px; background: #e74c3c; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold;">
                 CANCELAR
             </button>
@@ -836,27 +498,17 @@
     function selectArcadeChallenge(challengeNumber) {
         currentArcadeChallenge = challengeNumber;
         
-        if (challengeNumber === 1) {
-            arcadeCurrentOrder = ARCADE_ORDER_FIRST;
-        } else if (challengeNumber === 2) {
-            arcadeCurrentOrder = ARCADE_ORDER_SECOND;
-        } else {
-            arcadeCurrentOrder = ARCADE_ORDER_THIRD;
-        }
+        if (challengeNumber === 1) arcadeCurrentOrder = ARCADE_ORDER_FIRST;
+        else if (challengeNumber === 2) arcadeCurrentOrder = ARCADE_ORDER_SECOND;
+        else arcadeCurrentOrder = ARCADE_ORDER_THIRD;
         
         arcadeIndex = 0;
         boss.type = arcadeCurrentOrder[arcadeIndex];
         
         hideScreen('playersScreen');
         showScreen('gameScreen');
-        currentScreen = 'game';
-        initGameWithPlayers();
-    }
-    
-    function selectBoss(bossType) {
-        boss.type = bossType;
-        hideScreen('playersScreen');
-        showScreen('gameScreen');
+        const gs = document.getElementById('gameScreen');
+        if (gs) gs.classList.add('active');
         currentScreen = 'game';
         initGameWithPlayers();
     }
@@ -876,12 +528,15 @@
             if (confirm('Deseja voltar ao menu? O progresso atual será perdido.')) {
                 gameActive = false;
                 hideScreen('gameScreen');
+                const gs = document.getElementById('gameScreen');
+                if (gs) gs.classList.remove('active');
                 showScreen('titleScreen');
                 currentScreen = 'title';
                 stopAllAudio();
             }
         } else {
             hideScreen(currentScreen + 'Screen');
+            if (currentScreen === 'players') hideScreen('challengeScreen');
             showScreen('titleScreen');
             currentScreen = 'title';
         }
@@ -911,7 +566,7 @@
                         style="padding: 15px; background: #e74c3c; color: white; border: none; border-radius: 8px; font-size: 1.2rem; cursor: pointer;">
                     MENU PRINCIPAL
                 </button>
-                <button onclick="showConfigScreen(); this.parentElement.parentElement.remove();" 
+                <button onclick="this.parentElement.parentElement.remove(); showConfigScreen();" 
                         style="padding: 15px; background: #9b59b6; color: white; border: none; border-radius: 8px; font-size: 1.2rem; cursor: pointer;">
                     CONFIGURAÇÕES
                 </button>
@@ -927,29 +582,31 @@
     }
     
     function showScreen(screenId) {
-        document.getElementById(screenId).style.display = 'block';
+        const el = document.getElementById(screenId);
+        if (el) el.style.display = 'block';
     }
     
     function hideScreen(screenId) {
-        document.getElementById(screenId).style.display = 'none';
+        const el = document.getElementById(screenId);
+        if (el) el.style.display = 'none';
     }
-
-    // ================= FUNÇÕES DE CONFIGURAÇÃO =================
+    // ================= CONFIGURAÇÕES =================
     function loadConfigToUI() {
         const slider = document.getElementById('amulet_chance_slider');
         const valueDisplay = document.getElementById('amulet_chance_value');
         const hiddenInput = document.getElementById('amulet_chance');
         
-        slider.value = hiddenInput.value;
-        valueDisplay.textContent = slider.value + '%';
-        
-        slider.addEventListener('input', function() {
-            valueDisplay.textContent = this.value + '%';
-            hiddenInput.value = this.value;
-        });
-        
-        document.getElementById('musicToggle').checked = true;
-        document.getElementById('sfxToggle').checked = true;
+        if (slider && hiddenInput && valueDisplay) {
+            slider.value = hiddenInput.value;
+            valueDisplay.textContent = slider.value + '%';
+            
+            if (slider._listener) slider.removeEventListener('input', slider._listener);
+            slider._listener = function() {
+                valueDisplay.textContent = this.value + '%';
+                hiddenInput.value = this.value;
+            };
+            slider.addEventListener('input', slider._listener);
+        }
     }
     
     function saveConfig() {
@@ -974,13 +631,9 @@
         addLog('⚙️ Configurações restauradas para valores padrão!');
     }
 
-    // ================= FUNÇÕES DO SISTEMA DE TÍTULOS =================
+    // ================= TÍTULOS =================
     function saveTitleData() {
-        const data = {
-            stats: PLAYER_STATS,
-            titles: TITLES,
-            activeTitle: ACTIVE_TITLE
-        };
+        const data = { stats: PLAYER_STATS, titles: TITLES, activeTitle: ACTIVE_TITLE };
         localStorage.setItem('entity_titles_data', JSON.stringify(data));
     }
 
@@ -990,6 +643,8 @@
             try {
                 const data = JSON.parse(saved);
                 Object.assign(PLAYER_STATS, data.stats || {});
+                
+                if (!PLAYER_STATS.wins_as_class) PLAYER_STATS.wins_as_class = { Tupa: 0, Sume: 0, Caipora: 0 };
                 
                 for (let id in data.titles) {
                     if (TITLES[id]) {
@@ -1006,36 +661,21 @@
     }
 
     function updateTitleStats(type, value = 1, elementOrClass = null) {
+        if (tutorialMode) return;
+        
         switch(type) {
-            case 'game_played':
-                PLAYER_STATS.games_played++;
-                break;
-            case 'survive_1hp':
-                PLAYER_STATS.survive_1hp++;
-                break;
-            case 'amulet_collected':
-                PLAYER_STATS.total_amulets++;
-                break;
-            case 'bravely_chain':
-                PLAYER_STATS.bravely_chains++;
-                break;
-            case 'healing':
-                PLAYER_STATS.total_healing += value;
-                break;
+            case 'game_played': PLAYER_STATS.games_played++; break;
+            case 'survive_1hp': PLAYER_STATS.survive_1hp++; break;
+            case 'amulet_collected': PLAYER_STATS.total_amulets++; break;
+            case 'bravely_chain': PLAYER_STATS.bravely_chains++; break;
+            case 'healing': PLAYER_STATS.total_healing += value; break;
             case 'element_damage':
                 if (elementOrClass && PLAYER_STATS.element_damage[elementOrClass] !== undefined) {
                     PLAYER_STATS.element_damage[elementOrClass] += value;
                 }
                 break;
-            case 'water_healing':
-                PLAYER_STATS.water_healing += value;
-                break;
-            case 'earth_tile':
-                PLAYER_STATS.earth_tiles++;
-                break;
-            case 'air_tile':
-                PLAYER_STATS.air_tiles++;
-                break;
+            case 'earth_tile': PLAYER_STATS.earth_tiles++; break;
+            case 'air_tile': PLAYER_STATS.air_tiles++; break;
             case 'class_damage':
                 if (elementOrClass && PLAYER_STATS.class_damage[elementOrClass] !== undefined) {
                     PLAYER_STATS.class_damage[elementOrClass] += value;
@@ -1054,8 +694,11 @@
                     }
                 }
                 break;
-            case 'ultimate_used':
-                PLAYER_STATS.ultimates_used++;
+            case 'ultimate_used': PLAYER_STATS.ultimates_used++; break;
+            case 'win_as_class':
+                if (elementOrClass && PLAYER_STATS.wins_as_class[elementOrClass] !== undefined) {
+                    PLAYER_STATS.wins_as_class[elementOrClass]++;
+                }
                 break;
         }
         
@@ -1068,56 +711,26 @@
         
         for (let id in TITLES) {
             const title = TITLES[id];
-            if (title.unlocked) {
-                unlockedCount++;
-                continue;
-            }
+            if (title.unlocked) { unlockedCount++; continue; }
             
             const req = title.requirement;
             let progress = 0;
             let target = req.target;
             
             switch(req.type) {
-                case 'games_played':
-                    progress = PLAYER_STATS.games_played;
-                    break;
-                case 'survive_1hp':
-                    progress = PLAYER_STATS.survive_1hp;
-                    break;
-                case 'total_amulets':
-                    progress = PLAYER_STATS.total_amulets;
-                    break;
-                case 'bravely_chains':
-                    progress = PLAYER_STATS.bravely_chains;
-                    break;
-                case 'total_healing':
-                    progress = PLAYER_STATS.total_healing;
-                    break;
-                case 'element_damage':
-                    progress = PLAYER_STATS.element_damage[req.element] || 0;
-                    break;
-                case 'water_healing':
-                    progress = PLAYER_STATS.water_healing;
-                    break;
-                case 'earth_tiles':
-                    progress = PLAYER_STATS.earth_tiles;
-                    break;
-                case 'air_tiles':
-                    progress = PLAYER_STATS.air_tiles;
-                    break;
-                case 'class_damage':
-                    progress = PLAYER_STATS.class_damage[req.class] || 0;
-                    break;
-                case 'bosses_defeated':
-                    progress = PLAYER_STATS.bosses_defeated.length;
-                    break;
-                case 'all_shapes':
-                    progress = PLAYER_STATS.all_shapes ? 1 : 0;
-                    target = 1;
-                    break;
-                case 'ultimates_used':
-                    progress = PLAYER_STATS.ultimates_used;
-                    break;
+                case 'games_played': progress = PLAYER_STATS.games_played; break;
+                case 'survive_1hp': progress = PLAYER_STATS.survive_1hp; break;
+                case 'total_amulets': progress = PLAYER_STATS.total_amulets; break;
+                case 'bravely_chains': progress = PLAYER_STATS.bravely_chains; break;
+                case 'total_healing': progress = PLAYER_STATS.total_healing; break;
+                case 'element_damage': progress = PLAYER_STATS.element_damage[req.element] || 0; break;
+                case 'earth_tiles': progress = PLAYER_STATS.earth_tiles; break;
+                case 'air_tiles': progress = PLAYER_STATS.air_tiles; break;
+                case 'class_damage': progress = PLAYER_STATS.class_damage[req.class] || 0; break;
+                case 'wins_as_class': progress = (PLAYER_STATS.wins_as_class && PLAYER_STATS.wins_as_class[req.class]) || 0; break;
+                case 'bosses_defeated': progress = PLAYER_STATS.bosses_defeated.length; break;
+                case 'all_shapes': progress = PLAYER_STATS.all_shapes ? 1 : 0; target = 1; break;
+                case 'ultimates_used': progress = PLAYER_STATS.ultimates_used; break;
             }
             
             title.progress = progress;
@@ -1125,10 +738,7 @@
             if (progress >= target) {
                 title.unlocked = true;
                 unlockedCount++;
-                
-                if (gameActive) {
-                    triggerTitleUnlock(title.name, title.icon);
-                }
+                if (gameActive && !tutorialMode) triggerTitleUnlock(title.name, title.icon);
             }
         }
         
@@ -1138,19 +748,12 @@
     function triggerTitleUnlock(name, icon) {
         const notification = document.createElement('div');
         notification.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
+            position: fixed; top: 20px; right: 20px;
             background: linear-gradient(135deg, #2c3e50, #34495e);
-            color: white;
-            padding: 15px 20px;
-            border-radius: 8px;
+            color: white; padding: 15px 20px; border-radius: 8px;
             border-left: 4px solid #f1c40f;
             box-shadow: 0 5px 15px rgba(0,0,0,0.5);
-            z-index: 10001;
-            animation: slideIn 0.5s ease, fadeOut 0.5s ease 2.5s forwards;
-            max-width: 300px;
-            font-family: 'Segoe UI', sans-serif;
+            z-index: 10001; max-width: 300px;
         `;
         
         notification.innerHTML = `
@@ -1164,49 +767,28 @@
         `;
         
         document.body.appendChild(notification);
-        
-        setTimeout(() => {
-            if (notification.parentNode) {
-                notification.parentNode.removeChild(notification);
-            }
-        }, 3000);
+        setTimeout(() => { if (notification.parentNode) notification.parentNode.removeChild(notification); }, 3000);
     }
 
     function applyTitleBonus(player) {
-        if (!ACTIVE_TITLE || !TITLES[ACTIVE_TITLE]) {
-            return;
-        }
-        
+        if (!ACTIVE_TITLE || !TITLES[ACTIVE_TITLE]) return;
         const title = TITLES[ACTIVE_TITLE];
         const bonus = title.bonus;
-        
         player.titleBonus = player.titleBonus || {};
         
         switch(bonus.type) {
-            case 'ATK':
-                player.titleBonus.ATK = bonus.value;
-                break;
-                
+            case 'ATK': player.titleBonus.ATK = bonus.value; break;
             case 'MAX_HP':
                 player.titleBonus.MAX_HP = bonus.value;
                 player.maxHp += bonus.value;
                 player.hp += bonus.value;
                 break;
-                
             case 'ELEMENTAL_RESIST':
                 player.titleBonus.RESIST = player.titleBonus.RESIST || {};
                 player.titleBonus.RESIST[bonus.element] = bonus.value;
                 break;
-                
-            case 'CLASS_BONUS':
-                if (player.class === bonus.class) {
-                    player.titleBonus.CLASS = bonus;
-                }
-                break;
-                
-            case 'UNIQUE':
-                player.titleBonus.UNIQUE = bonus;
-                break;
+            case 'CLASS_BONUS': if (player.class === bonus.class) player.titleBonus.CLASS = bonus; break;
+            case 'UNIQUE': player.titleBonus.UNIQUE = bonus; break;
         }
         
         updateVisuals();
@@ -1214,12 +796,10 @@
 
     function removeTitleBonus(player) {
         if (!player.titleBonus) return;
-        
         if (player.titleBonus.MAX_HP) {
             player.maxHp -= player.titleBonus.MAX_HP;
             player.hp = Math.min(player.hp, player.maxHp);
         }
-        
         player.titleBonus = null;
         updateVisuals();
     }
@@ -1229,12 +809,9 @@
         const titleId = select.value;
         
         players.forEach(p => removeTitleBonus(p));
-        
         ACTIVE_TITLE = titleId === 'none' ? null : titleId;
         
-        if (ACTIVE_TITLE && gameActive) {
-            players.forEach(p => applyTitleBonus(p));
-        }
+        if (ACTIVE_TITLE && gameActive) players.forEach(p => applyTitleBonus(p));
         
         updateTitlePreview();
         saveTitleData();
@@ -1259,21 +836,11 @@
         
         let bonusText = '';
         switch(bonus.type) {
-            case 'ATK':
-                bonusText = `+${bonus.value} ATK`;
-                break;
-            case 'MAX_HP':
-                bonusText = `+${bonus.value} HP Máximo`;
-                break;
-            case 'ELEMENTAL_RESIST':
-                bonusText = `-${Math.abs(bonus.value)} dano de ${bonus.element}`;
-                break;
-            case 'CLASS_BONUS':
-                bonusText = bonus.desc;
-                break;
-            case 'UNIQUE':
-                bonusText = bonus.desc;
-                break;
+            case 'ATK': bonusText = `+${bonus.value} ATK`; break;
+            case 'MAX_HP': bonusText = `+${bonus.value} HP Máximo`; break;
+            case 'ELEMENTAL_RESIST': bonusText = `-${Math.abs(bonus.value)} dano de ${bonus.element}`; break;
+            case 'CLASS_BONUS': bonusText = bonus.desc; break;
+            case 'UNIQUE': bonusText = bonus.desc; break;
         }
         
         preview.innerHTML = `
@@ -1315,9 +882,7 @@
     }
 
     function switchTitleTab(category) {
-        document.querySelectorAll('.title-tab-btn').forEach(btn => {
-            btn.classList.remove('title-tab-active');
-        });
+        document.querySelectorAll('.title-tab-btn').forEach(btn => btn.classList.remove('title-tab-active'));
         
         const buttons = document.querySelectorAll('.title-tab-btn');
         for (let btn of buttons) {
@@ -1332,7 +897,6 @@
         }
         
         const filtered = Object.entries(TITLES).filter(([id, title]) => title.category === category);
-        
         const content = document.getElementById('titlesContent');
         let html = '';
         
@@ -1346,32 +910,21 @@
                 
                 let bonusText = '';
                 switch(title.bonus.type) {
-                    case 'ATK':
-                        bonusText = `+${title.bonus.value} ATK`;
-                        break;
-                    case 'MAX_HP':
-                        bonusText = `+${title.bonus.value} HP Máximo`;
-                        break;
-                    case 'ELEMENTAL_RESIST':
-                        bonusText = `-${Math.abs(title.bonus.value)} dano de ${title.bonus.element}`;
-                        break;
-                    case 'CLASS_BONUS':
-                        bonusText = title.bonus.desc;
-                        break;
-                    case 'UNIQUE':
-                        bonusText = title.bonus.desc;
-                        break;
+                    case 'ATK': bonusText = `+${title.bonus.value} ATK`; break;
+                    case 'MAX_HP': bonusText = `+${title.bonus.value} HP Máximo`; break;
+                    case 'ELEMENTAL_RESIST': bonusText = `-${Math.abs(title.bonus.value)} dano de ${title.bonus.element}`; break;
+                    case 'CLASS_BONUS': bonusText = title.bonus.desc; break;
+                    case 'UNIQUE': bonusText = title.bonus.desc; break;
                 }
                 
                 html += `
-                    <div class="title-card ${title.unlocked ? 'unlocked' : 'locked'} ${category === 'unique' ? 'epic' : ''}">
+                    <div class="title-card ${title.unlocked ? 'unlocked' : 'locked'} ${category === 'unique' ? 'epic' : ''}" data-title-id="${id}">
                         <div class="title-header">
                             <div class="title-name">${title.icon} ${title.name}</div>
                             <div class="title-icon">${title.unlocked ? '✅' : '🔒'}</div>
                         </div>
                         <div class="title-description">${title.description}</div>
                         <div class="title-bonus">${bonusText}</div>
-                        
                         ${!title.unlocked ? `
                             <div class="title-requirement">
                                 <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 3px;">
@@ -1391,8 +944,8 @@
         content.innerHTML = html;
         
         const titleCards = document.querySelectorAll('.title-card.unlocked');
-        titleCards.forEach((card, index) => {
-            const titleId = Object.keys(filtered)[index];
+        titleCards.forEach((card) => {
+            const titleId = card.getAttribute('data-title-id');
             if (titleId && TITLES[titleId]) {
                 card.addEventListener('click', () => {
                     document.getElementById('activeTitleSelect').value = titleId;
@@ -1411,18 +964,16 @@
         document.getElementById('progressBar').style.width = `${percent}%`;
     }
 
-    // ================= FUNÇÕES DO BESTIÁRIO ATUALIZADAS =================
+    // ================= BESTIÁRIO =================
     function showBestiaryModal() {
         const bestiaryModal = document.getElementById('bestiaryModal');
-        
-        // Verificar quais bosses estão disponíveis
         const savedData = localStorage.getItem('entity_titles_data');
+        
         if (savedData) {
             try {
                 const data = JSON.parse(savedData);
                 const bossesDefeated = data.stats?.bosses_defeated || [];
                 
-                // Mostrar novos bosses do segundo desafio se o primeiro foi completado
                 const firstChallengeBosses = ['SACI', 'MAPINGUARI', 'IARA', 'BOITATA'];
                 const hasDefeatedFirstChallenge = firstChallengeBosses.every(boss => bossesDefeated.includes(boss));
                 
@@ -1440,7 +991,6 @@
                     }
                 });
                 
-                // Mostrar novos bosses do terceiro desafio se o segundo foi completado
                 const secondChallengeBosses = ['MULA', 'CORPOSECO', 'LOBISOMEM', 'CUCA'];
                 const hasDefeatedSecondChallenge = secondChallengeBosses.every(boss => bossesDefeated.includes(boss));
                 
@@ -1469,7 +1019,7 @@
         document.getElementById('bestiaryModal').style.display = 'none';
     }
 
-    // ================= FUNÇÕES DE RANKING =================
+    // ================= RANKING =================
     function resetRankingStats() {
         RANKING.turns = 0;
         RANKING.ultimates = 0;
@@ -1495,9 +1045,7 @@
         const diff = getDifficultyByHP(boss.maxHp).toLowerCase();
         const pc = `${players.length}p`;
         
-        if(mode === "BOSS") {
-            return `coop-${boss.type.toLowerCase()}-${diff}-${pc}`;
-        }
+        if(mode === "BOSS") return `coop-${boss.type.toLowerCase()}-${diff}-${pc}`;
         if(mode === "ARCADE") {
             const challenge = currentArcadeChallenge === 1 ? "first" : currentArcadeChallenge === 2 ? "second" : "third";
             return `arcade-${challenge}-${diff}-${pc}`;
@@ -1528,13 +1076,13 @@
     function sendScoreToDreamlo() {
         if(RANKING.sent) return;
         if(mode === "PVP") return;
+        if(tutorialMode) return;
         
         const metaText = getRankingMetaString();
         if(!metaText) return;
         
         const score = calculateFinalScore();
         const playerLabel = getPlayersLabel();
-        
         const nameWithMeta = `${playerLabel.substring(0,15)} | ${metaText}`;
         
         RANKING.sent = true;
@@ -1544,74 +1092,32 @@
             `add/${encodeURIComponent(nameWithMeta)}/${score}`;
         
         const proxiedURL = `https://corsproxy.io/?${encodeURIComponent(originalURL)}`;
-
-        console.log("🎯 Enviando ranking via proxy:", { nameWithMeta, score });
         
         const img = new Image();
         img.src = proxiedURL;
         
         addLog(`🏆 ${score} pontos enviados!`);
-        
-        setTimeout(() => {
-            if(document.getElementById("rankingModal").style.display === "block") {
-                refreshRanking();
-            }
-        }, 2000);
     }
 
     function parseMetaFromName(fullName) {
         if (!fullName || !fullName.includes("|")) {
-            return {
-                displayName: fullName || "Desconhecido",
-                mode: "UNKNOWN",
-                boss: "NONE",
-                difficulty: "FACIL",
-                players: "1P",
-                challenge: "none"
-            };
+            return { displayName: fullName || "Desconhecido", mode: "UNKNOWN", boss: "NONE", difficulty: "FACIL", players: "1P", challenge: "none" };
         }
         
         const parts = fullName.split("|");
         const displayName = parts[0].trim();
         const meta = parts[1].trim();
-        
         const metaParts = meta.split("-");
         
-        const modeMap = {
-            "coop": "COOP",
-            "arcade": "ARCADE"
-        };
-        
-        const diffMap = {
-            "facil": "FÁCIL",
-            "medio": "MÉDIO", 
-            "dificil": "DIFÍCIL",
-            "insano": "INSANO"
-        };
-        
+        const modeMap = { "coop": "COOP", "arcade": "ARCADE" };
+        const diffMap = { "facil": "FÁCIL", "medio": "MÉDIO", "dificil": "DIFÍCIL", "insano": "INSANO" };
         const bossMap = {
-            "saci": "SACI",
-            "boitata": "BOITATA",
-            "mapinguari": "MAPINGUARI",
-            "iara": "IARA",
-            "mula": "MULA",
-            "corposeco": "CORPOSECO",
-            "lobisomem": "LOBISOMEM",
-            "cuca": "CUCA",
-            "boto": "BOTO",
-            "boi": "BOI",
-            "jaci": "JACI",
-            "guaraci": "GUARACI",
-            "anhanga": "ANHANGA",
-            "none": "NONE"
+            "saci": "SACI", "boitata": "BOITATA", "mapinguari": "MAPINGUARI", "iara": "IARA",
+            "mula": "MULA", "corposeco": "CORPOSECO", "lobisomem": "LOBISOMEM", "cuca": "CUCA",
+            "boto": "BOTO", "boi": "BOI", "jaci": "JACI", "guaraci": "GUARACI",
+            "anhanga": "ANHANGA", "none": "NONE"
         };
-        
-        const challengeMap = {
-            "first": "PRIMEIRO",
-            "second": "SEGUNDO",
-            "third": "TERCEIRO",
-            "none": "NONE"
-        };
+        const challengeMap = { "first": "PRIMEIRO", "second": "SEGUNDO", "third": "TERCEIRO", "none": "NONE" };
         
         return {
             displayName: displayName,
@@ -1625,31 +1131,17 @@
     }
 
     function getModeDisplayName(mode) {
-        const names = {
-            "COOP": "👾 COOP (Boss)",
-            "ARCADE": "🏆 Arcade (Rush)",
-            "UNKNOWN": "❓ Desconhecido"
-        };
+        const names = { "COOP": "👾 COOP (Boss)", "ARCADE": "🏆 Arcade (Rush)", "UNKNOWN": "❓ Desconhecido" };
         return names[mode] || mode;
     }
 
     function getDifficultyDisplayName(diff) {
-        const names = {
-            "FÁCIL": "FÁCIL",
-            "MÉDIO": "MÉDIO", 
-            "DIFÍCIL": "DIFÍCIL",
-            "INSANO": "INSANO"
-        };
+        const names = { "FÁCIL": "FÁCIL", "MÉDIO": "MÉDIO", "DIFÍCIL": "DIFÍCIL", "INSANO": "INSANO" };
         return names[diff] || diff;
     }
 
     function getDifficultyColor(diff) {
-        const colors = {
-            "FÁCIL": "#2ecc71",
-            "MÉDIO": "#f1c40f",
-            "DIFÍCIL": "#e67e22",
-            "INSANO": "#e74c3c"
-        };
+        const colors = { "FÁCIL": "#2ecc71", "MÉDIO": "#f1c40f", "DIFÍCIL": "#e67e22", "INSANO": "#e74c3c" };
         return colors[diff] || "#fff";
     }
 
@@ -1682,9 +1174,7 @@
                     return;
                 }
                 
-                if (!Array.isArray(entries)) {
-                    entries = [entries];
-                }
+                if (!Array.isArray(entries)) entries = [entries];
                 
                 RANKING_CACHE = entries.map(entry => {
                     const meta = parseMetaFromName(entry.name);
@@ -1698,13 +1188,12 @@
                 });
                 
                 LAST_RANKING_LOAD = now;
-                
                 populateFilterOptions();
                 applyRankingFilters();
             })
             .catch(error => {
                 console.error("Erro ao carregar ranking:", error);
-                content.innerHTML = '<div style="text-align:center; padding:20px; color:#e74c3c;">Erro ao carregar ranking. Verifique sua conexão.</div>';
+                content.innerHTML = '<div style="text-align:center; padding:20px; color:#e74c3c;">Erro ao carregar ranking.</div>';
             });
     }
 
@@ -1730,7 +1219,6 @@
         const bossFilter = document.getElementById("rf_boss");
         if (bossFilter) {
             const bosses = [...new Set(RANKING_CACHE.map(e => e.boss))].filter(b => b && b !== "NONE" && b !== "PRIMEIRO" && b !== "SEGUNDO" && b !== "TERCEIRO");
-            
             bossFilter.innerHTML = '<option value="">Todos os Bosses</option>';
             bosses.forEach(boss => {
                 const option = document.createElement("option");
@@ -1739,7 +1227,6 @@
                 bossFilter.appendChild(option);
             });
             
-            // Adicionar desafios do Arcade
             const arcadeChallenges = [...new Set(RANKING_CACHE.filter(e => e.mode === "ARCADE").map(e => e.challenge))].filter(c => c && c !== "NONE");
             arcadeChallenges.forEach(challenge => {
                 const option = document.createElement("option");
@@ -1786,30 +1273,21 @@
         
         let filtered = RANKING_CACHE;
         
-        if (filters.mode) {
-            filtered = filtered.filter(e => e.mode === filters.mode);
-        }
+        if (filters.mode) filtered = filtered.filter(e => e.mode === filters.mode);
         
         if (filters.boss) {
-            if (filters.mode === "COOP") {
-                filtered = filtered.filter(e => e.boss === filters.boss);
-            } else if (filters.mode === "ARCADE") {
+            if (filters.mode === "COOP") filtered = filtered.filter(e => e.boss === filters.boss);
+            else if (filters.mode === "ARCADE") {
                 if (filters.boss === "PRIMEIRO" || filters.boss === "SEGUNDO" || filters.boss === "TERCEIRO") {
                     filtered = filtered.filter(e => e.challenge === filters.boss);
                 } else {
-                    // Se for um nome de boss específico no arcade
                     filtered = filtered.filter(e => e.boss === filters.boss);
                 }
             }
         }
         
-        if (filters.players) {
-            filtered = filtered.filter(e => e.players === filters.players);
-        }
-        
-        if (filters.difficulty) {
-            filtered = filtered.filter(e => e.difficulty === filters.difficulty);
-        }
+        if (filters.players) filtered = filtered.filter(e => e.players === filters.players);
+        if (filters.difficulty) filtered = filtered.filter(e => e.difficulty === filters.difficulty);
         
         if (filters.search) {
             const searchLower = filters.search.toLowerCase();
@@ -1820,7 +1298,6 @@
         }
         
         filtered.sort((a, b) => b.score - a.score);
-        
         renderRankingTable(filtered);
     }
 
@@ -1840,14 +1317,7 @@
             <div style="overflow-x: auto;">
             <table class="ranking-table">
                 <thead>
-                    <tr>
-                        <th>#</th>
-                        <th>Nome</th>
-                        <th>Pontuação</th>
-                        <th>Modo</th>
-                        <th>Detalhes</th>
-                        <th>Data</th>
-                    </tr>
+                    <tr><th>#</th><th>Nome</th><th>Pontuação</th><th>Modo</th><th>Detalhes</th><th>Data</th></tr>
                 </thead>
                 <tbody>
         `;
@@ -1857,13 +1327,9 @@
             const modeIcon = entry.mode === "COOP" ? "👾" : entry.mode === "ARCADE" ? "🏆" : "❓";
             
             let details = "";
-            if (entry.mode === "COOP") {
-                details = `${entry.boss} | ${entry.players} | ${getDifficultyDisplayName(entry.difficulty)}`;
-            } else if (entry.mode === "ARCADE") {
-                details = `Desafio ${entry.challenge} | ${entry.players} | ${getDifficultyDisplayName(entry.difficulty)}`;
-            } else {
-                details = `${entry.players}`;
-            }
+            if (entry.mode === "COOP") details = `${entry.boss} | ${entry.players} | ${getDifficultyDisplayName(entry.difficulty)}`;
+            else if (entry.mode === "ARCADE") details = `Desafio ${entry.challenge} | ${entry.players} | ${getDifficultyDisplayName(entry.difficulty)}`;
+            else details = `${entry.players}`;
             
             const dateStr = entry.date ? entry.date.split(' ')[0] : "";
             
@@ -1879,12 +1345,7 @@
             `;
         });
         
-        html += `
-                </tbody>
-            </table>
-            </div>
-        `;
-        
+        html += `</tbody></table></div>`;
         content.innerHTML = html;
     }
 
@@ -1906,14 +1367,13 @@
         document.getElementById("rankingModal").style.display = "none";
     }
 
-    // ================= FUNÇÕES DO JOGO =================
+    // ================= ÁUDIO =================
     const sfx = { 
         skill1: new Audio("dramatic-synth-echo-43970.mp3"), atkg: new Audio("atkg.mp3"), atkm: new Audio("atkm.mp3"), atka: new Audio("atka.mp3"), 
         click: new Audio("click.mp3"), bgm: new Audio("fundoboss.mp3"), sacitema: new Audio("sacitema.mp3"), 
         mapinguaritema: new Audio("mapinguariteme.mp3"), boitatatema: new Audio("boitatatema.mp3"), iaratema: new Audio("iarateme.mp3"),
         minoa1: new Audio("minoa1.mp3"), minoa2: new Audio("minoa2.mp3"), saci: new Audio("saci.mp3"), saci1: new Audio("saci1.mp3"), 
         iara1: new Audio("iara1.mp3"), iara2: new Audio("iara2.mp3"), win: new Audio("win.mp3"), gameover: new Audio("gameover.mp3"),
-        // SEGUNDO DESAFIO
         corposecotema: new Audio("corposeco.mp3"),
         lobisomemtema: new Audio("lobisomem.mp3"),
         cucatema: new Audio("cuca.mp3"),
@@ -1921,32 +1381,25 @@
         cucask1: new Audio("cucask1.mp3"),
         cucask2: new Audio("cucask2.mp3"),
         garras: new Audio("garras.mp3"),
-        // TERCEIRO DESAFIO - NOVOS SONS
-        boto_skill1: new Audio("boto_skill1.mp3"), // Será referenciado a skill1
-        boto_skill2: null, // Será referenciado a iara2
-        boi_skill1: new Audio("boi_skill1.mp3"), // Será referenciado a garras
-        boi_skill2: new Audio("boi_skill2.mp3"), // Será referenciado a iara1
-        jaci_skill1: null, // Será referenciado a saci1
-        jaci_skill2: new Audio("jaciskill2.mp3"), // Será referenciado a cucask1
-        guaraci_skill1: null, // Será referenciado a skill1
-        guaraci_skill2: new Audio("guaraciskill2.mp3"), // Será referenciado a iara1
-        // TEMAS DOS NOVOS BOSSES
+        boto_skill1: new Audio("boto_skill1.mp3"),
+        boto_skill2: null,
+        boi_skill1: new Audio("boi_skill1.mp3"),
+        boi_skill2: new Audio("boi_skill2.mp3"),
+        jaci_skill1: null,
+        jaci_skill2: new Audio("jaciskill2.mp3"),
+        guaraci_skill1: null,
+        guaraci_skill2: new Audio("guaraciskill2.mp3"),
         bototema: new Audio("boto.mp3"),
         boitema: new Audio("boi.mp3"),
         jacitema: new Audio("jaci.mp3"),
         guaracitema: new Audio("guaraci.mp3"),
-        // BOSS FINAL
-        anhanga_skill1: null, // Será referenciado a skill1
-        anhanga_skill2: null, // Será referenciado a cucask2
+        anhanga_skill1: null,
+        anhanga_skill2: null,
         anhangatema: new Audio("anhanga.mp3"),
         intro: new Audio("intro.mp3")
     };
 
-    // Referenciar sons existentes para evitar duplicação
-    //sfx.boto_skill1 = sfx.skill1;
     sfx.boto_skill2 = sfx.iara2;
-    //sfx.boi_skill1 = sfx.garras;
-    //sfx.boi_skill2 = sfx.iara1;
     sfx.jaci_skill1 = sfx.saci1; 
     sfx.guaraci_skill1 = sfx.skill1;
     sfx.anhanga_skill1 = sfx.skill1;
@@ -1965,6 +1418,7 @@
     function unlockAudio() { 
         if (!audioUnlocked) { 
             Object.values(sfx).forEach(a => { 
+                if (!a) return;
                 a.play().then(() => { 
                     a.pause(); 
                     if([sfx.bgm, sfx.sacitema, sfx.mapinguaritema, sfx.boitatatema, sfx.iaratema,
@@ -1974,12 +1428,13 @@
                 }).catch(()=>{}); 
             }); 
             audioUnlocked = true; 
-            playBossTheme();
         } 
     }
 
     function playBossTheme() {
         if (!audioUnlocked) return;
+        if (tutorialMode) return;
+        
         [sfx.bgm, sfx.sacitema, sfx.mapinguaritema, sfx.boitatatema, sfx.iaratema,
          sfx.corposecotema, sfx.lobisomemtema, sfx.cucatema, sfx.mulatema,
          sfx.bototema, sfx.boitema, sfx.jacitema, sfx.guaracitema,
@@ -1990,29 +1445,26 @@
                 case "MAPINGUARI": currentBGM = sfx.mapinguaritema; break;
                 case "BOITATA": currentBGM = sfx.boitatatema; break;
                 case "IARA": currentBGM = sfx.iaratema; break;
-                // SEGUNDO DESAFIO
                 case "MULA": currentBGM = sfx.mulatema; break;
                 case "CORPOSECO": currentBGM = sfx.corposecotema; break;
                 case "LOBISOMEM": currentBGM = sfx.lobisomemtema; break;
                 case "CUCA": currentBGM = sfx.cucatema; break;
-                // TERCEIRO DESAFIO
                 case "BOTO": currentBGM = sfx.bototema; break;
                 case "BOI": currentBGM = sfx.boitema; break;
                 case "JACI": currentBGM = sfx.jacitema; break;
                 case "GUARACI": currentBGM = sfx.guaracitema; break;
-                // BOSS FINAL
                 case "ANHANGA": currentBGM = sfx.anhangatema; break;
                 default: currentBGM = sfx.bgm;
             }
         } else currentBGM = sfx.bgm;
-        if (currentBGM) { currentBGM.currentTime = 0; currentBGM.play(); }
+        if (currentBGM) { currentBGM.currentTime = 0; currentBGM.play().catch(()=>{}); }
     }
 
     function playSfx(name) { 
         if (!audioUnlocked || !sfx[name]) return; 
         const sound = sfx[name].cloneNode(); 
         sound.volume = 0.6; 
-        sound.play(); 
+        sound.play().catch(()=>{}); 
     }
 
     function stopAllAudio() {
@@ -2026,10 +1478,16 @@
 
     function addLog(msg) { 
         const log = document.getElementById('log'); 
+        if (!log) return;
         const entry = document.createElement('div');
         entry.className = 'log-entry';
         entry.innerHTML = `> ${msg}`;
         log.appendChild(entry); 
+        
+        while (log.children.length > 40) {
+            log.removeChild(log.firstChild);
+        }
+        
         log.scrollTop = log.scrollHeight; 
     }
     
@@ -2043,32 +1501,25 @@
         }); 
     }
     
-    // ================= FUNÇÃO PARA ATUALIZAR DIREÇÃO DOS SPRITES =================
+    // ================= DIREÇÃO DE SPRITES =================
     function updateAllSpriteDirections() {
         if (!gameActive) return;
+        if (tutorialMode) return;
         
-        // Atualizar sprites dos jogadores
         players.forEach(player => {
             if (player.dead) return;
-            
             const img = document.getElementById(`imgP${player.id}`);
             if (!img) return;
             
             let targetX, targetY;
             
             if (mode === "BOSS" || mode === "ARCADE") {
-                if (boss.dead) {
-                    img.className = 'normal';
-                    return;
-                }
+                if (boss.dead) { img.className = 'normal'; return; }
                 targetX = boss.x;
                 targetY = boss.y;
             } else if (mode === "PVP") {
                 const otherPlayer = players.find(p => p.id !== player.id && !p.dead);
-                if (!otherPlayer) {
-                    img.className = 'normal';
-                    return;
-                }
+                if (!otherPlayer) { img.className = 'normal'; return; }
                 targetX = otherPlayer.x;
                 targetY = otherPlayer.y;
             } else {
@@ -2077,15 +1528,9 @@
             }
             
             const shouldFlip = targetX < player.x;
-            
-            if (shouldFlip) {
-                img.className = 'flipped';
-            } else {
-                img.className = 'normal';
-            }
+            img.className = shouldFlip ? 'flipped' : 'normal';
         });
         
-        // Atualizar sprite do boss
         if (mode === "BOSS" || mode === "ARCADE") {
             const bossImg = document.getElementById('imgBoss');
             if (bossImg && !boss.dead) {
@@ -2104,41 +1549,26 @@
                     
                     const shouldBossFlip = nearestPlayer.x < boss.x;
                     
-                    // Tratamento especial para bosses que olham para esquerda
                     if (boss.type === "IARA" || boss.type === "CORPOSECO" || boss.type === "BOTO") {
-                        if (shouldBossFlip) {
-                            bossImg.className = boss.type === "IARA" ? 'iara-flipped' : 'flipped';
-                        } else {
-                            bossImg.className = boss.type === "IARA" ? 'iara-normal' : 'normal';
-                        }
+                        if (shouldBossFlip) bossImg.className = boss.type === "IARA" ? 'iara-flipped' : 'flipped';
+                        else bossImg.className = boss.type === "IARA" ? 'iara-normal' : 'normal';
                     } else {
-                        if (shouldBossFlip) {
-                            bossImg.className = 'flipped';
-                        } else {
-                            bossImg.className = 'normal';
-                        }
+                        bossImg.className = shouldBossFlip ? 'flipped' : 'normal';
                     }
                 }
             }
         }
     }
     
-    // ================= NOVA FUNÇÃO: EXIBIR ANIMAÇÃO DO BRAVELY CHAIN =================
+    // ================= ANIMAÇÃO PODER ANCESTRAL =================
     async function showBravelyAnimation(playerClass) {
         return new Promise((resolve) => {
             let gifUrl = "";
             switch(playerClass) {
-                case "Tupa":
-                    gifUrl = SPRITES.BRAVELY_TUPA;
-                    break;
-                case "Sume":
-                    gifUrl = SPRITES.BRAVELY_SUME;
-                    break;
-                case "Caipora":
-                    gifUrl = SPRITES.BRAVELY_CAIPORA;
-                    break;
-                default:
-                    gifUrl = SPRITES.BRAVELY_TUPA;
+                case "Tupa": gifUrl = SPRITES.BRAVELY_TUPA; break;
+                case "Sume": gifUrl = SPRITES.BRAVELY_SUME; break;
+                case "Caipora": gifUrl = SPRITES.BRAVELY_CAIPORA; break;
+                default: gifUrl = SPRITES.BRAVELY_TUPA;
             }
             
             const overlay = document.createElement('div');
@@ -2148,28 +1578,12 @@
             const gif = document.createElement('img');
             gif.src = gifUrl;
             gif.className = 'bravely-animation-gif';
-            gif.alt = 'Bravely Chain Animation';
-            
-            const text = document.createElement('div');
-            text.style.cssText = `
-                position: absolute;
-                bottom: 20%;
-                left: 0;
-                width: 100%;
-                text-align: center;
-                color: gold;
-                font-size: 32px;
-                font-weight: bold;
-                text-shadow: 0 0 10px #000;
-                z-index: 10001;
-            `;
-            text.textContent = 'BRAVELY CHAIN!';
+            gif.alt = 'Poder Ancestral';
             
             overlay.appendChild(gif);
-            overlay.appendChild(text);
             
-            const board = document.getElementById('board');
-            board.appendChild(overlay);
+            const board = tutorialMode ? document.getElementById('tutorialBoard') : document.getElementById('board');
+            if (board) board.appendChild(overlay);
             
             playSfx('skill1');
             
@@ -2177,11 +1591,8 @@
                 if (overlay.parentNode) {
                     overlay.style.opacity = '0';
                     overlay.style.transition = 'opacity 0.5s ease';
-                    
                     setTimeout(() => {
-                        if (overlay.parentNode) {
-                            overlay.parentNode.removeChild(overlay);
-                        }
+                        if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
                         resolve();
                     }, 500);
                 } else {
@@ -2191,15 +1602,1023 @@
         });
     }
     
-    // ================= FUNÇÕES DE INICIALIZAÇÃO DO JOGO =================
+    // ================= EFEITO PODER ANCESTRAL =================
+    function showPoderAncestralEffect() {
+        const board = tutorialMode ? document.getElementById('tutorialBoard') : document.getElementById('board');
+        if (!board) return;
+        
+        document.querySelectorAll('.poder-ancestral-vignette, .poder-ancestral-text, .poder-ancestral-runes, .poder-ancestral-burst').forEach(el => el.remove());
+        
+        const vignette = document.createElement('div');
+        vignette.className = 'poder-ancestral-vignette';
+        board.appendChild(vignette);
+        
+        const burst = document.createElement('div');
+        burst.className = 'poder-ancestral-burst';
+        board.appendChild(burst);
+        
+        const text = document.createElement('div');
+        text.className = 'poder-ancestral-text';
+        text.textContent = 'PODER ANCESTRAL';
+        board.appendChild(text);
+        
+        const runesContainer = document.createElement('div');
+        runesContainer.className = 'poder-ancestral-runes';
+        
+        const runes = ['ᛉ', 'ᚨ', 'ᛟ', 'ᚦ', 'ᚱ', 'ᛊ', 'ᛗ', 'ᛏ'];
+        const positions = [
+            { rx: '-280px', ry: '-140px', rrot: '-25deg' },
+            { rx: '280px', ry: '-140px', rrot: '25deg' },
+            { rx: '-320px', ry: '20px', rrot: '-10deg' },
+            { rx: '320px', ry: '20px', rrot: '10deg' },
+            { rx: '-280px', ry: '160px', rrot: '15deg' },
+            { rx: '280px', ry: '160px', rrot: '-15deg' },
+            { rx: '-180px', ry: '-200px', rrot: '-40deg' },
+            { rx: '180px', ry: '-200px', rrot: '40deg' }
+        ];
+        
+        runes.forEach((rune, i) => {
+            const span = document.createElement('span');
+            span.textContent = rune;
+            const pos = positions[i];
+            span.style.setProperty('--rx', pos.rx);
+            span.style.setProperty('--ry', pos.ry);
+            span.style.setProperty('--rrot', pos.rrot);
+            span.style.animationDelay = (i * 0.05) + 's';
+            runesContainer.appendChild(span);
+        });
+        
+        board.appendChild(runesContainer);
+        
+        setTimeout(() => {
+            document.querySelectorAll('.poder-ancestral-vignette, .poder-ancestral-text, .poder-ancestral-runes, .poder-ancestral-burst').forEach(el => el.remove());
+        }, 2400);
+    }
+    
+    // ================= CARD DE HERÓI =================
+    function updateHeroCard() {
+        const list = document.getElementById('heroesStatusList');
+        if (!list) return;
+        
+        if (tutorialMode) {
+            list.innerHTML = '';
+            return;
+        }
+        
+        const ELEMENT_ICONS = {
+            'FOGO':  { icon: '🔥', color: '#e74c3c' },
+            'AGUA':  { icon: '💧', color: '#3498db' },
+            'TERRA': { icon: '⛰️', color: '#27ae60' },
+            'AR':    { icon: '🌪️', color: '#f1c40f' }
+        };
+        
+        list.innerHTML = '';
+        
+        players.forEach((p, index) => {
+            const row = document.createElement('div');
+            row.className = 'hero-status-row';
+            if (index === currentPlayerIdx && currentPlayerIdx >= 0) row.classList.add('current');
+            if (p.dead) row.classList.add('dead');
+            
+            const elemInfo = ELEMENT_ICONS[p.element] || { icon: '❓', color: '#666' };
+            row.style.borderLeftColor = elemInfo.color;
+            
+            const hpPercent = p.maxHp > 0 ? Math.max(0, (p.hp / p.maxHp) * 100) : 0;
+            const hpColor = hpPercent > 60 ? '#2ecc71' : hpPercent > 30 ? '#f1c40f' : '#e74c3c';
+            
+            const baseAtk = CLASS_DB[p.class]?.atk || 0;
+            const amuletBonus = p.bonusAtk || 0;
+            const titleBonus = p.titleBonus?.ATK || 0;
+            const totalAtk = baseAtk + amuletBonus + titleBonus;
+            
+            let atkText = `${totalAtk}`;
+            if (amuletBonus > 0 && titleBonus > 0) {
+                atkText += ` <span style="color:#f39c12;font-size:0.7em;">(+${amuletBonus}<img src="${SPRITES.Muiraquita}" style="width:10px;height:10px;vertical-align:middle;"> +${titleBonus}🏅)</span>`;
+            } else if (amuletBonus > 0) {
+                atkText += ` <span style="color:#f39c12;font-size:0.7em;">(+${amuletBonus}<img src="${SPRITES.Muiraquita}" style="width:10px;height:10px;vertical-align:middle;">)</span>`;
+            } else if (titleBonus > 0) {
+                atkText += ` <span style="color:#2ecc71;font-size:0.7em;">(+${titleBonus}🏅)</span>`;
+            }
+            
+            row.innerHTML = `
+                <img class="hero-status-sprite" src="${SPRITES[p.class]}" alt="${p.name}">
+                <div class="hero-status-info">
+                    <div class="hero-status-name">
+                        <span class="hero-element-icon" style="color: ${elemInfo.color}; text-shadow: 0 0 6px ${elemInfo.color};" title="${p.element}">
+                            ${elemInfo.icon}
+                        </span>
+                        ${p.name || 'P'+(index+1)}
+                    </div>
+                    <div class="hero-status-hp">
+                        <span>${p.hp}/${p.maxHp}</span>
+                        <div class="mini-hp-bar">
+                            <div class="mini-hp-fill" style="width: ${hpPercent}%; background: ${hpColor};"></div>
+                        </div>
+                        <span class="hero-status-atk" title="Ataque total">⚔️ ${atkText}</span>
+                    </div>
+                </div>
+            `;
+            
+            list.appendChild(row);
+        });
+        
+        const turnName = document.getElementById('turnDisplayName');
+        if (turnName) {
+            if (currentPlayerIdx >= 0 && players[currentPlayerIdx]) {
+                const p = players[currentPlayerIdx];
+                const elemInfo = ELEMENT_ICONS[p.element] || { icon: '' };
+                turnName.innerHTML = `${elemInfo.icon} ${p.name || `Jogador ${currentPlayerIdx+1}`}`;
+                const turnDisplay = document.getElementById('turnP_Active');
+                if (turnDisplay) turnDisplay.classList.add('active-turn');
+            } else {
+                turnName.textContent = 'Boss';
+            }
+        }
+    }
+    
+    function updateHeaderBossName() {
+        const headerBoss = document.getElementById('headerBossName');
+        if (!headerBoss) return;
+        
+        if (tutorialMode) {
+            headerBoss.textContent = 'TREINAMENTO';
+            headerBoss.style.display = 'inline-block';
+            return;
+        }
+        
+        if (mode === "BOSS" || mode === "ARCADE") {
+            headerBoss.textContent = getBossDisplayName(boss.type);
+            headerBoss.style.display = 'inline-block';
+        } else if (mode === "PVP" && players[1]) {
+            headerBoss.textContent = `PVP: ${players[0]?.name || 'P1'} vs ${players[1]?.name || 'P2'}`;
+            headerBoss.style.display = 'inline-block';
+        } else {
+            headerBoss.style.display = 'none';
+        }
+    }
+    
+    function updateBossCard() {
+        const sprite = document.getElementById('bossCardSprite');
+        const name = document.getElementById('bossCardName');
+        const hp = document.getElementById('bossCardHp');
+        
+        if (tutorialMode) {
+            if (sprite) sprite.src = SPRITES.Tupa;
+            if (name) name.textContent = 'TREINAMENTO';
+            if (hp) hp.innerHTML = '<span style="color:#c39bd3;">Modo de prática</span>';
+            return;
+        }
+        
+        if (mode === "BOSS" || mode === "ARCADE") {
+            if (sprite) sprite.src = SPRITES[boss.type];
+            if (name) name.textContent = getBossDisplayName(boss.type);
+            if (hp) hp.innerHTML = `HP: <b>${boss.hp}</b> / ${boss.maxHp}`;
+        } else if (mode === "PVP" && players[1]) {
+            if (sprite) sprite.src = SPRITES[players[1].class];
+            if (name) name.textContent = players[1].name;
+            if (hp) hp.innerHTML = `HP: <b>${players[1].hp}</b> / ${players[1].maxHp}`;
+        }
+    }
+    // ================================================================
+    // 🎓 SISTEMA DE TUTORIAL (v4 — flags corrigidas)
+    // ================================================================
+    
+    // --- Persistência ---
+    function saveTutorialData(completed) {
+        try {
+            localStorage.setItem('entity_tutorial_data', JSON.stringify({
+                completed: completed,
+                lastLesson: tutorialLessonIndex,
+                timestamp: Date.now()
+            }));
+        } catch (e) {
+            console.warn("Não foi possível salvar tutorial:", e);
+        }
+    }
+    
+    function loadTutorialData() {
+        try {
+            const raw = localStorage.getItem('entity_tutorial_data');
+            if (raw) {
+                const data = JSON.parse(raw);
+                tutorialCompleted = data.completed || false;
+            }
+        } catch (e) {
+            tutorialCompleted = false;
+        }
+    }
+    
+    // ✅ RESET DE TODAS AS FLAGS (incluindo as novas)
+    function resetTutorialFlags() {
+        window._tutorialBravelyTriggered = false;
+        window._tutorialSoloSagradoUsed = false;
+        window._tutorialAmuletCollected = false;
+        window._tutorialMoveExecuted = false;
+        window._tutorialPathExecuted = false;
+        window._tutorialFormExecuted = null;
+    }
+    
+    // --- Entrada e saída do tutorial ---
+    function beginTutorial() {
+        tutorialMode = true;
+        tutorialLessonIndex = 0;
+        
+        hideScreen('titleScreen');
+        hideScreen('modeScreen');
+        hideScreen('challengeScreen');
+        hideScreen('playersScreen');
+        hideScreen('gameScreen');
+        hideScreen('configScreen');
+        
+        const tutScreen = document.getElementById('tutorialScreen');
+        if (tutScreen) {
+            tutScreen.classList.add('active');
+            tutScreen.style.display = 'flex';
+        }
+        
+        currentScreen = 'tutorial';
+        gameActive = true;
+        
+        playerCount = 1;
+        playerConfigs[0].active = true;
+        playerConfigs[0].class = 'Tupa';
+        playerConfigs[0].name = 'Herói';
+        
+        initTutorialGrid();
+        loadTutorialLesson(tutorialLessonIndex);
+    }
+    
+    function exitTutorial() {
+        tutorialMode = false;
+        gameActive = false;
+        
+        if (tutorialHighlightTimeout) {
+            clearTimeout(tutorialHighlightTimeout);
+            tutorialHighlightTimeout = null;
+        }
+        
+        clearTutorialHints();
+        
+        const tutScreen = document.getElementById('tutorialScreen');
+        if (tutScreen) {
+            tutScreen.classList.remove('active');
+            tutScreen.style.display = 'none';
+        }
+        
+        showScreen('titleScreen');
+        currentScreen = 'title';
+    }
+    
+    // --- Inicialização do tabuleiro do tutorial ---
+    function initTutorialGrid() {
+        const gridEl = document.getElementById('tutorialGrid');
+        if (!gridEl) return;
+        
+        gridEl.innerHTML = '';
+        grid = [];
+        amulets = [];
+        path = [];
+        
+        for (let i = 0; i < 64; i++) {
+            const c = COLORS[Math.floor(Math.random() * 4)];
+            grid[i] = c;
+            amulets[i] = false;
+            
+            const tile = document.createElement('div');
+            tile.className = `tile bg-${c}`;
+            tile.onclick = () => handleSelect(i);
+            tile.dataset.idx = i;
+            gridEl.appendChild(tile);
+        }
+        
+        players = [{
+            id: 0,
+            x: 0,
+            y: 7,
+            hp: 16,
+            maxHp: 16,
+            class: 'Tupa',
+            element: 'FOGO',
+            name: 'Herói',
+            skillUsed: false,
+            dead: false,
+            bonusAtk: 0
+        }];
+        
+        const board = document.getElementById('tutorialBoard');
+        board.querySelectorAll('.token').forEach(t => t.remove());
+        
+        const token = document.createElement('div');
+        token.id = `tokenP0`;
+        token.className = `token p-hue-0`;
+        token.innerHTML = `<div class="hp-container"><div id="hpBarP0" class="hp-bar"></div></div><img id="imgP0" src="${SPRITES.Tupa}" class="normal">`;
+        board.appendChild(token);
+        
+        updateTutorialVisuals();
+    }
+    
+    function updateTutorialVisuals() {
+        const s = getStep();
+        players.forEach(p => {
+            const t = document.getElementById(`tokenP${p.id}`);
+            if (t && !p.dead) {
+                t.style.left = (p.x * s + 8) + 'px';
+                t.style.top = (p.y * s + 8) + 'px';
+                const h = document.getElementById(`hpBarP${p.id}`);
+                if (h) h.style.width = (p.hp / p.maxHp) * 100 + '%';
+            }
+        });
+    }
+    
+    function clearTutorialHints() {
+        document.querySelectorAll('#tutorialGrid .tile').forEach(t => {
+            t.classList.remove('tutorial-hint');
+            t.classList.remove('tutorial-path-start');
+            const arrow = t.querySelector('.tutorial-arrow');
+            if (arrow) arrow.remove();
+            const num = t.querySelector('.tutorial-step-num');
+            if (num) num.remove();
+        });
+        document.querySelectorAll('#tutorialBoard .tutorial-path-line').forEach(el => el.remove());
+    }
+    
+    function loadTutorialLesson(index) {
+        if (index >= TUTORIAL_LESSONS.length) {
+            finishTutorial();
+            return;
+        }
+        
+        tutorialLessonIndex = index;
+        const lesson = TUTORIAL_LESSONS[index];
+        
+        const numEl = document.getElementById('tutorialLessonNum');
+        const totalEl = document.getElementById('tutorialLessonTotal');
+        if (numEl) numEl.textContent = index + 1;
+        if (totalEl) totalEl.textContent = TUTORIAL_LESSONS.length;
+        
+        const instTitle = document.getElementById('tutorialInstructionTitle');
+        const instText = document.getElementById('tutorialInstructionText');
+        const instBox = document.getElementById('tutorialInstruction');
+        
+        if (instTitle) instTitle.textContent = lesson.title;
+        if (instText) instText.textContent = lesson.instruction;
+        if (instBox) instBox.classList.remove('success');
+        
+        const nextBtn = document.getElementById('tutorialNextBtn');
+        if (nextBtn) nextBtn.disabled = true;
+        
+        if (tutorialHighlightTimeout) {
+            clearTimeout(tutorialHighlightTimeout);
+            tutorialHighlightTimeout = null;
+        }
+        clearTutorialHints();
+        
+        path = [];
+        renderTutorialPath();
+        
+        resetTutorialFlags();
+        
+        players[0].x = 0;
+        players[0].y = 7;
+        players[0].hp = players[0].maxHp;
+        players[0].skillUsed = false;
+        players[0].bonusAtk = 0;
+        skillActive = false;
+        
+        document.querySelectorAll('#tutorialGrid .tile').forEach(t => t.classList.remove('skill-mode'));
+        
+        const board = document.getElementById('tutorialBoard');
+        board.querySelectorAll('.poder-ancestral-vignette, .poder-ancestral-text, .poder-ancestral-runes, .poder-ancestral-burst, .dmg-float, .heal-float, .flare-fx, .rock-projectile, .sword-fx, .arrow-fx').forEach(el => el.remove());
+        
+        if (typeof lesson.setup === 'function') {
+            lesson.setup();
+        }
+        
+        updateTutorialVisuals();
+        updateTutorialButtons();
+        
+        tutorialHighlightTimeout = setTimeout(() => {
+            if (tutorialMode && tutorialLessonIndex === index && typeof lesson.hint === 'function') {
+                lesson.hint();
+            }
+        }, 5000);
+    }
+    
+    // ✅ Atualiza estado dos botões do tutorial
+    function updateTutorialButtons() {
+        const btnSkill = document.getElementById('tutorialBtnSkill');
+        const btnPlay = document.getElementById('tutorialBtnPlay');
+        
+        if (!btnSkill || !btnPlay) return;
+        
+        const p = players[0];
+        if (!p) return;
+        
+        btnSkill.disabled = p.skillUsed;
+        btnPlay.disabled = (path.length === 0);
+    }
+    
+    function checkTutorialObjective() {
+        if (!tutorialMode) return;
+        
+        const lesson = TUTORIAL_LESSONS[tutorialLessonIndex];
+        if (!lesson || typeof lesson.check !== 'function') return;
+        
+        if (lesson.check()) {
+            onTutorialSuccess();
+        }
+    }
+    
+    async function onTutorialSuccess() {
+        if (!tutorialMode) return;
+        
+        if (tutorialHighlightTimeout) {
+            clearTimeout(tutorialHighlightTimeout);
+            tutorialHighlightTimeout = null;
+        }
+        clearTutorialHints();
+        
+        const instBox = document.getElementById('tutorialInstruction');
+        const instTitle = document.getElementById('tutorialInstructionTitle');
+        const nextBtn = document.getElementById('tutorialNextBtn');
+        
+        if (instBox) instBox.classList.add('success');
+        if (instTitle) instTitle.textContent = '✨ PERFEITO!';
+        if (nextBtn) nextBtn.disabled = false;
+        
+        playSfx('win');
+    }
+    
+    function nextTutorialLesson() {
+        const nextIndex = tutorialLessonIndex + 1;
+        
+        if (nextIndex >= TUTORIAL_LESSONS.length) {
+            finishTutorial();
+        } else {
+            loadTutorialLesson(nextIndex);
+        }
+    }
+    
+    function skipTutorialLesson() {
+        nextTutorialLesson();
+    }
+    
+    function finishTutorial() {
+        tutorialMode = false;
+        tutorialCompleted = true;
+        saveTutorialData(true);
+        
+        const tutMain = document.querySelector('.tutorial-main');
+        if (!tutMain) return;
+        
+        const old = document.querySelector('.tutorial-complete');
+        if (old) old.remove();
+        
+        const completeOverlay = document.createElement('div');
+        completeOverlay.className = 'tutorial-complete';
+        completeOverlay.innerHTML = `
+            <div class="tutorial-complete-icon">🏆</div>
+            <div class="tutorial-complete-title">TREINAMENTO CONCLUÍDO!</div>
+            <div class="tutorial-complete-text">
+                Você dominou todas as mecânicas. Agora está pronto para enfrentar os bosses corrompidos!
+            </div>
+            <div class="tutorial-complete-actions">
+                <button class="tutorial-complete-btn" onclick="closeTutorialComplete(true)">JOGAR AGORA</button>
+                <button class="tutorial-complete-btn secondary" onclick="closeTutorialComplete(false)">MENU PRINCIPAL</button>
+                <button class="tutorial-complete-btn secondary" onclick="restartTutorialFromComplete()">REVISAR</button>
+            </div>
+        `;
+        
+        const tutScreen = document.getElementById('tutorialScreen');
+        if (tutScreen) tutScreen.appendChild(completeOverlay);
+        
+        const btnTitle = document.getElementById('tutorialTitleBtn');
+        const btnCta = document.getElementById('tutorialCtaBtn');
+        if (btnTitle) {
+            btnTitle.classList.add('completed');
+            btnTitle.innerHTML = '✔ TREINAMENTO (REVISAR)';
+        }
+        if (btnCta) {
+            btnCta.classList.add('completed');
+            btnCta.innerHTML = '✔ REVISAR TREINAMENTO';
+        }
+    }
+    
+    function closeTutorialComplete(goToGame) {
+        const overlay = document.querySelector('.tutorial-complete');
+        if (overlay) overlay.remove();
+        
+        if (goToGame) {
+            exitTutorial();
+            setTimeout(() => {
+                showScreen('modeScreen');
+                currentScreen = 'mode';
+            }, 100);
+        } else {
+            exitTutorial();
+        }
+    }
+    
+    function restartTutorialFromComplete() {
+        const overlay = document.querySelector('.tutorial-complete');
+        if (overlay) overlay.remove();
+        tutorialLessonIndex = 0;
+        tutorialMode = true;
+        initTutorialGrid();
+        loadTutorialLesson(0);
+    }
+    
+    function renderTutorialPath() {
+        document.querySelectorAll('#tutorialGrid .tile').forEach((t, i) => {
+            t.classList.toggle('selected', path.includes(i));
+        });
+    }
+    
+    // ================================================================
+    // 🎓 DEFINIÇÃO DAS 9 LIÇÕES
+    // ================================================================
+    const TUTORIAL_LESSONS = [
+        { id: 1, title: 'LIÇÃO 1 — MOVIMENTO', instruction: 'Mova o herói clicando num tile vizinho dele e clique em ▶ JOGAR TURNO.', setup: setupTutorialLessonMove, check: checkTutorialLessonMove, hint: getHintTutorialLessonMove },
+        { id: 2, title: 'LIÇÃO 2 — CAMINHO', instruction: 'Encadeie 3 tiles do mesmo elemento e clique em ▶ JOGAR TURNO.', setup: setupTutorialLessonPath, check: checkTutorialLessonPath, hint: getHintTutorialLessonPath },
+        { id: 3, title: 'LIÇÃO 3 — FORMA LINHA', instruction: 'Monte uma LINHA: 4 tiles em fileira do mesmo elemento, e clique em ▶ JOGAR TURNO.', setup: setupTutorialLessonLinha, check: checkTutorialLessonLinha, hint: getHintTutorialLessonLinha },
+        { id: 4, title: 'LIÇÃO 4 — FORMA L', instruction: 'Monte um L: 4 tiles em formato de L do mesmo elemento, e clique em ▶ JOGAR TURNO.', setup: setupTutorialLessonL, check: checkTutorialLessonL, hint: getHintTutorialLessonL },
+        { id: 5, title: 'LIÇÃO 5 — ZIGUE-ZAGUE', instruction: 'Monte um ZIGUE-ZAGUE: 4 tiles conectados em zigue-zague, e clique em ▶ JOGAR TURNO.', setup: setupTutorialLessonZigzag, check: checkTutorialLessonZigzag, hint: getHintTutorialLessonZigzag },
+        { id: 6, title: 'LIÇÃO 6 — QUADRADO', instruction: 'Monte um QUADRADO: 4 tiles formando um bloco 2×2 do mesmo elemento, e clique em ▶ JOGAR TURNO.', setup: setupTutorialLessonQuadrado, check: checkTutorialLessonQuadrado, hint: getHintTutorialLessonQuadrado },
+        { id: 7, title: 'LIÇÃO 7 — PODER ANCESTRAL', instruction: 'Encadeie 9+ tiles num caminho e clique em ▶ JOGAR TURNO para desencadear o Poder Ancestral.', setup: setupTutorialLessonPoderAncestral, check: checkTutorialLessonPoderAncestral, hint: getHintTutorialLessonPoderAncestral },
+        { id: 8, title: 'LIÇÃO 8 — SOLO SAGRADO', instruction: 'Clique em ✨ SOLO SAGRADO e depois em qualquer tile do tabuleiro para mudar o elemento dele.', setup: setupTutorialLessonSoloSagrado, check: checkTutorialLessonSoloSagrado, hint: getHintTutorialLessonSoloSagrado },
+        { id: 9, title: 'LIÇÃO 9 — MUIRAQUITÃ', instruction: 'Mova o herói até o tile com a Muiraquitã e clique em ▶ JOGAR TURNO para ganhar +1 ATK.', setup: setupTutorialLessonMuiraquita, check: checkTutorialLessonMuiraquita, hint: getHintTutorialLessonMuiraquita }
+    ];
+    
+    // ================= HELPERS PARA SETAS E LINHAS =================
+    
+    function addArrowToTile(idx, direction) {
+        const tile = document.querySelectorAll('#tutorialGrid .tile')[idx];
+        if (!tile) return;
+        
+        const old = tile.querySelector('.tutorial-arrow');
+        if (old) old.remove();
+        
+        const arrow = document.createElement('div');
+        arrow.className = 'tutorial-arrow';
+        arrow.textContent = direction === 'right' ? '→' :
+                            direction === 'left' ? '←' :
+                            direction === 'up' ? '↑' :
+                            direction === 'down' ? '↓' : '•';
+        tile.appendChild(arrow);
+    }
+    
+    function addStepNumberToTile(idx, num) {
+        const tile = document.querySelectorAll('#tutorialGrid .tile')[idx];
+        if (!tile) return;
+        
+        const old = tile.querySelector('.tutorial-step-num');
+        if (old) old.remove();
+        
+        const step = document.createElement('div');
+        step.className = 'tutorial-step-num';
+        step.textContent = num;
+        tile.appendChild(step);
+    }
+    
+    function drawPathLine(fromIdx, toIdx) {
+        const board = document.getElementById('tutorialBoard');
+        if (!board) return;
+        
+        const s = getStep();
+        const fromX = (fromIdx % 8) * s + s / 2 + 8;
+        const fromY = Math.floor(fromIdx / 8) * s + s / 2 + 8;
+        const toX = (toIdx % 8) * s + s / 2 + 8;
+        const toY = Math.floor(toIdx / 8) * s + s / 2 + 8;
+        
+        const dx = toX - fromX;
+        const dy = toY - fromY;
+        const length = Math.sqrt(dx * dx + dy * dy);
+        const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+        
+        const line = document.createElement('div');
+        line.className = 'tutorial-path-line';
+        line.style.left = fromX + 'px';
+        line.style.top = fromY + 'px';
+        line.style.width = length + 'px';
+        line.style.transform = `rotate(${angle}deg)`;
+        
+        board.appendChild(line);
+    }
+    
+    function drawTutorialPath(positions) {
+        if (positions.length === 0) return;
+        
+        positions.forEach((p, i) => {
+            const idx = p.y * 8 + p.x;
+            const tile = document.querySelectorAll('#tutorialGrid .tile')[idx];
+            if (tile) {
+                tile.classList.add('tutorial-hint');
+                if (i === 0) tile.classList.add('tutorial-path-start');
+            }
+            addStepNumberToTile(idx, i + 1);
+        });
+        
+        for (let i = 0; i < positions.length - 1; i++) {
+            const curr = positions[i];
+            const next = positions[i + 1];
+            const dx = next.x - curr.x;
+            const dy = next.y - curr.y;
+            
+            let dir = '';
+            if (dx === 1) dir = 'right';
+            else if (dx === -1) dir = 'left';
+            else if (dy === 1) dir = 'down';
+            else if (dy === -1) dir = 'up';
+            
+            const currIdx = curr.y * 8 + curr.x;
+            addArrowToTile(currIdx, dir);
+            
+            const nextIdx = next.y * 8 + next.x;
+            drawPathLine(currIdx, nextIdx);
+        }
+    }
+    
+    // ================================================================
+    // SETUP E CHECK DE CADA LIÇÃO
+    // ================================================================
+    
+    // --- LIÇÃO 1: MOVIMENTO ---
+    function setupTutorialLessonMove() {
+        const idx = 7 * 8 + 1;
+        grid[idx] = 'AGUA';
+        const tile = document.querySelectorAll('#tutorialGrid .tile')[idx];
+        if (tile) tile.className = 'tile bg-AGUA';
+    }
+    
+    // ✅ CORRIGIDO: usa flag (path já foi zerado no executeTutorialAction)
+    function checkTutorialLessonMove() {
+        return window._tutorialMoveExecuted === true;
+    }
+    
+    function getHintTutorialLessonMove() {
+        drawTutorialPath([{ x: 1, y: 7 }]);
+    }
+    
+    // --- LIÇÃO 2: CAMINHO ---
+    function setupTutorialLessonPath() {
+        for (let i = 0; i < 4; i++) {
+            const x = 1 + i;
+            if (x < 8) {
+                const idx = 7 * 8 + x;
+                grid[idx] = 'AGUA';
+                const tile = document.querySelectorAll('#tutorialGrid .tile')[idx];
+                if (tile) tile.className = 'tile bg-AGUA';
+            }
+        }
+    }
+    
+    // ✅ CORRIGIDO: usa flag (path já foi zerado no executeTutorialAction)
+    function checkTutorialLessonPath() {
+        return window._tutorialPathExecuted === true;
+    }
+    
+    function getHintTutorialLessonPath() {
+        drawTutorialPath([
+            { x: 1, y: 7 },
+            { x: 2, y: 7 },
+            { x: 3, y: 7 }
+        ]);
+    }
+    
+    // --- LIÇÃO 3: LINHA ---
+    function setupTutorialLessonLinha() {
+        for (let x = 1; x <= 4; x++) {
+            const idx = 7 * 8 + x;
+            grid[idx] = 'AGUA';
+            const tile = document.querySelectorAll('#tutorialGrid .tile')[idx];
+            if (tile) tile.className = 'tile bg-AGUA';
+        }
+    }
+    
+    function checkTutorialLessonLinha() {
+        return window._tutorialFormExecuted === 'LINHA';
+    }
+    
+    function getHintTutorialLessonLinha() {
+        drawTutorialPath([
+            { x: 1, y: 7 },
+            { x: 2, y: 7 },
+            { x: 3, y: 7 },
+            { x: 4, y: 7 }
+        ]);
+    }
+    
+    // --- LIÇÃO 4: L ---
+    function setupTutorialLessonL() {
+        const positions = [
+            { x: 1, y: 7 },
+            { x: 2, y: 7 },
+            { x: 3, y: 7 },
+            { x: 3, y: 6 }
+        ];
+        positions.forEach(p => {
+            const idx = p.y * 8 + p.x;
+            grid[idx] = 'TERRA';
+            const tile = document.querySelectorAll('#tutorialGrid .tile')[idx];
+            if (tile) tile.className = 'tile bg-TERRA';
+        });
+    }
+    
+    function checkTutorialLessonL() {
+        return window._tutorialFormExecuted === 'L';
+    }
+    
+    function getHintTutorialLessonL() {
+        drawTutorialPath([
+            { x: 1, y: 7 },
+            { x: 2, y: 7 },
+            { x: 3, y: 7 },
+            { x: 3, y: 6 }
+        ]);
+    }
+    
+    // --- LIÇÃO 5: ZIGUE-ZAGUE ---
+    function setupTutorialLessonZigzag() {
+        const positions = [
+            { x: 1, y: 7 },
+            { x: 2, y: 7 },
+            { x: 2, y: 6 },
+            { x: 3, y: 6 }
+        ];
+        positions.forEach(p => {
+            const idx = p.y * 8 + p.x;
+            grid[idx] = 'AR';
+            const tile = document.querySelectorAll('#tutorialGrid .tile')[idx];
+            if (tile) tile.className = 'tile bg-AR';
+        });
+    }
+    
+    function checkTutorialLessonZigzag() {
+        return window._tutorialFormExecuted === 'ZIGZAG';
+    }
+    
+    function getHintTutorialLessonZigzag() {
+        drawTutorialPath([
+            { x: 1, y: 7 },
+            { x: 2, y: 7 },
+            { x: 2, y: 6 },
+            { x: 3, y: 6 }
+        ]);
+    }
+    
+    // --- LIÇÃO 6: QUADRADO ---
+    function setupTutorialLessonQuadrado() {
+        const positions = [
+            { x: 1, y: 6 },
+            { x: 2, y: 6 },
+            { x: 1, y: 7 },
+            { x: 2, y: 7 }
+        ];
+        positions.forEach(p => {
+            const idx = p.y * 8 + p.x;
+            grid[idx] = 'FOGO';
+            const tile = document.querySelectorAll('#tutorialGrid .tile')[idx];
+            if (tile) tile.className = 'tile bg-FOGO';
+        });
+    }
+    
+    function checkTutorialLessonQuadrado() {
+        return window._tutorialFormExecuted === 'QUADRADO';
+    }
+    
+    function getHintTutorialLessonQuadrado() {
+        drawTutorialPath([
+            { x: 1, y: 7 },
+            { x: 1, y: 6 },
+            { x: 2, y: 6 },
+            { x: 2, y: 7 }
+        ]);
+    }
+    
+    // --- LIÇÃO 7: PODER ANCESTRAL ---
+    function setupTutorialLessonPoderAncestral() {
+        const positions = [
+            { x: 1, y: 7 }, { x: 2, y: 7 }, { x: 3, y: 7 }, { x: 4, y: 7 },
+            { x: 4, y: 6 }, { x: 3, y: 6 }, { x: 2, y: 6 }, { x: 1, y: 6 },
+            { x: 1, y: 5 }
+        ];
+        positions.forEach(p => {
+            const idx = p.y * 8 + p.x;
+            grid[idx] = 'AGUA';
+            const tile = document.querySelectorAll('#tutorialGrid .tile')[idx];
+            if (tile) tile.className = 'tile bg-AGUA';
+        });
+    }
+    
+    function checkTutorialLessonPoderAncestral() {
+        return window._tutorialBravelyTriggered === true;
+    }
+    
+    function getHintTutorialLessonPoderAncestral() {
+        drawTutorialPath([
+            { x: 1, y: 7 }, { x: 2, y: 7 }, { x: 3, y: 7 }, { x: 4, y: 7 },
+            { x: 4, y: 6 }, { x: 3, y: 6 }, { x: 2, y: 6 }, { x: 1, y: 6 },
+            { x: 1, y: 5 }
+        ]);
+    }
+    
+    // --- LIÇÃO 8: SOLO SAGRADO ---
+    function setupTutorialLessonSoloSagrado() {
+        players[0].skillUsed = false;
+        window._tutorialSoloSagradoUsed = false;
+    }
+    
+    function checkTutorialLessonSoloSagrado() {
+        return window._tutorialSoloSagradoUsed === true;
+    }
+    
+    function getHintTutorialLessonSoloSagrado() {
+        const btn = document.getElementById('tutorialBtnSkill');
+        if (btn) {
+            btn.style.boxShadow = '0 0 25px rgba(241, 196, 15, 0.9)';
+            btn.style.transform = 'scale(1.05)';
+            setTimeout(() => {
+                btn.style.boxShadow = '';
+                btn.style.transform = '';
+            }, 3000);
+        }
+    }
+    
+    // --- LIÇÃO 9: MUIRAQUITÃ ---
+    function setupTutorialLessonMuiraquita() {
+        const idx = 7 * 8 + 1;
+        amulets[idx] = true;
+        grid[idx] = 'AGUA';
+        const tile = document.querySelectorAll('#tutorialGrid .tile')[idx];
+        if (tile) {
+            tile.className = 'tile bg-AGUA';
+            tile.innerHTML = `<img src="${SPRITES.Muiraquita}" class="amulet-img" alt="Muiraquitã">`;
+        }
+    }
+    
+    function checkTutorialLessonMuiraquita() {
+        return window._tutorialAmuletCollected === true;
+    }
+    
+    function getHintTutorialLessonMuiraquita() {
+        drawTutorialPath([{ x: 1, y: 7 }]);
+    }
+    
+    // ================================================================
+    // 🎓 SELECT no tutorial
+    // ================================================================
+    function handleTutorialSelect(idx) {
+        const p = players[0];
+        if (!p) return;
+        
+        if (skillActive) {
+            grid[idx] = p.element;
+            const tile = document.querySelectorAll('#tutorialGrid .tile')[idx];
+            if (tile) tile.className = `tile bg-${p.element}`;
+            p.skillUsed = true;
+            skillActive = false;
+            document.querySelectorAll('#tutorialGrid .tile').forEach(t => t.classList.remove('skill-mode'));
+            addLog(`✨ SOLO SAGRADO ativado!`);
+            
+            if (tutorialLessonIndex === 7) {
+                window._tutorialSoloSagradoUsed = true;
+            }
+            
+            updateTutorialButtons();
+            checkTutorialObjective();
+            return;
+        }
+        
+        const x = idx % 8, y = Math.floor(idx / 8);
+        
+        if ((x === p.x && y === p.y)) return;
+        
+        if (path.length === 0) {
+            if ((Math.abs(x - p.x) + Math.abs(y - p.y)) === 1) {
+                path.push(idx);
+                playSfx('click');
+            }
+        } else {
+            const lastIdx = path[path.length - 1];
+            if (idx === lastIdx) {
+                path.pop();
+                playSfx('click');
+            } else if (!path.includes(idx) && grid[idx] === grid[lastIdx] && (Math.abs(x - lastIdx % 8) + Math.abs(y - Math.floor(lastIdx / 8))) === 1) {
+                path.push(idx);
+                playSfx('click');
+            }
+        }
+        
+        // Remove hint dos tiles que já estão no path
+        path.forEach(pIdx => {
+            const tile = document.querySelectorAll('#tutorialGrid .tile')[pIdx];
+            if (tile) {
+                tile.classList.remove('tutorial-hint');
+                tile.classList.remove('tutorial-path-start');
+                const arrow = tile.querySelector('.tutorial-arrow');
+                if (arrow) arrow.remove();
+                const num = tile.querySelector('.tutorial-step-num');
+                if (num) num.remove();
+            }
+        });
+        document.querySelectorAll('#tutorialBoard .tutorial-path-line').forEach(el => el.remove());
+        
+        renderTutorialPath();
+        updateTutorialButtons();
+    }
+    
+    // ================================================================
+    // 🎓 EXECUTE ACTION no tutorial (chamado pelo botão JOGAR TURNO)
+    // ================================================================
+    async function executeTutorialAction() {
+        if (!tutorialMode) return;
+        if (path.length === 0) return;
+        if (isExecutingAction) return;
+        
+        isExecutingAction = true;
+        
+        const active = players[0];
+        const usedPath = [...path];
+        const pathLength = usedPath.length;
+        const threshold = 9;
+        const isBravely = pathLength >= threshold;
+        const shape = detectShape(usedPath);
+        
+        // ✅ SETA AS FLAGS ANTES DE MOVER O HERÓI (crítico!)
+        if (pathLength === 1) {
+            window._tutorialMoveExecuted = true;
+        }
+        if (pathLength >= 3) {
+            window._tutorialPathExecuted = true;
+        }
+        if (shape) {
+            window._tutorialFormExecuted = shape;
+        }
+        if (isBravely) {
+            window._tutorialBravelyTriggered = true;
+        }
+        
+        // Aplica efeitos visuais das formas
+        if (shape === "LINHA") {
+            active.hp = Math.min(active.maxHp, active.hp + 1);
+            showHealEffect(active.x, active.y, 1);
+            addLog(`✨ LINHA! Cura 1 HP.`);
+        } else if (shape === "L") {
+            active.hp = Math.min(active.maxHp, active.hp + 2);
+            showHealEffect(active.x, active.y, 2);
+            addLog(`✨ L! Cura 2 HP.`);
+        } else if (shape === "ZIGZAG") {
+            addLog(`✨ ZIGUE-ZAGUE! +3 ATK no próximo ataque.`);
+        } else if (shape === "QUADRADO") {
+            active.skillUsed = false;
+            addLog(`✨ QUADRADO! Solo Sagrado recarregado.`);
+        }
+        
+        // Move o herói pelos tiles
+        for (const idx of usedPath) {
+            active.x = idx % 8;
+            active.y = Math.floor(idx / 8);
+            
+            if (amulets[idx]) {
+                amulets[idx] = false;
+                active.bonusAtk += 1;
+                window._tutorialAmuletCollected = true;
+                const tile = document.querySelectorAll('#tutorialGrid .tile')[idx];
+                if (tile) tile.innerHTML = '';
+                addLog(`💎 Muiraquitã! +1 ATK.`);
+            }
+            
+            updateTutorialVisuals();
+            await sleep(100);
+        }
+        
+        // Poder Ancestral: efeito visual
+        if (isBravely) {
+            addLog(`🔥 PODER ANCESTRAL! Dano devastador.`);
+            showPoderAncestralEffect();
+            await sleep(400);
+            await showBravelyAnimation(active.class);
+        }
+        
+        // Limpa o path e re-renderiza
+        path = [];
+        renderTutorialPath();
+        updateTutorialButtons();
+        
+        // Verifica objetivo da lição
+        checkTutorialObjective();
+        
+        isExecutingAction = false;
+    }
+    // ================= INIT GAME =================
     async function initGame() {
         LORE.currentStage = 1;
         LORE.anhangáRevealed = false;
         
         bossAIIsRunning = false;
         arcadeBossTransition = false;
+        isExecutingAction = false;
         
-        // RESETAR PROGRESSO DO ARCADE AO REINICIAR
         arcadeIndex = 0;
         if (mode === "ARCADE") {
             boss.type = arcadeCurrentOrder[arcadeIndex];
@@ -2224,22 +2643,15 @@
         const board = document.getElementById('board');
         document.querySelectorAll('.token').forEach(t => t.remove()); 
         
-        // Criar jogadores
         for(let i=0; i<playerCount; i++) { 
             const config = playerConfigs[i];
             const initialHP = CLASS_DB[config.class].hp; 
             players.push({ 
-                id: i, 
-                x: 2 + i, 
-                y: 7, 
-                hp: initialHP, 
-                maxHp: initialHP, 
-                class: config.class, 
-                element: 'FOGO', 
-                name: config.name, 
-                skillUsed: false, 
-                dead: false, 
-                bonusAtk: 0 
+                id: i, x: 2 + i, y: 7,
+                hp: initialHP, maxHp: initialHP,
+                class: config.class, element: 'FOGO',
+                name: config.name, skillUsed: false,
+                dead: false, bonusAtk: 0 
             }); 
             
             const token = document.createElement('div'); 
@@ -2250,61 +2662,40 @@
         }
         
         if(mode === "BOSS" || mode === "ARCADE") {
-            if(mode === "ARCADE") { 
-                // Configurar boss baseado no desafio atual
-                boss.type = arcadeCurrentOrder[arcadeIndex]; 
-            }
+            if(mode === "ARCADE") boss.type = arcadeCurrentOrder[arcadeIndex];
             
-            // Vida base do boss
             let baseBossHP = parseInt(document.getElementById('hp_BOSS_cfg').value) || 30;
-            
-            // Se for o Anhangá, adicionar +10 de vida
-            if (boss.type === "ANHANGA") {
-                boss.maxHp = baseBossHP + 9;
-            } else {
-                boss.maxHp = baseBossHP;
-            }
+            if (boss.type === "ANHANGA") boss.maxHp = baseBossHP + 9;
+            else boss.maxHp = baseBossHP;
             
             boss.hp = boss.maxHp; 
             boss.x = 4; 
             boss.y = 0; 
             boss.dead = false;
             
-            document.getElementById('turnBoss').innerText = `${boss.type} BOSS`; 
+            document.getElementById('turnBoss').innerText = `${getBossDisplayName(boss.type)}`;
             const bToken = document.createElement('div'); 
             bToken.id = `tokenBoss`; 
             bToken.className = `token`;
             
-            // Aplicar classe correta baseada no tipo de boss
             let bossClass = 'normal';
-            if (boss.type === "IARA") {
-                bossClass = 'iara-normal';
-            } else if (boss.type === "CORPOSECO" || boss.type === "BOTO") {
-                bossClass = 'normal'; // Já olha para esquerda
-            }
+            if (boss.type === "IARA") bossClass = 'iara-normal';
             
             bToken.innerHTML = `<div class="hp-container"><div id="hpBarBoss" class="hp-bar"></div></div><img id="imgBoss" src="${SPRITES[boss.type]}" class="${bossClass}">`; 
             board.appendChild(bToken);
             
-            document.getElementById('bossNameDisplay').textContent = boss.type;
+            document.getElementById('bossNameDisplay').textContent = getBossDisplayName(boss.type);
             document.getElementById('bossStatsDisplay').innerHTML = `HP: <b>${boss.hp}</b> / ${boss.maxHp}`;
             
-            // Mostrar diálogo do boss no modo Arcade
-            if (mode === "ARCADE") {
-                await showBossIntroDialog(boss.type);
-            }
+            if (mode === "ARCADE") await showBossIntroDialog(boss.type);
         } else { 
-            // Modo PVP
             if (players.length > 1) {
-                players[0].x = 4;
-                players[0].y = 7;
-                players[1].x = 4; 
-                players[1].y = 0; 
-                
-                players[0].hp = CLASS_DB[players[0].class].hp ; 
-                players[0].maxHp = players[0].hp; 
-                players[1].hp = CLASS_DB[players[1].class].hp ; 
-                players[1].maxHp = players[1].hp; 
+                players[0].x = 4; players[0].y = 7;
+                players[1].x = 4; players[1].y = 0;
+                players[0].hp = CLASS_DB[players[0].class].hp;
+                players[0].maxHp = players[0].hp;
+                players[1].hp = CLASS_DB[players[1].class].hp;
+                players[1].maxHp = players[1].hp;
             }
             
             document.getElementById('turnBoss').innerText = 'PVP ADVERSÁRIO';
@@ -2317,8 +2708,10 @@
         currentPlayerIdx = 0; 
         switchConfig(0); 
         updateVisuals(); 
-        
         updateAllSpriteDirections();
+        updateHeroCard();
+        updateHeaderBossName();
+        updateBossCard();
         
         playBossTheme();
         
@@ -2333,18 +2726,27 @@
         updateTitleStats('game_played');
         
         addLog(`🎮 Jogo iniciado no modo ${mode}!`);
-        if (mode === "BOSS") {
-            addLog(`👹 Boss selecionado: ${boss.type}`);
-        } else if (mode === "ARCADE") {
-            addLog(`🏆 Modo Arcade - Desafio ${currentArcadeChallenge}: ${boss.type}`);
-        } else if (mode === "PVP") {
-            addLog(`⚔️ Modo PVP iniciado! ${players[0].name} vs ${players[1].name}`);
+        if (mode === "BOSS") addLog(`👹 Boss selecionado: ${getBossDisplayName(boss.type)}`);
+        else if (mode === "ARCADE") addLog(`🏆 Modo Arcade - Desafio ${currentArcadeChallenge}: ${getBossDisplayName(boss.type)}`);
+        else if (mode === "PVP") addLog(`⚔️ Modo PVP iniciado! ${players[0].name} vs ${players[1].name}`);
+        
+        const mechanicsPanel = document.getElementById('mechanicsPanel');
+        if (mechanicsPanel && window.innerWidth > 1200) {
+            mechanicsPanel.classList.remove('hidden');
+            mechanicsPanel.classList.remove('open-mobile');
         }
     }
 
-    // ================= FUNÇÃO EXECUTEACTION - CORRIGIDA =================
+    // ================= EXECUTE ACTION =================
     async function executeAction() {
-        if(!gameActive || path.length === 0 || bossAIIsRunning || arcadeBossTransition || isExecutingAction) return;
+        if(!gameActive || path.length === 0 || arcadeBossTransition || isExecutingAction) return;
+        
+        if (tutorialMode) {
+            await executeTutorialAction();
+            return;
+        }
+        
+        if (bossAIIsRunning) return;
         
         isExecutingAction = true;
         
@@ -2368,12 +2770,10 @@
                 updateTitleStats('healing', 1);
             }
             if(shape === "L") { 
+                skillAtkBonus = 0; 
                 active.hp = Math.min(active.maxHp, active.hp + 2); 
                 showHealEffect(active.x, active.y, 2); 
                 updateTitleStats('healing', 2);
-                if (grid[usedPath[0]] === 'AGUA') {
-                    updateTitleStats('water_healing', 2);
-                }
             }
             if(shape === "ZIGZAG") skillAtkBonus = 3;
             if(shape === "QUADRADO") active.skillUsed = false;
@@ -2389,9 +2789,7 @@
                     applyDmg(target, totalAtk); 
                     spawnSwordEffect(target.x, target.y); 
                     
-                    // ✅ VERIFICAR SE O BOSS MORREU
                     if (mode === "ARCADE" && boss.dead) {
-                        console.log("⚡ Boss morto durante ataque de Tupã");
                         isExecutingAction = false;
                         return;
                     }
@@ -2405,10 +2803,9 @@
                 active.y = Math.floor(idx/8); 
                 checkAmulet(active, active.x, active.y); 
                 updateVisuals(); 
+                updateHeroCard();
                 
-                if (isOccupied(active.x, active.y, active.id)) {
-                    break;
-                }
+                if (isOccupied(active.x, active.y, active.id)) break;
                 
                 dealGueDmg(); 
                 await sleep(120); 
@@ -2419,27 +2816,21 @@
                 active.y = Math.floor(idx/8); 
                 checkAmulet(active, active.x, active.y); 
                 updateVisuals(); 
+                updateHeroCard();
                 
-                if (isOccupied(active.x, active.y, active.id)) {
-                    break;
-                }
+                if (isOccupied(active.x, active.y, active.id)) break;
                 
                 await sleep(100); 
             }
             
-            if (isBravely) {
-                await showBravelyAnimation(active.class);
-            }
+            if (isBravely) await showBravelyAnimation(active.class);
             
             if(usedPath.length >= info.min && !target.dead) {
                 let extra = usedPath.length - info.min; 
                 playSfx(active.class === 'Sume' ? 'atkm' : 'atka'); 
                 
-                if (active.class === "Caipora") {
-                    await spawnArrowProjectile(active, target);
-                } else {
-                    await spawnProjectile(active, target, 'Magic');
-                }
+                if (active.class === "Caipora") await spawnArrowProjectile(active, target);
+                else await spawnProjectile(active, target, 'Magic');
                 
                 applyDmg(target, totalAtk + (active.class === "Sume" ? extra : Math.floor(extra/2)));
             }
@@ -2447,81 +2838,46 @@
 
         usedPath.forEach(idx => { 
             const gridEl = document.getElementById('grid'); 
-            gridEl.replaceChild(createTile(idx), gridEl.childNodes[idx]); 
+            if (gridEl.childNodes[idx]) {
+                gridEl.replaceChild(createTile(idx), gridEl.childNodes[idx]); 
+            }
         });
 
         if(isBravely) {
-            if (active.class === "Tupa") {
-                await showBravelyAnimation(active.class);
-            }
+            if (active.class === "Tupa") await showBravelyAnimation(active.class);
             
             await triggerBravelyChain(active, target, totalAtk);
             updateTitleStats('bravely_chain');
             
-            path = []; 
-            renderPath();
+            path = []; renderPath();
             RANKING.turns++;
             
-            // ✅ CORREÇÃO: Verificar se o boss morreu no bravely chain
-            if (mode === "ARCADE" && boss.dead) {
-                console.log("⚡ Boss morto no bravely chain, finalizando ação");
-                isExecutingAction = false;
-                return;
-            }
+            if (mode === "ARCADE" && boss.dead) { isExecutingAction = false; return; }
             
-            // ✅ CORREÇÃO: Apenar passar o turno se o boss ainda estiver vivo
             if (mode === "BOSS" || mode === "ARCADE") {
                 isExecutingAction = false;
-                
-                if (mode === "ARCADE" && boss.dead) {
-                    console.log("⚡ Boss morto, não passando turno");
-                    return;
-                }
-                
+                if (mode === "ARCADE" && boss.dead) return;
                 manageTurns();
                 return;
             }
         }
 
-        path = []; 
-        renderPath();
+        path = []; renderPath();
         RANKING.turns++;
 
-        // ✅ CORREÇÃO: Verificar se o boss morreu antes de passar turno
-        if (mode === "ARCADE" && boss.dead) {
-            console.log("⚡ Boss morto, finalizando ação");
-            isExecutingAction = false;
-            return;
-        }
+        if (mode === "ARCADE" && boss.dead) { isExecutingAction = false; return; }
 
-        // ✅ CORREÇÃO: Apenar passar turno se o jogo ainda estiver ativo
-        if (gameActive) {
-            manageTurns();
-        }
+        if (gameActive) manageTurns();
         
         updateAllSpriteDirections();
+        updateHeroCard();
         
         isExecutingAction = false;
     }
 
     async function triggerBravelyChain(active, target, totalAtk) {
-        const pop = document.getElementById('bravelyPop');
-        pop.innerText = "BRAVELY CHAIN!";
-        pop.style.color = "gold";
-        pop.style.display = 'block';
-        pop.style.transform = 'translate(-50%, -50%) scale(1)';
-        pop.style.transition = 'transform 0.5s ease-out';
-        
-        setTimeout(() => {
-            pop.style.transform = 'translate(-50%, -50%) scale(1.5)';
-            pop.style.opacity = '0';
-        }, 500);
-        
-        setTimeout(() => {
-            pop.style.display = 'none';
-            pop.style.transform = 'translate(-50%, -50%) scale(0)';
-            pop.style.opacity = '1';
-        }, 1200);
+        showPoderAncestralEffect();
+        await sleep(300);
         
         let affectedIndices = [];
         if(active.class === "Tupa") { 
@@ -2556,27 +2912,21 @@
             await sleep(400); 
             if(!target.dead) applyDmg(target, totalAtk); 
         }
+        
         affectedIndices.forEach(idx => { 
             grid[idx] = active.element; 
-            const tile = document.querySelectorAll('.tile')[idx]; 
-            tile.className = `tile bg-${active.element}`; 
-            if (active.element === 'TERRA') {
-                updateTitleStats('earth_tile');
-            } else if (active.element === 'AR') {
-                updateTitleStats('air_tile');
-            }
+            const tile = document.querySelectorAll('#grid .tile')[idx]; 
+            if (tile) tile.className = `tile bg-${active.element}`; 
+            if (active.element === 'TERRA') updateTitleStats('earth_tile');
+            else if (active.element === 'AR') updateTitleStats('air_tile');
         });
     }
 
-    // ================= FUNÇÃO MANAGE TURNS - CORRIGIDA =================
+    // ================= MANAGE TURNS =================
     function manageTurns() {
         if (!gameActive || arcadeBossTransition) return;
-
-        // ✅ CORREÇÃO: Verificar se o boss morreu no modo Arcade
-        if (mode === "ARCADE" && boss.dead) {
-            console.log("⚡ Boss morto, não passando turno");
-            return;
-        }
+        if (tutorialMode) return;
+        if (mode === "ARCADE" && boss.dead) return;
         
         if (mode === "PVP") {
             let next = currentPlayerIdx + 1; 
@@ -2596,9 +2946,7 @@
             }
         } else if (mode === "BOSS" || mode === "ARCADE") {
             let nextPlayerIdx = currentPlayerIdx + 1;
-            while(nextPlayerIdx < players.length && players[nextPlayerIdx].dead) {
-                nextPlayerIdx++;
-            }
+            while(nextPlayerIdx < players.length && players[nextPlayerIdx].dead) nextPlayerIdx++;
             
             if(nextPlayerIdx < players.length) {
                 currentPlayerIdx = nextPlayerIdx;
@@ -2627,8 +2975,11 @@
         }
         
         updateAllSpriteDirections();
+        updateHeroCard();
+        updateBossCard();
     }
-    // ================= NOVAS FUNÇÕES PARA OS NOVOS BOSSES segundo =================
+
+    // ================= EFEITOS VISUAIS =================
     function triggerFireball(startX, startY, endX, endY) {
         const board = document.getElementById('board');
         const s = getStep();
@@ -2644,36 +2995,24 @@
         
         board.appendChild(fireball);
         
-        // Animação de movimento
         setTimeout(() => {
             fireball.style.left = (endX * s + 8) + 'px';
             fireball.style.top = (endY * s + 8) + 'px';
             
-            // Criar explosão no destino
             setTimeout(() => {
                 triggerFlare(endX, endY);
-                
-                // Dano em cruz
                 const crossTiles = [
-                    {x: endX, y: endY-1},
-                    {x: endX, y: endY+1},
-                    {x: endX-1, y: endY},
-                    {x: endX+1, y: endY}
+                    {x: endX, y: endY-1}, {x: endX, y: endY+1},
+                    {x: endX-1, y: endY}, {x: endX+1, y: endY}
                 ];
-                
                 crossTiles.forEach(tile => {
-                    if(tile.x >= 0 && tile.x < 8 && tile.y >= 0 && tile.y < 8) {
-                        triggerFlare(tile.x, tile.y);
-                    }
+                    if(tile.x >= 0 && tile.x < 8 && tile.y >= 0 && tile.y < 8) triggerFlare(tile.x, tile.y);
                 });
-                
                 fireball.remove();
             }, 300);
         }, 50);
         
-        setTimeout(() => {
-            if (fireball.parentNode) fireball.remove();
-        }, 1000);
+        setTimeout(() => { if (fireball.parentNode) fireball.remove(); }, 1000);
     }
 
     function triggerClawSpin(x, y) {
@@ -2690,10 +3029,7 @@
         claw.style.zIndex = '60';
         
         board.appendChild(claw);
-        
-        setTimeout(() => {
-            if (claw.parentNode) claw.remove();
-        }, 1000);
+        setTimeout(() => { if (claw.parentNode) claw.remove(); }, 1000);
     }
 
     function triggerPotion(x, y) {
@@ -2710,10 +3046,7 @@
         potion.style.zIndex = '60';
         
         board.appendChild(potion);
-        
-        setTimeout(() => {
-            if (potion.parentNode) potion.remove();
-        }, 600);
+        setTimeout(() => { if (potion.parentNode) potion.remove(); }, 600);
     }
 
     function triggerPoisonGas(x, y) {
@@ -2727,76 +3060,18 @@
         poison.style.zIndex = '60';
         
         board.appendChild(poison);
-        
-        setTimeout(() => {
-            if (poison.parentNode) poison.remove();
-        }, 1200);
+        setTimeout(() => { if (poison.parentNode) poison.remove(); }, 1200);
     }
 
     function triggerEarthquake() {
         const board = document.getElementById('board');
-        
         const earthquake = document.createElement('div');
         earthquake.className = 'earthquake-fx';
         earthquake.style.zIndex = '40';
-        
         board.appendChild(earthquake);
-        
-        setTimeout(() => {
-            if (earthquake.parentNode) earthquake.remove();
-        }, 800);
+        setTimeout(() => { if (earthquake.parentNode) earthquake.remove(); }, 800);
     }
     
-    // ================= NOVA FUNÇÃO: ATAQUE DA CUCA COM QUADRANTES =================
-    function triggerQuadrantPotionAttack() {
-        const board = document.getElementById('board');
-        const s = getStep();
-        
-        // Definir os 4 quadrantes do tabuleiro 8x8
-        const quadrants = [
-            { xStart: 0, xEnd: 3, yStart: 0, yEnd: 3, name: "Superior Esquerdo" },
-            { xStart: 4, xEnd: 7, yStart: 0, yEnd: 3, name: "Superior Direito" },
-            { xStart: 0, xEnd: 3, yStart: 4, yEnd: 7, name: "Inferior Esquerdo" },
-            { xStart: 4, xEnd: 7, yStart: 4, yEnd: 7, name: "Inferior Direito" }
-        ];
-        
-        // Escolher um quadrante aleatoriamente
-        const quadrant = quadrants[Math.floor(Math.random() * 4)];
-        
-        addLog(`🧙‍♀️ Cuca lança uma poção no quadrante ${quadrant.name}!`);
-        
-        // Criar efeito visual para o quadrante inteiro
-        const quadrantEffect = document.createElement('div');
-        quadrantEffect.style.position = 'absolute';
-        quadrantEffect.style.left = (quadrant.xStart * s) + 'px';
-        quadrantEffect.style.top = (quadrant.yStart * s) + 'px';
-        quadrantEffect.style.width = ((quadrant.xEnd - quadrant.xStart + 1) * s) + 'px';
-        quadrantEffect.style.height = ((quadrant.yEnd - quadrant.yStart + 1) * s) + 'px';
-        quadrantEffect.style.background = 'radial-gradient(circle, rgba(155, 89, 182, 0.7), rgba(155, 89, 182, 0.3), transparent)';
-        quadrantEffect.style.borderRadius = '10px';
-        quadrantEffect.style.boxShadow = '0 0 30px rgba(155, 89, 182, 0.8)';
-        quadrantEffect.style.animation = 'potionAnim 0.8s ease-out';
-        quadrantEffect.style.zIndex = '55';
-        
-        board.appendChild(quadrantEffect);
-        
-        // Adicionar efeito de poção em cada tile do quadrante
-        for (let x = quadrant.xStart; x <= quadrant.xEnd; x++) {
-            for (let y = quadrant.yStart; y <= quadrant.yEnd; y++) {
-                setTimeout(() => {
-                    triggerPotion(x, y);
-                }, (x + y) * 50);
-            }
-        }
-        
-        setTimeout(() => {
-            if (quadrantEffect.parentNode) quadrantEffect.remove();
-        }, 1000);
-        
-        return quadrant;
-    }
-
-    // ================= NOVAS FUNÇÕES PARA OS NOVOS BOSSES terceiro=================
     function triggerBrokenHeart(x, y) {
         const board = document.getElementById('board');
         const s = getStep();
@@ -2811,10 +3086,7 @@
         heart.style.zIndex = '60';
         
         board.appendChild(heart);
-        
-        setTimeout(() => {
-            if (heart.parentNode) heart.remove();
-        }, 1200);
+        setTimeout(() => { if (heart.parentNode) heart.remove(); }, 1200);
     }
 
     function triggerScaryFace(x, y) {
@@ -2831,10 +3103,7 @@
         face.style.zIndex = '60';
         
         board.appendChild(face);
-        
-        setTimeout(() => {
-            if (face.parentNode) face.remove();
-        }, 1500);
+        setTimeout(() => { if (face.parentNode) face.remove(); }, 1500);
     }
 
     function triggerMoon(x, y) {
@@ -2851,10 +3120,7 @@
         moon.style.zIndex = '60';
         
         board.appendChild(moon);
-        
-        setTimeout(() => {
-            if (moon.parentNode) moon.remove();
-        }, 1500);
+        setTimeout(() => { if (moon.parentNode) moon.remove(); }, 1500);
     }
 
     function triggerMoonRay(x, y) {
@@ -2868,10 +3134,7 @@
         ray.style.zIndex = '60';
         
         board.appendChild(ray);
-        
-        setTimeout(() => {
-            if (ray.parentNode) ray.remove();
-        }, 800);
+        setTimeout(() => { if (ray.parentNode) ray.remove(); }, 800);
     }
 
     function triggerSun(x, y) {
@@ -2888,10 +3151,7 @@
         sun.style.zIndex = '60';
         
         board.appendChild(sun);
-        
-        setTimeout(() => {
-            if (sun.parentNode) sun.remove();
-        }, 1500);
+        setTimeout(() => { if (sun.parentNode) sun.remove(); }, 1500);
     }
 
     function triggerSunRay(x, y) {
@@ -2905,43 +3165,31 @@
         ray.style.zIndex = '60';
         
         board.appendChild(ray);
-        
-        setTimeout(() => {
-            if (ray.parentNode) ray.remove();
-        }, 800);
+        setTimeout(() => { if (ray.parentNode) ray.remove(); }, 800);
     }
 
     function triggerHeatWave() {
         const board = document.getElementById('board');
-        
         const wave = document.createElement('div');
         wave.className = 'heat-wave-fx';
         wave.style.zIndex = '40';
-        
         board.appendChild(wave);
-        
-        setTimeout(() => {
-            if (wave.parentNode) wave.remove();
-        }, 1500);
+        setTimeout(() => { if (wave.parentNode) wave.remove(); }, 1500);
     }
 
     function triggerStorm() {
         const board = document.getElementById('board');
-        
         const storm = document.createElement('div');
         storm.className = 'storm-fx';
         storm.style.zIndex = '40';
-        
         board.appendChild(storm);
-        
-        setTimeout(() => {
-            if (storm.parentNode) storm.remove();
-        }, 1500);
+        setTimeout(() => { if (storm.parentNode) storm.remove(); }, 1500);
     }
 
-    // ================= BOSSAI ATUALIZADO COM TERCEIRO DESAFIO =================
+    // ================= BOSS AI =================
     async function bossAI() {
         if (bossAIIsRunning || arcadeBossTransition) return;
+        if (tutorialMode) return;
         
         bossAIIsRunning = true;
         
@@ -2955,9 +3203,8 @@
         document.getElementById('turnBoss').classList.add('active-turn');
         const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value);
         
-        addLog(`👹 ${boss.type} ataca!`);
+        addLog(`👹 ${getBossDisplayName(boss.type)} ataca!`);
         
-        // Movimento do boss
         for(let i = 0; i < 4; i++) { 
             if(boss.dead) break; 
             
@@ -2980,23 +3227,14 @@
         updateAllSpriteDirections();
         
         if(!boss.dead) {
-            // Ataques específicos do boss
             if(boss.type === "BOITATA") { 
                 if(Math.random() < 0.6) { 
                     playSfx('skill1'); 
                     addLog("🔥 Boitatá lança colunas de fogo!");
                     const columns = [boss.x-1, boss.x, boss.x+1]; 
-                    columns.forEach(col => { 
-                        if(col >= 0 && col <= 7) {
-                            triggerFireColumn(col); 
-                        }
-                    }); 
+                    columns.forEach(col => { if(col >= 0 && col <= 7) triggerFireColumn(col); }); 
                     await sleep(600);
-                    players.forEach(p => { 
-                        if(!p.dead && columns.includes(p.x)) {
-                            applyDmg(p, bossAtk); 
-                        }
-                    }); 
+                    players.forEach(p => { if(!p.dead && columns.includes(p.x)) applyDmg(p, bossAtk); }); 
                 } else { 
                     playSfx('skill1'); 
                     addLog("🔥 Boitatá invoca explosões de fogo!");
@@ -3006,9 +3244,7 @@
                         if(grid[idx] === 'FOGO') { 
                             triggerFlare(idx % 8, Math.floor(idx / 8)); 
                             players.forEach(p => { 
-                                if(!p.dead && p.x === idx % 8 && p.y === Math.floor(idx / 8)) {
-                                    applyDmg(p, bossAtk); 
-                                }
+                                if(!p.dead && p.x === idx % 8 && p.y === Math.floor(idx / 8)) applyDmg(p, bossAtk); 
                             }); 
                             count++; 
                         } 
@@ -3023,9 +3259,7 @@
                     triggerBite(boss.x, boss.y); 
                     await sleep(600);
                     players.forEach(p => { 
-                        if(!p.dead && Math.abs(p.x - boss.x) <= 2 && Math.abs(p.y - boss.y) <= 2) {
-                            applyDmg(p, bossAtk); 
-                        }
+                        if(!p.dead && Math.abs(p.x - boss.x) <= 2 && Math.abs(p.y - boss.y) <= 2) applyDmg(p, bossAtk); 
                     }); 
                 } else { 
                     playSfx('minoa2'); 
@@ -3033,11 +3267,7 @@
                     triggerRocks(boss.x, boss.y); 
                     await sleep(600);
                     const rows = [boss.y - 1, boss.y, boss.y + 1]; 
-                    players.forEach(p => { 
-                        if(!p.dead && rows.includes(p.y)) {
-                            applyDmg(p, 2); 
-                        }
-                    }); 
+                    players.forEach(p => { if(!p.dead && rows.includes(p.y)) applyDmg(p, 2); }); 
                 } 
             }
             else if(boss.type === "SACI") { 
@@ -3048,9 +3278,7 @@
                         if(element === 'AR') { 
                             triggerVortex(idx % 8, Math.floor(idx / 8), 0, true); 
                             players.forEach(p => { 
-                                if(!p.dead && p.x === idx % 8 && p.y === Math.floor(idx / 8)) {
-                                    applyDmg(p, bossAtk); 
-                                }
+                                if(!p.dead && p.x === idx % 8 && p.y === Math.floor(idx / 8)) applyDmg(p, bossAtk); 
                             }); 
                         } 
                     }); 
@@ -3061,16 +3289,13 @@
                         {dx:1, dy:1}, {dx:1, dy:-1}, 
                         {dx:-1, dy:1}, {dx:-1, dy:-1}
                     ];
-                    
                     diagonals.forEach(dir => { 
                         for(let step = 1; step < 8; step++) { 
                             let nx = boss.x + dir.dx * step, ny = boss.y + dir.dy * step; 
                             if(nx >= 0 && nx < 8 && ny >= 0 && ny < 8) { 
                                 triggerVortex(nx, ny, step * 100, true); 
                                 players.forEach(p => { 
-                                    if(!p.dead && p.x === nx && p.y === ny) {
-                                        setTimeout(() => applyDmg(p, bossAtk), step * 100); 
-                                    }
+                                    if(!p.dead && p.x === nx && p.y === ny) setTimeout(() => applyDmg(p, bossAtk), step * 100); 
                                 }); 
                             } 
                         } 
@@ -3092,10 +3317,7 @@
                             } else { 
                                 if(p.y + dy >= 0 && p.y + dy < 8) ny += dy; 
                             } 
-                            if (!isOccupied(nx, ny, p.id)) { 
-                                p.x = nx; 
-                                p.y = ny; 
-                            } 
+                            if (!isOccupied(nx, ny, p.id)) { p.x = nx; p.y = ny; } 
                         } 
                     }); 
                     updateVisuals(); 
@@ -3105,448 +3327,183 @@
                     triggerWaterJet(boss.x, boss.y); 
                     await sleep(600);
                     players.forEach(p => { 
-                        if(!p.dead && (p.x === boss.x || p.y === boss.y)) {
-                            applyDmg(p, bossAtk); 
-                        }
+                        if(!p.dead && (p.x === boss.x || p.y === boss.y)) applyDmg(p, bossAtk); 
                     }); 
                 } 
             }
-            // SEGUNDO DESAFIO
             else if(boss.type === "MULA") { 
                 if(Math.random() < 0.6) { 
                     playSfx('skill1'); 
                     addLog("🔥 Mula sem Cabeça relincha fogo em 3 colunas!");
                     const columns = [boss.x-1, boss.x, boss.x+1].filter(col => col >= 0 && col <= 7); 
-                    columns.forEach(col => { 
-                        triggerFireColumn(col); 
-                    }); 
+                    columns.forEach(col => triggerFireColumn(col)); 
                     await sleep(600);
-                    players.forEach(p => { 
-                        if(!p.dead && columns.includes(p.x)) {
-                            applyDmg(p, bossAtk); 
-                        }
-                    }); 
+                    players.forEach(p => { if(!p.dead && columns.includes(p.x)) applyDmg(p, bossAtk); }); 
                 } else { 
-        playSfx('skill1'); 
-        addLog("🔥 Mula sem Cabeça lança bolas de fogo!");
-        
-        // Adicione esta função NOVA antes do else if (em qualquer lugar das funções de efeito)
-        // FUNÇÃO triggerFireball - SE NÃO EXISTIR, ADICIONE ANTES DO bossAI:
-        // function triggerFireball(startX, startY, targetX, targetY) {
-        //     const board = document.getElementById('board');
-        //     const s = getStep();
-        //     
-        //     const fireball = document.createElement('img');
-        //     fireball.src = SPRITES.FireballFX;
-        //     fireball.className = 'fireball-fx';
-        //     fireball.style.width = s + 'px';
-        //     fireball.style.height = s + 'px';
-        //     fireball.style.position = 'absolute';
-        //     fireball.style.left = (startX * s) + 'px';
-        //     fireball.style.top = (startY * s) + 'px';
-        //     fireball.style.zIndex = '50';
-        //     fireball.style.transition = 'all 0.3s ease-out';
-        //     
-        //     board.appendChild(fireball);
-        //     
-        //     setTimeout(() => {
-        //         fireball.style.left = (targetX * s) + 'px';
-        //         fireball.style.top = (targetY * s) + 'px';
-        //     }, 10);
-        //     
-        //     setTimeout(() => {
-        //         if (fireball.parentNode) fireball.remove();
-        //         
-        //         // Criar explosão em cruz
-        //         const s = getStep();
-        //         const centerExplosion = document.createElement('div');
-        //         centerExplosion.className = 'flare-fx';
-        //         centerExplosion.style.left = (targetX * s) + 'px';
-        //         centerExplosion.style.top = (targetY * s) + 'px';
-        //         centerExplosion.style.width = s + 'px';
-        //         centerExplosion.style.height = s + 'px';
-        //         board.appendChild(centerExplosion);
-        //         
-        //         // Explosões em cruz
-        //         const crossOffsets = [
-        //             {dx: 0, dy: -1}, {dx: 0, dy: 1},
-        //             {dx: -1, dy: 0}, {dx: 1, dy: 0}
-        //         ];
-        //         
-        //         crossOffsets.forEach(offset => {
-        //             const x = targetX + offset.dx;
-        //             const y = targetY + offset.dy;
-        //             
-        //             if(x >= 0 && x < 8 && y >= 0 && y < 8) {
-        //                 const explosion = document.createElement('div');
-        //                 explosion.className = 'flare-fx';
-        //                 explosion.style.left = (x * s) + 'px';
-        //                 explosion.style.top = (y * s) + 'px';
-        //                 explosion.style.width = s + 'px';
-        //                 explosion.style.height = s + 'px';
-        //                 explosion.style.animationDelay = '0.1s';
-        //                 board.appendChild(explosion);
-        //                 
-        //                 setTimeout(() => {
-        //                     if (explosion.parentNode) explosion.remove();
-        //                 }, 600);
-        //             }
-        //         });
-        //         
-        //         setTimeout(() => {
-        //             if (centerExplosion.parentNode) centerExplosion.remove();
-        //         }, 600);
-        //     }, 310);
-        //     
-        //     setTimeout(() => {
-        //         if (fireball.parentNode) fireball.remove();
-        //     }, 1000);
-        // }
-        
-        const directions = [
-            {dx: 2, dy: 0},  // Direita
-            {dx: -2, dy: 0}, // Esquerda
-            {dx: 0, dy: 2},  // Baixo
-            {dx: 0, dy: -2}  // Cima
-        ];
-        
-        let attacksCount = 0;
-        
-        directions.forEach(dir => { 
-            let targetX = boss.x + dir.dx;
-            let targetY = boss.y + dir.dy;
-            
-            if(targetX >= 0 && targetX < 8 && targetY >= 0 && targetY < 8) {
-                attacksCount++;
-                
-                // Se a função triggerFireball não existir, use este código direto:
-                const board = document.getElementById('board');
-                const s = getStep();
-                
-                const fireball = document.createElement('img');
-                fireball.src = SPRITES.FireballFX;
-                fireball.className = 'fireball-fx';
-                fireball.style.width = s + 'px';
-                fireball.style.height = s + 'px';
-                fireball.style.position = 'absolute';
-                fireball.style.left = (boss.x * s) + 'px';
-                fireball.style.top = (boss.y * s) + 'px';
-                fireball.style.zIndex = '50';
-                fireball.style.transition = 'all 0.3s ease-out';
-                
-                board.appendChild(fireball);
-                
-                setTimeout(() => {
-                    fireball.style.left = (targetX * s) + 'px';
-                    fireball.style.top = (targetY * s) + 'px';
-                }, 10);
-                
-                setTimeout(() => {
-                    if (fireball.parentNode) fireball.remove();
-                    
-                    // Explosão central
-                    const centerExplosion = document.createElement('div');
-                    centerExplosion.className = 'flare-fx';
-                    centerExplosion.style.left = (targetX * s) + 'px';
-                    centerExplosion.style.top = (targetY * s) + 'px';
-                    centerExplosion.style.width = s + 'px';
-                    centerExplosion.style.height = s + 'px';
-                    board.appendChild(centerExplosion);
-                    
-                    // Explosões em cruz
-                    const crossOffsets = [
-                        {dx: 0, dy: -1}, {dx: 0, dy: 1},
-                        {dx: -1, dy: 0}, {dx: 1, dy: 0}
+                    playSfx('skill1'); 
+                    addLog("🔥 Mula sem Cabeça lança bolas de fogo!");
+                    const directions = [
+                        {dx: 2, dy: 0}, {dx: -2, dy: 0},
+                        {dx: 0, dy: 2}, {dx: 0, dy: -2}
                     ];
-                    
-                    crossOffsets.forEach(offset => {
-                        const x = targetX + offset.dx;
-                        const y = targetY + offset.dy;
-                        
-                        if(x >= 0 && x < 8 && y >= 0 && y < 8) {
-                            const explosion = document.createElement('div');
-                            explosion.className = 'flare-fx';
-                            explosion.style.left = (x * s) + 'px';
-                            explosion.style.top = (y * s) + 'px';
-                            explosion.style.width = s + 'px';
-                            explosion.style.height = s + 'px';
-                            explosion.style.animationDelay = '0.1s';
-                            board.appendChild(explosion);
-                            
-                            setTimeout(() => {
-                                if (explosion.parentNode) explosion.remove();
-                            }, 600);
-                        }
-                    });
-                    
-                    setTimeout(() => {
-                        if (centerExplosion.parentNode) centerExplosion.remove();
-                    }, 600);
-                    
-                }, 310);
-                
-                setTimeout(() => {
-                    if (fireball.parentNode) fireball.remove();
-                }, 1000);
-                
-                // Dano após delay
-                setTimeout(() => {
-                    players.forEach(p => { 
-                        if(!p.dead && p.x === targetX && p.y === targetY) {
-                            applyDmg(p, bossAtk); 
-                        }
-                    });
-                    
-                    const crossTiles = [
-                        {x: targetX, y: targetY-1},
-                        {x: targetX, y: targetY+1},
-                        {x: targetX-1, y: targetY},
-                        {x: targetX+1, y: targetY}
-                    ];
-                    
-                    crossTiles.forEach(tile => {
-                        if(tile.x >= 0 && tile.x < 8 && tile.y >= 0 && tile.y < 8) {
+                    directions.forEach(dir => { 
+                        let targetX = boss.x + dir.dx;
+                        let targetY = boss.y + dir.dy;
+                        if(targetX >= 0 && targetX < 8 && targetY >= 0 && targetY < 8) {
+                            triggerFireball(boss.x, boss.y, targetX, targetY);
                             players.forEach(p => { 
-                                if(!p.dead && p.x === tile.x && p.y === tile.y) {
-                                    applyDmg(p, Math.floor(bossAtk / 2)); 
-                                }
+                                if(!p.dead && p.x === targetX && p.y === targetY) setTimeout(() => applyDmg(p, bossAtk), 400); 
                             });
                         }
                     });
-                }, 350);
+                    await sleep(700);
+                } 
             }
-        });
-        
-        if (attacksCount === 0) {
-            addLog("🔥 Mula sem Cabeça lança colunas de fogo como alternativa!");
-            const columns = [boss.x-1, boss.x, boss.x+1].filter(col => col >= 0 && col <= 7); 
-            columns.forEach(col => { 
-                triggerFireColumn(col); 
-            }); 
-            
-            setTimeout(() => {
-                players.forEach(p => { 
-                    if(!p.dead && columns.includes(p.x)) {
-                        applyDmg(p, bossAtk); 
-                    }
-                }); 
-            }, 600);
-        }
-        
-        await sleep(700);
-    } 
-}
-else if(boss.type === "CORPOSECO") { 
-    if(Math.random() < 0.5) { 
-        playSfx('garras'); 
-        addLog("💀 Corpo Seco sopra vapor podre!");
-        
-        const directions = [
-            {dx: 0, dy: -1}, {dx: 0, dy: -2},
-            {dx: 0, dy: 1}, {dx: 0, dy: 2},
-            {dx: -1, dy: 0}, {dx: -2, dy: 0},
-            {dx: 1, dy: 0}, {dx: 2, dy: 0}
-        ];
-        
-        directions.forEach(dir => {
-            let tileX = boss.x + dir.dx;
-            let tileY = boss.y + dir.dy;
-            if(tileX >= 0 && tileX < 8 && tileY >= 0 && tileY < 8) {
-                triggerPoisonGas(tileX, tileY);
-                players.forEach(p => { 
-                    if(!p.dead && p.x === tileX && p.y === tileY) {
-                        applyDmg(p, bossAtk); 
-                    }
-                });
-            }
-        });
-        
-        await sleep(600);
-    } else { 
-        playSfx('garras'); 
-        addLog("💀 Corpo Seco ataca com garras!");
-        
-        const attackDirections = ['left', 'right', 'up', 'down'];
-        const direction = attackDirections[Math.floor(Math.random() * 4)];
-        let targetTiles = [];
-        
-        switch(direction) {
-            case 'left':
-                for(let dx = -2; dx <= 0; dx++) {
-                    for(let dy = -2; dy <= 2; dy++) {
-                        targetTiles.push({x: boss.x + dx, y: boss.y + dy});
-                    }
-                }
-                break;
-            case 'right':
-                for(let dx = 0; dx <= 2; dx++) {
-                    for(let dy = -2; dy <= 2; dy++) {
-                        targetTiles.push({x: boss.x + dx, y: boss.y + dy});
-                    }
-                }
-                break;
-            case 'up':
-                for(let dx = -2; dx <= 2; dx++) {
-                    for(let dy = -2; dy <= 0; dy++) {
-                        targetTiles.push({x: boss.x + dx, y: boss.y + dy});
-                    }
-                }
-                break;
-            case 'down':
-                for(let dx = -2; dx <= 2; dx++) {
-                    for(let dy = 0; dy <= 2; dy++) {
-                        targetTiles.push({x: boss.x + dx, y: boss.y + dy});
-                    }
-                }
-                break;
-        }
-        
-        targetTiles.forEach(tile => {
-            if(tile.x >= 0 && tile.x < 8 && tile.y >= 0 && tile.y < 8) {
-                triggerClawSpin(tile.x, tile.y);
-                players.forEach(p => { 
-                    if(!p.dead && p.x === tile.x && p.y === tile.y) {
-                        applyDmg(p, bossAtk + 1); 
-                    }
-                });
-            }
-        });
-        
-        await sleep(600);
-    } 
-}
-else if(boss.type === "LOBISOMEM") { 
-    if(Math.random() < 0.5) { 
-        playSfx('garras'); 
-        addLog("🐺 Lobisomem ataca com garras!");
-        
-        triggerClawSpin(boss.x, boss.y);
-        
-        // Aplicar dano após animação
-        setTimeout(() => {
-            players.forEach(p => { 
-                if(!p.dead && Math.abs(p.x - boss.x) <= 1 && Math.abs(p.y - boss.y) <= 1) {
-                    applyDmg(p, bossAtk); 
-                }
-            });
-        }, 300);
-        
-        await sleep(600);
-    } else { 
-        playSfx('minoa2'); 
-        addLog("🐺 Lobisomem treme a terra!");
-        
-        triggerEarthquake();
-        await sleep(400);
-        
-        // Dano em área
-        for(let dx = -2; dx <= 2; dx++) {
-            for(let dy = -2; dy <= 2; dy++) {
-                if(dx === 0 && dy === 0) continue;
-                
-                const tileX = boss.x + dx;
-                const tileY = boss.y + dy;
-                
-                if(tileX >= 0 && tileX < 8 && tileY >= 0 && tileY < 8) {
-                    triggerFlare(tileX, tileY);
-                    players.forEach(p => { 
-                        if(!p.dead && p.x === tileX && p.y === tileY) {
-                            applyDmg(p, 2); 
+            else if(boss.type === "CORPOSECO") { 
+                if(Math.random() < 0.5) { 
+                    playSfx('garras'); 
+                    addLog("💀 Corpo Seco sopra vapor podre!");
+                    const directions = [
+                        {dx: 0, dy: -1}, {dx: 0, dy: -2},
+                        {dx: 0, dy: 1}, {dx: 0, dy: 2},
+                        {dx: -1, dy: 0}, {dx: -2, dy: 0},
+                        {dx: 1, dy: 0}, {dx: 2, dy: 0}
+                    ];
+                    directions.forEach(dir => {
+                        let tileX = boss.x + dir.dx;
+                        let tileY = boss.y + dir.dy;
+                        if(tileX >= 0 && tileX < 8 && tileY >= 0 && tileY < 8) {
+                            triggerPoisonGas(tileX, tileY);
+                            players.forEach(p => { 
+                                if(!p.dead && p.x === tileX && p.y === tileY) applyDmg(p, bossAtk); 
+                            });
                         }
                     });
-                }
-            }
-        }
-        
-        // Movimento simples SEM LOOPS INFINITOS
-        players.forEach(p => { 
-            if(!p.dead) {
-                // Mover 1 tile em direção ao lobisomem
-                let newX = p.x;
-                let newY = p.y;
-                
-                if(p.x < boss.x && !isOccupied(p.x + 1, p.y, p.id)) newX = p.x + 1;
-                else if(p.x > boss.x && !isOccupied(p.x - 1, p.y, p.id)) newX = p.x - 1;
-                
-                if(p.y < boss.y && !isOccupied(newX, p.y + 1, p.id)) newY = p.y + 1;
-                else if(p.y > boss.y && !isOccupied(newX, p.y - 1, p.id)) newY = p.y - 1;
-                
-                p.x = newX;
-                p.y = newY;
-            }
-        });
-        
-        updateVisuals();
-        addLog("🐺 Heróis foram puxados para perto!");
-        await sleep(400);
-    } 
-}
-else if(boss.type === "CUCA") { 
-    if(Math.random() < 0.5) { 
-        playSfx('cucask1'); 
-        addLog("🧙‍♀️ Cuca lança poção em um quadrante!");
-        
-        // Escolher quadrante aleatório
-        const quadrantX = Math.random() < 0.5 ? 0 : 4;
-        const quadrantY = Math.random() < 0.5 ? 0 : 4;
-        
-        // Efeito visual no quadrante
-        for(let x = quadrantX; x < quadrantX + 4; x++) {
-            for(let y = quadrantY; y < quadrantY + 4; y++) {
-                triggerPoisonGas(x, y);
-            }
-        }
-        
-        // Aplicar dano
-        setTimeout(() => {
-            for(let x = quadrantX; x < quadrantX + 4; x++) {
-                for(let y = quadrantY; y < quadrantY + 4; y++) {
-                    if(x >= 0 && x < 8 && y >= 0 && y < 8) {
-                        players.forEach(p => { 
-                            if(!p.dead && p.x === x && p.y === y) {
-                                applyDmg(p, bossAtk); 
-                            }
-                        });
+                    await sleep(600);
+                } else { 
+                    playSfx('garras'); 
+                    addLog("💀 Corpo Seco ataca com garras!");
+                    const attackDirections = ['left', 'right', 'up', 'down'];
+                    const direction = attackDirections[Math.floor(Math.random() * 4)];
+                    let targetTiles = [];
+                    switch(direction) {
+                        case 'left':
+                            for(let dx = -2; dx <= 0; dx++) for(let dy = -2; dy <= 2; dy++) targetTiles.push({x: boss.x + dx, y: boss.y + dy});
+                            break;
+                        case 'right':
+                            for(let dx = 0; dx <= 2; dx++) for(let dy = -2; dy <= 2; dy++) targetTiles.push({x: boss.x + dx, y: boss.y + dy});
+                            break;
+                        case 'up':
+                            for(let dx = -2; dx <= 2; dx++) for(let dy = -2; dy <= 0; dy++) targetTiles.push({x: boss.x + dx, y: boss.y + dy});
+                            break;
+                        case 'down':
+                            for(let dx = -2; dx <= 2; dx++) for(let dy = 0; dy <= 2; dy++) targetTiles.push({x: boss.x + dx, y: boss.y + dy});
+                            break;
                     }
-                }
+                    targetTiles.forEach(tile => {
+                        if(tile.x >= 0 && tile.x < 8 && tile.y >= 0 && tile.y < 8) {
+                            triggerClawSpin(tile.x, tile.y);
+                            players.forEach(p => { 
+                                if(!p.dead && p.x === tile.x && p.y === tile.y) applyDmg(p, bossAtk + 1); 
+                            });
+                        }
+                    });
+                    await sleep(600);
+                } 
             }
-        }, 300);
-        
-        await sleep(600);
-    } else { 
-        playSfx('cucask2'); 
-        addLog("🧙‍♀️ Cuca bebe uma poção curativa!");
-        
-        triggerPotion(boss.x, boss.y);
-        await sleep(400);
-        
-        boss.hp = Math.min(boss.maxHp, boss.hp + 2);
-        showHealEffect(boss.x, boss.y, 2);
-        updateVisuals();
-        addLog(`🧪 ${boss.type} recuperou 2 HP!`);
-        
-        await sleep(400);
-    } 
-}
-            // TERCEIRO DESAFIO - NOVOS BOSSES
+            else if(boss.type === "LOBISOMEM") { 
+                if(Math.random() < 0.5) { 
+                    playSfx('garras'); 
+                    addLog("🐺 Lobisomem ataca com garras!");
+                    triggerClawSpin(boss.x, boss.y);
+                    setTimeout(() => {
+                        players.forEach(p => { 
+                            if(!p.dead && Math.abs(p.x - boss.x) <= 1 && Math.abs(p.y - boss.y) <= 1) applyDmg(p, bossAtk); 
+                        });
+                    }, 300);
+                    await sleep(600);
+                } else { 
+                    playSfx('minoa2'); 
+                    addLog("🐺 Lobisomem treme a terra!");
+                    triggerEarthquake();
+                    await sleep(400);
+                    for(let dx = -2; dx <= 2; dx++) {
+                        for(let dy = -2; dy <= 2; dy++) {
+                            if(dx === 0 && dy === 0) continue;
+                            const tileX = boss.x + dx;
+                            const tileY = boss.y + dy;
+                            if(tileX >= 0 && tileX < 8 && tileY >= 0 && tileY < 8) {
+                                triggerFlare(tileX, tileY);
+                                players.forEach(p => { 
+                                    if(!p.dead && p.x === tileX && p.y === tileY) applyDmg(p, 2); 
+                                });
+                            }
+                        }
+                    }
+                    players.forEach(p => { 
+                        if(!p.dead) {
+                            let newX = p.x, newY = p.y;
+                            if(p.x < boss.x && !isOccupied(p.x + 1, p.y, p.id)) newX = p.x + 1;
+                            else if(p.x > boss.x && !isOccupied(p.x - 1, p.y, p.id)) newX = p.x - 1;
+                            if(p.y < boss.y && !isOccupied(newX, p.y + 1, p.id)) newY = p.y + 1;
+                            else if(p.y > boss.y && !isOccupied(newX, p.y - 1, p.id)) newY = p.y - 1;
+                            p.x = newX;
+                            p.y = newY;
+                        }
+                    });
+                    updateVisuals();
+                    addLog("🐺 Heróis foram puxados para perto!");
+                    await sleep(400);
+                } 
+            }
+            else if(boss.type === "CUCA") { 
+                if(Math.random() < 0.5) { 
+                    playSfx('cucask1'); 
+                    addLog("🧙‍♀️ Cuca lança poção em um quadrante!");
+                    const quadrantX = Math.random() < 0.5 ? 0 : 4;
+                    const quadrantY = Math.random() < 0.5 ? 0 : 4;
+                    for(let x = quadrantX; x < quadrantX + 4; x++) {
+                        for(let y = quadrantY; y < quadrantY + 4; y++) {
+                            triggerPoisonGas(x, y);
+                        }
+                    }
+                    setTimeout(() => {
+                        for(let x = quadrantX; x < quadrantX + 4; x++) {
+                            for(let y = quadrantY; y < quadrantY + 4; y++) {
+                                if(x >= 0 && x < 8 && y >= 0 && y < 8) {
+                                    players.forEach(p => { 
+                                        if(!p.dead && p.x === x && p.y === y) applyDmg(p, bossAtk); 
+                                    });
+                                }
+                            }
+                        }
+                    }, 300);
+                    await sleep(600);
+                } else { 
+                    playSfx('cucask2'); 
+                    addLog("🧙‍♀️ Cuca bebe uma poção curativa!");
+                    triggerPotion(boss.x, boss.y);
+                    await sleep(400);
+                    boss.hp = Math.min(boss.maxHp, boss.hp + 2);
+                    showHealEffect(boss.x, boss.y, 2);
+                    updateVisuals();
+                    addLog(`🧪 ${getBossDisplayName(boss.type)} recuperou 2 HP!`);
+                    await sleep(400);
+                } 
+            }
             else if(boss.type === "BOTO") { 
                 if(Math.random() < 0.6) { 
                     playSfx('boto_skill1'); 
                     addLog("🐬 Boto Rosa quebra corações na área!");
-                    
-                    // Dano em 2 tiles ao redor do boss
                     for(let dx = -1; dx <= 1; dx++) {
                         for(let dy = -1; dy <= 1; dy++) {
                             if(dx === 0 && dy === 0) continue;
                             const tileX = boss.x + dx;
                             const tileY = boss.y + dy;
-                            
                             if(tileX >= 0 && tileX < 8 && tileY >= 0 && tileY < 8) {
                                 triggerBrokenHeart(tileX, tileY);
                                 players.forEach(p => { 
-                                    if(!p.dead && p.x === tileX && p.y === tileY) {
-                                        applyDmg(p, bossAtk); 
-                                    }
+                                    if(!p.dead && p.x === tileX && p.y === tileY) applyDmg(p, bossAtk); 
                                 });
                             }
                         }
@@ -3555,28 +3512,11 @@ else if(boss.type === "CUCA") {
                 } else { 
                     playSfx('boto_skill2'); 
                     addLog("🐬 Boto Rosa lança jatos d'água em cruz!");
-                    
-                    // Jato vertical
-                    for(let y = 0; y < 8; y++) {
-                        const tileX = boss.x;
-                        const tileY = y;
-                        triggerWaterJet(tileX, tileY);
-                    }
-                    
-                    // Jato horizontal
-                    for(let x = 0; x < 8; x++) {
-                        const tileX = x;
-                        const tileY = boss.y;
-                        triggerWaterJet(tileX, tileY);
-                    }
-                    
+                    for(let y = 0; y < 8; y++) triggerWaterJet(boss.x, y);
+                    for(let x = 0; x < 8; x++) triggerWaterJet(x, boss.y);
                     await sleep(600);
-                    
-                    // Aplicar dano na linha e coluna
                     players.forEach(p => { 
-                        if(!p.dead && (p.x === boss.x || p.y === boss.y)) {
-                            applyDmg(p, bossAtk); 
-                        }
+                        if(!p.dead && (p.x === boss.x || p.y === boss.y)) applyDmg(p, bossAtk); 
                     });
                 } 
             }
@@ -3584,26 +3524,19 @@ else if(boss.type === "CUCA") {
                 if(Math.random() < 0.5) { 
                     playSfx('boi_skill1'); 
                     addLog("🐂 Boi da Cara Preta mostra sua face assustadora!");
-                    
-                    // Dano em 2 tiles ao redor
                     for(let dx = -1; dx <= 1; dx++) {
                         for(let dy = -1; dy <= 1; dy++) {
                             if(dx === 0 && dy === 0) continue;
                             const tileX = boss.x + dx;
                             const tileY = boss.y + dy;
-                            
                             if(tileX >= 0 && tileX < 8 && tileY >= 0 && tileY < 8) {
                                 triggerScaryFace(tileX, tileY);
                                 players.forEach(p => { 
-                                    if(!p.dead && p.x === tileX && p.y === tileY) {
-                                        applyDmg(p, bossAtk); 
-                                    }
+                                    if(!p.dead && p.x === tileX && p.y === tileY) applyDmg(p, bossAtk); 
                                 });
                             }
                         }
                     }
-                    
-                    // Embaralhar tiles atingidos
                     const affectedIndices = [];
                     for(let dx = -1; dx <= 1; dx++) {
                         for(let dy = -1; dy <= 1; dy++) {
@@ -3614,91 +3547,51 @@ else if(boss.type === "CUCA") {
                             }
                         }
                     }
-                    
-                    // Embaralhar cores dos tiles
                     affectedIndices.forEach(idx => {
                         const newColor = COLORS[Math.floor(Math.random() * 4)];
                         grid[idx] = newColor;
-                        const tile = document.querySelectorAll('.tile')[idx];
-                        tile.className = `tile bg-${newColor}`;
+                        const tile = document.querySelectorAll('#grid .tile')[idx];
+                        if (tile) tile.className = `tile bg-${newColor}`;
                     });
-                    
                     addLog("🌀 Tiles ao redor foram embaralhados!");
                     await sleep(600);
-                    
                 } else { 
                     playSfx('boi_skill2'); 
                     addLog("🐂 Boi da Cara Preta empurra os heróis para as bordas!");
-                    
-                    // Empurrar jogadores para as bordas
                     players.forEach(p => { 
                         if(!p.dead) {
                             let nx = p.x, ny = p.y;
-                            
-                            // Empurrar para borda mais próxima
-                            if(p.x < 4) {
-                                nx = Math.max(0, p.x - 1); // Empurrar para esquerda
-                            } else {
-                                nx = Math.min(7, p.x + 1); // Empurrar para direita
-                            }
-                            
-                            if(p.y < 4) {
-                                ny = Math.max(0, p.y - 1); // Empurrar para cima
-                            } else {
-                                ny = Math.min(7, p.y + 1); // Empurrar para baixo
-                            }
-                            
-                            // Tentar mover para a borda, evitando ocupação
+                            if(p.x < 4) nx = Math.max(0, p.x - 1);
+                            else nx = Math.min(7, p.x + 1);
+                            if(p.y < 4) ny = Math.max(0, p.y - 1);
+                            else ny = Math.min(7, p.y + 1);
                             let finalX = p.x, finalY = p.y;
-                            
-                            // Mover horizontalmente primeiro
                             let stepX = p.x < nx ? 1 : -1;
                             for(let x = p.x; x !== nx; x += stepX) {
-                                if(!isOccupied(x + stepX, p.y, p.id)) {
-                                    finalX = x + stepX;
-                                } else {
-                                    break;
-                                }
+                                if(!isOccupied(x + stepX, p.y, p.id)) finalX = x + stepX;
+                                else break;
                             }
-                            
-                            // Mover verticalmente
                             let stepY = p.y < ny ? 1 : -1;
                             for(let y = p.y; y !== ny; y += stepY) {
-                                if(!isOccupied(finalX, y + stepY, p.id)) {
-                                    finalY = y + stepY;
-                                } else {
-                                    break;
-                                }
+                                if(!isOccupied(finalX, y + stepY, p.id)) finalY = y + stepY;
+                                else break;
                             }
-                            
                             p.x = finalX;
                             p.y = finalY;
                         } 
                     });
-                    
                     updateVisuals();
-                    addLog("💨 Heróis foram empurrados para as bordas do tabuleiro!");
+                    addLog("💨 Heróis foram empurrados para as bordas!");
                     await sleep(400);
-                    
-                    // Dano após empurrar
-                    players.forEach(p => { 
-                        if(!p.dead) {
-                            applyDmg(p, 1); 
-                        }
-                    });
+                    players.forEach(p => { if(!p.dead) applyDmg(p, 1); });
                 } 
             }
             else if(boss.type === "JACI") { 
                 if(Math.random() < 0.6) { 
                     playSfx('jaci_skill1'); 
                     addLog("🌙 Jaci invoca a lua e ataca todos os tiles de AR!");
-                    
-                    // Efeito da lua
                     triggerMoon(boss.x, boss.y);
-                    
                     await sleep(400);
-                    
-                    // Ataque em todos os tiles de AR
                     let arTilesAttacked = 0;
                     grid.forEach((element, idx) => { 
                         if(element === 'AR') { 
@@ -3706,40 +3599,23 @@ else if(boss.type === "CUCA") {
                             const y = Math.floor(idx / 8);
                             triggerMoonRay(x, y);
                             arTilesAttacked++;
-                            
                             players.forEach(p => { 
-                                if(!p.dead && p.x === x && p.y === y) {
-                                    setTimeout(() => applyDmg(p, bossAtk), 200); 
-                                }
+                                if(!p.dead && p.x === x && p.y === y) setTimeout(() => applyDmg(p, bossAtk), 200); 
                             });
                         } 
                     });
-                    
                     addLog(`💨 ${arTilesAttacked} tiles de AR foram atingidos!`);
                     await sleep(600);
-                    
                 } else { 
                     playSfx('jaci_skill2'); 
                     addLog("⛈️ Jaci invoca uma tempestade em todo o tabuleiro!");
-                    
-                    // Efeito de tempestade
                     triggerStorm();
-                    
                     await sleep(500);
-                    
-                    // Dano a todos os jogadores
-                    players.forEach(p => { 
-                        if(!p.dead) {
-                            applyDmg(p, 1); 
-                        }
-                    });
-                    
-                    // Cura do boss
+                    players.forEach(p => { if(!p.dead) applyDmg(p, 1); });
                     boss.hp = Math.min(boss.maxHp, boss.hp + 1);
                     showHealEffect(boss.x, boss.y, 1);
                     updateVisuals();
-                    addLog(`💖 ${boss.type} recuperou 1 HP!`);
-                    
+                    addLog(`💖 ${getBossDisplayName(boss.type)} recuperou 1 HP!`);
                     await sleep(400);
                 } 
             }
@@ -3747,13 +3623,8 @@ else if(boss.type === "CUCA") {
                 if(Math.random() < 0.6) { 
                     playSfx('guaraci_skill1'); 
                     addLog("☀️ Guaraci invoca o sol e ataca todos os tiles de FOGO!");
-                    
-                    // Efeito do sol
                     triggerSun(boss.x, boss.y);
-                    
                     await sleep(400);
-                    
-                    // Ataque em todos os tiles de FOGO
                     let fireTilesAttacked = 0;
                     grid.forEach((element, idx) => { 
                         if(element === 'FOGO') { 
@@ -3761,89 +3632,46 @@ else if(boss.type === "CUCA") {
                             const y = Math.floor(idx / 8);
                             triggerSunRay(x, y);
                             fireTilesAttacked++;
-                            
                             players.forEach(p => { 
-                                if(!p.dead && p.x === x && p.y === y) {
-                                    setTimeout(() => applyDmg(p, bossAtk), 200); 
-                                }
+                                if(!p.dead && p.x === x && p.y === y) setTimeout(() => applyDmg(p, bossAtk), 200); 
                             });
                         } 
                     });
-                    
                     addLog(`🔥 ${fireTilesAttacked} tiles de FOGO foram atingidos!`);
                     await sleep(600);
-                    
                 } else { 
                     playSfx('guaraci_skill2'); 
                     addLog("🔥 Guaraci invoca uma onda de calor!");
-                    
-                    // Efeito de onda de calor
                     triggerHeatWave();
-                    
                     await sleep(500);
-                    
-                    // Dano a todos os jogadores
-                    players.forEach(p => { 
-                        if(!p.dead) {
-                            applyDmg(p, 1); 
-                        }
-                    });
-                    
-                    // Cura do boss
+                    players.forEach(p => { if(!p.dead) applyDmg(p, 1); });
                     boss.hp = Math.min(boss.maxHp, boss.hp + 1);
                     showHealEffect(boss.x, boss.y, 1);
                     updateVisuals();
-                    addLog(`💖 ${boss.type} recuperou 1 HP!`);
-                    
+                    addLog(`💖 ${getBossDisplayName(boss.type)} recuperou 1 HP!`);
                     await sleep(400);
                 } 
             }
-            // BOSS FINAL: ANHANGÁ
             else if(boss.type === "ANHANGA") { 
-                // 60% de chance para Skill 1, 40% para Skill 2
                 if(Math.random() < 0.6) { 
                     playSfx('anhanga_skill1'); 
                     addLog("🔥 ANHANGÁ: 'Sintam meu fogo intercalado!'");
-                    
-                    // Atacar colunas alternadas a partir da posição do boss
                     const columnsToAttack = [];
-                    
-                    // Começar na coluna do boss e alternar
-                    for (let col = boss.x; col < 8; col += 2) {
-                        columnsToAttack.push(col);
-                    }
-                    for (let col = boss.x; col >= 0; col -= 2) {
-                        columnsToAttack.push(col);
-                    }
-                    
-                    // Remover duplicados
+                    for (let col = boss.x; col < 8; col += 2) columnsToAttack.push(col);
+                    for (let col = boss.x; col >= 0; col -= 2) columnsToAttack.push(col);
                     const uniqueColumns = [...new Set(columnsToAttack)];
-                    
-                    // Efeito visual nas colunas atacadas
                     uniqueColumns.forEach(col => {
-                        if(col >= 0 && col <= 7) {
-                            triggerFireColumn(col);
-                        }
+                        if(col >= 0 && col <= 7) triggerFireColumn(col);
                     });
-                    
                     await sleep(600);
-                    
-                    // Aplicar dano apenas nas colunas atacadas
                     players.forEach(p => { 
-                        if(!p.dead && uniqueColumns.includes(p.x)) {
-                            applyDmg(p, bossAtk ); // Dano aumentado para o boss final
-                        }
+                        if(!p.dead && uniqueColumns.includes(p.x)) applyDmg(p, bossAtk); 
                     });
-                    
                 } else { 
                     playSfx('anhanga_skill2'); 
                     addLog("💀 ANHANGÁ: 'Eu me alimento da natureza!'");
-                    
-                    // Efeito visual de sucção de energia
                     const board = document.getElementById('board');
                     const s = getStep();
-                    
-                    // Criar efeito de energia sendo sugada para o Anhangá
                     const suckEffect = document.createElement('div');
                     suckEffect.style.position = 'absolute';
                     suckEffect.style.left = (boss.x * s + 8) + 'px';
@@ -3855,21 +3683,14 @@ else if(boss.type === "CUCA") {
                     suckEffect.style.boxShadow = '0 0 20px #8e44ad';
                     suckEffect.style.animation = 'pulseSkill 0.8s infinite alternate';
                     suckEffect.style.zIndex = '55';
-                    
                     board.appendChild(suckEffect);
-                    
-                    // Cura do Anhangá
                     triggerPotion(boss.x, boss.y);
                     await sleep(400);
                     boss.hp = Math.min(boss.maxHp, boss.hp + 3);
                     showHealEffect(boss.x, boss.y, 3);
                     updateVisuals();
-                    addLog(`🧪 ${boss.type} recuperou 3 HP sugando energia da natureza!`);
-                    
-                    // Remover efeito
-                    setTimeout(() => {
-                        if (suckEffect.parentNode) suckEffect.remove();
-                    }, 1000);
+                    addLog(`🧪 ${getBossDisplayName(boss.type)} recuperou 3 HP!`);
+                    setTimeout(() => { if (suckEffect.parentNode) suckEffect.remove(); }, 1000);
                 } 
             }
         }
@@ -3879,11 +3700,7 @@ else if(boss.type === "CUCA") {
         
         bossAIIsRunning = false;
         
-        // ✅ VERIFICAR SE O BOSS MORREU DURANTE O ATAQUE
-        if (boss.dead) {
-            console.log("⚡ Boss morreu durante o ataque do AI");
-            return; // Não passa turno, handleBossDefeat será chamado
-        }
+        if (boss.dead) return;
         
         const stillAlivePlayers = players.filter(p => !p.dead);
         if (stillAlivePlayers.length === 0) {
@@ -3891,13 +3708,8 @@ else if(boss.type === "CUCA") {
             return;
         }
         
-        // ✅ VERIFICAR SE ESTÁ EM TRANSIÇÃO DE BOSS
-        if (arcadeBossTransition) {
-            console.log("⚡ Em transição de boss, não passando turno");
-            return;
-        }
+        if (arcadeBossTransition) return;
         
-        // ✅ DEFINIR TURNO DOS JOGADORES APÓS O BOSS ATACAR
         currentPlayerIdx = 0; 
         while (currentPlayerIdx < players.length && players[currentPlayerIdx] && players[currentPlayerIdx].dead) {
             currentPlayerIdx++;
@@ -3906,34 +3718,34 @@ else if(boss.type === "CUCA") {
         if (currentPlayerIdx < players.length && players[currentPlayerIdx]) {
             switchConfig(currentPlayerIdx);
             addLog(`🎮 Turno dos jogadores! Começa com ${players[currentPlayerIdx].name}`);
-            
             document.getElementById('turnP_Active').classList.add('active-turn');
         } else {
             showEndGame("GAME OVER", false);
         }
         
         updateAllSpriteDirections();
+        updateHeroCard();
+        updateBossCard();
     }
 
-    // ================= FUNÇÃO HANDLEBOSS DEFEAT - CORRIGIDA =================
+    // ================= HANDLE BOSS DEFEAT =================
     async function handleBossDefeat() {
+        if (tutorialMode) return;
+        
         if (mode === "ARCADE") {
-            // ✅ RESETAR IMEDIATAMENTE A FLAG DO BOSS AI
             bossAIIsRunning = false;
             
             const defeatedBoss = arcadeCurrentOrder[arcadeIndex];
             const clue = LORE.bossLore[defeatedBoss]?.clue || "...";
             
-            addLog(`💬 ${defeatedBoss} sussurra antes de cair: "${clue}"`);
+            addLog(`💬 ${getBossDisplayName(defeatedBoss)} sussurra antes de cair: "${clue}"`);
             
             updateTitleStats('boss_defeated', 1, defeatedBoss);
             
             arcadeIndex++; 
             LORE.currentStage++;
             
-            // ✅ VERIFICAR SE COMPLETOU OS 4 BOSSES DO DESAFIO
             if (arcadeIndex >= arcadeCurrentOrder.length) {
-                // Se for o quinto boss (Anhangá), mostrar vitória total
                 if (boss.type === "ANHANGA") {
                     LORE.anhangáRevealed = true;
                     addLog("👑 DESAFIO FINAL COMPLETO!");
@@ -3944,18 +3756,14 @@ else if(boss.type === "CUCA") {
                     return;
                 }
                 
-                // Se completou 4 bosses normais, adicionar Anhangá como quinto
                 addLog("🔥 OS QUATRO BOSSES FORAM DERROTADOS!");
                 addLog("👹 MAS ALGO SOMBRIO SE APROXIMA...");
                 addLog("💀 ANHANGÁ, O ESPÍRITO DO MAL, DESPERTA!");
                 
-                // ✅ SETAR FLAG DE TRANSIÇÃO
                 arcadeBossTransition = true;
                 
-                // Inicializar Anhangá como boss final
                 boss.type = "ANHANGA";
                 
-                // Vida do Anhangá: 10 a mais que o boss normal
                 const baseBossHP = parseInt(document.getElementById('hp_BOSS_cfg').value) || 30;
                 boss.maxHp = baseBossHP + 9;
                 boss.hp = boss.maxHp;
@@ -3963,20 +3771,23 @@ else if(boss.type === "CUCA") {
                 boss.x = 4;
                 boss.y = 0;
                 
-                // Atualizar sprite e interface
                 const bossImg = document.getElementById('imgBoss');
-                if (bossImg) bossImg.src = SPRITES.ANHANGA;
-                document.getElementById('turnBoss').innerText = `${boss.type} BOSS FINAL`;
-                document.getElementById('bossNameDisplay').textContent = "ANHANGA";
+                if (bossImg) {
+                    bossImg.src = SPRITES.ANHANGA;
+                    bossImg.className = 'normal';
+                }
+                document.getElementById('turnBoss').innerText = `${getBossDisplayName(boss.type)}`;
+                document.getElementById('bossNameDisplay').textContent = "Anhangá";
+                document.getElementById('bossStatsDisplay').innerHTML = `HP: <b>${boss.hp}</b> / ${boss.maxHp}`;
                 
                 updateVisuals();
+                updateHeaderBossName();
+                updateBossCard();
                 playBossTheme();
                 updateAllSpriteDirections();
                 
-                // Mostrar diálogo do Anhangá
                 await showBossIntroDialog("ANHANGA");
                 
-                // ✅ DEFINIR QUE OS HERÓIS ATACAM PRIMEIRO
                 currentPlayerIdx = 0;
                 while (currentPlayerIdx < players.length && players[currentPlayerIdx] && players[currentPlayerIdx].dead) {
                     currentPlayerIdx++;
@@ -3991,21 +3802,19 @@ else if(boss.type === "CUCA") {
                     document.getElementById('turnBoss').classList.remove('active-turn');
                     
                     saveAndRefresh();
+                    updateHeroCard();
+                    updateBossCard();
                     updateAllSpriteDirections();
                 }
                 
-                // ✅ RESETAR FLAG DE TRANSIÇÃO
                 arcadeBossTransition = false;
                 return;
             }
             
-            // ✅ SETAR FLAG DE TRANSIÇÃO PARA PRÓXIMO BOSS
             arcadeBossTransition = true;
             
-            // Próximo boss regular
             boss.type = arcadeCurrentOrder[arcadeIndex];
             
-            // Ajustar vida para boss normal
             const baseBossHP = parseInt(document.getElementById('hp_BOSS_cfg').value) || 30;
             boss.maxHp = baseBossHP;
             boss.hp = boss.maxHp;
@@ -4013,17 +3822,24 @@ else if(boss.type === "CUCA") {
             boss.x = 4;
             boss.y = 0;
             
-            document.getElementById('imgBoss').src = SPRITES[boss.type];
-            document.getElementById('turnBoss').innerText = `${boss.type} BOSS`;
+            const bossImg = document.getElementById('imgBoss');
+            if (bossImg) {
+                bossImg.src = SPRITES[boss.type];
+                if (boss.type === "IARA") bossImg.className = 'iara-normal';
+                else bossImg.className = 'normal';
+            }
+            document.getElementById('turnBoss').innerText = `${getBossDisplayName(boss.type)}`;
+            document.getElementById('bossNameDisplay').textContent = getBossDisplayName(boss.type);
+            document.getElementById('bossStatsDisplay').innerHTML = `HP: <b>${boss.hp}</b> / ${boss.maxHp}`;
             
             updateAllSpriteDirections();
             updateVisuals();
+            updateHeaderBossName();
+            updateBossCard();
             playBossTheme();
             
-            // Mostrar diálogo do boss
             await showBossIntroDialog(boss.type);
             
-            // ✅ GARANTIR QUE OS HERÓIS ATACAM PRIMEIRO
             currentPlayerIdx = 0;
             while (currentPlayerIdx < players.length && players[currentPlayerIdx] && players[currentPlayerIdx].dead) {
                 currentPlayerIdx++;
@@ -4031,17 +3847,18 @@ else if(boss.type === "CUCA") {
             
             if (currentPlayerIdx < players.length && players[currentPlayerIdx]) {
                 switchConfig(currentPlayerIdx);
-                addLog(`🔥 PRÓXIMO BOSS: ${boss.type}!`);
+                addLog(`🔥 PRÓXIMO BOSS: ${getBossDisplayName(boss.type)}!`);
                 addLog(`🎮 ${players[currentPlayerIdx].name} ATACA PRIMEIRO!`);
                 
                 document.getElementById('turnP_Active').classList.add('active-turn');
                 document.getElementById('turnBoss').classList.remove('active-turn');
                 
                 saveAndRefresh();
+                updateHeroCard();
+                updateBossCard();
                 updateAllSpriteDirections();
             }
             
-            // ✅ RESETAR FLAG DE TRANSIÇÃO
             arcadeBossTransition = false;
             
         } else if (mode === "BOSS") {
@@ -4049,64 +3866,79 @@ else if(boss.type === "CUCA") {
         }
     }
 
-    // ================= FUNÇÕES AUXILIARES DO JOGO =================
+    // ================= AUXILIARES =================
     function saveAndRefresh() { 
+        if (tutorialMode) return;
+        
         const p = players[editingIdx]; 
         if (!p) return; 
         p.name = document.getElementById('pName').value.toUpperCase(); 
         let s = 0; 
         for(let i = 0; i < p.name.length; i++) s += p.name.charCodeAt(i); 
         p.element = COLORS[s % 4]; 
+        
         const ed = document.getElementById('pElem'); 
-        ed.innerText = p.element; 
-        ed.className = `element-display bg-${p.element}`; 
+        if (ed) {
+            ed.innerText = p.element; 
+            ed.className = `element-display bg-${p.element}`; 
+        }
         
         const baseAtk = CLASS_DB[p.class].atk;
         const amuletBonus = p.bonusAtk || 0;
         const titleBonus = p.titleBonus?.ATK || 0;
         const totalAtk = baseAtk + amuletBonus + titleBonus;
         
-        document.getElementById('pStatsDisplay').innerHTML = `
-            HP: <b>${p.hp}</b> / ${p.maxHp} | 
-            ATK: <b>${totalAtk}</b>
-            ${titleBonus > 0 ? `<span style="color:#2ecc70; font-size:10px;"> (+${titleBonus} título)</span>` : ''}
-        `; 
+        const statsDisplay = document.getElementById('pStatsDisplay');
+        if (statsDisplay) {
+            statsDisplay.innerHTML = `
+                HP: <b>${p.hp}</b> / ${p.maxHp} | 
+                ATK: <b>${totalAtk}</b>
+                ${titleBonus > 0 ? `<span style="color:#2ecc70; font-size:10px;"> (+${titleBonus} título)</span>` : ''}
+            `; 
+        }
         
         const img = document.getElementById(`imgP${p.id}`); 
         if (img) img.src = SPRITES[p.class]; 
         
         const isMyTurn = (editingIdx === currentPlayerIdx && currentPlayerIdx >= 0); 
-        document.getElementById('btnPlay').disabled = !isMyTurn; 
-        document.getElementById('btnSkill').disabled = !isMyTurn || players[currentPlayerIdx]?.skillUsed; 
+        const btnPlay = document.getElementById('btnPlay');
+        const btnSkill = document.getElementById('btnSkill');
+        if (btnPlay) btnPlay.disabled = !isMyTurn; 
+        if (btnSkill) btnSkill.disabled = !isMyTurn || players[currentPlayerIdx]?.skillUsed; 
         
         const turnActive = document.getElementById('turnP_Active');
-        if (turnActive) {
-            turnActive.classList.toggle('active-turn', currentPlayerIdx >= 0); 
-            turnActive.style.opacity = currentPlayerIdx >= 0 ? "1" : "0.7";
-        }
+        if (turnActive) turnActive.classList.toggle('active-turn', currentPlayerIdx >= 0); 
         
         const titleBonusDisplay = document.getElementById('titleBonusDisplay');
-        if (titleBonus > 0) {
-            titleBonusDisplay.style.display = 'block';
-            titleBonusDisplay.textContent = `+${titleBonus} ATK (Título)`;
-        } else {
-            titleBonusDisplay.style.display = 'none';
+        if (titleBonusDisplay) {
+            if (titleBonus > 0) {
+                titleBonusDisplay.style.display = 'block';
+                titleBonusDisplay.textContent = `+${titleBonus} ATK (Título)`;
+            } else {
+                titleBonusDisplay.style.display = 'none';
+            }
         }
         
         updateAllSpriteDirections();
+        updateHeroCard();
     }
     
     function switchConfig(idx) { 
+        if (tutorialMode) return;
+        
         editingIdx = idx; 
         const p = players[idx]; 
         if(!p) return; 
-        document.getElementById('pName').value = p.name; 
-        document.getElementById('pClass').value = p.class; 
+        const pNameEl = document.getElementById('pName');
+        const pClassEl = document.getElementById('pClass');
+        if (pNameEl) pNameEl.value = p.name; 
+        if (pClassEl) pClassEl.value = p.class; 
         saveAndRefresh(); 
     }
     
     function resetPlayerHP() { 
         const p = players[editingIdx]; 
+        if (!p) return;
         p.class = document.getElementById('pClass').value; 
         p.hp = CLASS_DB[p.class].hp; 
         p.maxHp = p.hp; 
@@ -4133,7 +3965,7 @@ else if(boss.type === "CUCA") {
     }
     
     function isOccupied(nx, ny, excludeId) { 
-        if ((mode === "BOSS" || mode === "ARCADE") && boss.x === nx && boss.y === ny && !boss.dead) return true; 
+        if ((mode === "BOSS" || mode === "ARCADE") && boss.x === nx && boss.y === ny && !boss.dead && !tutorialMode) return true; 
         return players.some(p => !p.dead && p.id !== excludeId && p.x === nx && p.y === ny); 
     }
     
@@ -4141,12 +3973,26 @@ else if(boss.type === "CUCA") {
         const idx = y * 8 + x; 
         if(amulets[idx]) { 
             RANKING.amulets++;
-            updateTitleStats('amulet_collected');
+            
+            if (tutorialMode) {
+                if (tutorialLessonIndex === 8) {
+                    window._tutorialAmuletCollected = true;
+                }
+            } else {
+                updateTitleStats('amulet_collected');
+            }
             
             amulets[idx] = false; 
             p.bonusAtk += 1; 
-            const tile = document.querySelectorAll('.tile')[idx]; 
-            if(tile) tile.innerHTML = ''; 
+            
+            if (tutorialMode) {
+                const tile = document.querySelectorAll('#tutorialGrid .tile')[idx]; 
+                if(tile) tile.innerHTML = ''; 
+            } else {
+                const tile = document.querySelectorAll('#grid .tile')[idx]; 
+                if(tile) tile.innerHTML = ''; 
+            }
+            
             addLog(`${p.name} Muiraquitã! +1 ATK.`); 
             saveAndRefresh(); 
         } 
@@ -4154,17 +4000,27 @@ else if(boss.type === "CUCA") {
     
     function handleSelect(idx) { 
         if(!gameActive || arcadeBossTransition) return; 
+        
+        if (tutorialMode) {
+            handleTutorialSelect(idx);
+            return;
+        }
+        
         const p = players[currentPlayerIdx]; 
+        if (!p) return;
+        
         if (skillActive) { 
             grid[idx] = p.element; 
-            document.querySelectorAll('.tile')[idx].className = `tile bg-${p.element}`; 
+            const targetTile = document.querySelectorAll('#grid .tile')[idx];
+            if (targetTile) targetTile.className = `tile bg-${p.element}`; 
             p.skillUsed = true; 
             skillActive = false; 
-            document.querySelectorAll('.tile').forEach(t => t.classList.remove('skill-mode')); 
-            addLog(`${p.name} Ultimate!`); 
+            document.querySelectorAll('#grid .tile').forEach(t => t.classList.remove('skill-mode')); 
+            addLog(`✨ ${p.name} usou SOLO SAGRADO!`); 
             saveAndRefresh(); 
             return; 
         } 
+        
         const x = idx % 8, y = Math.floor(idx / 8); 
         if(isOccupied(x, y, p.id) || (x === p.x && y === p.y)) return; 
         if(path.length === 0) { 
@@ -4188,7 +4044,7 @@ else if(boss.type === "CUCA") {
     function renderPath() { 
         const threshold = parseInt(document.getElementById('bravely_tiles').value) || 9; 
         const isBravely = path.length >= threshold; 
-        document.querySelectorAll('.tile').forEach((t, i) => { 
+        document.querySelectorAll('#grid .tile').forEach((t, i) => { 
             t.classList.toggle('selected', path.includes(i)); 
             t.classList.toggle('bravely-ready', isBravely && path.includes(i)); 
         }); 
@@ -4213,7 +4069,7 @@ else if(boss.type === "CUCA") {
     
     function triggerElementalFX(element, pos, type, heroX, heroY) { 
         const s = getStep(); 
-        const board = document.getElementById('board'); 
+        const board = tutorialMode ? document.getElementById('tutorialBoard') : document.getElementById('board'); 
         if(element === 'FOGO') { 
             playSfx('skill1'); 
             const f = document.createElement('div'); 
@@ -4231,29 +4087,19 @@ else if(boss.type === "CUCA") {
             setTimeout(() => f.remove(), 1200); 
         } else if(element === 'AGUA') { 
             playSfx('iara2'); 
-            
             const waterFX = document.createElement('div');
             waterFX.className = 'water-cross-fx';
-            
             if(type === 'COL') {
                 waterFX.style.width = s + 'px';
                 waterFX.style.height = '100%';
                 waterFX.style.left = (pos * s + 8) + 'px';
                 waterFX.style.top = '0';
-                waterFX.style.background = 'linear-gradient(0deg, transparent, rgba(255,255,255,0.9), rgba(52,152,219,1), rgba(255,255,255,0.9), transparent)';
             } else {
                 waterFX.style.width = '100%';
                 waterFX.style.height = s + 'px';
                 waterFX.style.top = (pos * s + 8) + 'px';
                 waterFX.style.left = '0';
-                waterFX.style.background = 'linear-gradient(90deg, transparent, rgba(255,255,255,0.9), rgba(52,152,219,1), rgba(255,255,255,0.9), transparent)';
             }
-            
-            waterFX.style.boxShadow = '0 0 20px rgba(52, 152, 219, 0.8)';
-            waterFX.style.borderRadius = '4px';
-            waterFX.style.animation = 'waterCrossAnim 0.8s ease-out';
-            waterFX.style.zIndex = '50';
-            
             board.appendChild(waterFX);
             setTimeout(() => waterFX.remove(), 1200);
         } else if(element === 'TERRA') { 
@@ -4283,18 +4129,19 @@ else if(boss.type === "CUCA") {
 
     function showEndGame(msg, isWin) { 
         gameActive = false;
-        console.log("🏁 Fim de jogo:", msg, "Venceu?", isWin);
+        
+        if (tutorialMode) return;
         
         if (isWin) {
+            players.forEach(p => { 
+                if (p.hp === 1 && !p.dead) updateTitleStats('survive_1hp'); 
+            });
             players.forEach(p => {
-                if (p.hp === 1 && !p.dead) {
-                    updateTitleStats('survive_1hp');
-                }
+                if (!p.dead) updateTitleStats('win_as_class', 1, p.class);
             });
         }
         
         if(isWin && (mode === "BOSS" || mode === "ARCADE")){ 
-            console.log("📤 Chamando sendScoreToDreamlo...");
             sendScoreToDreamlo(); 
         }
         
@@ -4309,7 +4156,7 @@ else if(boss.type === "CUCA") {
     function applyDmg(t, amt) { 
         if(t.dead) return; 
         
-        if (t.titleBonus?.RESIST) {
+        if (t.titleBonus?.RESIST && !tutorialMode) {
             const attacker = players[currentPlayerIdx];
             if (attacker && t.titleBonus.RESIST[attacker.element]) {
                 amt += t.titleBonus.RESIST[attacker.element];
@@ -4320,7 +4167,7 @@ else if(boss.type === "CUCA") {
         t.hp -= amt; 
         showDmgEffect(t.x, t.y, amt); 
         
-        if (gameActive && currentPlayerIdx >= 0 && path.length > 0) {
+        if (gameActive && currentPlayerIdx >= 0 && path.length > 0 && !tutorialMode) {
             const player = players[currentPlayerIdx];
             const element = grid[path[0]];
             
@@ -4337,17 +4184,24 @@ else if(boss.type === "CUCA") {
                 if(t === boss) handleBossDefeat(); 
                 else if(players.every(p => p.dead)) showEndGame("GAME OVER", false); 
             } else showEndGame(`VITÓRIA DO ${players.find(p => !p.dead).name}`, true); 
-            if(t.id !== undefined) document.getElementById(`tokenP${t.id}`).style.display = 'none'; 
+            if(t.id !== undefined) {
+                const tok = document.getElementById(`tokenP${t.id}`);
+                if (tok) tok.style.display = 'none'; 
+            }
         } 
         updateVisuals(); 
         
         if (mode === "BOSS" || mode === "ARCADE") {
-            document.getElementById('bossStatsDisplay').innerHTML = `HP: <b>${boss.hp}</b> / ${boss.maxHp}`;
+            const bsd = document.getElementById('bossStatsDisplay');
+            if (bsd) bsd.innerHTML = `HP: <b>${boss.hp}</b> / ${boss.maxHp}`;
         } else if (t === players[1]) {
-            document.getElementById('bossStatsDisplay').innerHTML = `HP: <b>${t.hp}</b> / ${t.maxHp}`;
+            const bsd = document.getElementById('bossStatsDisplay');
+            if (bsd) bsd.innerHTML = `HP: <b>${t.hp}</b> / ${t.maxHp}`;
         }
         
         updateAllSpriteDirections();
+        updateHeroCard();
+        updateBossCard();
     }
     
     function triggerFireColumn(c) { 
@@ -4356,7 +4210,8 @@ else if(boss.type === "CUCA") {
         f.style.left = (c * getStep() + 8) + 'px'; 
         f.style.top = '0';
         f.style.height = '100%';
-        document.getElementById('board').appendChild(f); 
+        const board = tutorialMode ? document.getElementById('tutorialBoard') : document.getElementById('board');
+        board.appendChild(f); 
         setTimeout(() => f.remove(), 1200); 
     }
     
@@ -4366,7 +4221,8 @@ else if(boss.type === "CUCA") {
         const s = getStep(); 
         f.style.left = (x * s + 8) + 'px'; 
         f.style.top = (y * s + 8) + 'px'; 
-        document.getElementById('board').appendChild(f); 
+        const board = tutorialMode ? document.getElementById('tutorialBoard') : document.getElementById('board');
+        board.appendChild(f); 
         setTimeout(() => f.remove(), 600); 
     }
     
@@ -4429,11 +4285,7 @@ else if(boss.type === "CUCA") {
             
             document.getElementById('board').appendChild(v); 
             
-            setTimeout(() => { 
-                v.style.opacity = '0'; 
-                v.style.transform = 'scale(0.5)'; 
-            }, 700); 
-            
+            setTimeout(() => { v.style.opacity = '0'; v.style.transform = 'scale(0.5)'; }, 700); 
             setTimeout(() => v.remove(), 1000); 
         }, d); 
     }
@@ -4449,10 +4301,6 @@ else if(boss.type === "CUCA") {
         vertical.style.height = boardSize + 'px';
         vertical.style.left = (bx * s + 8) + 'px';
         vertical.style.top = '8px';
-        vertical.style.background = 'linear-gradient(0deg, transparent, rgba(255,255,255,0.9), rgba(52,152,219,1), rgba(255,255,255,0.9), transparent)';
-        vertical.style.boxShadow = '0 0 20px rgba(52, 152, 219, 0.8)';
-        vertical.style.borderRadius = '4px';
-        vertical.style.animation = 'waterCrossAnim 0.8s ease-out';
         board.appendChild(vertical);
         
         const horizontal = document.createElement('div');
@@ -4461,10 +4309,6 @@ else if(boss.type === "CUCA") {
         horizontal.style.height = s + 'px';
         horizontal.style.top = (by * s + 8) + 'px';
         horizontal.style.left = '8px';
-        horizontal.style.background = 'linear-gradient(90deg, transparent, rgba(255,255,255,0.9), rgba(52,152,219,1), rgba(255,255,255,0.9), transparent)';
-        horizontal.style.boxShadow = '0 0 20px rgba(52, 152, 219, 0.8)';
-        horizontal.style.borderRadius = '4px';
-        horizontal.style.animation = 'waterCrossAnim 0.8s ease-out';
         board.appendChild(horizontal);
         
         setTimeout(() => {
@@ -4488,6 +4332,9 @@ else if(boss.type === "CUCA") {
                 if(h) h.style.width = (p.hp / p.maxHp) * 100 + '%'; 
             } 
         }); 
+        
+        if (tutorialMode) return;
+        
         if(mode === "BOSS" || mode === "ARCADE") { 
             const bt = document.getElementById('tokenBoss'); 
             if(bt) { 
@@ -4496,19 +4343,29 @@ else if(boss.type === "CUCA") {
                 const bh = document.getElementById('hpBarBoss'); 
                 if(bh) bh.style.width = (boss.hp / boss.maxHp) * 100 + '%'; 
             } 
-            document.getElementById('bossStatsDisplay').innerHTML = `HP: <b>${boss.hp}</b> / ${boss.maxHp}`; 
+            const bsd = document.getElementById('bossStatsDisplay');
+            if (bsd) bsd.innerHTML = `HP: <b>${boss.hp}</b> / ${boss.maxHp}`; 
         } else if (players[1]) {
-            document.getElementById('bossStatsDisplay').innerHTML = `HP: <b>${players[1].hp}</b> / ${players[1].maxHp}`;
+            const bsd = document.getElementById('bossStatsDisplay');
+            if (bsd) bsd.innerHTML = `HP: <b>${players[1].hp}</b> / ${players[1].maxHp}`;
         }
     }
     
     function activateSkill() {
+        if (!gameActive || arcadeBossTransition) return;
+        
+        if (tutorialMode) {
+            if (players[0].skillUsed) return;
+            skillActive = true;
+            document.querySelectorAll('#tutorialGrid .tile').forEach(t => t.classList.add('skill-mode'));
+            return;
+        }
+        
+        if (players[currentPlayerIdx].skillUsed) return; 
         RANKING.ultimates++;
         updateTitleStats('ultimate_used');
-        
-        if (!gameActive || players[currentPlayerIdx].skillUsed || arcadeBossTransition) return; 
         skillActive = true; 
-        document.querySelectorAll('.tile').forEach(t => t.classList.add('skill-mode')); 
+        document.querySelectorAll('#grid .tile').forEach(t => t.classList.add('skill-mode')); 
     }
     
     function showDmgEffect(x, y, a){ 
@@ -4517,7 +4374,8 @@ else if(boss.type === "CUCA") {
         f.innerText = `-${a}`; 
         f.style.left = (x * s + 20) + 'px'; 
         f.style.top = (y * s) + 'px'; 
-        document.getElementById('board').appendChild(f); 
+        const board = tutorialMode ? document.getElementById('tutorialBoard') : document.getElementById('board');
+        board.appendChild(f); 
         setTimeout(() => f.remove(), 1200); 
     }
     
@@ -4527,7 +4385,8 @@ else if(boss.type === "CUCA") {
         f.innerText = `+${a}`; 
         f.style.left = (x * s + 20) + 'px'; 
         f.style.top = (y * s) + 'px'; 
-        document.getElementById('board').appendChild(f); 
+        const board = tutorialMode ? document.getElementById('tutorialBoard') : document.getElementById('board');
+        board.appendChild(f); 
         setTimeout(() => f.remove(), 1200); 
     }
     
@@ -4570,7 +4429,8 @@ else if(boss.type === "CUCA") {
         const angle = Math.atan2(dy, dx) * (180 / Math.PI);
         arrow.style.transform = `rotate(${angle}deg)`;
         
-        document.getElementById('board').appendChild(arrow);
+        const board = tutorialMode ? document.getElementById('tutorialBoard') : document.getElementById('board');
+        board.appendChild(arrow);
         
         await sleep(50);
         
@@ -4591,5 +4451,5 @@ else if(boss.type === "CUCA") {
         
         loadTitleData();
         checkTitleUnlocks();
+        loadTutorialData();
     });
-
