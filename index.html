@@ -12,9 +12,10 @@
     <style>
         /* ================= RESET & VARIÁVEIS ================= */
         :root {
-            --tile-size: 55px;
-            --gap: 4px;
-            --step: 59px;
+            /* 🎯 Board escala com a tela: mínimo 24px, ideal 9vw, máximo 55px */
+            --tile-size: clamp(24px, 9.5vw, 55px);
+            --gap: clamp(2px, 0.5vw, 4px);
+            --step: calc(var(--tile-size) + var(--gap));
 
             /* ===== PALETA ENTIDADES (Fase 1 - Pergaminho & Selo) ===== */
             --parchment-1: #d9c89a;
@@ -39,7 +40,6 @@
             --elem-earth: #4a7a3a;
             --elem-air: #c9a227;
 
-            /* Compatibilidade com CSS existente */
             --color-primary: #c9a227;
             --color-secondary: #2a1f10;
             --color-bg: #1a1208;
@@ -51,15 +51,11 @@
             --color-panel-border: #6a5024;
         }
         
-        @media (max-width: 600px) {
-            :root { --tile-size: 42px; --gap: 2px; --step: 44px; }
-        }
-        
-        @media (max-width: 400px) {
-            :root { --tile-size: 36px; --gap: 2px; --step: 38px; }
-        }
-        
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        html, body {
+            overflow-x: hidden;
+        }
         
         body {
             font-family: 'EB Garamond', 'Segoe UI', serif;
@@ -69,13 +65,11 @@
                 radial-gradient(ellipse at bottom, rgba(74, 107, 58, 0.06), transparent 60%),
                 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.10 0 0 0 0 0.07 0 0 0 0 0.03 0 0 0 0.35 0'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E");
             color: var(--color-text);
-            overflow-x: hidden;
             touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
         }
         
-        /* ================= SISTEMA DE ÍCONES (novo) ================= */
-        /* Ícones em <img> herdam tamanho daqui. Tamanhos específicos 
-           podem ser sobrescritos com classes utilitárias. */
+        /* ================= SISTEMA DE ÍCONES ================= */
         .game-icon {
             width: 1em;
             height: 1em;
@@ -91,7 +85,6 @@
         .game-icon--lg { width: 1.4em;  height: 1.4em; }
         .game-icon--xl { width: 2em;    height: 2em; }
         
-        /* Ícone dentro de botões grandes (title-btn, mode-select-btn, etc) */
         .title-btn .game-icon,
         .mode-select-btn .game-icon,
         .players-start-btn .game-icon,
@@ -105,7 +98,6 @@
             margin-right: 4px;
         }
         
-        /* Ícone em headers de seção */
         .section-title .game-icon,
         .config-title .game-icon,
         .mechanics-title .game-icon,
@@ -116,20 +108,17 @@
             margin-right: 6px;
         }
         
-        /* Ícone em log (linhas do diário) */
         .log-entry .game-icon {
             width: 1.05em;
             height: 1.05em;
             margin-right: 3px;
         }
         
-        /* Ícone em cards do hero-status */
         .hero-status-atk .game-icon {
             width: 12px;
             height: 12px;
         }
         
-        /* Ícone em mechanic-icon-inline (era img hardcoded) */
         .mechanic-icon-inline {
             width: 16px;
             height: 16px;
@@ -714,6 +703,7 @@
             font-size: 0.75rem; margin-top: 6px; font-weight: 700;
             letter-spacing: 1px;
         }
+        
         /* ================= SELEÇÃO DE MODO ================= */
         #modeScreen {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -1035,7 +1025,6 @@
             display: flex; justify-content: center; gap: 15px;
             margin-top: 30px; padding-bottom: 30px;
         }
-        
         /* ================= 🎓 TELA DE TUTORIAL ================= */
         #tutorialScreen {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -1429,11 +1418,12 @@
         
         /* ================= TELA DE JOGO ================= */
         #gameScreen {
-            display: none; width: 100%; min-height: 100vh; height: 100vh;
+            display: none; width: 100%;
+            min-height: 100vh;
             background:
                 radial-gradient(ellipse at center, rgba(201, 162, 39, 0.04), transparent 60%),
                 radial-gradient(ellipse at center, #221a0f 0%, #1a1208 60%, #0d0805 100%);
-            overflow: hidden; flex-direction: column;
+            flex-direction: column;
         }
         
         #gameScreen.active { display: flex; }
@@ -1470,7 +1460,7 @@
             display: flex; gap: 10px; align-items: center;
         }
         
-        .game-menu-trigger, .game-help-trigger {
+        .game-menu-trigger, .game-help-trigger, .game-log-trigger {
             padding: 8px 18px;
             background: linear-gradient(135deg, #3d2d18, #2a1f10);
             color: #c8b787;
@@ -1484,7 +1474,7 @@
             letter-spacing: 1px;
         }
         
-        .game-menu-trigger:hover, .game-help-trigger:hover {
+        .game-menu-trigger:hover, .game-help-trigger:hover, .game-log-trigger:hover {
             background: linear-gradient(135deg, #5a4220, #3d2d18);
             color: #e8dcc4;
             border-color: var(--gold);
@@ -1503,11 +1493,26 @@
             color: #f0e0ff;
         }
         
+        /* Botão do log — só aparece em mobile */
+        .game-log-trigger {
+            display: none;
+            background: linear-gradient(135deg, #2a5570, #1a3a50);
+            border-color: #3a7ca5;
+            color: #d0e8f5;
+        }
+        
+        .game-log-trigger:hover {
+            background: linear-gradient(135deg, #3a6a90, #2a5570);
+            border-color: #4a8cb5;
+            color: #e0f0ff;
+        }
+        
         .game-main {
             display: flex; flex: 1; padding: 15px; gap: 15px;
-            align-items: center; justify-content: center;
-            overflow: hidden; min-height: 0;
+            align-items: flex-start; justify-content: center;
+            min-height: 0;
         }
+        
         /* ================= PAINEL DE MECÂNICAS ================= */
         .mechanics-panel {
             background:
@@ -1648,13 +1653,13 @@
         /* ================= BOARD ================= */
         .board-area {
             display: flex; flex-direction: column; align-items: center;
-            justify-content: center; gap: 15px; flex-shrink: 0; max-height: 100%;
+            justify-content: flex-start; gap: 15px; flex-shrink: 0;
         }
         
         .board-wrapper {
             position: relative;
-            width: calc((var(--tile-size) * 8) + (var(--gap) * 7) + 16px);
-            height: calc((var(--tile-size) * 8) + (var(--gap) * 7) + 16px);
+            width: fit-content;
+            height: fit-content;
             background:
                 linear-gradient(135deg, rgba(74, 107, 58, 0.15), transparent 40%),
                 linear-gradient(180deg, #1f1608, #0d0805);
@@ -1665,7 +1670,8 @@
                 0 10px 40px rgba(0,0,0,0.8),
                 0 0 60px rgba(74, 107, 58, 0.15),
                 inset 0 0 40px rgba(0,0,0,0.5);
-            overflow: visible; flex-shrink: 0;
+            overflow: visible;
+            flex-shrink: 0;
         }
         
         .board-wrapper::before {
@@ -1680,8 +1686,11 @@
         }
         
         .grid {
-            display: grid; grid-template-columns: repeat(8, var(--tile-size));
-            gap: var(--gap); position: relative; z-index: 2;
+            display: grid;
+            grid-template-columns: repeat(8, var(--tile-size));
+            gap: var(--gap);
+            position: relative;
+            z-index: 2;
         }
         
         .tile {
@@ -2166,8 +2175,7 @@
             100% { opacity: 0; transform: translateY(-100px) scale(1.6); }
         }
         
-        /* ================= 💫 PURIFICAÇÃO (nova mecânica visual) ================= */
-        /* Container do efeito — cobre o board todo */
+        /* ================= 💫 PURIFICAÇÃO ================= */
         .purificacao-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             z-index: 500; pointer-events: none;
@@ -2177,7 +2185,6 @@
         
         .purificacao-overlay.active { opacity: 1; }
         
-        /* Escurecimento do tabuleiro */
         .purificacao-darken {
             position: absolute; inset: 0;
             background: radial-gradient(ellipse at center, rgba(10,6,2,0.3) 0%, rgba(10,6,2,0.75) 100%);
@@ -2191,7 +2198,6 @@
             100% { opacity: 0; }
         }
         
-        /* Feixe de luz descendo do topo */
         .purificacao-feixe {
             position: absolute;
             top: 0;
@@ -2211,7 +2217,6 @@
             mix-blend-mode: screen;
         }
         
-        /* Ajuste dinâmico do feixe (JS seta left e width conforme tile do boss) */
         .purificacao-feixe.custom {
             animation: none;
             transform: translateX(-50%) scaleY(1);
@@ -2225,7 +2230,6 @@
             100% { transform: translateX(-50%) scaleY(1); opacity: 0; }
         }
         
-        /* Halo de luz no tile do boss */
         .purificacao-halo {
             position: absolute;
             width: calc(var(--tile-size) * 2.5);
@@ -2249,7 +2253,6 @@
             100% { transform: translate(-50%, -50%) scale(1.6); opacity: 0; }
         }
         
-        /* Partículas douradas subindo */
         .purificacao-particula {
             position: absolute;
             width: 6px;
@@ -2268,7 +2271,6 @@
             100% { opacity: 0; transform: translate(var(--dx, 0), var(--dy, -180px)) scale(0.6); }
         }
         
-        /* Flash de purificação no sprite do boss */
         .purificacao-flash img,
         img.purificacao-flash {
             animation: purificacaoFlash 2.4s ease-out forwards;
@@ -2282,7 +2284,7 @@
             100% { filter: brightness(0.6) drop-shadow(0 0 6px rgba(255,245,220,0.2)); opacity: 0; }
         }
         
-        /* ================= OUTROS EFEITOS DE HABILIDADE ================= */
+        /* ================= OUTROS EFEITOS ================= */
         .fire-column {
             position: absolute; width: var(--tile-size); height: 100%;
             background: linear-gradient(to bottom, #b73a3a, #d9b840, #b73a3a);
@@ -2671,9 +2673,14 @@
             100% { width: 500px; height: 500px; opacity: 0; transform: translate(-250px, -250px); }
         }
         
-        /* ================= 🏆 NOVA TELA DE VITÓRIA ================= */
+        /* ================================================================
+           🏆 NOVA TELA DE VITÓRIA
+           CORREÇÃO: scroll funciona + flex-shrink: 0 no painel
+           ================================================================ */
         #gameOverlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            position: fixed; top: 0; left: 0; width: 100%;
+            min-height: 100vh;
+            min-height: 100dvh;
             background:
                 radial-gradient(ellipse at center, rgba(42, 31, 16, 0.97), rgba(10, 6, 2, 0.99));
             display: none;
@@ -2682,9 +2689,16 @@
             overflow-x: hidden;
             -webkit-overflow-scrolling: touch;
             backdrop-filter: blur(2px);
+            padding: 40px 20px;
+            box-sizing: border-box;
         }
         
-        #gameOverlay.active { display: block; }
+        #gameOverlay.active {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+        }
         
         .victory-panel {
             background:
@@ -2693,8 +2707,7 @@
             border: 3px solid var(--gold);
             border-radius: 8px;
             max-width: 640px;
-            width: calc(100% - 40px);
-            margin: 40px auto;
+            width: 100%;
             padding: 0;
             box-shadow:
                 0 0 0 1px rgba(201, 162, 39, 0.2),
@@ -2703,6 +2716,7 @@
                 inset 0 0 80px rgba(0,0,0,0.6);
             position: relative;
             animation: victoryPanelEntrance 0.7s cubic-bezier(0.25, 0.8, 0.3, 1) forwards;
+            flex-shrink: 0;
             overflow: hidden;
         }
         
@@ -2720,7 +2734,6 @@
             100% { transform: scale(1) translateY(0); opacity: 1; }
         }
         
-        /* Faixa de pergaminho superior */
         .victory-scroll-top {
             background:
                 linear-gradient(180deg, #d9c89a 0%, #b8a577 50%, #8a7a52 100%);
@@ -2754,6 +2767,11 @@
                 0 1px 0 rgba(255, 245, 220, 0.5),
                 0 2px 4px rgba(0,0,0,0.3);
             margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            flex-wrap: wrap;
         }
         
         .victory-title.defeat {
@@ -2763,7 +2781,11 @@
                 0 2px 4px rgba(0,0,0,0.4);
         }
         
-        /* Corpo da tela de vitória */
+        .victory-title .game-icon {
+            width: 1.2em;
+            height: 1.2em;
+        }
+        
         .victory-body {
             padding: 30px 35px;
             display: flex;
@@ -2772,7 +2794,6 @@
             gap: 20px;
         }
         
-        /* Imagem do boss com halo */
         .victory-boss-image-wrap {
             position: relative;
             width: 160px;
@@ -2821,7 +2842,6 @@
             filter: drop-shadow(0 0 20px rgba(168, 50, 50, 0.5)) grayscale(0.5);
         }
         
-        /* Nome do boss */
         .victory-boss-name {
             font-family: 'Cinzel', serif;
             font-size: 1.3rem;
@@ -2840,7 +2860,6 @@
             margin-top: -12px;
         }
         
-        /* Texto de lore */
         .victory-lore {
             font-family: 'EB Garamond', serif;
             font-size: 1.05rem;
@@ -2867,7 +2886,6 @@
             line-height: 1;
         }
         
-        /* Estatísticas */
         .victory-stats {
             display: flex;
             justify-content: center;
@@ -2908,7 +2926,6 @@
             text-transform: uppercase;
         }
         
-        /* Botões */
         .victory-actions {
             display: flex;
             gap: 12px;
@@ -3390,11 +3407,14 @@
             box-shadow: 0 5px 20px rgba(168, 50, 50, 0.5);
         }
         
-        /* ================= RESPONSIVO ================= */
+        /* ================= 🎯 RESPONSIVO (mobile priorizando board) ================= */
+        
+        /* Desktop grande: painel de mecânicas reduzido */
         @media (max-width: 1400px) {
             .mechanics-panel { width: 230px; padding: 12px; }
         }
         
+        /* Tablet grande: mecânicas viram drawer lateral */
         @media (max-width: 1200px) {
             .mechanics-panel {
                 position: fixed; top: 60px; left: -320px;
@@ -3408,34 +3428,186 @@
             .mechanics-panel.hidden { left: -320px !important; width: 300px; padding: 14px; }
         }
         
-        @media (max-width: 1024px) {
-            .status-panel { width: 240px; padding: 12px; }
-            .game-main { padding: 10px; gap: 10px; }
-        }
-        
+        /* Tablet: layout empilhado vertical - BOARD NO TOPO */
         @media (max-width: 900px) {
+            .game-header {
+                padding: 8px 12px;
+                gap: 8px;
+            }
+            
+            .game-title {
+                font-size: 0.95rem;
+                gap: 8px;
+            }
+            
+            .game-title .boss-name-header {
+                font-size: 0.7rem;
+                padding: 3px 10px;
+                letter-spacing: 1px;
+            }
+            
+            .game-header-actions {
+                gap: 6px;
+            }
+            
+            .game-menu-trigger, .game-help-trigger {
+                padding: 6px 12px;
+                font-size: 0.8rem;
+            }
+            
+            /* Mostra o botão do log em mobile */
+            .game-log-trigger {
+                display: flex;
+                padding: 6px 12px;
+                font-size: 0.8rem;
+            }
+            
             .game-main {
-                flex-direction: column; overflow-y: auto;
-                align-items: center; padding: 10px;
+                flex-direction: column;
+                align-items: center;
+                padding: 8px;
+                gap: 10px;
+                overflow: visible;
             }
-            .board-area { width: 100%; }
+            
+            /* BOARD ocupa largura total */
+            .board-area {
+                width: 100%;
+                max-width: 100%;
+                flex-shrink: 0;
+                gap: 12px;
+                order: 1;
+            }
+            
+            /* Botões logo abaixo do board */
+            .action-buttons-bar {
+                width: 100%;
+                max-width: 100%;
+                gap: 8px;
+            }
+            
+            .skill-btn, .play-btn {
+                padding: 12px 16px;
+                font-size: 0.9rem;
+            }
+            
+            /* Painéis de status empilhados */
             .status-panel {
-                width: 100%; max-width: 500px; max-height: none;
-                flex-direction: row; flex-wrap: wrap; gap: 10px;
+                width: 100%;
+                max-width: 100%;
+                max-height: none;
+                flex-direction: column;
+                flex-shrink: 0;
+                padding: 12px;
+                gap: 10px;
+                order: 2;
             }
-            .status-panel > * { flex: 1; min-width: 200px; }
-            .log-compact { min-height: 100px; max-height: 150px; }
+            
+            .status-panel > * {
+                flex: none;
+                min-width: auto;
+            }
+            
+            /* Cards de herói mais compactos */
+            .hero-status-row {
+                padding: 5px 8px;
+            }
+            
+            .hero-status-sprite {
+                width: 26px;
+                height: 26px;
+            }
+            
+            .hero-status-name {
+                font-size: 0.75rem;
+            }
+            
+            .hero-status-hp {
+                font-size: 0.75rem;
+            }
+            
+            .boss-card {
+                padding: 8px;
+            }
+            
+            .boss-card-sprite {
+                width: 36px;
+                height: 36px;
+            }
+            
+            /* Log fica escondido por padrão em mobile */
+            .log-compact {
+                display: none;
+            }
+            
+            .log-compact.mobile-open {
+                display: flex;
+                min-height: 120px;
+                max-height: 250px;
+            }
+            
+            /* Seção do log escondida por padrão */
+            .status-section.log-section {
+                display: none;
+            }
+            
+            .status-section.log-section.mobile-open {
+                display: flex;
+            }
+            
+            .turn-display {
+                padding: 10px 8px;
+            }
+            
+            .turn-name {
+                font-size: 0.95rem;
+            }
         }
         
+        /* Celular: ajustes finos */
         @media (max-width: 600px) {
             .config-grid { grid-template-columns: 1fr; }
             .mode-grid { grid-template-columns: 1fr; }
             .players-grid { grid-template-columns: 1fr; }
-            .game-header { flex-direction: column; gap: 8px; text-align: center; padding: 10px; }
-            .game-title { font-size: 0.95rem; }
-            .game-title .boss-name-header { font-size: 0.75rem; padding: 3px 8px; }
-            .game-header-actions { flex-wrap: wrap; justify-content: center; }
-            .board-wrapper { transform: scale(0.95); transform-origin: center top; }
+            
+            .game-header {
+                flex-direction: row;
+                justify-content: space-between;
+                align-items: center;
+                padding: 8px 10px;
+            }
+            
+            .game-title {
+                font-size: 0.85rem;
+                flex: 1;
+            }
+            
+            .game-title .boss-name-header {
+                font-size: 0.65rem;
+                padding: 2px 8px;
+            }
+            
+            .game-header-actions {
+                gap: 4px;
+                flex-wrap: nowrap;
+            }
+            
+            .game-menu-trigger, .game-help-trigger, .game-log-trigger {
+                padding: 6px 10px;
+                font-size: 0.75rem;
+                min-width: auto;
+            }
+            
+            /* Esconde texto dos botões em telas muito pequenas */
+            .game-menu-trigger .btn-text,
+            .game-help-trigger .btn-text {
+                display: none;
+            }
+            
+            .game-menu-trigger, .game-help-trigger, .game-log-trigger {
+                padding: 8px 10px;
+            }
+            
             .title-logo { font-size: 2rem; }
             .players-title, .mode-title, .challenge-title { font-size: 1.8rem; }
             .title-cards-grid { grid-template-columns: 1fr; }
@@ -3460,28 +3632,154 @@
             .tutorial-complete-title { font-size: 1.6rem; }
             .tutorial-complete-icon { font-size: 3.5rem; }
             .tutorial-complete-icon .game-icon { width: 3.5rem; height: 3.5rem; }
-            /* Vitória responsiva */
-            .victory-title { font-size: 1.4rem; letter-spacing: 2px; }
-            .victory-body { padding: 20px 18px; gap: 16px; }
-            .victory-boss-image-wrap { width: 120px; height: 120px; }
-            .victory-boss-image { width: 100px; height: 100px; }
-            .victory-boss-name { font-size: 1.1rem; }
-            .victory-lore { font-size: 0.95rem; padding: 12px 14px; }
-            .victory-stats { gap: 14px; padding: 12px; }
-            .victory-stat-value { font-size: 1.1rem; }
-            .victory-btn { padding: 12px 18px; font-size: 0.85rem; }
-            /* Purificação responsiva */
+            
+            /* Tela de vitória compacta */
+            #gameOverlay {
+                padding: 20px 10px;
+            }
+            
+            .victory-title { 
+                font-size: 1.3rem; 
+                letter-spacing: 1.5px; 
+            }
+            .victory-body { padding: 18px 16px; gap: 14px; }
+            .victory-boss-image-wrap { width: 110px; height: 110px; }
+            .victory-boss-image { width: 90px; height: 90px; }
+            .victory-boss-name { font-size: 1rem; }
+            .victory-lore { font-size: 0.9rem; padding: 12px 14px; }
+            .victory-stats { gap: 12px; padding: 10px; }
+            .victory-stat-value { font-size: 1rem; }
+            .victory-stat-label { font-size: 0.6rem; }
+            .victory-btn { 
+                padding: 10px 16px; 
+                font-size: 0.8rem;
+                flex: 1;
+                min-width: 140px;
+                justify-content: center;
+            }
+            
             .purificacao-feixe { width: 80px; }
         }
         
         @media (max-width: 400px) {
-            .action-buttons-bar { flex-direction: column; }
-            .skill-btn, .play-btn { width: 100%; }
+            .action-buttons-bar { 
+                flex-direction: row; 
+                gap: 6px;
+            }
+            .skill-btn, .play-btn { 
+                width: auto;
+                flex: 1;
+                padding: 10px 8px;
+                font-size: 0.75rem;
+                letter-spacing: 0.5px;
+            }
+            .skill-btn .game-icon, .play-btn .game-icon {
+                width: 16px;
+                height: 16px;
+            }
             .poder-ancestral-text { font-size: 32px; letter-spacing: 2px; }
             .tutorial-action-buttons { flex-direction: column; }
             .tutorial-skill-btn, .tutorial-play-btn { width: 100%; }
-            .victory-title { font-size: 1.15rem; }
-            .victory-stat-value { font-size: 0.95rem; }
+            .victory-title { font-size: 1.1rem; }
+            .victory-stat-value { font-size: 0.9rem; }
+            .victory-btn {
+                padding: 9px 12px;
+                font-size: 0.75rem;
+                min-width: 120px;
+            }
+        }
+        
+        /* ================================================================
+           📱 OVERLAY MOBILE DO LOG
+           ================================================================ */
+        .mobile-log-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(10, 6, 2, 0.9);
+            z-index: 9990;
+            display: none;
+            padding: 20px;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .mobile-log-overlay.open {
+            display: flex;
+        }
+        
+        .mobile-log-panel {
+            background:
+                linear-gradient(180deg, rgba(201, 162, 39, 0.05), transparent 20%),
+                linear-gradient(180deg, #2a1f10 0%, #1a1208 100%);
+            border: 2px solid var(--gold);
+            border-radius: 6px;
+            width: 100%;
+            max-width: 500px;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+            padding: 0;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.9);
+            animation: victoryPanelEntrance 0.3s ease-out;
+        }
+        
+        .mobile-log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 14px 18px;
+            border-bottom: 2px solid rgba(201, 162, 39, 0.3);
+        }
+        
+        .mobile-log-header h3 {
+            font-family: 'Cinzel', serif;
+            color: var(--gold-bright);
+            font-size: 1rem;
+            letter-spacing: 2px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .mobile-log-close {
+            padding: 6px 12px;
+            background: linear-gradient(135deg, #6a2020, #3a1010);
+            color: #f5c8c8;
+            border: 1px solid #a83232;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: 'Cinzel', serif;
+            font-weight: 700;
+            font-size: 0.8rem;
+        }
+        
+        .mobile-log-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            font-family: 'EB Garamond', serif;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            scrollbar-width: thin;
+            scrollbar-color: var(--gold-dim) transparent;
+        }
+        
+        .mobile-log-body .log-entry {
+            color: #c8b787;
+            padding: 4px 8px;
+            border-radius: 3px;
+            background: rgba(201, 162, 39, 0.04);
+            word-wrap: break-word;
+            border-left: 2px solid rgba(201, 162, 39, 0.2);
+        }
+        
+        .mobile-log-body .log-entry:last-child {
+            background: rgba(201, 162, 39, 0.1);
+            color: var(--gold-bright);
+            border-left-color: var(--gold);
         }
     </style>
 </head>
@@ -3506,7 +3804,7 @@
             <button class="title-btn secondary" onclick="showBestiaryModal()">BESTIÁRIO</button>
         </div>
         
-        <div class="version-tag">V 10.3</div>
+        <div class="version-tag">V 10.4</div>
     </div>
     
     <!-- TELA DE CONFIGURAÇÕES -->
@@ -3752,8 +4050,9 @@
                 <span class="boss-name-header" id="headerBossName">—</span>
             </div>
             <div class="game-header-actions">
-                <button class="game-help-trigger" onclick="toggleMechanicsPanel()">❓ MECÂNICAS</button>
-                <button class="game-menu-trigger" onclick="openSideMenu()">≡ MENU</button>
+                <button class="game-log-trigger" id="gameLogTrigger" onclick="toggleMobileLog()" title="Ver Registro">📜 <span class="btn-text">LOG</span></button>
+                <button class="game-help-trigger" onclick="toggleMechanicsPanel()" title="Mecânicas">❓ <span class="btn-text">MECÂNICAS</span></button>
+                <button class="game-menu-trigger" onclick="openSideMenu()" title="Menu">≡ <span class="btn-text">MENU</span></button>
             </div>
         </div>
         
@@ -3857,7 +4156,7 @@
                     </div>
                 </div>
                 
-                <div class="status-section" style="flex: 1; min-height: 0;">
+                <div class="status-section log-section" id="logSection">
                     <div class="status-section-title">Registro</div>
                     <div class="log-compact" id="log">
                         <div class="log-entry">Bem-vindo ao jogo!</div>
@@ -3885,6 +4184,19 @@
             <div id="modeIndicator">👾 COOP</div>
             <div id="bossNameDisplay">BOITATÁ</div>
             <div id="bossStatsDisplay">HP: 30/30</div>
+        </div>
+    </div>
+    
+    <!-- 📱 OVERLAY MOBILE DO LOG -->
+    <div class="mobile-log-overlay" id="mobileLogOverlay" onclick="if(event.target === this) closeMobileLog();">
+        <div class="mobile-log-panel">
+            <div class="mobile-log-header">
+                <h3>📜 REGISTRO</h3>
+                <button class="mobile-log-close" onclick="closeMobileLog()">✕ FECHAR</button>
+            </div>
+            <div class="mobile-log-body" id="mobileLogBody">
+                <!-- Conteúdo copiado do #log -->
+            </div>
         </div>
     </div>
     
@@ -4152,9 +4464,13 @@
     <script>
         // ================================================================
         // SCRIPT INLINE DO INDEX.HTML
+        // Versão: V 10.4
         // Correções aplicadas:
         //  1. PVP — esconde o card "Boss" do painel direito quando mode === "PVP"
         //  2. Título — força display:flex ao voltar para a titleScreen
+        //  3. 🆕 Board escala com clamp() no CSS (mobile prioriza board)
+        //  4. 🆕 Log escondido em mobile com botão toggle
+        //  5. 🆕 Tela de vitória com scroll funcional
         // ================================================================
         let selectedMode = "BOSS";
         let currentBoss = "BOITATA";
@@ -4167,8 +4483,6 @@
         };
 
         // ================= MAPA DE TELAS (Bug 2) =================
-        // Guarda o tipo de display original de cada tela para que showScreen
-        // restaure o valor correto (flex/block) em vez de sempre usar "block".
         const SCREEN_DISPLAY = {
             'introScreen': 'flex',
             'titleScreen': 'flex',
@@ -4180,7 +4494,6 @@
             'gameScreen': 'flex'
         };
 
-        // Override do showScreen global para respeitar o display correto.
         function applyScreenDisplayFix() {
             if (typeof window.showScreen !== 'function') return;
 
@@ -4212,7 +4525,6 @@
         }
 
         // ================= CORREÇÃO BUG PVP =================
-        // Esconde o card do Boss quando o modo é PVP.
         function applyPvpBossCardFix() {
             const bossSectionWrapper = document.getElementById('bossSectionWrapper');
             if (!bossSectionWrapper) return;
@@ -4232,7 +4544,52 @@
             }, 300);
         }
 
-        // ================= FIM DAS CORREÇÕES =================
+        // ================= 📱 SISTEMA DE LOG MOBILE =================
+        // Em mobile, o log fica escondido por padrão. Este botão abre
+        // um overlay com o conteúdo do log.
+
+        function toggleMobileLog() {
+            const overlay = document.getElementById('mobileLogOverlay');
+            if (!overlay) return;
+            
+            if (overlay.classList.contains('open')) {
+                closeMobileLog();
+            } else {
+                openMobileLog();
+            }
+        }
+
+        function openMobileLog() {
+            const overlay = document.getElementById('mobileLogOverlay');
+            const body = document.getElementById('mobileLogBody');
+            const log = document.getElementById('log');
+            
+            if (!overlay || !body || !log) return;
+            
+            // Copia o conteúdo do log para o overlay
+            body.innerHTML = log.innerHTML;
+            
+            // Rola pro final
+            setTimeout(() => {
+                body.scrollTop = body.scrollHeight;
+            }, 50);
+            
+            overlay.classList.add('open');
+        }
+
+        function closeMobileLog() {
+            const overlay = document.getElementById('mobileLogOverlay');
+            if (overlay) overlay.classList.remove('open');
+        }
+
+        // Fecha o overlay do log com ESC
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeMobileLog();
+            }
+        });
+
+        // ================= SELEÇÃO DE MODO =================
 
         function selectMode(mode) {
             selectedMode = mode;

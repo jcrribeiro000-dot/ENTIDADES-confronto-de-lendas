@@ -1,7 +1,7 @@
 // =================================================================
 // ENTIDADES: Confronto de Lendas
-// entidades.js — Parte 1/8
-// Cabeçalho, variáveis globais, sistema de áudio, MAPA DE ÍCONES
+// entidades.js — V10.4
+// Parte 1/8 — Cabeçalho, variáveis globais, sistema de áudio, MAPA DE ÍCONES
 // =================================================================
 
 // ================= VARIÁVEIS GLOBAIS =================
@@ -9,20 +9,7 @@ let currentScreen = 'intro';
 let COLORS = ['FOGO', 'AGUA', 'TERRA', 'AR'];
 
 // =================================================================
-// 🎨 SISTEMA DE ÍCONES (novo — Fase de modernização visual)
-// -----------------------------------------------------------------
-// COMO USAR:
-//  1. Hospede cada ícone PNG (transparente) no Imgur
-//  2. Cole a URL entre as aspas da chave correspondente
-//  3. O jogo troca AUTOMATICAMENTE o emoji pelo ícone
-//  4. Se a URL ficar vazia OU quebrar, volta pro emoji (fallback)
-//
-// EXEMPLO:
-//   Antes:  'tutorial': '',
-//   Depois: 'tutorial': 'https://i.imgur.com/XXXXXXXX.png',
-//
-// NOMES DOS ARQUIVOS (sugestão):
-//   Use o mesmo nome da chave. Ex: tutorial.png, modo_boss.png, saci.png
+// 🎨 SISTEMA DE ÍCONES
 // =================================================================
 const ICONS = {
     // ---- Navegação / Ação ----
@@ -126,10 +113,6 @@ const ICONS = {
     'eclipse':          ''
 };
 
-// Mapeamento emoji ↔ chave do mapa.
-// Usado como FALLBACK automático: se ICONS[x] estiver vazio,
-// mostra o emoji. Se estiver preenchido, mostra o ícone.
-// Também serve pra referência caso você esqueça qual emoji cada chave representa.
 const EMOJI_FALLBACK = {
     'tutorial':      '🎓',
     'jogar_turno':   '▶',
@@ -221,36 +204,17 @@ const EMOJI_FALLBACK = {
 
 // =================================================================
 // 🎨 HELPER icon()
-// -----------------------------------------------------------------
-// Retorna o HTML do ícone se a URL estiver preenchida, ou o emoji
-// como fallback se estiver vazia ou ausente.
-//
-// Uso:
-//   `${icon('trofeu')} Pontos ganhos!`
-//   `${icon('saci', 'game-icon--lg')} ataca!`
-//
-// Parâmetros:
-//   nome      — chave do mapa ICONS
-//   extraCls  — (opcional) classe CSS extra (ex: 'game-icon--lg')
-//
-// Comportamento:
-//   - Se ICONS[nome] existe e não está vazio → retorna <img>
-//   - Se estiver vazio/ausente → retorna o emoji de EMOJI_FALLBACK
-//   - Se a URL quebrar (404, CORS, etc) → onerror volta pro emoji
 // =================================================================
 function icon(nome, extraCls) {
     const url = ICONS[nome];
     const emoji = EMOJI_FALLBACK[nome] || '';
 
-    // Sanitiza nome pra usar em atributo HTML (evita quebras)
     const safeNome = String(nome).replace(/[^a-zA-Z0-9_\-]/g, '');
 
-    // Sem URL → retorna emoji puro (não quebra o layout)
     if (!url || url.trim() === '') {
         return emoji;
     }
 
-    // Com URL → retorna <img> com fallback automático em caso de erro
     const cls = extraCls ? `game-icon ${extraCls}` : 'game-icon';
     const emojiEscapado = emoji.replace(/'/g, "\\'").replace(/"/g, '&quot;');
 
@@ -326,9 +290,6 @@ window._tutorialMoveExecuted = false;
 window._tutorialPathExecuted = false;
 window._tutorialFormExecuted = null;
 
-// 🛡️ IMPORTANTE: Sempre que precisar iterar sobre os tiles do JOGO REAL,
-// use o seletor '#grid .tile' (NUNCA '.tile').
-
 // ================= SISTEMA DE ARCADE =================
 const ARCADE_ORDER_FIRST = ['SACI', 'MAPINGUARI', 'IARA', 'BOITATA'];
 const ARCADE_ORDER_SECOND = ['MULA', 'CORPOSECO', 'LOBISOMEM', 'CUCA'];
@@ -373,9 +334,6 @@ const LORE = {
 };
 
 // ================= EPÍLOGOS DE VITÓRIA =================
-// Textos mostrados na nova tela de vitória.
-// Usa os desfechos dos manuais físicos + textos novos pros bosses
-// que não existem no físico.
 const BOSS_EPILOGOS = {
     'SACI': 'Seu redemoinho se dissipa em um suspiro de cansaço, mas seus olhos ainda brilham com a fúria de Anhangá. Ele recua para as sombras da mata profunda, aguardando que o Senhor do Abismo seja derrotado para que sua verdadeira essência de protetor possa, enfim, ser purificada.',
     'MAPINGUARI': 'O gigante solta um rugido que faz as árvores tremerem e desaba, transformando-se lentamente em um monte de rochas e lodo. Ele não está morto, apenas retornou ao descanso da terra, aguardando que a influência de Anhangá seja expurgada para que possa voltar a ser o pilar da floresta.',
@@ -437,11 +395,6 @@ let PLAYER_STATS = {
 let ACTIVE_TITLE = null;
 
 // ================= SISTEMA DE ÁUDIO =================
-// 🆕 Adicionado: sfx.purificacao
-//   - Quando você tiver o arquivo "purificacao.mp3" na pasta,
-//     ele será usado automaticamente.
-//   - Enquanto o arquivo não existir, o jogo usa fallback
-//     (sfx.skill1 + sfx.win) sem quebrar nada.
 const sfx = { 
     skill1: new Audio("dramatic-synth-echo-43970.mp3"), atkg: new Audio("atkg.mp3"), atkm: new Audio("atkm.mp3"), atka: new Audio("atka.mp3"), 
     click: new Audio("click.mp3"), bgm: new Audio("fundoboss.mp3"), sacitema: new Audio("sacitema.mp3"), 
@@ -471,7 +424,6 @@ const sfx = {
     anhanga_skill2: null,
     anhangatema: new Audio("anhanga.mp3"),
     intro: new Audio("intro.mp3"),
-    // 🆕 Som de purificação — coloque purificacao.mp3 na pasta pra ativar
     purificacao: new Audio("purificacao.mp3")
 };
 
@@ -577,7 +529,7 @@ function updateClassBase() {
     }); 
 }
 // =================================================================
-// entidades.js — Parte 2/8
+// entidades.js — V10.4 — Parte 2/8
 // Navegação, configurações, títulos, bestiário, ranking
 // =================================================================
 
@@ -1178,7 +1130,6 @@ function triggerTitleUnlock(name, iconFallback) {
         z-index: 10001; max-width: 300px;
     `;
     
-    // Busca o ícone pelo nome do título (mapeamento reverso)
     let iconHTML = iconFallback || icon('titulo_novato');
     for (let id in TITLES) {
         if (TITLES[id].name === name && TITLES[id].iconKey) {
@@ -1863,8 +1814,9 @@ function updateAllSpriteDirections() {
     }
 }
 // =================================================================
-// entidades.js — Parte 3/8
+// entidades.js — V10.4 — Parte 3/8
 // Animações, hero card, boss card, tutorial (9 lições)
+// ⚠️ CONTÉM A CORREÇÃO CRÍTICA DO getStep()
 // =================================================================
 
 // ================= ANIMAÇÃO PODER ANCESTRAL =================
@@ -1964,29 +1916,19 @@ function showPoderAncestralEffect() {
 
 // ================================================================
 // 💫 PURIFICAÇÃO DO BOSS
-// ----------------------------------------------------------------
-// Efeito visual exibido quando o boss chega a 0 HP, antes da
-// tela de vitória. Feixe de luz celestial desce, envolve o boss
-// e o dissolve em partículas douradas.
-//
-// Duração total: ~2.6s
-// Áudio: sfx.purificacao (se existir) OU sfx.skill1 + sfx.win
 // ================================================================
 async function showPurificacao(bossType, tileX, tileY, isFinalBoss) {
     return new Promise((resolve) => {
         const board = tutorialMode ? document.getElementById('tutorialBoard') : document.getElementById('board');
         if (!board) { resolve(); return; }
         
-        // Ajusta duração: Anhangá é ligeiramente mais épico
         const duration = isFinalBoss ? 3200 : 2600;
         
-        // Toca som
         if (sfx.purificacao && audioUnlocked) {
             try {
                 const purifSound = sfx.purificacao.cloneNode();
                 purifSound.volume = 0.7;
                 purifSound.play().catch(() => {
-                    // Se falhar (arquivo não existe), toca fallback
                     playSfx('skill1');
                 });
             } catch (e) {
@@ -1996,18 +1938,15 @@ async function showPurificacao(bossType, tileX, tileY, isFinalBoss) {
             playSfx('skill1');
         }
         
-        // Container principal do efeito
         const overlay = document.createElement('div');
         overlay.className = 'purificacao-overlay active';
         overlay.id = 'purificacaoOverlay';
         board.appendChild(overlay);
         
-        // Escurecimento do tabuleiro
         const darken = document.createElement('div');
         darken.className = 'purificacao-darken';
         overlay.appendChild(darken);
         
-        // Feixe de luz — calcula posição do tile do boss
         const s = getStep();
         const bossCenterX = tileX * s + s / 2 + 8;
         const feixeWidth = s * 2;
@@ -2019,7 +1958,6 @@ async function showPurificacao(bossType, tileX, tileY, isFinalBoss) {
         feixe.style.height = '100%';
         overlay.appendChild(feixe);
         
-        // Halo no tile do boss
         const halo = document.createElement('div');
         halo.className = 'purificacao-halo';
         halo.style.left = bossCenterX + 'px';
@@ -2027,13 +1965,11 @@ async function showPurificacao(bossType, tileX, tileY, isFinalBoss) {
         halo.style.animationDuration = duration + 'ms';
         overlay.appendChild(halo);
         
-        // Partículas douradas subindo
         const particleCount = isFinalBoss ? 26 : 18;
         for (let i = 0; i < particleCount; i++) {
             const particle = document.createElement('div');
             particle.className = 'purificacao-particula';
             
-            // Posição aleatória ao redor do boss
             const offsetX = (Math.random() - 0.5) * s * 1.8;
             const offsetY = (Math.random() - 0.5) * s * 1.8;
             const driftX = (Math.random() - 0.5) * 60;
@@ -2048,13 +1984,11 @@ async function showPurificacao(bossType, tileX, tileY, isFinalBoss) {
             overlay.appendChild(particle);
         }
         
-        // Flash de purificação no sprite do boss
         const bossImg = document.getElementById('imgBoss');
         if (bossImg) {
             bossImg.classList.add('purificacao-flash');
         }
         
-        // Remove o overlay após a animação
         setTimeout(() => {
             if (bossImg) bossImg.classList.remove('purificacao-flash');
             if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
@@ -3006,11 +2940,42 @@ function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-function getStep() { 
-    return parseInt(getComputedStyle(document.documentElement).getPropertyValue('--step')); 
+// ================================================================
+// ✅ CORREÇÃO CRÍTICA: getStep()
+// ----------------------------------------------------------------
+// Antes: parseInt("calc(35.6px + 2px)") → NaN → tokens presos em (0,0)
+// Agora: mede o tile real renderizado via getBoundingClientRect()
+// Funciona com clamp(), vw, media queries, qualquer valor dinâmico.
+// ================================================================
+function getStep() {
+    // Tenta medir o tile real do board principal
+    const tile = document.querySelector('#grid .tile');
+    if (tile) {
+        const rect = tile.getBoundingClientRect();
+        if (rect.width > 0) {
+            const gridEl = document.getElementById('grid');
+            let gap = 4;
+            if (gridEl) {
+                const gridStyle = getComputedStyle(gridEl);
+                const gapValue = parseFloat(gridStyle.gap || gridStyle.columnGap || '4');
+                if (!isNaN(gapValue)) gap = gapValue;
+            }
+            return rect.width + gap;
+        }
+    }
+    
+    // Fallback para o tutorial
+    const tutTile = document.querySelector('#tutorialGrid .tile');
+    if (tutTile) {
+        const rect = tutTile.getBoundingClientRect();
+        if (rect.width > 0) return rect.width + 4;
+    }
+    
+    // Fallback final
+    return 59;
 }
 // =================================================================
-// entidades.js — Parte 4/8
+// entidades.js — V10.4 — Parte 4/8
 // initGame, executeAction, manageTurns, efeitos visuais
 // =================================================================
 
@@ -3590,7 +3555,7 @@ function triggerStorm() {
     setTimeout(() => { if (storm.parentNode) storm.remove(); }, 1500);
 }
 // =================================================================
-// entidades.js — Parte 5/8
+// entidades.js — V10.4 — Parte 5/8
 // Boss AI (13 bosses) + handleBossDefeat (com purificação)
 // =================================================================
 
@@ -4137,7 +4102,6 @@ async function bossAI() {
 }
 
 // ================= HANDLE BOSS DEFEAT =================
-// 🆕 Modificado: agora toca a PURIFICAÇÃO antes de mostrar a vitória.
 async function handleBossDefeat() {
     if (tutorialMode) return;
     
@@ -4147,7 +4111,6 @@ async function handleBossDefeat() {
         const defeatedBoss = arcadeCurrentOrder[arcadeIndex];
         const clue = LORE.bossLore[defeatedBoss]?.clue || "...";
         
-        // 🆕 Efeito de purificação
         await showPurificacao(defeatedBoss, boss.x, boss.y, false);
         
         addLog(`${icon('dialogo')} ${getBossDisplayName(defeatedBoss)} sussurra antes de cair: "${clue}"`);
@@ -4276,13 +4239,12 @@ async function handleBossDefeat() {
         arcadeBossTransition = false;
         
     } else if (mode === "BOSS") {
-        // 🆕 No modo BOSS normal, toca purificação antes da vitória
         await showPurificacao(boss.type, boss.x, boss.y, false);
         showEndGame("BOSS DERROTADO!", true);
     }
 }
 // =================================================================
-// entidades.js — Parte 6/8
+// entidades.js — V10.4 — Parte 6/8
 // Auxiliares: saveAndRefresh, switchConfig, createTile, isOccupied,
 // checkAmulet, handleSelect, renderPath, detectShape, FX elemental
 // =================================================================
@@ -4662,7 +4624,7 @@ function triggerWaterJet(bx, by) {
     }, 800);
 }
 // =================================================================
-// entidades.js — Parte 7/8
+// entidades.js — V10.4 — Parte 7/8
 // Visuals, dmg/heal FX, projectiles, skill, applyDmg, showEndGame
 // =================================================================
 
@@ -4841,13 +4803,6 @@ function applyDmg(t, amt) {
 
 // ================================================================
 // 🏆 NOVA TELA DE VITÓRIA / DERROTA
-// ----------------------------------------------------------------
-// Substitui a antiga tela simples por um painel temático estilo
-// pergaminho, com:
-//   - Imagem do boss com halo
-//   - Nome + epílogo (texto de lore)
-//   - Estatísticas da partida
-//   - Botões contextuais por modo
 // ================================================================
 function showEndGame(msg, isWin) { 
     gameActive = false;
@@ -4873,14 +4828,11 @@ function showEndGame(msg, isWin) {
     const overlay = document.getElementById('gameOverlay');
     if (!overlay) return;
     
-    // ===== Monta o conteúdo da tela =====
     const isDefeat = !isWin;
     
-    // Título
     const titleText = isDefeat ? 'DERROTA' : 'PURIFICAÇÃO CONCLUÍDA';
     const titleIcon = isDefeat ? icon('derrota') : icon('trofeu_grande');
     
-    // Nome do boss (só em BOSS/ARCADE)
     let bossName = '';
     let bossSubtitle = '';
     let bossImg = '';
@@ -4896,15 +4848,11 @@ function showEndGame(msg, isWin) {
         bossSubtitle = isWin ? 'O estrategista venceu' : 'Duelo encerrado';
     }
     
-    // Estatísticas
     const score = (mode === "BOSS" || mode === "ARCADE") ? calculateFinalScore() : 0;
     
-    // Botões contextuais
     let buttonsHTML = '';
     if (isWin) {
         if (mode === "ARCADE" && currentArcadeChallenge) {
-            // Se ainda tiver bosses pra enfrentar no arcade, próximo botão
-            // (mas o handleBossDefeat já cuida da sequência — a tela final só aparece no último)
             buttonsHTML = `
                 <button class="victory-btn" onclick="backToTitle()">
                     ${icon('sair')} MENU PRINCIPAL
@@ -4946,7 +4894,6 @@ function showEndGame(msg, isWin) {
         `;
     }
     
-    // Monta o painel
     overlay.innerHTML = `
         <div class="victory-panel ${isDefeat ? 'defeat' : ''}">
             <div class="victory-scroll-top">
@@ -5005,7 +4952,7 @@ function showEndGame(msg, isWin) {
     overlay.style.display = 'flex';
 }
 // =================================================================
-// entidades.js — Parte 8/8 (FINAL)
+// entidades.js — V10.4 — Parte 8/8 (FINAL)
 // Inicialização e fechamento
 // =================================================================
 
@@ -5019,5 +4966,5 @@ document.addEventListener("DOMContentLoaded", function() {
 });
 
 // =================================================================
-// FIM DO ARQUIVO
+// FIM DO ARQUIVO — V10.4
 // =================================================================
