@@ -1,6 +1,6 @@
 // =================================================================
 // ENTIDADES: Confronto de Lendas
-// entidades.js — V10.4
+// entidades.js — V10.5
 // Parte 1/8 — Cabeçalho, variáveis globais, sistema de áudio, MAPA DE ÍCONES
 // =================================================================
 
@@ -277,6 +277,9 @@ let CLASS_DB = {}, grid = [], path = [], players = [], amulets = [];
 let boss = { x: 4, y: 0, hp: 0, maxHp: 0, type: 'BOITATA', dead: false };
 let currentPlayerIdx = 0, editingIdx = 0, gameActive = true, mode = "BOSS", skillActive = false;
 
+// 🛡️ Flag global: impede dupla chamada da tela de fim de jogo
+window._endGameShowing = false;
+
 // 🎓 Variáveis do tutorial
 let tutorialMode = false;
 let tutorialLessonIndex = 0;
@@ -529,7 +532,7 @@ function updateClassBase() {
     }); 
 }
 // =================================================================
-// entidades.js — V10.4 — Parte 2/8
+// entidades.js — V10.5 — Parte 2/8
 // Navegação, configurações, títulos, bestiário, ranking
 // =================================================================
 
@@ -896,7 +899,28 @@ function initGameWithPlayers() {
     initGame();
 }
 
+function restartGame() {
+    // 🛡️ Limpa flag + overlay antes de reiniciar
+    window._endGameShowing = false;
+    const overlay = document.getElementById('gameOverlay');
+    if (overlay) {
+        overlay.classList.remove('active');
+        overlay.style.display = 'none';
+        overlay.innerHTML = '';
+    }
+    initGame();
+}
+
 function backToTitle() {
+    // 🛡️ Sempre limpa o overlay ao voltar pro título
+    window._endGameShowing = false;
+    const overlay = document.getElementById('gameOverlay');
+    if (overlay) {
+        overlay.classList.remove('active');
+        overlay.style.display = 'none';
+        overlay.innerHTML = '';
+    }
+    
     if (currentScreen === 'game') {
         if (confirm('Deseja voltar ao menu? O progresso atual será perdido.')) {
             gameActive = false;
@@ -947,11 +971,6 @@ function pauseGame() {
     `;
     
     document.body.appendChild(modal);
-}
-
-function restartGame() {
-    hideScreen('gameOverlay');
-    initGame();
 }
 
 function showScreen(screenId) {
@@ -1814,9 +1833,9 @@ function updateAllSpriteDirections() {
     }
 }
 // =================================================================
-// entidades.js — V10.4 — Parte 3/8
+// entidades.js — V10.5 — Parte 3/8
 // Animações, hero card, boss card, tutorial (9 lições)
-// ⚠️ CONTÉM A CORREÇÃO CRÍTICA DO getStep()
+// ⚠️ CONTÉM A CORREÇÃO getStep()
 // =================================================================
 
 // ================= ANIMAÇÃO PODER ANCESTRAL =================
@@ -2942,9 +2961,7 @@ function sleep(ms) {
 
 // ================================================================
 // ✅ CORREÇÃO CRÍTICA: getStep()
-// ----------------------------------------------------------------
-// Antes: parseInt("calc(35.6px + 2px)") → NaN → tokens presos em (0,0)
-// Agora: mede o tile real renderizado via getBoundingClientRect()
+// Mede o tile real renderizado via getBoundingClientRect()
 // Funciona com clamp(), vw, media queries, qualquer valor dinâmico.
 // ================================================================
 function getStep() {
@@ -2975,12 +2992,21 @@ function getStep() {
     return 59;
 }
 // =================================================================
-// entidades.js — V10.4 — Parte 4/8
+// entidades.js — V10.5 — Parte 4/8
 // initGame, executeAction, manageTurns, efeitos visuais
 // =================================================================
 
 // ================= INIT GAME =================
 async function initGame() {
+    // 🛡️ Limpa qualquer overlay de fim de jogo pendente
+    const endOverlay = document.getElementById('gameOverlay');
+    if (endOverlay) {
+        endOverlay.classList.remove('active');
+        endOverlay.style.display = 'none';
+        endOverlay.innerHTML = '';
+    }
+    window._endGameShowing = false;
+    
     LORE.currentStage = 1;
     LORE.anhangáRevealed = false;
     
@@ -3297,6 +3323,9 @@ function manageTurns() {
     if (tutorialMode) return;
     if (mode === "ARCADE" && boss.dead) return;
     
+    // 🛡️ Guard: se fim de jogo já foi mostrado, não processa turnos
+    if (window._endGameShowing) return;
+    
     if (mode === "PVP") {
         let next = currentPlayerIdx + 1; 
         while(next < players.length && players[next].dead) next++;
@@ -3334,6 +3363,7 @@ function manageTurns() {
             document.getElementById('turnBoss').classList.add('active-turn');
             
             setTimeout(() => {
+                if (window._endGameShowing) return;
                 if(gameActive && !boss.dead && players.some(p => !p.dead) && !arcadeBossTransition) {
                     bossAI();
                 } else if (!players.some(p => !p.dead)) {
@@ -3555,7 +3585,7 @@ function triggerStorm() {
     setTimeout(() => { if (storm.parentNode) storm.remove(); }, 1500);
 }
 // =================================================================
-// entidades.js — V10.4 — Parte 5/8
+// entidades.js — V10.5 — Parte 5/8
 // Boss AI (13 bosses) + handleBossDefeat (com purificação)
 // =================================================================
 
@@ -3563,6 +3593,8 @@ function triggerStorm() {
 async function bossAI() {
     if (bossAIIsRunning || arcadeBossTransition) return;
     if (tutorialMode) return;
+    // 🛡️ Guard: se fim de jogo já foi mostrado, não continua a IA
+    if (window._endGameShowing) return;
     
     bossAIIsRunning = true;
     
@@ -4077,7 +4109,7 @@ async function bossAI() {
     
     const stillAlivePlayers = players.filter(p => !p.dead);
     if (stillAlivePlayers.length === 0) {
-        showEndGame("GAME OVER", false);
+        if (!window._endGameShowing) showEndGame("GAME OVER", false);
         return;
     }
     
@@ -4093,7 +4125,7 @@ async function bossAI() {
         addLog(`${icon('turno')} Turno dos jogadores! Começa com ${players[currentPlayerIdx].name}`);
         document.getElementById('turnP_Active').classList.add('active-turn');
     } else {
-        showEndGame("GAME OVER", false);
+        if (!window._endGameShowing) showEndGame("GAME OVER", false);
     }
     
     updateAllSpriteDirections();
@@ -4244,7 +4276,7 @@ async function handleBossDefeat() {
     }
 }
 // =================================================================
-// entidades.js — V10.4 — Parte 6/8
+// entidades.js — V10.5 — Parte 6/8
 // Auxiliares: saveAndRefresh, switchConfig, createTile, isOccupied,
 // checkAmulet, handleSelect, renderPath, detectShape, FX elemental
 // =================================================================
@@ -4624,7 +4656,7 @@ function triggerWaterJet(bx, by) {
     }, 800);
 }
 // =================================================================
-// entidades.js — V10.4 — Parte 7/8
+// entidades.js — V10.5 — Parte 7/8
 // Visuals, dmg/heal FX, projectiles, skill, applyDmg, showEndGame
 // =================================================================
 
@@ -4779,8 +4811,12 @@ function applyDmg(t, amt) {
         t.dead = true; 
         if(mode === "BOSS" || mode === "ARCADE") { 
             if(t === boss) handleBossDefeat(); 
-            else if(players.every(p => p.dead)) showEndGame("GAME OVER", false); 
-        } else showEndGame(`VITÓRIA DO ${players.find(p => !p.dead).name}`, true); 
+            else if(players.every(p => p.dead)) {
+                if (!window._endGameShowing) showEndGame("GAME OVER", false);
+            }
+        } else {
+            if (!window._endGameShowing) showEndGame(`VITÓRIA DO ${players.find(p => !p.dead).name}`, true);
+        }
         if(t.id !== undefined) {
             const tok = document.getElementById(`tokenP${t.id}`);
             if (tok) tok.style.display = 'none'; 
@@ -4805,6 +4841,10 @@ function applyDmg(t, amt) {
 // 🏆 NOVA TELA DE VITÓRIA / DERROTA
 // ================================================================
 function showEndGame(msg, isWin) { 
+    // 🛡️ GUARD: impede chamadas duplas
+    if (window._endGameShowing) return;
+    window._endGameShowing = true;
+    
     gameActive = false;
     
     if (tutorialMode) return;
@@ -4826,7 +4866,10 @@ function showEndGame(msg, isWin) {
     playSfx(isWin ? 'win' : 'gameover'); 
     
     const overlay = document.getElementById('gameOverlay');
-    if (!overlay) return;
+    if (!overlay) {
+        window._endGameShowing = false;
+        return;
+    }
     
     const isDefeat = !isWin;
     
@@ -4952,7 +4995,7 @@ function showEndGame(msg, isWin) {
     overlay.style.display = 'flex';
 }
 // =================================================================
-// entidades.js — V10.4 — Parte 8/8 (FINAL)
+// entidades.js — V10.5 — Parte 8/8 (FINAL)
 // Inicialização e fechamento
 // =================================================================
 
@@ -4966,5 +5009,5 @@ document.addEventListener("DOMContentLoaded", function() {
 });
 
 // =================================================================
-// FIM DO ARQUIVO — V10.4
+// FIM DO ARQUIVO — V10.5
 // =================================================================

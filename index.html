@@ -2618,7 +2618,7 @@
             position: absolute; top: 50%; left: 50%;
             transform: translate(-50%, -50%) scale(0);
             font-family: 'Cinzel Decorative', serif;
-            font-weight: 900; font-size: 68px; letter-spacing: 6px;
+            font-weight: 900; font-size: clamp(24px, 8vw, 68px); letter-spacing: clamp(1px, 0.5vw, 6px);
             text-align: center; white-space: nowrap;
             z-index: 2001; pointer-events: none;
             background: linear-gradient(180deg, #fff8dc 0%, #e8b923 30%, #c9a227 65%, #8a3030 100%);
@@ -3627,7 +3627,7 @@
             .status-panel { flex-direction: column; }
             .status-panel > * { min-width: auto; }
             .side-menu { width: 280px; }
-            .poder-ancestral-text { font-size: 42px; letter-spacing: 3px; }
+           
             .poder-ancestral-runes span { font-size: 28px; }
             .tutorial-complete-title { font-size: 1.6rem; }
             .tutorial-complete-icon { font-size: 3.5rem; }
@@ -3677,7 +3677,7 @@
                 width: 16px;
                 height: 16px;
             }
-            .poder-ancestral-text { font-size: 32px; letter-spacing: 2px; }
+            
             .tutorial-action-buttons { flex-direction: column; }
             .tutorial-skill-btn, .tutorial-play-btn { width: 100%; }
             .victory-title { font-size: 1.1rem; }
