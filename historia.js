@@ -1,17 +1,16 @@
 // =================================================================
 // ENTIDADES: Confronto de Lendas — MODO HISTÓRIA
-// historia.js — V5.0
-// Bloco 1/7 — Parte A: CSS + Sprites
+// historia.js — V5.1
+// Bloco 1/4 — CSS + Sprites + uiIcon + Save
 // =================================================================
 //
 // ⚠️ NÃO TOCA EM entidades.js
 // Sobrescreve applyDmg/manageTurns/saveAndRefresh SÓ quando _storyMode === true.
 //
-// V5.0 — NOVIDADES:
-//   • 13 atos completos (12 bosses + Anhangá)
-//   • Cada ato: 5 fases (3 animais + mini-boss + boss)
-//   • Ato 13: 3 fases com bosses originais + 1 fase final com 12 espectros + Anhangá
-//   • Espectros: 10 HP / 2 ATK, sprite com transparência
+// V5.1 — CORREÇÕES:
+//   • B4 — aldeia_bg aceita imagem
+//   • B5 — loadStoryProgressByName NÃO libera todos os atos
+//   • B7 — Sistema uiIcon() universal
 // =================================================================
 
 // =================================================================
@@ -30,25 +29,30 @@
         .story-subtitle{color:#b8a577;font-family:'EB Garamond',serif;font-size:1.15rem;font-style:italic;max-width:600px;margin:0 auto}
         .story-ald-eheader{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding:15px 25px;background:linear-gradient(180deg,rgba(201,162,39,.08),transparent 40%),linear-gradient(135deg,rgba(58,42,24,.9),rgba(26,18,8,.9));border:2px solid #6a5024;border-radius:8px;flex-wrap:wrap;gap:15px}
         .story-ald-header-title{display:flex;align-items:center;gap:12px}
-        .story-ald-icon-lg{font-size:2rem}
+        .story-ald-icon-lg{font-size:2rem;display:flex;align-items:center;justify-content:center}
+        .story-ald-icon-lg img{width:40px;height:40px;object-fit:contain;filter:drop-shadow(0 0 8px rgba(232,185,35,.5))}
         .story-ald-title{font-family:'Cinzel Decorative',serif;color:#e8b923;font-size:1.8rem;letter-spacing:3px;margin:0;text-shadow:0 2px 6px rgba(0,0,0,.7)}
         .story-ald-header-stats{display:flex;gap:20px}
         .story-ald-stat{display:flex;align-items:center;gap:6px;padding:8px 14px;background:rgba(10,6,2,.6);border:1px solid rgba(201,162,39,.3);border-radius:6px}
-        .story-ald-stat-icon{font-size:1.2rem}
+        .story-ald-stat-icon{font-size:1.2rem;display:flex;align-items:center;justify-content:center}
+        .story-ald-stat-icon img{width:24px;height:24px;object-fit:contain;filter:drop-shadow(0 0 4px rgba(232,185,35,.5))}
         .story-ald-stat-value{font-family:'Cinzel',serif;color:#e8b923;font-weight:700;font-size:1rem;letter-spacing:1px}
         .story-ald-save-info{display:flex;align-items:center;justify-content:center;gap:15px;flex-wrap:wrap;padding:12px 20px;margin-bottom:20px;background:rgba(10,6,2,.5);border:1px solid rgba(201,162,39,.25);border-radius:6px}
         .story-ald-save-name{display:flex;align-items:center;gap:8px;font-family:'Cinzel',serif}
         .story-ald-save-label{color:#8a7a52;font-size:.85rem;letter-spacing:2px}
         .story-ald-save-value{color:#f0e2c0;font-weight:700;letter-spacing:1px}
-        .story-ald-save-element{font-family:'Cinzel',serif;font-weight:700;font-size:.9rem;padding:6px 12px;background:rgba(10,6,2,.6);border-radius:20px;border:1px solid rgba(201,162,39,.3);letter-spacing:1px}
-        .story-ald-change-save{padding:8px 16px;background:linear-gradient(135deg,#3d2d18,#2a1f10);color:#c8b787;border:1px solid #6a5024;border-radius:4px;cursor:pointer;font-family:'Cinzel',serif;font-weight:700;font-size:.8rem;letter-spacing:1.5px;transition:all .2s}
+        .story-ald-save-element{font-family:'Cinzel',serif;font-weight:700;font-size:.9rem;padding:6px 12px;background:rgba(10,6,2,.6);border-radius:20px;border:1px solid rgba(201,162,39,.3);letter-spacing:1px;display:inline-flex;align-items:center;gap:6px}
+        .story-ald-save-element img{width:20px;height:20px;object-fit:contain;filter:drop-shadow(0 0 4px rgba(232,185,35,.5))}
+        .story-ald-change-save{padding:8px 16px;background:linear-gradient(135deg,#3d2d18,#2a1f10);color:#c8b787;border:1px solid #6a5024;border-radius:4px;cursor:pointer;font-family:'Cinzel',serif;font-weight:700;font-size:.8rem;letter-spacing:1.5px;transition:all .2s;display:inline-flex;align-items:center;gap:6px}
+        .story-ald-change-save img{width:18px;height:18px;object-fit:contain}
         .story-ald-change-save:hover{background:linear-gradient(135deg,#5a4220,#3d2d18);color:#e8dcc4;border-color:#c9a227}
         .story-ald-subtitle{color:#b8a577;font-family:'EB Garamond',serif;font-size:1.05rem;font-style:italic;text-align:center;margin-bottom:30px}
         .story-ald-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;margin-bottom:30px}
         .story-ald-location{background:linear-gradient(180deg,rgba(201,162,39,.06),transparent 40%),linear-gradient(180deg,rgba(42,31,16,.9),rgba(26,18,8,.9));border:2px solid #3d2d18;border-radius:8px;padding:20px;cursor:pointer;transition:all .3s;display:flex;align-items:center;gap:15px}
         .story-ald-location:hover:not(.locked){transform:translateY(-4px);border-color:#c9a227;box-shadow:0 8px 25px rgba(0,0,0,.5),0 0 25px rgba(201,162,39,.25)}
         .story-ald-location.locked{opacity:.55;cursor:not-allowed}
-        .story-ald-loc-icon{font-size:2.5rem;line-height:1;filter:drop-shadow(0 0 8px rgba(232,185,35,.5));flex-shrink:0}
+        .story-ald-loc-icon{font-size:2.5rem;line-height:1;filter:drop-shadow(0 0 8px rgba(232,185,35,.5));flex-shrink:0;display:flex;align-items:center;justify-content:center}
+        .story-ald-loc-img{width:64px;height:64px;object-fit:contain;display:block;filter:drop-shadow(0 0 8px rgba(232,185,35,.5));flex-shrink:0}
         .story-ald-loc-info{flex:1}
         .story-ald-loc-name{font-family:'Cinzel',serif;color:#f0e2c0;font-size:1.15rem;letter-spacing:1.5px;margin-bottom:5px}
         .story-ald-loc-desc{color:#b8a577;font-family:'EB Garamond',serif;font-size:.9rem;font-style:italic;line-height:1.4}
@@ -88,14 +92,17 @@
         .story-phase-bg{background:radial-gradient(circle at center,rgba(0,0,0,.3),rgba(0,0,0,.6));padding:20px;text-align:center;border-bottom:1px solid rgba(201,162,39,.15);min-height:80px;display:flex;align-items:center;justify-content:center}
         .story-phase-header{display:flex;justify-content:space-between;align-items:center;padding:10px 15px;background:rgba(10,6,2,.5);border-bottom:1px solid rgba(201,162,39,.15)}
         .story-phase-num{font-family:'Cinzel',serif;font-size:.85rem;color:#e8b923;letter-spacing:1.5px;font-weight:700}
-        .story-phase-status{font-size:1.1rem}
-        .story-phase-available{color:#e8b923;animation:storyPulseArrow 1s ease-in-out infinite alternate}
+        .story-phase-status{font-size:1.1rem;display:inline-flex;align-items:center;justify-content:center}
+        .story-phase-status img{width:22px;height:22px;object-fit:contain}
+        .story-phase-available{color:#e8b923;animation:storyPulseArrow 1s ease-in-out infinite alternate;display:inline-flex;align-items:center;justify-content:center}
+        .story-phase-available img{width:22px;height:22px;object-fit:contain}
         @keyframes storyPulseArrow{from{opacity:.6;transform:translateX(0)}to{opacity:1;transform:translateX(3px)}}
         .story-phase-body{padding:15px;flex:1;display:flex;flex-direction:column}
         .story-phase-name{font-family:'Cinzel',serif;color:#f0e2c0;font-size:1.05rem;margin-bottom:8px;letter-spacing:1px}
         .story-phase-desc{color:#b8a577;font-family:'EB Garamond',serif;font-size:.9rem;font-style:italic;line-height:1.4;margin-bottom:12px;flex:1}
         .story-phase-enemies-row{display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap;padding-top:10px;border-top:1px solid rgba(201,162,39,.1)}
-        .story-phase-enemy{font-size:1.5rem;line-height:1}
+        .story-phase-enemy{font-size:1.5rem;line-height:1;display:inline-flex;align-items:center;justify-content:center}
+        .story-phase-enemy img{width:32px;height:32px;object-fit:contain;filter:drop-shadow(0 0 3px rgba(0,0,0,.6))}
         .story-phase-arrow{color:#8a7a52;font-size:.85rem;margin:0 2px}
         .story-enemy-mini{font-size:1.3rem}
         .story-heroes-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:20px;margin-bottom:30px}
@@ -104,23 +111,28 @@
         .story-hero-card.selected{border-color:#e8b923;background:linear-gradient(180deg,rgba(232,185,35,.15),transparent 50%),linear-gradient(180deg,rgba(58,42,24,.9),rgba(26,18,8,.9));box-shadow:0 0 25px rgba(232,185,35,.35)}
         .story-hero-sprite{width:80px;height:80px;object-fit:contain;display:block;margin:0 auto 12px;filter:drop-shadow(0 0 6px rgba(0,0,0,.7))}
         .story-hero-name{font-family:'Cinzel',serif;color:#f0e2c0;font-size:1rem;letter-spacing:1px;margin-bottom:4px}
-        .story-hero-element{font-family:'Cinzel',serif;font-size:.8rem;font-weight:700;letter-spacing:1px;margin-bottom:6px}
+        .story-hero-element{font-family:'Cinzel',serif;font-size:.8rem;font-weight:700;letter-spacing:1px;margin-bottom:6px;display:inline-flex;align-items:center;gap:4px;justify-content:center}
+        .story-hero-element img{width:16px;height:16px;object-fit:contain}
         .story-hero-level{font-family:'EB Garamond',serif;color:#e8b923;font-size:.85rem;font-weight:700;margin-bottom:2px}
         .story-hero-xp{font-family:'EB Garamond',serif;color:#8a7a52;font-size:.8rem}
         .story-hero-check{position:absolute;top:10px;right:10px;font-size:1.2rem}
+        .story-hero-check img{width:22px;height:22px;object-fit:contain}
         .story-shop-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px;margin-bottom:30px}
         .story-shop-item{background:linear-gradient(180deg,rgba(201,162,39,.05),transparent 40%),linear-gradient(180deg,rgba(42,31,16,.9),rgba(26,18,8,.9));border:2px solid #3d2d18;border-radius:8px;padding:20px 15px;text-align:center;transition:all .3s;display:flex;flex-direction:column}
         .story-shop-item:hover:not(.disabled){transform:translateY(-4px);border-color:#c9a227}
         .story-shop-item.disabled{opacity:.55}
-        .story-shop-emoji{font-size:2.5rem;line-height:1;margin-bottom:10px;filter:drop-shadow(0 0 8px rgba(232,185,35,.4))}
+        .story-shop-emoji{font-size:2.5rem;line-height:1;margin-bottom:10px;filter:drop-shadow(0 0 8px rgba(232,185,35,.4));display:flex;align-items:center;justify-content:center}
+        .story-shop-emoji img{width:48px;height:48px;object-fit:contain}
         .story-shop-name{font-family:'Cinzel',serif;color:#f0e2c0;font-size:1rem;margin-bottom:6px;letter-spacing:1px}
         .story-shop-desc{color:#b8a577;font-family:'EB Garamond',serif;font-size:.85rem;font-style:italic;flex:1;margin-bottom:12px}
-        .story-shop-price{font-family:'Cinzel',serif;color:#e8b923;font-size:1rem;font-weight:700;margin-bottom:12px}
+        .story-shop-price{font-family:'Cinzel',serif;color:#e8b923;font-size:1rem;font-weight:700;margin-bottom:12px;display:inline-flex;align-items:center;gap:6px;justify-content:center}
+        .story-shop-price img{width:20px;height:20px;object-fit:contain}
         .story-shop-btn{padding:10px 16px;background:linear-gradient(180deg,rgba(232,185,35,.2),transparent 45%),linear-gradient(135deg,#6a5024,#3d2d18);color:#f0e2c0;border:2px solid #c9a227;border-radius:4px;font-family:'Cinzel',serif;font-weight:700;font-size:.9rem;letter-spacing:1.5px;cursor:pointer;transition:all .2s}
         .story-shop-btn:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 6px 15px rgba(0,0,0,.5),0 0 15px rgba(232,185,35,.35)}
         .story-shop-btn:disabled{background:#2a1f10;color:#6a5024;border-color:#3d2d18;cursor:not-allowed}
         .story-placeholder{text-align:center;padding:60px 20px;background:rgba(10,6,2,.5);border:2px dashed #3d2d18;border-radius:8px;margin-bottom:30px}
-        .story-placeholder-icon{font-size:4rem;line-height:1;margin-bottom:20px;opacity:.6}
+        .story-placeholder-icon{font-size:4rem;line-height:1;margin-bottom:20px;opacity:.6;display:flex;align-items:center;justify-content:center}
+        .story-placeholder-icon img{width:80px;height:80px;object-fit:contain;filter:drop-shadow(0 0 8px rgba(232,185,35,.4))}
         .story-placeholder-text{font-family:'EB Garamond',serif;color:#8a7a52;font-size:1.1rem;font-style:italic}
         .story-footer{display:flex;justify-content:center;gap:15px;padding:15px 20px;background:rgba(10,6,2,.6);border-radius:8px;border:1px solid rgba(201,162,39,.2);flex-wrap:wrap;margin-top:20px}
         .story-back-btn{padding:12px 24px;background:linear-gradient(135deg,#3d2d18,#2a1f10);color:#c8b787;border:2px solid #6a5024;border-radius:4px;cursor:pointer;font-family:'Cinzel',serif;font-weight:700;font-size:.95rem;letter-spacing:1.5px;transition:all .2s}
@@ -143,7 +155,8 @@
         .story-save-confirm-btn:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,.6),0 0 25px rgba(232,185,35,.4)}
         .story-save-element-preview{margin-bottom:20px;padding:12px;background:rgba(10,6,2,.5);border:1px solid rgba(201,162,39,.2);border-radius:6px;min-height:50px;display:flex;align-items:center;justify-content:center;gap:10px}
         .story-save-element-label{font-family:'Cinzel',serif;color:#8a7a52;font-size:.8rem;letter-spacing:2px}
-        .story-save-element-value{font-family:'Cinzel',serif;font-size:1.1rem;font-weight:700;letter-spacing:1.5px}
+        .story-save-element-value{font-family:'Cinzel',serif;font-size:1.1rem;font-weight:700;letter-spacing:1.5px;display:inline-flex;align-items:center;gap:6px}
+        .story-save-element-value img{width:24px;height:24px;object-fit:contain}
         .story-save-element-empty{color:#6a5024;font-family:'EB Garamond',serif;font-style:italic;font-size:.9rem}
         .story-save-section{margin-bottom:15px;text-align:left}
         .story-save-section-title{font-family:'Cinzel',serif;color:#8a7a52;font-size:.8rem;letter-spacing:2px;margin-bottom:10px}
@@ -170,21 +183,26 @@
         .story-result-panel.defeat{border-color:#a83232}
         .story-result-scroll-top{background:linear-gradient(180deg,#d9c89a,#b8a577 50%,#8a7a52);padding:18px 30px;text-align:center;border-bottom:3px solid #8a7018}
         .story-result-scroll-top.defeat{background:linear-gradient(180deg,#d9a0a0,#b88080 50%,#8a5a5a);border-bottom:3px solid #6a2020}
-        .story-result-title{font-family:'Cinzel Decorative',serif;font-size:1.6rem;color:#1a1208;letter-spacing:3px;margin:0}
+        .story-result-title{font-family:'Cinzel Decorative',serif;font-size:1.6rem;color:#1a1208;letter-spacing:3px;margin:0;display:inline-flex;align-items:center;gap:10px;justify-content:center}
+        .story-result-title img{width:32px;height:32px;object-fit:contain}
         .story-result-title.defeat{color:#3a1010}
         .story-result-body{padding:25px;display:flex;flex-direction:column;align-items:center;gap:18px}
         .story-result-subtitle{font-family:'EB Garamond',serif;color:#d9c89a;font-size:1.05rem;font-style:italic;text-align:center;line-height:1.5}
-        .story-result-section-title{font-family:'Cinzel',serif;color:#8a7a52;font-size:.8rem;letter-spacing:2px;text-transform:uppercase;margin-top:8px}
+        .story-result-section-title{font-family:'Cinzel',serif;color:#8a7a52;font-size:.8rem;letter-spacing:2px;text-transform:uppercase;margin-top:8px;display:inline-flex;align-items:center;gap:6px}
+        .story-result-section-title img{width:18px;height:18px;object-fit:contain}
         .story-result-drops-grid{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;width:100%}
         .story-result-drop{background:rgba(10,6,2,.6);border:2px solid rgba(201,162,39,.4);border-radius:6px;padding:12px 16px;text-align:center;min-width:90px;transition:all .2s}
         .story-result-drop:hover{border-color:#e8b923;transform:translateY(-3px);box-shadow:0 6px 15px rgba(232,185,35,.3)}
-        .story-result-drop-emoji{font-size:2rem;line-height:1;margin-bottom:6px}
+        .story-result-drop-emoji{font-size:2rem;line-height:1;margin-bottom:6px;display:flex;align-items:center;justify-content:center}
+        .story-result-drop-emoji img{width:40px;height:40px;object-fit:contain}
         .story-result-drop-name{font-family:'EB Garamond',serif;color:#d9c89a;font-size:.85rem;margin-bottom:4px}
         .story-result-drop-qty{font-family:'Cinzel',serif;color:#e8b923;font-weight:700;font-size:.9rem}
         .story-result-no-drops{color:#8a7a52;font-family:'EB Garamond',serif;font-style:italic;font-size:.95rem}
-        .story-result-xp{font-family:'Cinzel Decorative',serif;color:#e8b923;font-size:1.4rem;text-shadow:0 0 15px rgba(232,185,35,.5);margin-top:8px;text-align:center}
+        .story-result-xp{font-family:'Cinzel Decorative',serif;color:#e8b923;font-size:1.4rem;text-shadow:0 0 15px rgba(232,185,35,.5);margin-top:8px;text-align:center;display:inline-flex;align-items:center;gap:8px;justify-content:center}
+        .story-result-xp img{width:26px;height:26px;object-fit:contain}
         .story-result-actions{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;width:100%;margin-top:10px}
-        .story-result-btn{padding:14px 24px;border-radius:4px;font-family:'Cinzel',serif;font-weight:700;font-size:.95rem;letter-spacing:1.5px;cursor:pointer;transition:all .2s;border:2px solid transparent}
+        .story-result-btn{padding:14px 24px;border-radius:4px;font-family:'Cinzel',serif;font-weight:700;font-size:.95rem;letter-spacing:1.5px;cursor:pointer;transition:all .2s;border:2px solid transparent;display:inline-flex;align-items:center;gap:8px}
+        .story-result-btn img{width:20px;height:20px;object-fit:contain}
         .story-result-btn.primary{background:linear-gradient(180deg,rgba(232,185,35,.25),transparent 45%),linear-gradient(135deg,#8a6a2e,#4a3418);color:#fff5dc;border-color:#e8b923}
         .story-result-btn.primary:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,.6),0 0 25px rgba(232,185,35,.4)}
         .story-result-btn.secondary{background:linear-gradient(180deg,rgba(201,162,39,.08),transparent 40%),linear-gradient(135deg,#3d2d18,#2a1f10);color:#c8b787;border-color:#6a5024}
@@ -312,7 +330,6 @@
             .story-saci-dialog-title{font-size:1.2rem}
             .story-saci-dialog-text{font-size:1rem;padding:15px}
         }
-        /* ===== ESPECTRO (transparência espectral) ===== */
         .spectral-boss {
             opacity: 0.65;
             filter: hue-rotate(220deg) saturate(0.7) brightness(1.15) drop-shadow(0 0 8px rgba(142,68,173,.7));
@@ -336,7 +353,7 @@ const SPRITES_STORY = {
     // --- Ato 2 — Inimigos ---
     'tamandua':'https://i.imgur.com/8Breoi9.gif','anta':'https://i.imgur.com/0avAEnD.gif','queixada':'https://i.imgur.com/0fsGkKs.gif','sucuri':'https://i.imgur.com/0dt6Jk2.gif',
     // --- Ato 3 — Iara (rio) ---
-    'piranha':'https://i.imgur.com/KKOPhc5.gif','lontra':'https://i.imgur.com/wOHYX2a.gif','ariranha':'https://i.imgur.com/7obkFIq.gif','pirarucu':'https://i.imgur.com/4dHWgkT.gif',
+    'piranha':'https://i.imgur.com/5yTVSbh.gif','lontra':'https://i.imgur.com/wOHYX2a.gif','ariranha':'https://i.imgur.com/7obkFIq.gif','pirarucu':'https://i.imgur.com/4dHWgkT.gif',
     // --- Ato 4 — Boitatá (caverna) ---
     'cascavel':'','coral':'','jararaca':'','tartaruga':'',
     // --- Ato 5 — Mula (campos) ---
@@ -360,31 +377,19 @@ const SPRITES_STORY = {
     'espectro_mula':'','espectro_corposeco':'','espectro_lobisomem':'','espectro_cuca':'',
     'espectro_boto':'','espectro_boi':'','espectro_jaci':'','espectro_guaraci':'',
 
-    // --- Cenários Ato 1 ---
-    'bg_1_1':'','bg_1_2':'','bg_1_3':'','bg_1_4':'','bg_1_boss':'',
-    // --- Cenários Ato 2 ---
+    // --- Cenários ---
+    'bg_1_1':'https://i.imgur.com/OWIsmOc.png','bg_1_2':'','bg_1_3':'','bg_1_4':'','bg_1_boss':'',
     'bg_2_1':'','bg_2_2':'','bg_2_3':'','bg_2_4':'','bg_2_boss':'',
-    // --- Cenários Ato 3 ---
     'bg_3_1':'','bg_3_2':'','bg_3_3':'','bg_3_4':'','bg_3_boss':'',
-    // --- Cenários Ato 4 ---
     'bg_4_1':'','bg_4_2':'','bg_4_3':'','bg_4_4':'','bg_4_boss':'',
-    // --- Cenários Ato 5 ---
     'bg_5_1':'','bg_5_2':'','bg_5_3':'','bg_5_4':'','bg_5_boss':'',
-    // --- Cenários Ato 6 ---
     'bg_6_1':'','bg_6_2':'','bg_6_3':'','bg_6_4':'','bg_6_boss':'',
-    // --- Cenários Ato 7 ---
     'bg_7_1':'','bg_7_2':'','bg_7_3':'','bg_7_4':'','bg_7_boss':'',
-    // --- Cenários Ato 8 ---
     'bg_8_1':'','bg_8_2':'','bg_8_3':'','bg_8_4':'','bg_8_boss':'',
-    // --- Cenários Ato 9 ---
     'bg_9_1':'','bg_9_2':'','bg_9_3':'','bg_9_4':'','bg_9_boss':'',
-    // --- Cenários Ato 10 ---
     'bg_10_1':'','bg_10_2':'','bg_10_3':'','bg_10_4':'','bg_10_boss':'',
-    // --- Cenários Ato 11 ---
     'bg_11_1':'','bg_11_2':'','bg_11_3':'','bg_11_4':'','bg_11_boss':'',
-    // --- Cenários Ato 12 ---
     'bg_12_1':'','bg_12_2':'','bg_12_3':'','bg_12_4':'','bg_12_boss':'',
-    // --- Cenários Ato 13 ---
     'bg_13_1':'','bg_13_2':'','bg_13_3':'','bg_13_4':'',
 
     // --- Capas ---
@@ -399,8 +404,27 @@ const SPRITES_STORY = {
     // --- Armas ---
     'arma_cajado':'','arma_arco':'','arma_manopla':'',
 
-    // --- Ícones UI ---
-    'icon_story':'https://i.imgur.com/aL5KByZ.png','icon_locked':'https://i.imgur.com/wGgq9l7.png','icon_unlocked':'https://i.imgur.com/Y0g5RoY.png',
+    // --- Ícones UI (B7) ---
+    'ui_gold':'https://i.imgur.com/LIfKWB8.png',       // 💰
+    'ui_xp':'https://i.imgur.com/sksvz3H.png',         // ⭐
+    'ui_swap':'https://i.imgur.com/12PFW5I.png',       // 🔄
+    'ui_home':'https://i.imgur.com/ld3V2eD.png',       // 🏘️
+    'ui_play':'https://i.imgur.com/mXodqS6.png',       // ▶
+    'ui_gift':'https://i.imgur.com/a5t2pWl.png',       // 🎁
+    'ui_crown':'',      // 👑
+    'ui_sparkle':'',    // ✨
+    'ui_skull':'https://i.imgur.com/GPSPBly.png',      // 💀
+    'ui_lock':'https://i.imgur.com/wGgq9l7.png',       // 🔒
+    'ui_check':'https://i.imgur.com/Y0g5RoY.png',      // ✅
+    'ui_arrow':'https://i.imgur.com/mXodqS6.png',      // ▶ (seta dos cards)
+    'ui_warn':'',       // ⚠️
+    'ui_medal':'https://i.imgur.com/ViAr1EO.png',      // 🏅
+    'elem_fogo':'https://i.imgur.com/JouEZbM.png',     // 🔥
+    'elem_agua':'https://i.imgur.com/tMRUv48.png',     // 💧
+    'elem_terra':'https://i.imgur.com/ZVPQ9iH.png',    // ⛰️
+    'elem_ar':'https://i.imgur.com/HLqTdbd.png',       // 🌪️
+    // Aliases (compatibilidade com código existente)
+    'icon_story':'https://i.imgur.com/aL5KByZ.png','icon_locked':'https://i.imgur.com/wGgq9l7.png','icon_unlocked':'',
     'icon_skull':'https://i.imgur.com/GPSPBly.png','icon_drop':'https://i.imgur.com/a5t2pWl.png','icon_gold':'https://i.imgur.com/LIfKWB8.png'
 };
 
@@ -462,26 +486,21 @@ const EMOJI_STORY = {
     // --- Armas ---
     'arma_cajado':'🪄','arma_arco':'🏹','arma_manopla':'🪓',
 
-    // --- Ícones UI ---
+    // --- Ícones UI (B7) ---
+    'ui_gold':'💰','ui_xp':'⭐','ui_swap':'🔄','ui_home':'🏘️','ui_play':'▶',
+    'ui_gift':'🎁','ui_crown':'👑','ui_sparkle':'✨','ui_skull':'💀','ui_lock':'🔒',
+    'ui_check':'✅','ui_arrow':'▶','ui_warn':'⚠️','ui_medal':'🏅',
+    'elem_fogo':'🔥','elem_agua':'💧','elem_terra':'⛰️','elem_ar':'🌪️',
+    // Aliases
     'icon_story':'📖','icon_locked':'🔒','icon_unlocked':'✅',
     'icon_skull':'💀','icon_drop':'💎','icon_gold':'💰'
 };
 
 // Mapeamento pro jogo base (reusa sprite/tema/lógica)
 const STORY_TO_BASE_BOSS = {
-    'saci': 'SACI',
-    'mapinguari': 'MAPINGUARI',
-    'iara': 'IARA',
-    'boitata': 'BOITATA',
-    'mula': 'MULA',
-    'corpo_seco': 'CORPOSECO',
-    'lobisomem': 'LOBISOMEM',
-    'cuca': 'CUCA',
-    'boto': 'BOTO',
-    'boi': 'BOI',
-    'jaci': 'JACI',
-    'guaraci': 'GUARACI',
-    'anhanga': 'ANHANGA',
+    'saci': 'SACI','mapinguari': 'MAPINGUARI','iara': 'IARA','boitata': 'BOITATA',
+    'mula': 'MULA','corpo_seco': 'CORPOSECO','lobisomem': 'LOBISOMEM','cuca': 'CUCA',
+    'boto': 'BOTO','boi': 'BOI','jaci': 'JACI','guaraci': 'GUARACI','anhanga': 'ANHANGA',
     'porco_espinho': null, 'jacare': null, 'cervo': null, 'onca_parda': null,
     'tamandua': null, 'anta': null, 'queixada': null, 'sucuri': null,
     'piranha': null, 'lontra': null, 'ariranha': null, 'pirarucu': null,
@@ -494,27 +513,44 @@ const STORY_TO_BASE_BOSS = {
     'bufalo': null, 'vaca_louca': null, 'cabra_preta': null, 'zebu': null,
     'gato_mato': null, 'mariposa_gigante': null, 'quati': null, 'sucuarana': null,
     'gaviao': null, 'falcao': null, 'urutau': null, 'aguia_cinzenta': null,
-    // Espectros reusam o boss base
-    'espectro_saci': 'SACI',
-    'espectro_mapinguari': 'MAPINGUARI',
-    'espectro_iara': 'IARA',
-    'espectro_boitata': 'BOITATA',
-    'espectro_mula': 'MULA',
-    'espectro_corposeco': 'CORPOSECO',
-    'espectro_lobisomem': 'LOBISOMEM',
-    'espectro_cuca': 'CUCA',
-    'espectro_boto': 'BOTO',
-    'espectro_boi': 'BOI',
-    'espectro_jaci': 'JACI',
-    'espectro_guaraci': 'GUARACI'
+    'espectro_saci': 'SACI','espectro_mapinguari': 'MAPINGUARI','espectro_iara': 'IARA',
+    'espectro_boitata': 'BOITATA','espectro_mula': 'MULA','espectro_corposeco': 'CORPOSECO',
+    'espectro_lobisomem': 'LOBISOMEM','espectro_cuca': 'CUCA','espectro_boto': 'BOTO',
+    'espectro_boi': 'BOI','espectro_jaci': 'JACI','espectro_guaraci': 'GUARACI'
 };
 
-// Lista dos espectros (útil pra iterar)
 const SPECTRAL_IDS = [
     'espectro_saci','espectro_mapinguari','espectro_iara','espectro_boitata',
     'espectro_mula','espectro_corposeco','espectro_lobisomem','espectro_cuca',
     'espectro_boto','espectro_boi','espectro_jaci','espectro_guaraci'
 ];
+
+// =================================================================
+// 🎯 SISTEMA UNIVERSAL DE ÍCONES (B7)
+// =================================================================
+
+/**
+ * Retorna HTML de um ícone (imagem ou emoji fallback).
+ * Uso:
+ *   uiIcon('gold')         → <img src="..." class="ui-icon"> ou 💰
+ *   uiIcon('lock', '--lg') → versão maior
+ */
+function uiIcon(nome, extraCls){
+    const spriteKey = nome.startsWith('ui_') || nome.startsWith('elem_') || nome.startsWith('icon_') ? nome : 'ui_' + nome;
+    const url = SPRITES_STORY[spriteKey];
+    const emoji = EMOJI_STORY[spriteKey] || '?';
+    const cls = extraCls ? `ui-icon ${extraCls}` : 'ui-icon';
+    if(url && url.trim() !== ''){
+        return `<img src="${url}" class="${cls}" alt="${nome}" onerror="this.outerHTML='${emoji.replace(/'/g,"\\'")}'">`;
+    }
+    return `<span class="${cls} ui-icon-emoji">${emoji}</span>`;
+}
+
+/** Helper pra elementos (FOGO, AGUA, TERRA, AR) */
+function elemIcon(elemento){
+    const map = {FOGO:'elem_fogo', AGUA:'elem_agua', TERRA:'elem_terra', AR:'elem_ar'};
+    return uiIcon(map[elemento] || 'elem_fogo');
+}
 
 function storySprite(key){
     const url = SPRITES_STORY[key];
@@ -528,13 +564,9 @@ function storySpriteLarge(key){
         ? `<img src="${url}" class="story-sprite-large" alt="${key}" onerror="this.outerHTML='<span class=\\'story-emoji-large\\'>${EMOJI_STORY[key]||'?'}</span>'">`
         : `<span class="story-emoji-large">${EMOJI_STORY[key]||'?'}</span>`;
 }
-// =================================================================
-// historia.js — V5.0 — Bloco 1/7 — Parte B
-// Inimigos (todos os 13 atos) + Capítulos + Materiais + Save
-// =================================================================
 
 // =================================================================
-// 👹 INIMIGOS — Ato 1
+// 👹 INIMIGOS (continua igual — Ato 1 ao 13)
 // =================================================================
 const STORY_ENEMIES = {
     porco_espinho:{id:'porco_espinho',name:'Porco-Espinho',hp:10,atk:2,
@@ -550,10 +582,6 @@ const STORY_ENEMIES = {
         skill1:{name:'Garra',type:'area_around',area:2,dmg:3},
         skill2:{name:'Salto',type:'jump',distance:2,dmg:3,area:1}},
     saci:{id:'saci',name:'Saci',hp:30,atk:4,isBoss:true},
-
-    // =================================================================
-    // 👹 INIMIGOS — Ato 2 (Mata Fechada)
-    // =================================================================
     tamandua:{id:'tamandua',name:'Tamanduá-Bandeira',hp:14,atk:2,
         skill1:{name:'Garras Longas',type:'area_around',area:1,dmg:2},
         skill2:{name:'Bicada',type:'dash_line',range:2,dmg:2}},
@@ -567,10 +595,6 @@ const STORY_ENEMIES = {
         skill1:{name:'Constrição',type:'area_around',area:2,dmg:3},
         skill2:{name:'Engolir',type:'dash_line',range:2,dmg:3}},
     mapinguari:{id:'mapinguari',name:'Mapinguari',hp:40,atk:4,isBoss:true},
-
-    // =================================================================
-    // 👹 INIMIGOS — Ato 3 (Águas Profundas — Iara)
-    // =================================================================
     piranha:{id:'piranha',name:'Piranha',hp:12,atk:2,
         skill1:{name:'Cardume',type:'area_around',area:1,dmg:2},
         skill2:{name:'Mordida Rápida',type:'dash_line',range:2,dmg:2}},
@@ -584,10 +608,6 @@ const STORY_ENEMIES = {
         skill1:{name:'Bocarra',type:'line_cardinal',range:2,dmg:3},
         skill2:{name:'Caudada',type:'area_around',area:2,dmg:3}},
     iara:{id:'iara',name:'Iara',hp:40,atk:4,isBoss:true},
-
-    // =================================================================
-    // 👹 INIMIGOS — Ato 4 (Chamas da Noite — Boitatá)
-    // =================================================================
     cascavel:{id:'cascavel',name:'Cascavel',hp:14,atk:2,
         skill1:{name:'Chocalho Ameaçador',type:'area_around',area:1,dmg:2},
         skill2:{name:'Bote Peçonhento',type:'dash_line',range:2,dmg:2}},
@@ -601,10 +621,6 @@ const STORY_ENEMIES = {
         skill1:{name:'Casco Duro',type:'area_around',area:1,dmg:3},
         skill2:{name:'Pancada Pesada',type:'charge',dmg:3}},
     boitata:{id:'boitata',name:'Boitatá',hp:42,atk:4,isBoss:true},
-
-    // =================================================================
-    // 👹 INIMIGOS — Ato 5 (A Maldição do Fogo — Mula sem Cabeça)
-    // =================================================================
     bode:{id:'bode',name:'Bode',hp:16,atk:2,
         skill1:{name:'Cornada',type:'area_around',area:1,dmg:2},
         skill2:{name:'Marrada',type:'dash_line',range:2,dmg:2}},
@@ -618,10 +634,6 @@ const STORY_ENEMIES = {
         skill1:{name:'Cornada Violenta',type:'dash_line',range:2,dmg:3},
         skill2:{name:'Pisoteada',type:'area_around',area:2,dmg:3}},
     mula:{id:'mula',name:'Mula sem Cabeça',hp:42,atk:4,isBoss:true},
-
-    // =================================================================
-    // 👹 INIMIGOS — Ato 6 (Ossos do Sertão — Corpo Seco)
-    // =================================================================
     urubu:{id:'urubu',name:'Urubu',hp:14,atk:2,
         skill1:{name:'Voo Rasante',type:'dash_line',range:2,dmg:2},
         skill2:{name:'Bicada',type:'area_around',area:1,dmg:2}},
@@ -635,10 +647,6 @@ const STORY_ENEMIES = {
         skill1:{name:'Uivo',type:'area_around',area:2,dmg:3},
         skill2:{name:'Bote Selvagem',type:'dash_line',range:2,dmg:3}},
     corpo_seco:{id:'corpo_seco',name:'Corpo Seco',hp:44,atk:4,isBoss:true},
-
-    // =================================================================
-    // 👹 INIMIGOS — Ato 7 (A Maldição da Lua — Lobisomem)
-    // =================================================================
     cachorro_mato:{id:'cachorro_mato',name:'Cachorro-do-Mato',hp:16,atk:2,
         skill1:{name:'Mordida',type:'dash_line',range:2,dmg:2},
         skill2:{name:'Rosnado',type:'area_around',area:1,dmg:2}},
@@ -652,10 +660,6 @@ const STORY_ENEMIES = {
         skill1:{name:'Garras Selvagens',type:'area_around',area:2,dmg:3},
         skill2:{name:'Salto Mortal',type:'jump',distance:2,dmg:3,area:1}},
     lobisomem:{id:'lobisomem',name:'Lobisomem',hp:46,atk:4,isBoss:true},
-
-    // =================================================================
-    // 👹 INIMIGOS — Ato 8 (Poções e Sombras — Cuca)
-    // =================================================================
     morcego:{id:'morcego',name:'Morcego',hp:14,atk:2,
         skill1:{name:'Voo Sombrio',type:'dash_line',range:2,dmg:2},
         skill2:{name:'Eco',type:'area_around',area:1,dmg:2}},
@@ -669,10 +673,6 @@ const STORY_ENEMIES = {
         skill1:{name:'Bicada Feroz',type:'dash_line',range:2,dmg:3},
         skill2:{name:'Grito',type:'area_around',area:2,dmg:3}},
     cuca:{id:'cuca',name:'Cuca',hp:46,atk:5,isBoss:true},
-
-    // =================================================================
-    // 👹 INIMIGOS — Ato 9 (Canto das Águas — Boto Rosa)
-    // =================================================================
     tucunare:{id:'tucunare',name:'Tucunaré',hp:16,atk:2,
         skill1:{name:'Bote Aquático',type:'dash_line',range:2,dmg:2},
         skill2:{name:'Cardume',type:'area_around',area:1,dmg:2}},
@@ -686,10 +686,6 @@ const STORY_ENEMIES = {
         skill1:{name:'Corpulência',type:'area_around',area:2,dmg:3},
         skill2:{name:'Pancada na Água',type:'charge',dmg:3}},
     boto:{id:'boto',name:'Boto Rosa',hp:48,atk:5,isBoss:true},
-
-    // =================================================================
-    // 👹 INIMIGOS — Ato 10 (Terror do Pasto — Boi da Cara Preta)
-    // =================================================================
     bufalo:{id:'bufalo',name:'Búfalo Selvagem',hp:20,atk:3,
         skill1:{name:'Marrada Selvagem',type:'dash_line',range:2,dmg:3},
         skill2:{name:'Pisoteada',type:'area_around',area:2,dmg:3}},
@@ -703,10 +699,6 @@ const STORY_ENEMIES = {
         skill1:{name:'Marrada Bruta',type:'dash_line',range:2,dmg:4},
         skill2:{name:'Pisada Pesada',type:'area_around',area:2,dmg:4}},
     boi:{id:'boi',name:'Boi da Cara Preta',hp:50,atk:5,isBoss:true},
-
-    // =================================================================
-    // 👹 INIMIGOS — Ato 11 (Luz Fria da Lua — Jaci)
-    // =================================================================
     gato_mato:{id:'gato_mato',name:'Gato-do-Mato',hp:18,atk:3,
         skill1:{name:'Garras Noturnas',type:'area_around',area:1,dmg:3},
         skill2:{name:'Salto Silencioso',type:'jump',distance:2,dmg:3,area:1}},
@@ -720,10 +712,6 @@ const STORY_ENEMIES = {
         skill1:{name:'Garra Fatal',type:'area_around',area:2,dmg:4},
         skill2:{name:'Salto Mortal',type:'jump',distance:2,dmg:4,area:1}},
     jaci:{id:'jaci',name:'Jaci',hp:50,atk:5,isBoss:true},
-
-    // =================================================================
-    // 👹 INIMIGOS — Ato 12 (O Sol Devorador — Guaraci)
-    // =================================================================
     gaviao:{id:'gaviao',name:'Gavião',hp:18,atk:3,
         skill1:{name:'Voo Rasante',type:'dash_line',range:2,dmg:3},
         skill2:{name:'Garras',type:'area_around',area:1,dmg:3}},
@@ -737,10 +725,6 @@ const STORY_ENEMIES = {
         skill1:{name:'Garras Reais',type:'area_around',area:2,dmg:4},
         skill2:{name:'Mergulho Solar',type:'dash_line',range:2,dmg:4}},
     guaraci:{id:'guaraci',name:'Guaraci',hp:52,atk:5,isBoss:true},
-
-    // =================================================================
-    // 👹 ATO 13 — ESPECTROS (10 HP / 2 ATK cada)
-    // =================================================================
     espectro_saci:{id:'espectro_saci',name:'Espectro do Saci',hp:10,atk:2,isSpectral:true},
     espectro_mapinguari:{id:'espectro_mapinguari',name:'Espectro do Mapinguari',hp:10,atk:2,isSpectral:true},
     espectro_iara:{id:'espectro_iara',name:'Espectro da Iara',hp:10,atk:2,isSpectral:true},
@@ -753,425 +737,237 @@ const STORY_ENEMIES = {
     espectro_boi:{id:'espectro_boi',name:'Espectro do Boi da Cara Preta',hp:10,atk:2,isSpectral:true},
     espectro_jaci:{id:'espectro_jaci',name:'Espectro da Jaci',hp:10,atk:2,isSpectral:true},
     espectro_guaraci:{id:'espectro_guaraci',name:'Espectro do Guaraci',hp:10,atk:2,isSpectral:true},
-
-    // =================================================================
-    // 👹 ATO 13 — ANHANGÁ (BOSS FINAL)
-    // =================================================================
     anhanga:{id:'anhanga',name:'Anhangá',hp:60,atk:6,isBoss:true,isFinalBoss:true}
 };
 
 // =================================================================
-// 🗺️ CAPÍTULOS — 13 atos
+// 🗺️ CAPÍTULOS (sem mudanças — 13 atos)
 // =================================================================
 const STORY_CHAPTERS = {
-    1:{
-        id:1,
-        name:'Ato 1 — O Caminho do Redemoinho',
-        description:'O Saci, corrompido por Anhangá, comanda os animais da mata. Atravesse o território dos bichos enfeitiçados para purificar o Senhor do Redemoinho.',
-        capa:'capa_ato1',
-        phases:[
-            {id:'1-1',name:'Trilha dos Espinhos',bg:'bg_1_1',enemies:['porco_espinho'],description:'O primeiro guardião do caminho.',reward:{xp:10,gold:15}},
-            {id:'1-2',name:'Vau do Rio',bg:'bg_1_2',enemies:['porco_espinho','jacare'],description:'Dois guardiões protegem o vau.',reward:{xp:20,gold:25}},
-            {id:'1-3',name:'Bosque Sagrado',bg:'bg_1_3',enemies:['porco_espinho','jacare','cervo'],description:'Três guardiões.',reward:{xp:30,gold:40}},
-            {id:'1-4',name:'Coração da Mata',bg:'bg_1_4',enemies:['porco_espinho','jacare','cervo','onca_parda'],description:'A onça-parda também caiu.',reward:{xp:50,gold:60}},
-            {id:'1-BOSS',name:'Redemoinho',bg:'bg_1_boss',isBoss:true,enemies:['porco_espinho','jacare','cervo','onca_parda','saci'],description:'Enfrente o Saci.',reward:{xp:100,gold:100,chapterComplete:true}}
-        ]
-    },
-    2:{
-        id:2,
-        name:'Ato 2 — Mata Fechada',
-        description:'O Mapinguari, o gigante protetor das árvores, foi consumido pela frustração. Agora ele devora o que jurou proteger. Atravesse a mata fechada e liberte o Pilar da Floresta.',
-        capa:'capa_ato2',
-        phases:[
-            {id:'2-1',name:'Trilha das Raízes',bg:'bg_2_1',enemies:['tamandua'],description:'A mata fechada começa aqui.',reward:{xp:20,gold:25}},
-            {id:'2-2',name:'Clareira Selvagem',bg:'bg_2_2',enemies:['tamandua','anta'],description:'Dois guardiões bloqueiam o caminho.',reward:{xp:30,gold:40}},
-            {id:'2-3',name:'Vale dos Ossos',bg:'bg_2_3',enemies:['tamandua','anta','queixada'],description:'Três servos do Devorador.',reward:{xp:45,gold:55}},
-            {id:'2-4',name:'Águas Turvas',bg:'bg_2_4',enemies:['tamandua','anta','queixada','sucuri'],description:'A Sucuri Gigante protege a passagem.',reward:{xp:65,gold:80}},
-            {id:'2-BOSS',name:'Toca do Devorador',bg:'bg_2_boss',isBoss:true,enemies:['tamandua','anta','queixada','sucuri','mapinguari'],description:'Enfrente o Mapinguari.',reward:{xp:150,gold:150,chapterComplete:true}}
-        ]
-    },
-    3:{
-        id:3,
-        name:'Ato 3 — Águas Profundas',
-        description:'A Iara, sedutora dos rios, foi envenenada pela raiva. Suas águas agora afogam sem piedade. Mergulhe no leito do rio e liberte o Canto da Perdição.',
-        capa:'capa_ato3',
-        phases:[
-            {id:'3-1',name:'Margem Sombria',bg:'bg_3_1',enemies:['piranha'],description:'O rio começa a ficar turvo.',reward:{xp:25,gold:30}},
-            {id:'3-2',name:'Remanso Profundo',bg:'bg_3_2',enemies:['piranha','lontra'],description:'Dois guardiões das águas.',reward:{xp:40,gold:50}},
-            {id:'3-3',name:'Cachoeira Sagrada',bg:'bg_3_3',enemies:['piranha','lontra','ariranha'],description:'Três servos do Canto.',reward:{xp:60,gold:70}},
-            {id:'3-4',name:'Foz do Rio',bg:'bg_3_4',enemies:['piranha','lontra','ariranha','pirarucu'],description:'O Pirarucu bloqueia a foz.',reward:{xp:80,gold:100}},
-            {id:'3-BOSS',name:'Palácio Submerso',bg:'bg_3_boss',isBoss:true,enemies:['piranha','lontra','ariranha','pirarucu','iara'],description:'Enfrente a Iara.',reward:{xp:200,gold:200,chapterComplete:true}}
-        ]
-    },
-    4:{
-        id:4,
-        name:'Ato 4 — Chamas da Noite',
-        description:'O Boitatá, a serpente de fogo, aceitou o poder de Anhangá. Agora ele consome tudo em seu caminho. Atravesse as cavernas incandescentes e liberte a Serpente de Fogo.',
-        capa:'capa_ato4',
-        phases:[
-            {id:'4-1',name:'Entrada da Caverna',bg:'bg_4_1',enemies:['cascavel'],description:'A escuridão sibila.',reward:{xp:30,gold:35}},
-            {id:'4-2',name:'Galeria das Serpentes',bg:'bg_4_2',enemies:['cascavel','coral'],description:'Duas serpentes guardam a passagem.',reward:{xp:45,gold:55}},
-            {id:'4-3',name:'Câmara Ardente',bg:'bg_4_3',enemies:['cascavel','coral','jararaca'],description:'Três servos do fogo.',reward:{xp:65,gold:80}},
-            {id:'4-4',name:'Lago de Lava',bg:'bg_4_4',enemies:['cascavel','coral','jararaca','tartaruga'],description:'A Tartaruga Ancestral protege o lago.',reward:{xp:90,gold:110}},
-            {id:'4-BOSS',name:'Coração de Fogo',bg:'bg_4_boss',isBoss:true,enemies:['cascavel','coral','jararaca','tartaruga','boitata'],description:'Enfrente o Boitatá.',reward:{xp:250,gold:250,chapterComplete:true}}
-        ]
-    },
-    5:{
-        id:5,
-        name:'Ato 5 — A Maldição do Fogo',
-        description:'A Mula sem Cabeça, amaldiçoada por seus pecados, foi consumida pela fúria. Agora relincha fogo e dor. Atravesse os campos em chamas e liberte o Relincho da Noite.',
-        capa:'capa_ato5',
-        phases:[
-            {id:'5-1',name:'Pastagem Abandonada',bg:'bg_5_1',enemies:['bode'],description:'O primeiro servo da maldição.',reward:{xp:35,gold:40}},
-            {id:'5-2',name:'Cerca Quebrada',bg:'bg_5_2',enemies:['bode','carneiro'],description:'Dois guardiões do campo.',reward:{xp:50,gold:60}},
-            {id:'5-3',name:'Estábulo em Cinzas',bg:'bg_5_3',enemies:['bode','carneiro','cavalo_selvagem'],description:'Três servos da Mula.',reward:{xp:70,gold:90}},
-            {id:'5-4',name:'Curral Amaldiçoado',bg:'bg_5_4',enemies:['bode','carneiro','cavalo_selvagem','touro_bravo'],description:'O Touro Bravo guarda o curral.',reward:{xp:100,gold:120}},
-            {id:'5-BOSS',name:'Relincho Final',bg:'bg_5_boss',isBoss:true,enemies:['bode','carneiro','cavalo_selvagem','touro_bravo','mula'],description:'Enfrente a Mula sem Cabeça.',reward:{xp:300,gold:300,chapterComplete:true}}
-        ]
-    },
-    6:{
-        id:6,
-        name:'Ato 6 — Ossos do Sertão',
-        description:'O Corpo Seco, esqueleto faminto, foi tentado por Anhangá. Sua fome é infinita. Atravesse o sertão árido e liberte o Devorador de Almas.',
-        capa:'capa_ato6',
-        phases:[
-            {id:'6-1',name:'Terra Rachada',bg:'bg_6_1',enemies:['urubu'],description:'O céu já não é azul aqui.',reward:{xp:40,gold:45}},
-            {id:'6-2',name:'Cemitério Esquecido',bg:'bg_6_2',enemies:['urubu','carcara'],description:'Aves da morte guardam o caminho.',reward:{xp:55,gold:70}},
-            {id:'6-3',name:'Cavernas Secas',bg:'bg_6_3',enemies:['urubu','carcara','tatu'],description:'Três servos da fome.',reward:{xp:75,gold:95}},
-            {id:'6-4',name:'Vale dos Ossos',bg:'bg_6_4',enemies:['urubu','carcara','tatu','lobo_guara'],description:'O Lobo-Guará uiva para a morte.',reward:{xp:110,gold:130}},
-            {id:'6-BOSS',name:'Covil do Faminto',bg:'bg_6_boss',isBoss:true,enemies:['urubu','carcara','tatu','lobo_guara','corpo_seco'],description:'Enfrente o Corpo Seco.',reward:{xp:350,gold:350,chapterComplete:true}}
-        ]
-    },
-    7:{
-        id:7,
-        name:'Ato 7 — A Maldição da Lua',
-        description:'O Lobisomem, amaldiçoado a se transformar, ouviu Anhangá. A lua agora desperta apenas ódio. Atravesse a mata fria e liberte a Maldição da Lua.',
-        capa:'capa_ato7',
-        phases:[
-            {id:'7-1',name:'Mata Fria',bg:'bg_7_1',enemies:['cachorro_mato'],description:'O primeiro uivo ao longe.',reward:{xp:50,gold:55}},
-            {id:'7-2',name:'Trilha do Uivo',bg:'bg_7_2',enemies:['cachorro_mato','raposa'],description:'Dois caçadores noturnos.',reward:{xp:65,gold:80}},
-            {id:'7-3',name:'Bosque Enluarado',bg:'bg_7_3',enemies:['cachorro_mato','raposa','guaxinim'],description:'Três servos da lua.',reward:{xp:85,gold:105}},
-            {id:'7-4',name:'Clareira do Ritual',bg:'bg_7_4',enemies:['cachorro_mato','raposa','guaxinim','jaguatirica'],description:'A Jaguatirica ronda o ritual.',reward:{xp:120,gold:150}},
-            {id:'7-BOSS',name:'Lua Cheia',bg:'bg_7_boss',isBoss:true,enemies:['cachorro_mato','raposa','guaxinim','jaguatirica','lobisomem'],description:'Enfrente o Lobisomem.',reward:{xp:400,gold:400,chapterComplete:true}}
-        ]
-    },
-    8:{
-        id:8,
-        name:'Ato 8 — Poções e Sombras',
-        description:'A Cuca, a velha bruxa, foi corrompida por Anhangá. Suas poções agora são veneno puro. Atravesse o pântano enfeitiçado e liberte a Bruxa da Floresta.',
-        capa:'capa_ato8',
-        phases:[
-            {id:'8-1',name:'Pântano Sombrio',bg:'bg_8_1',enemies:['morcego'],description:'A névoa esconde perigo.',reward:{xp:60,gold:65}},
-            {id:'8-2',name:'Caverna dos Ecos',bg:'bg_8_2',enemies:['morcego','coruja'],description:'Olhos na escuridão.',reward:{xp:75,gold:90}},
-            {id:'8-3',name:'Covil da Bruxa',bg:'bg_8_3',enemies:['morcego','coruja','sapo_cururu'],description:'Três servos da Cuca.',reward:{xp:95,gold:120}},
-            {id:'8-4',name:'Caldeirão Fervente',bg:'bg_8_4',enemies:['morcego','coruja','sapo_cururu','seriema'],description:'A Seriema guarda o caldeirão.',reward:{xp:130,gold:160}},
-            {id:'8-BOSS',name:'Ritual das Sombras',bg:'bg_8_boss',isBoss:true,enemies:['morcego','coruja','sapo_cururu','seriema','cuca'],description:'Enfrente a Cuca.',reward:{xp:450,gold:450,chapterComplete:true}}
-        ]
-    },
-    9:{
-        id:9,
-        name:'Ato 9 — Canto das Águas',
-        description:'O Boto Rosa, sedutor das águas doces, foi corrompido pela luxúria de Anhangá. Seus encantos são mortalmente perigosos. Atravesse o rio fundo e liberte o Sedutor das Águas.',
-        capa:'capa_ato9',
-        phases:[
-            {id:'9-1',name:'Rio Calmo',bg:'bg_9_1',enemies:['tucunare'],description:'Mas o canto já se ouve.',reward:{xp:70,gold:75}},
-            {id:'9-2',name:'Corredeira',bg:'bg_9_2',enemies:['tucunare','piraiba'],description:'Dois peixes guardam a correnteza.',reward:{xp:85,gold:100}},
-            {id:'9-3',name:'Poço Fundo',bg:'bg_9_3',enemies:['tucunare','piraiba','dourada'],description:'Três servos das águas.',reward:{xp:105,gold:130}},
-            {id:'9-4',name:'Remanso do Boto',bg:'bg_9_4',enemies:['tucunare','piraiba','dourada','peixe_boi'],description:'O Peixe-Boi protege o remanso.',reward:{xp:140,gold:170}},
-            {id:'9-BOSS',name:'Canto Final',bg:'bg_9_boss',isBoss:true,enemies:['tucunare','piraiba','dourada','peixe_boi','boto'],description:'Enfrente o Boto Rosa.',reward:{xp:500,gold:500,chapterComplete:true}}
-        ]
-    },
-    10:{
-        id:10,
-        name:'Ato 10 — Terror do Pasto',
-        description:'O Boi da Cara Preta, guardião das trevas, foi consumido pelo medo. Seu verdadeiro terror se revela. Atravesse o pasto noturno e liberte o Terrível das Sombras.',
-        capa:'capa_ato10',
-        phases:[
-            {id:'10-1',name:'Pasto Vazio',bg:'bg_10_1',enemies:['bufalo'],description:'O primeiro rugido.',reward:{xp:80,gold:85}},
-            {id:'10-2',name:'Curral Abandonado',bg:'bg_10_2',enemies:['bufalo','vaca_louca'],description:'Dois guardiões do pasto.',reward:{xp:95,gold:110}},
-            {id:'10-3',name:'Campo das Sombras',bg:'bg_10_3',enemies:['bufalo','vaca_louca','cabra_preta'],description:'Três servos do terror.',reward:{xp:115,gold:140}},
-            {id:'10-4',name:'Curral da Morte',bg:'bg_10_4',enemies:['bufalo','vaca_louca','cabra_preta','zebu'],description:'O Zebu guarda o curral.',reward:{xp:150,gold:180}},
-            {id:'10-BOSS',name:'Cara Preta',bg:'bg_10_boss',isBoss:true,enemies:['bufalo','vaca_louca','cabra_preta','zebu','boi'],description:'Enfrente o Boi da Cara Preta.',reward:{xp:550,gold:550,chapterComplete:true}}
-        ]
-    },
-    11:{
-        id:11,
-        name:'Ato 11 — Luz Fria da Lua',
-        description:'Jaci, deusa da lua, foi envenenada pela melancolia. Seus raios queimam em vez de iluminar. Suba a montanha noturna e liberte a Deusa da Lua.',
-        capa:'capa_ato11',
-        phases:[
-            {id:'11-1',name:'Encosta da Montanha',bg:'bg_11_1',enemies:['gato_mato'],description:'A noite é mais fria aqui.',reward:{xp:90,gold:95}},
-            {id:'11-2',name:'Floresta de Névoa',bg:'bg_11_2',enemies:['gato_mato','mariposa_gigante'],description:'Sombras em movimento.',reward:{xp:105,gold:120}},
-            {id:'11-3',name:'Penhasco Prateado',bg:'bg_11_3',enemies:['gato_mato','mariposa_gigante','quati'],description:'Três servos da lua.',reward:{xp:125,gold:150}},
-            {id:'11-4',name:'Pico Enluarado',bg:'bg_11_4',enemies:['gato_mato','mariposa_gigante','quati','sucuarana'],description:'A Suçuarana ronda o pico.',reward:{xp:160,gold:190}},
-            {id:'11-BOSS',name:'Trono Lunar',bg:'bg_11_boss',isBoss:true,enemies:['gato_mato','mariposa_gigante','quati','sucuarana','jaci'],description:'Enfrente Jaci.',reward:{xp:600,gold:600,chapterComplete:true}}
-        ]
-    },
-    12:{
-        id:12,
-        name:'Ato 12 — O Sol Devorador',
-        description:'Guaraci, deus do sol, foi consumido pela arrogância. Seu sol queima sem piedade. Atravesse o planalto incandescente e liberte o Sol Devorador.',
-        capa:'capa_ato12',
-        phases:[
-            {id:'12-1',name:'Planalto Ardente',bg:'bg_12_1',enemies:['gaviao'],description:'O calor é insuportável.',reward:{xp:100,gold:105}},
-            {id:'12-2',name:'Ravina Seca',bg:'bg_12_2',enemies:['gaviao','falcao'],description:'Dois senhores do céu.',reward:{xp:115,gold:130}},
-            {id:'12-3',name:'Vale do Urutau',bg:'bg_12_3',enemies:['gaviao','falcao','urutau'],description:'Três servos do sol.',reward:{xp:135,gold:160}},
-            {id:'12-4',name:'Ninho da Águia',bg:'bg_12_4',enemies:['gaviao','falcao','urutau','aguia_cinzenta'],description:'A Águia-Cinzenta protege o ninho.',reward:{xp:170,gold:200}},
-            {id:'12-BOSS',name:'Trono Solar',bg:'bg_12_boss',isBoss:true,enemies:['gaviao','falcao','urutau','aguia_cinzenta','guaraci'],description:'Enfrente Guaraci.',reward:{xp:700,gold:700,chapterComplete:true}}
-        ]
-    },
-    13:{
-        id:13,
-        name:'Ato 13 — O Senhor do Abismo',
-        description:'Anhangá reuniu os poderes que consumiu. Ele manifesta os doze guardiões como servos, e agora aguarda no abismo. Atravesse os portões do pesadelo e liberte o Senhor do Abismo.',
-        capa:'capa_ato13',
-        phases:[
-            {id:'13-1',name:'Portão dos Corrompidos',bg:'bg_13_1',isBoss:true,
-                enemies:['saci','mapinguari','iara','boitata'],
-                description:'Os quatro primeiros guardiões te aguardam.',reward:{xp:200,gold:200}},
-            {id:'13-2',name:'Portão dos Caídos',bg:'bg_13_2',isBoss:true,
-                enemies:['mula','corpo_seco','lobisomem','cuca'],
-                description:'Os quatro guardiões do meio.',reward:{xp:250,gold:250}},
-            {id:'13-3',name:'Portão do Crepúsculo',bg:'bg_13_3',isBoss:true,
-                enemies:['boto','boi','jaci','guaraci'],
-                description:'Os quatro guardiões finais.',reward:{xp:300,gold:300}},
-            {id:'13-4',name:'Abismo Final',bg:'bg_13_4',isBoss:true,isFinalBoss:true,
-                enemies:[
-                    'espectro_saci','espectro_mapinguari','espectro_iara','espectro_boitata',
-                    'espectro_mula','espectro_corposeco','espectro_lobisomem','espectro_cuca',
-                    'espectro_boto','espectro_boi','espectro_jaci','espectro_guaraci',
-                    'anhanga'
-                ],
-                description:'Os doze espectros + Anhangá. A batalha final.',reward:{xp:2000,gold:2000,chapterComplete:true}}
-        ]
-    }
+    1:{id:1,name:'Ato 1 — O Caminho do Redemoinho',description:'O Saci, corrompido por Anhangá, comanda os animais da mata. Atravesse o território dos bichos enfeitiçados para purificar o Senhor do Redemoinho.',capa:'capa_ato1',phases:[
+        {id:'1-1',name:'Trilha dos Espinhos',bg:'bg_1_1',enemies:['porco_espinho'],description:'O primeiro guardião do caminho.',reward:{xp:10,gold:15}},
+        {id:'1-2',name:'Vau do Rio',bg:'bg_1_2',enemies:['porco_espinho','jacare'],description:'Dois guardiões protegem o vau.',reward:{xp:20,gold:25}},
+        {id:'1-3',name:'Bosque Sagrado',bg:'bg_1_3',enemies:['porco_espinho','jacare','cervo'],description:'Três guardiões.',reward:{xp:30,gold:40}},
+        {id:'1-4',name:'Coração da Mata',bg:'bg_1_4',enemies:['porco_espinho','jacare','cervo','onca_parda'],description:'A onça-parda também caiu.',reward:{xp:50,gold:60}},
+        {id:'1-BOSS',name:'Redemoinho',bg:'bg_1_boss',isBoss:true,enemies:['porco_espinho','jacare','cervo','onca_parda','saci'],description:'Enfrente o Saci.',reward:{xp:100,gold:100,chapterComplete:true}}
+    ]},
+    2:{id:2,name:'Ato 2 — Mata Fechada',description:'O Mapinguari, o gigante protetor das árvores, foi consumido pela frustração. Agora ele devora o que jurou proteger. Atravesse a mata fechada e liberte o Pilar da Floresta.',capa:'capa_ato2',phases:[
+        {id:'2-1',name:'Trilha das Raízes',bg:'bg_2_1',enemies:['tamandua'],description:'A mata fechada começa aqui.',reward:{xp:20,gold:25}},
+        {id:'2-2',name:'Clareira Selvagem',bg:'bg_2_2',enemies:['tamandua','anta'],description:'Dois guardiões bloqueiam o caminho.',reward:{xp:30,gold:40}},
+        {id:'2-3',name:'Vale dos Ossos',bg:'bg_2_3',enemies:['tamandua','anta','queixada'],description:'Três servos do Devorador.',reward:{xp:45,gold:55}},
+        {id:'2-4',name:'Águas Turvas',bg:'bg_2_4',enemies:['tamandua','anta','queixada','sucuri'],description:'A Sucuri Gigante protege a passagem.',reward:{xp:65,gold:80}},
+        {id:'2-BOSS',name:'Toca do Devorador',bg:'bg_2_boss',isBoss:true,enemies:['tamandua','anta','queixada','sucuri','mapinguari'],description:'Enfrente o Mapinguari.',reward:{xp:150,gold:150,chapterComplete:true}}
+    ]},
+    3:{id:3,name:'Ato 3 — Águas Profundas',description:'A Iara, sedutora dos rios, foi envenenada pela raiva. Suas águas agora afogam sem piedade. Mergulhe no leito do rio e liberte o Canto da Perdição.',capa:'capa_ato3',phases:[
+        {id:'3-1',name:'Margem Sombria',bg:'bg_3_1',enemies:['piranha'],description:'O rio começa a ficar turvo.',reward:{xp:25,gold:30}},
+        {id:'3-2',name:'Remanso Profundo',bg:'bg_3_2',enemies:['piranha','lontra'],description:'Dois guardiões das águas.',reward:{xp:40,gold:50}},
+        {id:'3-3',name:'Cachoeira Sagrada',bg:'bg_3_3',enemies:['piranha','lontra','ariranha'],description:'Três servos do Canto.',reward:{xp:60,gold:70}},
+        {id:'3-4',name:'Foz do Rio',bg:'bg_3_4',enemies:['piranha','lontra','ariranha','pirarucu'],description:'O Pirarucu bloqueia a foz.',reward:{xp:80,gold:100}},
+        {id:'3-BOSS',name:'Palácio Submerso',bg:'bg_3_boss',isBoss:true,enemies:['piranha','lontra','ariranha','pirarucu','iara'],description:'Enfrente a Iara.',reward:{xp:200,gold:200,chapterComplete:true}}
+    ]},
+    4:{id:4,name:'Ato 4 — Chamas da Noite',description:'O Boitatá, a serpente de fogo, aceitou o poder de Anhangá. Agora ele consome tudo em seu caminho. Atravesse as cavernas incandescentes e liberte a Serpente de Fogo.',capa:'capa_ato4',phases:[
+        {id:'4-1',name:'Entrada da Caverna',bg:'bg_4_1',enemies:['cascavel'],description:'A escuridão sibila.',reward:{xp:30,gold:35}},
+        {id:'4-2',name:'Galeria das Serpentes',bg:'bg_4_2',enemies:['cascavel','coral'],description:'Duas serpentes guardam a passagem.',reward:{xp:45,gold:55}},
+        {id:'4-3',name:'Câmara Ardente',bg:'bg_4_3',enemies:['cascavel','coral','jararaca'],description:'Três servos do fogo.',reward:{xp:65,gold:80}},
+        {id:'4-4',name:'Lago de Lava',bg:'bg_4_4',enemies:['cascavel','coral','jararaca','tartaruga'],description:'A Tartaruga Ancestral protege o lago.',reward:{xp:90,gold:110}},
+        {id:'4-BOSS',name:'Coração de Fogo',bg:'bg_4_boss',isBoss:true,enemies:['cascavel','coral','jararaca','tartaruga','boitata'],description:'Enfrente o Boitatá.',reward:{xp:250,gold:250,chapterComplete:true}}
+    ]},
+    5:{id:5,name:'Ato 5 — A Maldição do Fogo',description:'A Mula sem Cabeça, amaldiçoada por seus pecados, foi consumida pela fúria. Agora relincha fogo e dor. Atravesse os campos em chamas e liberte o Relincho da Noite.',capa:'capa_ato5',phases:[
+        {id:'5-1',name:'Pastagem Abandonada',bg:'bg_5_1',enemies:['bode'],description:'O primeiro servo da maldição.',reward:{xp:35,gold:40}},
+        {id:'5-2',name:'Cerca Quebrada',bg:'bg_5_2',enemies:['bode','carneiro'],description:'Dois guardiões do campo.',reward:{xp:50,gold:60}},
+        {id:'5-3',name:'Estábulo em Cinzas',bg:'bg_5_3',enemies:['bode','carneiro','cavalo_selvagem'],description:'Três servos da Mula.',reward:{xp:70,gold:90}},
+        {id:'5-4',name:'Curral Amaldiçoado',bg:'bg_5_4',enemies:['bode','carneiro','cavalo_selvagem','touro_bravo'],description:'O Touro Bravo guarda o curral.',reward:{xp:100,gold:120}},
+        {id:'5-BOSS',name:'Relincho Final',bg:'bg_5_boss',isBoss:true,enemies:['bode','carneiro','cavalo_selvagem','touro_bravo','mula'],description:'Enfrente a Mula sem Cabeça.',reward:{xp:300,gold:300,chapterComplete:true}}
+    ]},
+    6:{id:6,name:'Ato 6 — Ossos do Sertão',description:'O Corpo Seco, esqueleto faminto, foi tentado por Anhangá. Sua fome é infinita. Atravesse o sertão árido e liberte o Devorador de Almas.',capa:'capa_ato6',phases:[
+        {id:'6-1',name:'Terra Rachada',bg:'bg_6_1',enemies:['urubu'],description:'O céu já não é azul aqui.',reward:{xp:40,gold:45}},
+        {id:'6-2',name:'Cemitério Esquecido',bg:'bg_6_2',enemies:['urubu','carcara'],description:'Aves da morte guardam o caminho.',reward:{xp:55,gold:70}},
+        {id:'6-3',name:'Cavernas Secas',bg:'bg_6_3',enemies:['urubu','carcara','tatu'],description:'Três servos da fome.',reward:{xp:75,gold:95}},
+        {id:'6-4',name:'Vale dos Ossos',bg:'bg_6_4',enemies:['urubu','carcara','tatu','lobo_guara'],description:'O Lobo-Guará uiva para a morte.',reward:{xp:110,gold:130}},
+        {id:'6-BOSS',name:'Covil do Faminto',bg:'bg_6_boss',isBoss:true,enemies:['urubu','carcara','tatu','lobo_guara','corpo_seco'],description:'Enfrente o Corpo Seco.',reward:{xp:350,gold:350,chapterComplete:true}}
+    ]},
+    7:{id:7,name:'Ato 7 — A Maldição da Lua',description:'O Lobisomem, amaldiçoado a se transformar, ouviu Anhangá. A lua agora desperta apenas ódio. Atravesse a mata fria e liberte a Maldição da Lua.',capa:'capa_ato7',phases:[
+        {id:'7-1',name:'Mata Fria',bg:'bg_7_1',enemies:['cachorro_mato'],description:'O primeiro uivo ao longe.',reward:{xp:50,gold:55}},
+        {id:'7-2',name:'Trilha do Uivo',bg:'bg_7_2',enemies:['cachorro_mato','raposa'],description:'Dois caçadores noturnos.',reward:{xp:65,gold:80}},
+        {id:'7-3',name:'Bosque Enluarado',bg:'bg_7_3',enemies:['cachorro_mato','raposa','guaxinim'],description:'Três servos da lua.',reward:{xp:85,gold:105}},
+        {id:'7-4',name:'Clareira do Ritual',bg:'bg_7_4',enemies:['cachorro_mato','raposa','guaxinim','jaguatirica'],description:'A Jaguatirica ronda o ritual.',reward:{xp:120,gold:150}},
+        {id:'7-BOSS',name:'Lua Cheia',bg:'bg_7_boss',isBoss:true,enemies:['cachorro_mato','raposa','guaxinim','jaguatirica','lobisomem'],description:'Enfrente o Lobisomem.',reward:{xp:400,gold:400,chapterComplete:true}}
+    ]},
+    8:{id:8,name:'Ato 8 — Poções e Sombras',description:'A Cuca, a velha bruxa, foi corrompida por Anhangá. Suas poções agora são veneno puro. Atravesse o pântano enfeitiçado e liberte a Bruxa da Floresta.',capa:'capa_ato8',phases:[
+        {id:'8-1',name:'Pântano Sombrio',bg:'bg_8_1',enemies:['morcego'],description:'A névoa esconde perigo.',reward:{xp:60,gold:65}},
+        {id:'8-2',name:'Caverna dos Ecos',bg:'bg_8_2',enemies:['morcego','coruja'],description:'Olhos na escuridão.',reward:{xp:75,gold:90}},
+        {id:'8-3',name:'Covil da Bruxa',bg:'bg_8_3',enemies:['morcego','coruja','sapo_cururu'],description:'Três servos da Cuca.',reward:{xp:95,gold:120}},
+        {id:'8-4',name:'Caldeirão Fervente',bg:'bg_8_4',enemies:['morcego','coruja','sapo_cururu','seriema'],description:'A Seriema guarda o caldeirão.',reward:{xp:130,gold:160}},
+        {id:'8-BOSS',name:'Ritual das Sombras',bg:'bg_8_boss',isBoss:true,enemies:['morcego','coruja','sapo_cururu','seriema','cuca'],description:'Enfrente a Cuca.',reward:{xp:450,gold:450,chapterComplete:true}}
+    ]},
+    9:{id:9,name:'Ato 9 — Canto das Águas',description:'O Boto Rosa, sedutor das águas doces, foi corrompido pela luxúria de Anhangá. Seus encantos são mortalmente perigosos. Atravesse o rio fundo e liberte o Sedutor das Águas.',capa:'capa_ato9',phases:[
+        {id:'9-1',name:'Rio Calmo',bg:'bg_9_1',enemies:['tucunare'],description:'Mas o canto já se ouve.',reward:{xp:70,gold:75}},
+        {id:'9-2',name:'Corredeira',bg:'bg_9_2',enemies:['tucunare','piraiba'],description:'Dois peixes guardam a correnteza.',reward:{xp:85,gold:100}},
+        {id:'9-3',name:'Poço Fundo',bg:'bg_9_3',enemies:['tucunare','piraiba','dourada'],description:'Três servos das águas.',reward:{xp:105,gold:130}},
+        {id:'9-4',name:'Remanso do Boto',bg:'bg_9_4',enemies:['tucunare','piraiba','dourada','peixe_boi'],description:'O Peixe-Boi protege o remanso.',reward:{xp:140,gold:170}},
+        {id:'9-BOSS',name:'Canto Final',bg:'bg_9_boss',isBoss:true,enemies:['tucunare','piraiba','dourada','peixe_boi','boto'],description:'Enfrente o Boto Rosa.',reward:{xp:500,gold:500,chapterComplete:true}}
+    ]},
+    10:{id:10,name:'Ato 10 — Terror do Pasto',description:'O Boi da Cara Preta, guardião das trevas, foi consumido pelo medo. Seu verdadeiro terror se revela. Atravesse o pasto noturno e liberte o Terrível das Sombras.',capa:'capa_ato10',phases:[
+        {id:'10-1',name:'Pasto Vazio',bg:'bg_10_1',enemies:['bufalo'],description:'O primeiro rugido.',reward:{xp:80,gold:85}},
+        {id:'10-2',name:'Curral Abandonado',bg:'bg_10_2',enemies:['bufalo','vaca_louca'],description:'Dois guardiões do pasto.',reward:{xp:95,gold:110}},
+        {id:'10-3',name:'Campo das Sombras',bg:'bg_10_3',enemies:['bufalo','vaca_louca','cabra_preta'],description:'Três servos do terror.',reward:{xp:115,gold:140}},
+        {id:'10-4',name:'Curral da Morte',bg:'bg_10_4',enemies:['bufalo','vaca_louca','cabra_preta','zebu'],description:'O Zebu guarda o curral.',reward:{xp:150,gold:180}},
+        {id:'10-BOSS',name:'Cara Preta',bg:'bg_10_boss',isBoss:true,enemies:['bufalo','vaca_louca','cabra_preta','zebu','boi'],description:'Enfrente o Boi da Cara Preta.',reward:{xp:550,gold:550,chapterComplete:true}}
+    ]},
+    11:{id:11,name:'Ato 11 — Luz Fria da Lua',description:'Jaci, deusa da lua, foi envenenada pela melancolia. Seus raios queimam em vez de iluminar. Suba a montanha noturna e liberte a Deusa da Lua.',capa:'capa_ato11',phases:[
+        {id:'11-1',name:'Encosta da Montanha',bg:'bg_11_1',enemies:['gato_mato'],description:'A noite é mais fria aqui.',reward:{xp:90,gold:95}},
+        {id:'11-2',name:'Floresta de Névoa',bg:'bg_11_2',enemies:['gato_mato','mariposa_gigante'],description:'Sombras em movimento.',reward:{xp:105,gold:120}},
+        {id:'11-3',name:'Penhasco Prateado',bg:'bg_11_3',enemies:['gato_mato','mariposa_gigante','quati'],description:'Três servos da lua.',reward:{xp:125,gold:150}},
+        {id:'11-4',name:'Pico Enluarado',bg:'bg_11_4',enemies:['gato_mato','mariposa_gigante','quati','sucuarana'],description:'A Suçuarana ronda o pico.',reward:{xp:160,gold:190}},
+        {id:'11-BOSS',name:'Trono Lunar',bg:'bg_11_boss',isBoss:true,enemies:['gato_mato','mariposa_gigante','quati','sucuarana','jaci'],description:'Enfrente Jaci.',reward:{xp:600,gold:600,chapterComplete:true}}
+    ]},
+    12:{id:12,name:'Ato 12 — O Sol Devorador',description:'Guaraci, deus do sol, foi consumido pela arrogância. Seu sol queima sem piedade. Atravesse o planalto incandescente e liberte o Sol Devorador.',capa:'capa_ato12',phases:[
+        {id:'12-1',name:'Planalto Ardente',bg:'bg_12_1',enemies:['gaviao'],description:'O calor é insuportável.',reward:{xp:100,gold:105}},
+        {id:'12-2',name:'Ravina Seca',bg:'bg_12_2',enemies:['gaviao','falcao'],description:'Dois senhores do céu.',reward:{xp:115,gold:130}},
+        {id:'12-3',name:'Vale do Urutau',bg:'bg_12_3',enemies:['gaviao','falcao','urutau'],description:'Três servos do sol.',reward:{xp:135,gold:160}},
+        {id:'12-4',name:'Ninho da Águia',bg:'bg_12_4',enemies:['gaviao','falcao','urutau','aguia_cinzenta'],description:'A Águia-Cinzenta protege o ninho.',reward:{xp:170,gold:200}},
+        {id:'12-BOSS',name:'Trono Solar',bg:'bg_12_boss',isBoss:true,enemies:['gaviao','falcao','urutau','aguia_cinzenta','guaraci'],description:'Enfrente Guaraci.',reward:{xp:700,gold:700,chapterComplete:true}}
+    ]},
+    13:{id:13,name:'Ato 13 — O Senhor do Abismo',description:'Anhangá reuniu os poderes que consumiu. Ele manifesta os doze guardiões como servos, e agora aguarda no abismo. Atravesse os portões do pesadelo e liberte o Senhor do Abismo.',capa:'capa_ato13',phases:[
+        {id:'13-1',name:'Portão dos Corrompidos',bg:'bg_13_1',isBoss:true,enemies:['saci','mapinguari','iara','boitata'],description:'Os quatro primeiros guardiões te aguardam.',reward:{xp:200,gold:200}},
+        {id:'13-2',name:'Portão dos Caídos',bg:'bg_13_2',isBoss:true,enemies:['mula','corpo_seco','lobisomem','cuca'],description:'Os quatro guardiões do meio.',reward:{xp:250,gold:250}},
+        {id:'13-3',name:'Portão do Crepúsculo',bg:'bg_13_3',isBoss:true,enemies:['boto','boi','jaci','guaraci'],description:'Os quatro guardiões finais.',reward:{xp:300,gold:300}},
+        {id:'13-4',name:'Abismo Final',bg:'bg_13_4',isBoss:true,isFinalBoss:true,enemies:['espectro_saci','espectro_mapinguari','espectro_iara','espectro_boitata','espectro_mula','espectro_corposeco','espectro_lobisomem','espectro_cuca','espectro_boto','espectro_boi','espectro_jaci','espectro_guaraci','anhanga'],description:'Os doze espectros + Anhangá. A batalha final.',reward:{xp:2000,gold:2000,chapterComplete:true}}
+    ]}
 };
 
 // =================================================================
-// 🎁 MATERIAIS (Ato 1 + Ato 2 + Ato 3 + ... + Ato 12 + Ato 13)
+// 🎁 MATERIAIS / LOJA
 // =================================================================
 const STORY_MATERIALS = {
-    // Ato 1
-    espinho:{id:'espinho',name:'Espinho',emoji:'🌵'},
-    espinho_raro:{id:'espinho_raro',name:'Espinho Raro',emoji:'🌵'},
-    pele_jacare:{id:'pele_jacare',name:'Pele de Jacaré',emoji:'🟢'},
-    escama_brilhante:{id:'escama_brilhante',name:'Escama Brilhante',emoji:'💚'},
-    chifre_cervo:{id:'chifre_cervo',name:'Chifre de Cervo',emoji:'🦌'},
-    chifre_ancestral:{id:'chifre_ancestral',name:'Chifre Ancestral',emoji:'🦌'},
-    garra_onca:{id:'garra_onca',name:'Garra de Onça',emoji:'🐾'},
-    garra_lendaria:{id:'garra_lendaria',name:'Garra Lendária',emoji:'🐾'},
-    gorro_saci:{id:'gorro_saci',name:'Gorro do Saci',emoji:'🧣'},
-    amuleto_saci:{id:'amuleto_saci',name:'Amuleto do Saci',emoji:'📿'},
+    espinho:{id:'espinho',name:'Espinho',emoji:'🌵'},espinho_raro:{id:'espinho_raro',name:'Espinho Raro',emoji:'🌵'},
+    pele_jacare:{id:'pele_jacare',name:'Pele de Jacaré',emoji:'🟢'},escama_brilhante:{id:'escama_brilhante',name:'Escama Brilhante',emoji:'💚'},
+    chifre_cervo:{id:'chifre_cervo',name:'Chifre de Cervo',emoji:'🦌'},chifre_ancestral:{id:'chifre_ancestral',name:'Chifre Ancestral',emoji:'🦌'},
+    garra_onca:{id:'garra_onca',name:'Garra de Onça',emoji:'🐾'},garra_lendaria:{id:'garra_lendaria',name:'Garra Lendária',emoji:'🐾'},
+    gorro_saci:{id:'gorro_saci',name:'Gorro do Saci',emoji:'🧣'},amuleto_saci:{id:'amuleto_saci',name:'Amuleto do Saci',emoji:'📿'},
     pocao_cura:{id:'pocao_cura',name:'Poção de Cura',emoji:'🧪'},
-    // Ato 2
-    pelo_tamandua:{id:'pelo_tamandua',name:'Pelo de Tamanduá',emoji:'🟤'},
-    garra_tamandua:{id:'garra_tamandua',name:'Garra de Tamanduá',emoji:'🗡️'},
-    couro_anta:{id:'couro_anta',name:'Couro de Anta',emoji:'🟫'},
-    chifre_anta:{id:'chifre_anta',name:'Chifre de Anta',emoji:'🦏'},
-    cera_queixada:{id:'cera_queixada',name:'Cera de Queixada',emoji:'⚫'},
-    presa_queixada:{id:'presa_queixada',name:'Presa de Queixada',emoji:'🦷'},
-    escama_sucuri:{id:'escama_sucuri',name:'Escama de Sucuri',emoji:'🐍'},
-    pele_sucuri:{id:'pele_sucuri',name:'Pele de Sucuri',emoji:'🟩'},
-    pelo_mapinguari:{id:'pelo_mapinguari',name:'Pelo do Mapinguari',emoji:'🦥'},
-    amuleto_mapinguari:{id:'amuleto_mapinguari',name:'Amuleto do Mapinguari',emoji:'🪬'},
-    // Ato 3 — Iara
-    escama_piranha:{id:'escama_piranha',name:'Escama de Piranha',emoji:'🐟'},
-    dente_piranha:{id:'dente_piranha',name:'Dente de Piranha',emoji:'🦷'},
-    pelo_lontra:{id:'pelo_lontra',name:'Pelo de Lontra',emoji:'🟫'},
-    garra_lontra:{id:'garra_lontra',name:'Garra de Lontra',emoji:'🗡️'},
-    pelo_ariranha:{id:'pelo_ariranha',name:'Pelo de Ariranha',emoji:'🟤'},
-    dente_ariranha:{id:'dente_ariranha',name:'Dente de Ariranha',emoji:'🦷'},
-    escama_pirarucu:{id:'escama_pirarucu',name:'Escama de Pirarucu',emoji:'🐠'},
-    lingua_pirarucu:{id:'lingua_pirarucu',name:'Língua de Pirarucu',emoji:'👅'},
-    joia_iara:{id:'joia_iara',name:'Joia da Iara',emoji:'💎'},
-    amuleto_iara:{id:'amuleto_iara',name:'Amuleto da Iara',emoji:'🧜‍♀️'},
-    // Ato 4 — Boitatá
-    pele_cascavel:{id:'pele_cascavel',name:'Pele de Cascavel',emoji:'🐍'},
-    chocalho_cascavel:{id:'chocalho_cascavel',name:'Chocalho de Cascavel',emoji:'🔔'},
-    anel_coral:{id:'anel_coral',name:'Anel de Coral',emoji:'🔴'},
-    veneno_coral:{id:'veneno_coral',name:'Veneno de Coral',emoji:'🧪'},
-    pele_jararaca:{id:'pele_jararaca',name:'Pele de Jararaca',emoji:'🐍'},
-    presa_jararaca:{id:'presa_jararaca',name:'Presa de Jararaca',emoji:'🦷'},
-    casco_tartaruga:{id:'casco_tartaruga',name:'Casco de Tartaruga',emoji:'🛡️'},
-    ovo_tartaruga:{id:'ovo_tartaruga',name:'Ovo de Tartaruga',emoji:'🥚'},
-    escama_boitata:{id:'escama_boitata',name:'Escama Flamejante',emoji:'🔥'},
-    amuleto_boitata:{id:'amuleto_boitata',name:'Amuleto do Boitatá',emoji:'🪬'},
-    // Ato 5 — Mula
-    chifre_bode:{id:'chifre_bode',name:'Chifre de Bode',emoji:'🐐'},
-    pelo_bode:{id:'pelo_bode',name:'Pelo de Bode',emoji:'🟤'},
-    la_carneiro:{id:'la_carneiro',name:'Lã de Carneiro',emoji:'☁️'},
-    chifre_carneiro:{id:'chifre_carneiro',name:'Chifre de Carneiro',emoji:'🐏'},
-    crina_cavalo:{id:'crina_cavalo',name:'Crina de Cavalo',emoji:'🟫'},
-    casco_cavalo:{id:'casco_cavalo',name:'Casco de Cavalo',emoji:'🐎'},
-    chifre_touro:{id:'chifre_touro',name:'Chifre de Touro',emoji:'🐂'},
-    couro_touro:{id:'couro_touro',name:'Couro de Touro',emoji:'🟫'},
-    ferradura_mula:{id:'ferradura_mula',name:'Ferradura da Mula',emoji:'🧲'},
-    amuleto_mula:{id:'amuleto_mula',name:'Amuleto da Mula',emoji:'🪬'},
-    // Ato 6 — Corpo Seco
-    pena_urubu:{id:'pena_urubu',name:'Pena de Urubu',emoji:'🪶'},
-    bico_urubu:{id:'bico_urubu',name:'Bico de Urubu',emoji:'🦅'},
-    pena_carcara:{id:'pena_carcara',name:'Pena de Carcará',emoji:'🪶'},
-    garra_carcara:{id:'garra_carcara',name:'Garra de Carcará',emoji:'🗡️'},
-    placa_tatu:{id:'placa_tatu',name:'Placa de Tatu',emoji:'🛡️'},
-    garra_tatu:{id:'garra_tatu',name:'Garra de Tatu',emoji:'🗡️'},
-    pelo_lobo_guara:{id:'pelo_lobo_guara',name:'Pelo de Lobo-Guará',emoji:'🐺'},
-    presa_lobo_guara:{id:'presa_lobo_guara',name:'Presa de Lobo-Guará',emoji:'🦷'},
-    osso_corpo_seco:{id:'osso_corpo_seco',name:'Osso Amaldiçoado',emoji:'🦴'},
-    amuleto_corpo_seco:{id:'amuleto_corpo_seco',name:'Amuleto do Corpo Seco',emoji:'🪬'},
-    // Ato 7 — Lobisomem
-    pelo_cachorro_mato:{id:'pelo_cachorro_mato',name:'Pelo de Cachorro-do-Mato',emoji:'🐕'},
-    presa_cachorro_mato:{id:'presa_cachorro_mato',name:'Presa de Cachorro-do-Mato',emoji:'🦷'},
-    cauda_raposa:{id:'cauda_raposa',name:'Cauda de Raposa',emoji:'🦊'},
-    pelo_raposa:{id:'pelo_raposa',name:'Pelo de Raposa',emoji:'🟠'},
-    mascara_guaxinim:{id:'mascara_guaxinim',name:'Máscara de Guaxinim',emoji:'🦝'},
-    garra_guaxinim:{id:'garra_guaxinim',name:'Garra de Guaxinim',emoji:'🗡️'},
-    pelo_jaguatirica:{id:'pelo_jaguatirica',name:'Pelo de Jaguatirica',emoji:'🐆'},
-    garra_jaguatirica:{id:'garra_jaguatirica',name:'Garra de Jaguatirica',emoji:'🗡️'},
-    pelo_lobisomem:{id:'pelo_lobisomem',name:'Pelo de Lobisomem',emoji:'🐺'},
-    amuleto_lobisomem:{id:'amuleto_lobisomem',name:'Amuleto do Lobisomem',emoji:'🌕'},
-    // Ato 8 — Cuca
-    asa_morcego:{id:'asa_morcego',name:'Asa de Morcego',emoji:'🦇'},
-    presa_morcego:{id:'presa_morcego',name:'Presa de Morcego',emoji:'🦷'},
-    pena_coruja:{id:'pena_coruja',name:'Pena de Coruja',emoji:'🪶'},
-    olho_coruja:{id:'olho_coruja',name:'Olho de Coruja',emoji:'👁️'},
-    pele_sapo:{id:'pele_sapo',name:'Pele de Sapo',emoji:'🐸'},
-    veneno_sapo:{id:'veneno_sapo',name:'Veneno de Sapo',emoji:'🧪'},
-    pena_seriema:{id:'pena_seriema',name:'Pena de Seriema',emoji:'🪶'},
-    bico_seriema:{id:'bico_seriema',name:'Bico de Seriema',emoji:'🐦'},
-    caldeirao_cuca:{id:'caldeirao_cuca',name:'Fragmento do Caldeirão',emoji:'🍯'},
-    amuleto_cuca:{id:'amuleto_cuca',name:'Amuleto da Cuca',emoji:'🪬'},
-    // Ato 9 — Boto
-    escama_tucunare:{id:'escama_tucunare',name:'Escama de Tucunaré',emoji:'🐟'},
-    dente_tucunare:{id:'dente_tucunare',name:'Dente de Tucunaré',emoji:'🦷'},
-    escama_piraiba:{id:'escama_piraiba',name:'Escama de Piraíba',emoji:'🐟'},
-    lingua_piraiba:{id:'lingua_piraiba',name:'Língua de Piraíba',emoji:'👅'},
-    escama_dourada:{id:'escama_dourada',name:'Escama Dourada',emoji:'✨'},
-    barbatana_dourada:{id:'barbatana_dourada',name:'Barbatana Dourada',emoji:'🐟'},
-    couro_peixe_boi:{id:'couro_peixe_boi',name:'Couro de Peixe-Boi',emoji:'🟫'},
-    osso_peixe_boi:{id:'osso_peixe_boi',name:'Osso de Peixe-Boi',emoji:'🦴'},
-    flor_boto:{id:'flor_boto',name:'Flor do Boto',emoji:'🌸'},
-    amuleto_boto:{id:'amuleto_boto',name:'Amuleto do Boto',emoji:'🪬'},
-    // Ato 10 — Boi
-    chifre_bufalo:{id:'chifre_bufalo',name:'Chifre de Búfalo',emoji:'🐃'},
-    couro_bufalo:{id:'couro_bufalo',name:'Couro de Búfalo',emoji:'🟫'},
-    sino_vaca:{id:'sino_vaca',name:'Sino da Vaca Louca',emoji:'🔔'},
-    chifre_vaca:{id:'chifre_vaca',name:'Chifre da Vaca Louca',emoji:'🐄'},
-    chifre_cabra:{id:'chifre_cabra',name:'Chifre de Cabra Preta',emoji:'🐐'},
-    pelo_cabra:{id:'pelo_cabra',name:'Pelo de Cabra Preta',emoji:'⚫'},
-    corcova_zebu:{id:'corcova_zebu',name:'Corcova de Zebu',emoji:'🐂'},
-    chifre_zebu:{id:'chifre_zebu',name:'Chifre de Zebu',emoji:'🐂'},
-    chifre_boi:{id:'chifre_boi',name:'Chifre do Boi da Cara Preta',emoji:'🐂'},
-    amuleto_boi:{id:'amuleto_boi',name:'Amuleto do Boi da Cara Preta',emoji:'🌑'},
-    // Ato 11 — Jaci
-    pelo_gato_mato:{id:'pelo_gato_mato',name:'Pelo de Gato-do-Mato',emoji:'🐈'},
-    garra_gato_mato:{id:'garra_gato_mato',name:'Garra de Gato-do-Mato',emoji:'🗡️'},
-    asa_mariposa:{id:'asa_mariposa',name:'Asa de Mariposa Gigante',emoji:'🦋'},
-    po_mariposa:{id:'po_mariposa',name:'Pó Lunar',emoji:'✨'},
-    mascara_quati:{id:'mascara_quati',name:'Máscara de Quati',emoji:'🦝'},
-    cauda_quati:{id:'cauda_quati',name:'Cauda de Quati',emoji:'🟤'},
-    pelo_sucuarana:{id:'pelo_sucuarana',name:'Pelo de Suçuarana',emoji:'🐆'},
-    garra_sucuarana:{id:'garra_sucuarana',name:'Garra de Suçuarana',emoji:'🗡️'},
-    raio_lunar:{id:'raio_lunar',name:'Raio Lunar',emoji:'🌙'},
-    amuleto_jaci:{id:'amuleto_jaci',name:'Amuleto da Jaci',emoji:'🌙'},
-    // Ato 12 — Guaraci
-    pena_gaviao:{id:'pena_gaviao',name:'Pena de Gavião',emoji:'🪶'},
-    garra_gaviao:{id:'garra_gaviao',name:'Garra de Gavião',emoji:'🗡️'},
-    pena_falcao:{id:'pena_falcao',name:'Pena de Falcão',emoji:'🪶'},
-    garra_falcao:{id:'garra_falcao',name:'Garra de Falcão',emoji:'🗡️'},
-    pena_urutau:{id:'pena_urutau',name:'Pena de Urutau',emoji:'🪶'},
-    olho_urutau:{id:'olho_urutau',name:'Olho de Urutau',emoji:'👁️'},
-    pena_aguia:{id:'pena_aguia',name:'Pena de Águia',emoji:'🪶'},
-    garra_aguia:{id:'garra_aguia',name:'Garra de Águia',emoji:'🗡️'},
-    coroa_solar:{id:'coroa_solar',name:'Coroa Solar',emoji:'👑'},
-    amuleto_guaraci:{id:'amuleto_guaraci',name:'Amuleto do Guaraci',emoji:'☀️'},
-    // Ato 13 — Anhangá
-    fragmento_abismo:{id:'fragmento_abismo',name:'Fragmento do Abismo',emoji:'🕳️'},
-    essencia_anhanga:{id:'essencia_anhanga',name:'Essência de Anhangá',emoji:'👹'}
+    pelo_tamandua:{id:'pelo_tamandua',name:'Pelo de Tamanduá',emoji:'🟤'},garra_tamandua:{id:'garra_tamandua',name:'Garra de Tamanduá',emoji:'🗡️'},
+    couro_anta:{id:'couro_anta',name:'Couro de Anta',emoji:'🟫'},chifre_anta:{id:'chifre_anta',name:'Chifre de Anta',emoji:'🦏'},
+    cera_queixada:{id:'cera_queixada',name:'Cera de Queixada',emoji:'⚫'},presa_queixada:{id:'presa_queixada',name:'Presa de Queixada',emoji:'🦷'},
+    escama_sucuri:{id:'escama_sucuri',name:'Escama de Sucuri',emoji:'🐍'},pele_sucuri:{id:'pele_sucuri',name:'Pele de Sucuri',emoji:'🟩'},
+    pelo_mapinguari:{id:'pelo_mapinguari',name:'Pelo do Mapinguari',emoji:'🦥'},amuleto_mapinguari:{id:'amuleto_mapinguari',name:'Amuleto do Mapinguari',emoji:'🪬'},
+    escama_piranha:{id:'escama_piranha',name:'Escama de Piranha',emoji:'🐟'},dente_piranha:{id:'dente_piranha',name:'Dente de Piranha',emoji:'🦷'},
+    pelo_lontra:{id:'pelo_lontra',name:'Pelo de Lontra',emoji:'🟫'},garra_lontra:{id:'garra_lontra',name:'Garra de Lontra',emoji:'🗡️'},
+    pelo_ariranha:{id:'pelo_ariranha',name:'Pelo de Ariranha',emoji:'🟤'},dente_ariranha:{id:'dente_ariranha',name:'Dente de Ariranha',emoji:'🦷'},
+    escama_pirarucu:{id:'escama_pirarucu',name:'Escama de Pirarucu',emoji:'🐠'},lingua_pirarucu:{id:'lingua_pirarucu',name:'Língua de Pirarucu',emoji:'👅'},
+    joia_iara:{id:'joia_iara',name:'Joia da Iara',emoji:'💎'},amuleto_iara:{id:'amuleto_iara',name:'Amuleto da Iara',emoji:'🧜‍♀️'},
+    pele_cascavel:{id:'pele_cascavel',name:'Pele de Cascavel',emoji:'🐍'},chocalho_cascavel:{id:'chocalho_cascavel',name:'Chocalho de Cascavel',emoji:'🔔'},
+    anel_coral:{id:'anel_coral',name:'Anel de Coral',emoji:'🔴'},veneno_coral:{id:'veneno_coral',name:'Veneno de Coral',emoji:'🧪'},
+    pele_jararaca:{id:'pele_jararaca',name:'Pele de Jararaca',emoji:'🐍'},presa_jararaca:{id:'presa_jararaca',name:'Presa de Jararaca',emoji:'🦷'},
+    casco_tartaruga:{id:'casco_tartaruga',name:'Casco de Tartaruga',emoji:'🛡️'},ovo_tartaruga:{id:'ovo_tartaruga',name:'Ovo de Tartaruga',emoji:'🥚'},
+    escama_boitata:{id:'escama_boitata',name:'Escama Flamejante',emoji:'🔥'},amuleto_boitata:{id:'amuleto_boitata',name:'Amuleto do Boitatá',emoji:'🪬'},
+    chifre_bode:{id:'chifre_bode',name:'Chifre de Bode',emoji:'🐐'},pelo_bode:{id:'pelo_bode',name:'Pelo de Bode',emoji:'🟤'},
+    la_carneiro:{id:'la_carneiro',name:'Lã de Carneiro',emoji:'☁️'},chifre_carneiro:{id:'chifre_carneiro',name:'Chifre de Carneiro',emoji:'🐏'},
+    crina_cavalo:{id:'crina_cavalo',name:'Crina de Cavalo',emoji:'🟫'},casco_cavalo:{id:'casco_cavalo',name:'Casco de Cavalo',emoji:'🐎'},
+    chifre_touro:{id:'chifre_touro',name:'Chifre de Touro',emoji:'🐂'},couro_touro:{id:'couro_touro',name:'Couro de Touro',emoji:'🟫'},
+    ferradura_mula:{id:'ferradura_mula',name:'Ferradura da Mula',emoji:'🧲'},amuleto_mula:{id:'amuleto_mula',name:'Amuleto da Mula',emoji:'🪬'},
+    pena_urubu:{id:'pena_urubu',name:'Pena de Urubu',emoji:'🪶'},bico_urubu:{id:'bico_urubu',name:'Bico de Urubu',emoji:'🦅'},
+    pena_carcara:{id:'pena_carcara',name:'Pena de Carcará',emoji:'🪶'},garra_carcara:{id:'garra_carcara',name:'Garra de Carcará',emoji:'🗡️'},
+    placa_tatu:{id:'placa_tatu',name:'Placa de Tatu',emoji:'🛡️'},garra_tatu:{id:'garra_tatu',name:'Garra de Tatu',emoji:'🗡️'},
+    pelo_lobo_guara:{id:'pelo_lobo_guara',name:'Pelo de Lobo-Guará',emoji:'🐺'},presa_lobo_guara:{id:'presa_lobo_guara',name:'Presa de Lobo-Guará',emoji:'🦷'},
+    osso_corpo_seco:{id:'osso_corpo_seco',name:'Osso Amaldiçoado',emoji:'🦴'},amuleto_corpo_seco:{id:'amuleto_corpo_seco',name:'Amuleto do Corpo Seco',emoji:'🪬'},
+    pelo_cachorro_mato:{id:'pelo_cachorro_mato',name:'Pelo de Cachorro-do-Mato',emoji:'🐕'},presa_cachorro_mato:{id:'presa_cachorro_mato',name:'Presa de Cachorro-do-Mato',emoji:'🦷'},
+    cauda_raposa:{id:'cauda_raposa',name:'Cauda de Raposa',emoji:'🦊'},pelo_raposa:{id:'pelo_raposa',name:'Pelo de Raposa',emoji:'🟠'},
+    mascara_guaxinim:{id:'mascara_guaxinim',name:'Máscara de Guaxinim',emoji:'🦝'},garra_guaxinim:{id:'garra_guaxinim',name:'Garra de Guaxinim',emoji:'🗡️'},
+    pelo_jaguatirica:{id:'pelo_jaguatirica',name:'Pelo de Jaguatirica',emoji:'🐆'},garra_jaguatirica:{id:'garra_jaguatirica',name:'Garra de Jaguatirica',emoji:'🗡️'},
+    pelo_lobisomem:{id:'pelo_lobisomem',name:'Pelo de Lobisomem',emoji:'🐺'},amuleto_lobisomem:{id:'amuleto_lobisomem',name:'Amuleto do Lobisomem',emoji:'🌕'},
+    asa_morcego:{id:'asa_morcego',name:'Asa de Morcego',emoji:'🦇'},presa_morcego:{id:'presa_morcego',name:'Presa de Morcego',emoji:'🦷'},
+    pena_coruja:{id:'pena_coruja',name:'Pena de Coruja',emoji:'🪶'},olho_coruja:{id:'olho_coruja',name:'Olho de Coruja',emoji:'👁️'},
+    pele_sapo:{id:'pele_sapo',name:'Pele de Sapo',emoji:'🐸'},veneno_sapo:{id:'veneno_sapo',name:'Veneno de Sapo',emoji:'🧪'},
+    pena_seriema:{id:'pena_seriema',name:'Pena de Seriema',emoji:'🪶'},bico_seriema:{id:'bico_seriema',name:'Bico de Seriema',emoji:'🐦'},
+    caldeirao_cuca:{id:'caldeirao_cuca',name:'Fragmento do Caldeirão',emoji:'🍯'},amuleto_cuca:{id:'amuleto_cuca',name:'Amuleto da Cuca',emoji:'🪬'},
+    escama_tucunare:{id:'escama_tucunare',name:'Escama de Tucunaré',emoji:'🐟'},dente_tucunare:{id:'dente_tucunare',name:'Dente de Tucunaré',emoji:'🦷'},
+    escama_piraiba:{id:'escama_piraiba',name:'Escama de Piraíba',emoji:'🐟'},lingua_piraiba:{id:'lingua_piraiba',name:'Língua de Piraíba',emoji:'👅'},
+    escama_dourada:{id:'escama_dourada',name:'Escama Dourada',emoji:'✨'},barbatana_dourada:{id:'barbatana_dourada',name:'Barbatana Dourada',emoji:'🐟'},
+    couro_peixe_boi:{id:'couro_peixe_boi',name:'Couro de Peixe-Boi',emoji:'🟫'},osso_peixe_boi:{id:'osso_peixe_boi',name:'Osso de Peixe-Boi',emoji:'🦴'},
+    flor_boto:{id:'flor_boto',name:'Flor do Boto',emoji:'🌸'},amuleto_boto:{id:'amuleto_boto',name:'Amuleto do Boto',emoji:'🪬'},
+    chifre_bufalo:{id:'chifre_bufalo',name:'Chifre de Búfalo',emoji:'🐃'},couro_bufalo:{id:'couro_bufalo',name:'Couro de Búfalo',emoji:'🟫'},
+    sino_vaca:{id:'sino_vaca',name:'Sino da Vaca Louca',emoji:'🔔'},chifre_vaca:{id:'chifre_vaca',name:'Chifre da Vaca Louca',emoji:'🐄'},
+    chifre_cabra:{id:'chifre_cabra',name:'Chifre de Cabra Preta',emoji:'🐐'},pelo_cabra:{id:'pelo_cabra',name:'Pelo de Cabra Preta',emoji:'⚫'},
+    corcova_zebu:{id:'corcova_zebu',name:'Corcova de Zebu',emoji:'🐂'},chifre_zebu:{id:'chifre_zebu',name:'Chifre de Zebu',emoji:'🐂'},
+    chifre_boi:{id:'chifre_boi',name:'Chifre do Boi da Cara Preta',emoji:'🐂'},amuleto_boi:{id:'amuleto_boi',name:'Amuleto do Boi da Cara Preta',emoji:'🌑'},
+    pelo_gato_mato:{id:'pelo_gato_mato',name:'Pelo de Gato-do-Mato',emoji:'🐈'},garra_gato_mato:{id:'garra_gato_mato',name:'Garra de Gato-do-Mato',emoji:'🗡️'},
+    asa_mariposa:{id:'asa_mariposa',name:'Asa de Mariposa Gigante',emoji:'🦋'},po_mariposa:{id:'po_mariposa',name:'Pó Lunar',emoji:'✨'},
+    mascara_quati:{id:'mascara_quati',name:'Máscara de Quati',emoji:'🦝'},cauda_quati:{id:'cauda_quati',name:'Cauda de Quati',emoji:'🟤'},
+    pelo_sucuarana:{id:'pelo_sucuarana',name:'Pelo de Suçuarana',emoji:'🐆'},garra_sucuarana:{id:'garra_sucuarana',name:'Garra de Suçuarana',emoji:'🗡️'},
+    raio_lunar:{id:'raio_lunar',name:'Raio Lunar',emoji:'🌙'},amuleto_jaci:{id:'amuleto_jaci',name:'Amuleto da Jaci',emoji:'🌙'},
+    pena_gaviao:{id:'pena_gaviao',name:'Pena de Gavião',emoji:'🪶'},garra_gaviao:{id:'garra_gaviao',name:'Garra de Gavião',emoji:'🗡️'},
+    pena_falcao:{id:'pena_falcao',name:'Pena de Falcão',emoji:'🪶'},garra_falcao:{id:'garra_falcao',name:'Garra de Falcão',emoji:'🗡️'},
+    pena_urutau:{id:'pena_urutau',name:'Pena de Urutau',emoji:'🪶'},olho_urutau:{id:'olho_urutau',name:'Olho de Urutau',emoji:'👁️'},
+    pena_aguia:{id:'pena_aguia',name:'Pena de Águia',emoji:'🪶'},garra_aguia:{id:'garra_aguia',name:'Garra de Águia',emoji:'🗡️'},
+    coroa_solar:{id:'coroa_solar',name:'Coroa Solar',emoji:'👑'},amuleto_guaraci:{id:'amuleto_guaraci',name:'Amuleto do Guaraci',emoji:'☀️'},
+    fragmento_abismo:{id:'fragmento_abismo',name:'Fragmento do Abismo',emoji:'🕳️'},essencia_anhanga:{id:'essencia_anhanga',name:'Essência de Anhangá',emoji:'👹'}
 };
 
-// =================================================================
-// 💎 DROPS POR INIMIGO
-// =================================================================
 const STORY_DROP_TABLE = {
-    // Ato 1
     porco_espinho:{comum:{id:'espinho',chance:70},raro:{id:'espinho_raro',chance:10}},
     jacare:{comum:{id:'pele_jacare',chance:70},raro:{id:'escama_brilhante',chance:10}},
     cervo:{comum:{id:'chifre_cervo',chance:70},raro:{id:'chifre_ancestral',chance:10}},
     onca_parda:{comum:{id:'garra_onca',chance:80},raro:{id:'garra_lendaria',chance:15}},
     saci:{comum:{id:'gorro_saci',chance:100},raro:{id:'amuleto_saci',chance:30}},
-    // Ato 2
     tamandua:{comum:{id:'pelo_tamandua',chance:70},raro:{id:'garra_tamandua',chance:12}},
     anta:{comum:{id:'couro_anta',chance:75},raro:{id:'chifre_anta',chance:12}},
     queixada:{comum:{id:'cera_queixada',chance:70},raro:{id:'presa_queixada',chance:15}},
     sucuri:{comum:{id:'escama_sucuri',chance:80},raro:{id:'pele_sucuri',chance:20}},
     mapinguari:{comum:{id:'pelo_mapinguari',chance:100},raro:{id:'amuleto_mapinguari',chance:40}},
-    // Ato 3
     piranha:{comum:{id:'escama_piranha',chance:70},raro:{id:'dente_piranha',chance:12}},
     lontra:{comum:{id:'pelo_lontra',chance:70},raro:{id:'garra_lontra',chance:12}},
     ariranha:{comum:{id:'pelo_ariranha',chance:75},raro:{id:'dente_ariranha',chance:15}},
     pirarucu:{comum:{id:'escama_pirarucu',chance:80},raro:{id:'lingua_pirarucu',chance:20}},
     iara:{comum:{id:'joia_iara',chance:100},raro:{id:'amuleto_iara',chance:40}},
-    // Ato 4
     cascavel:{comum:{id:'pele_cascavel',chance:70},raro:{id:'chocalho_cascavel',chance:12}},
     coral:{comum:{id:'anel_coral',chance:70},raro:{id:'veneno_coral',chance:12}},
     jararaca:{comum:{id:'pele_jararaca',chance:75},raro:{id:'presa_jararaca',chance:15}},
     tartaruga:{comum:{id:'casco_tartaruga',chance:80},raro:{id:'ovo_tartaruga',chance:20}},
     boitata:{comum:{id:'escama_boitata',chance:100},raro:{id:'amuleto_boitata',chance:40}},
-    // Ato 5
     bode:{comum:{id:'chifre_bode',chance:70},raro:{id:'pelo_bode',chance:12}},
     carneiro:{comum:{id:'la_carneiro',chance:75},raro:{id:'chifre_carneiro',chance:12}},
     cavalo_selvagem:{comum:{id:'crina_cavalo',chance:75},raro:{id:'casco_cavalo',chance:15}},
     touro_bravo:{comum:{id:'chifre_touro',chance:80},raro:{id:'couro_touro',chance:20}},
     mula:{comum:{id:'ferradura_mula',chance:100},raro:{id:'amuleto_mula',chance:40}},
-    // Ato 6
     urubu:{comum:{id:'pena_urubu',chance:70},raro:{id:'bico_urubu',chance:12}},
     carcaara:{comum:{id:'pena_carcara',chance:70},raro:{id:'garra_carcara',chance:15}},
     tatu:{comum:{id:'placa_tatu',chance:75},raro:{id:'garra_tatu',chance:12}},
     lobo_guara:{comum:{id:'pelo_lobo_guara',chance:80},raro:{id:'presa_lobo_guara',chance:20}},
     corpo_seco:{comum:{id:'osso_corpo_seco',chance:100},raro:{id:'amuleto_corpo_seco',chance:40}},
-    // Ato 7
     cachorro_mato:{comum:{id:'pelo_cachorro_mato',chance:70},raro:{id:'presa_cachorro_mato',chance:12}},
     raposa:{comum:{id:'cauda_raposa',chance:70},raro:{id:'pelo_raposa',chance:12}},
     guaxinim:{comum:{id:'mascara_guaxinim',chance:75},raro:{id:'garra_guaxinim',chance:15}},
     jaguatirica:{comum:{id:'pelo_jaguatirica',chance:80},raro:{id:'garra_jaguatirica',chance:20}},
     lobisomem:{comum:{id:'pelo_lobisomem',chance:100},raro:{id:'amuleto_lobisomem',chance:40}},
-    // Ato 8
     morcego:{comum:{id:'asa_morcego',chance:70},raro:{id:'presa_morcego',chance:12}},
     coruja:{comum:{id:'pena_coruja',chance:70},raro:{id:'olho_coruja',chance:15}},
     sapo_cururu:{comum:{id:'pele_sapo',chance:75},raro:{id:'veneno_sapo',chance:12}},
     seriema:{comum:{id:'pena_seriema',chance:80},raro:{id:'bico_seriema',chance:20}},
     cuca:{comum:{id:'caldeirao_cuca',chance:100},raro:{id:'amuleto_cuca',chance:40}},
-    // Ato 9
     tucunare:{comum:{id:'escama_tucunare',chance:70},raro:{id:'dente_tucunare',chance:12}},
     piraiba:{comum:{id:'escama_piraiba',chance:75},raro:{id:'lingua_piraiba',chance:15}},
     dourada:{comum:{id:'escama_dourada',chance:75},raro:{id:'barbatana_dourada',chance:15}},
     peixe_boi:{comum:{id:'couro_peixe_boi',chance:80},raro:{id:'osso_peixe_boi',chance:20}},
     boto:{comum:{id:'flor_boto',chance:100},raro:{id:'amuleto_boto',chance:40}},
-    // Ato 10
     bufalo:{comum:{id:'chifre_bufalo',chance:75},raro:{id:'couro_bufalo',chance:15}},
     vaca_louca:{comum:{id:'sino_vaca',chance:75},raro:{id:'chifre_vaca',chance:15}},
     cabra_preta:{comum:{id:'chifre_cabra',chance:70},raro:{id:'pelo_cabra',chance:12}},
     zebu:{comum:{id:'corcova_zebu',chance:80},raro:{id:'chifre_zebu',chance:20}},
     boi:{comum:{id:'chifre_boi',chance:100},raro:{id:'amuleto_boi',chance:40}},
-    // Ato 11
     gato_mato:{comum:{id:'pelo_gato_mato',chance:75},raro:{id:'garra_gato_mato',chance:15}},
     mariposa_gigante:{comum:{id:'asa_mariposa',chance:75},raro:{id:'po_mariposa',chance:15}},
     quati:{comum:{id:'mascara_quati',chance:75},raro:{id:'cauda_quati',chance:15}},
     sucuarana:{comum:{id:'pelo_sucuarana',chance:80},raro:{id:'garra_sucuarana',chance:20}},
     jaci:{comum:{id:'raio_lunar',chance:100},raro:{id:'amuleto_jaci',chance:40}},
-    // Ato 12
     gaviao:{comum:{id:'pena_gaviao',chance:75},raro:{id:'garra_gaviao',chance:15}},
     falcao:{comum:{id:'pena_falcao',chance:75},raro:{id:'garra_falcao',chance:15}},
     urutau:{comum:{id:'pena_urutau',chance:75},raro:{id:'olho_urutau',chance:15}},
     aguia_cinzenta:{comum:{id:'pena_aguia',chance:80},raro:{id:'garra_aguia',chance:20}},
     guaraci:{comum:{id:'coroa_solar',chance:100},raro:{id:'amuleto_guaraci',chance:40}},
-    // Ato 13
     anhanga:{comum:{id:'fragmento_abismo',chance:100},raro:{id:'essencia_anhanga',chance:100}}
 };
 
-// =================================================================
-// 🏪 LOJA
-// =================================================================
 const STORY_SHOP_ITEMS = [
     {id:'pocao_cura',name:'Poção de Cura',emoji:'🧪',price:15,description:'Recupera 5 HP.'},
     {id:'espinho',name:'Espinho',emoji:'🌵',price:5,description:'Material.'},
@@ -1186,7 +982,7 @@ const STORY_SHOP_ITEMS = [
 ];
 
 // =================================================================
-// 💾 SAVE
+// 💾 SAVE (B5 — sem liberação geral)
 // =================================================================
 const STORY_SAVE_KEY_CURRENT = 'entity_story_current_save';
 const STORY_SAVE_PREFIX = 'entity_story_save_';
@@ -1194,8 +990,8 @@ const STORY_SAVE_PREFIX = 'entity_story_save_';
 function createEmptyStoryProgress(){
     return {
         saveName:'', createdAt:Date.now(),
-        unlockedChapters:[1],           // ⚡ Só o Ato 1 no início. Ato 2+ desbloqueiam vencendo.
-        unlockedPhases:{1:['1-1']},     // ⚡ Só a 1-1 no início.
+        unlockedChapters:[1],
+        unlockedPhases:{1:['1-1']},
         completedPhases:[], currentChapter:1,
         inventory:{}, totalXP:0, gold:0, enemiesDefeated:0, bossesDefeated:[],
         unlockedHeroes:['Tupa','Sume','Caipora'], selectedHeroes:['Tupa'],
@@ -1217,6 +1013,7 @@ function saveStoryProgress(){
     } catch(e){ console.warn('save falhou', e); }
 }
 
+// ⚡ B5 — CORRIGIDO: NÃO libera todos os atos ao carregar
 function loadStoryProgressByName(saveName){
     try {
         const raw = localStorage.getItem(getSaveKey(saveName));
@@ -1224,29 +1021,16 @@ function loadStoryProgressByName(saveName){
         const loaded = JSON.parse(raw);
         STORY_PROGRESS = Object.assign(createEmptyStoryProgress(), loaded);
 
-        // ⚡ Compatibilidade: garante que capítulos novos apareçam em saves antigos
-        if(!Array.isArray(STORY_PROGRESS.unlockedChapters)) STORY_PROGRESS.unlockedChapters = [];
-        Object.keys(STORY_CHAPTERS).forEach(k => {
-            const cid = parseInt(k);
-            if(!STORY_PROGRESS.unlockedChapters.includes(cid)){
-                STORY_PROGRESS.unlockedChapters.push(cid);
-            }
-        });
-
-        // Garante que cada capítulo tenha pelo menos a primeira fase liberada
-        if(!STORY_PROGRESS.unlockedPhases) STORY_PROGRESS.unlockedPhases = {};
-        Object.keys(STORY_CHAPTERS).forEach(k => {
-            const cid = parseInt(k);
-            if(!STORY_PROGRESS.unlockedPhases[cid]) STORY_PROGRESS.unlockedPhases[cid] = [];
-            if(STORY_PROGRESS.unlockedPhases[cid].length === 0){
-                const first = STORY_CHAPTERS[cid].phases[0];
-                if(first) STORY_PROGRESS.unlockedPhases[cid].push(first.id);
-            }
-        });
+        // ⚡ Garante valores padrão mínimos se o save estiver corrompido
+        if(!Array.isArray(STORY_PROGRESS.unlockedChapters) || STORY_PROGRESS.unlockedChapters.length === 0){
+            STORY_PROGRESS.unlockedChapters = [1];
+        }
+        if(!STORY_PROGRESS.unlockedPhases || Object.keys(STORY_PROGRESS.unlockedPhases).length === 0){
+            STORY_PROGRESS.unlockedPhases = {1:['1-1']};
+        }
 
         STORY_CURRENT_SAVE_NAME = STORY_PROGRESS.saveName || saveName;
         localStorage.setItem(STORY_SAVE_KEY_CURRENT, STORY_CURRENT_SAVE_NAME);
-        saveStoryProgress();
         return true;
     } catch(e){ console.warn('load falhou', e); return false; }
 }
@@ -1343,7 +1127,7 @@ function rollStoryDrops(enemyId){
 }
 function getStoryEnemyName(id){ return STORY_ENEMIES[id]?.name || id; }
 // =================================================================
-// historia.js — V5.0 — Bloco 2/7
+// historia.js — V5.1 — Bloco 2/6
 // Diálogos dos bosses (todos os 13 atos) + diálogos finais
 // =================================================================
 
@@ -1908,8 +1692,10 @@ const STORY_PURIFICATION = {
     anhanga: 'O Senhor do Abismo se dissolve em névoa. As doze entidades, agora plenamente livres, brilham por um instante ao redor de você antes de voltarem aos seus postos. A mata, o rio, o céu, o sol — tudo respira. O equilíbrio retorna. Você venceu.'
 };
 // =================================================================
-// historia.js — V5.0 — Bloco 3/7
+// historia.js — V5.1 — Bloco 3/6
 // Modal de save + Aldeia + navegação + atos/fases + OCA + loja
+// Correções: B4 (aldeia_bg aceita imagem), B6 (re-render),
+//            B7 (sistema uiIcon universal)
 // =================================================================
 
 // =================================================================
@@ -1933,7 +1719,7 @@ function showStorySaveNameModal(options={}){
                 ${saves.map(s => `
                     <div class="story-save-item" onclick="loadStorySaveFromModal('${s.name.replace(/'/g,"\\'")}')">
                         <div class="story-save-item-name">${s.name}</div>
-                        <div class="story-save-item-stats">💰 ${s.gold} · ⭐ ${s.xp} XP · ✅ ${s.completed} fases</div>
+                        <div class="story-save-item-stats">${uiIcon('gold')} ${s.gold} · ${uiIcon('xp')} ${s.xp} XP · ${uiIcon('check')} ${s.completed} fases</div>
                     </div>
                 `).join('')}
             </div>
@@ -1976,10 +1762,9 @@ function updateStorySaveElementPreview(){
     const name = inp.value.trim();
     if(!name){ prev.innerHTML = '<span class="story-save-element-empty">Digite um nome...</span>'; return; }
     const el = getElementFromName(name);
-    const emoji = {FOGO:'🔥',AGUA:'💧',TERRA:'⛰️',AR:'🌪️'}[el] || '?';
     prev.innerHTML = `
         <div class="story-save-element-label">ELEMENTO DO TIME:</div>
-        <div class="story-save-element-value elem-${el}">${emoji} ${el}</div>
+        <div class="story-save-element-value elem-${el}">${elemIcon(el)} ${el}</div>
     `;
 }
 
@@ -2081,7 +1866,6 @@ function renderAldeiaScreen(){
     const xp = STORY_PROGRESS.totalXP||0;
     const saveName = STORY_CURRENT_SAVE_NAME;
     const saveEl = getSaveElement();
-    const emoji = {FOGO:'🔥',AGUA:'💧',TERRA:'⛰️',AR:'🌪️'}[saveEl] || '?';
 
     // Progresso geral (todos os capítulos definidos)
     const allChapters = Object.values(STORY_CHAPTERS);
@@ -2092,16 +1876,21 @@ function renderAldeiaScreen(){
     });
     const pct = totalPhases > 0 ? Math.round((totalCompleted/totalPhases)*100) : 0;
 
+    // ⚡ B4 — aldeia_bg agora aceita imagem via SPRITES_STORY (fallback pra emoji)
+    const aldeiaBgHTML = SPRITES_STORY['aldeia_bg'] && SPRITES_STORY['aldeia_bg'].trim() !== ''
+        ? `<img src="${SPRITES_STORY['aldeia_bg']}" alt="Aldeia" onerror="this.outerHTML='${EMOJI_STORY['aldeia_bg']||'🏘️'}'">`
+        : EMOJI_STORY['aldeia_bg'];
+
     screen.innerHTML = `
         <div class="story-container">
             <div class="story-ald-eheader">
                 <div class="story-ald-header-title">
-                    <span class="story-ald-icon-lg">${EMOJI_STORY['aldeia_bg']}</span>
+                    <span class="story-ald-icon-lg">${aldeiaBgHTML}</span>
                     <h1 class="story-ald-title">ALDEIA</h1>
                 </div>
                 <div class="story-ald-header-stats">
-                    <div class="story-ald-stat"><span class="story-ald-stat-icon">💰</span><span class="story-ald-stat-value">${gold}</span></div>
-                    <div class="story-ald-stat"><span class="story-ald-stat-icon">⭐</span><span class="story-ald-stat-value">${xp} XP</span></div>
+                    <div class="story-ald-stat"><span class="story-ald-stat-icon">${uiIcon('gold')}</span><span class="story-ald-stat-value">${gold}</span></div>
+                    <div class="story-ald-stat"><span class="story-ald-stat-icon">${uiIcon('xp')}</span><span class="story-ald-stat-value">${xp} XP</span></div>
                 </div>
             </div>
             <div class="story-ald-save-info">
@@ -2109,8 +1898,8 @@ function renderAldeiaScreen(){
                     <span class="story-ald-save-label">SAVE:</span>
                     <span class="story-ald-save-value">${saveName}</span>
                 </div>
-                <div class="story-ald-save-element elem-${saveEl}">${emoji} ${saveEl}</div>
-                <button class="story-ald-change-save" onclick="changeStorySave()">🔄 TROCAR SAVE</button>
+                <div class="story-ald-save-element elem-${saveEl}">${elemIcon(saveEl)} ${saveEl}</div>
+                <button class="story-ald-change-save" onclick="changeStorySave()">${uiIcon('swap')} TROCAR SAVE</button>
             </div>
             <div class="story-ald-subtitle">O abrigo dos guardiões da mata.</div>
             <div class="story-ald-grid">
@@ -2132,16 +1921,14 @@ function renderAldeiaScreen(){
     `;
 }
 
-// ⚡ CORREÇÃO: aceita imagem de SPRITES_STORY['aldeia_*'] com fallback pra emoji
+// ⚡ Aceita imagem via SPRITES_STORY['aldeia_*'] com fallback pra emoji
 function renderAldeiaBtn(key, label, desc, locked=false){
     const spriteKey = 'aldeia_' + key;
     const url = SPRITES_STORY[spriteKey];
     let iconHTML;
     if(url && url.trim() !== ''){
-        // Usa imagem PNG/GIF se a URL estiver preenchida
         iconHTML = `<img src="${url}" class="story-ald-loc-img" alt="${label}" onerror="this.outerHTML='${EMOJI_STORY[spriteKey]||'?'}'">`;
     } else {
-        // Fallback pro emoji
         iconHTML = EMOJI_STORY[spriteKey] || '❓';
     }
     return `
@@ -2150,7 +1937,7 @@ function renderAldeiaBtn(key, label, desc, locked=false){
             <div class="story-ald-loc-info">
                 <div class="story-ald-loc-name">${label}</div>
                 <div class="story-ald-loc-desc">${desc}</div>
-                ${locked?'<div class="story-ald-loc-locked">🔒 Em breve</div>':''}
+                ${locked?`<div class="story-ald-loc-locked">${uiIcon('lock')} Em breve</div>`:''}
             </div>
         </div>
     `;
@@ -2160,9 +1947,9 @@ function enterAldeiaLocation(key){
     if(key==='atos') return renderAtosScreen();
     if(key==='oca') return renderOcaScreen();
     if(key==='loja') return renderLojaScreen();
-    if(key==='ritual') return renderPlaceholder('⚗️','RITUAL','Em breve.');
-    if(key==='bestiario') return renderPlaceholder('📖','BESTIÁRIO','Em breve.');
-    if(key==='tesouraria') return renderPlaceholder('🏆','TESOURARIA','Em breve.');
+    if(key==='ritual') return renderPlaceholder(uiIcon('warn'),'RITUAL','Em breve.');
+    if(key==='bestiario') return renderPlaceholder(uiIcon('story'),'BESTIÁRIO','Em breve.');
+    if(key==='tesouraria') return renderPlaceholder(uiIcon('medal'),'TESOURARIA','Em breve.');
 }
 
 // =================================================================
@@ -2221,7 +2008,10 @@ function renderChapterPhases(ch){
         const comp = isPhaseCompleted(ph.id);
         const boss = ph.isBoss;
         const finalBoss = ph.isFinalBoss;
-        const statusIcon = comp ? '✅' : un ? '<span class="story-phase-available">▶</span>' : '🔒';
+        let statusIcon;
+        if(comp) statusIcon = uiIcon('check');
+        else if(un) statusIcon = `<span class="story-phase-available">${uiIcon('arrow')}</span>`;
+        else statusIcon = uiIcon('lock');
         const enemiesHTML = ph.enemies.map(eid => {
             const e = STORY_ENEMIES[eid]; if(!e) return '';
             return `<span class="story-phase-enemy" title="${e.name}">${SPRITES_STORY[eid]?storySprite(eid):`<span class="story-enemy-mini">${EMOJI_STORY[eid]||'?'}</span>`}</span>`;
@@ -2264,16 +2054,15 @@ function renderOcaScreen(){
         const sp = (typeof SPRITES !== 'undefined' && SPRITES[hc]) || '';
         const sel = STORY_PROGRESS.selectedHeroes.includes(hc);
         const el = getHeroStoryElement(hc);
-        const emoji = {FOGO:'🔥',AGUA:'💧',TERRA:'⛰️',AR:'🌪️'}[el] || '?';
         const lv = STORY_PROGRESS.heroLevels[hc]||1;
         const xp = STORY_PROGRESS.heroXP[hc]||0;
         return `<div class="story-hero-card ${sel?'selected':''}" onclick="toggleHeroSelection('${hc}')">
             <img src="${sp}" class="story-hero-sprite" alt="${hc}">
             <div class="story-hero-name">${hc}</div>
-            <div class="story-hero-element elem-${el}">${emoji} ${el}</div>
+            <div class="story-hero-element elem-${el}">${elemIcon(el)} ${el}</div>
             <div class="story-hero-level">Nível ${lv}</div>
             <div class="story-hero-xp">${xp} XP</div>
-            ${sel?'<div class="story-hero-check">✅</div>':''}
+            ${sel?`<div class="story-hero-check">${uiIcon('check')}</div>`:''}
         </div>`;
     }).join('');
     screen.innerHTML = `
@@ -2303,14 +2092,14 @@ function renderLojaScreen(){
             <div class="story-shop-emoji">${emoji}</div>
             <div class="story-shop-name">${it.name}</div>
             <div class="story-shop-desc">${it.description}</div>
-            <div class="story-shop-price">💰 ${it.price}</div>
+            <div class="story-shop-price">${uiIcon('gold')} ${it.price}</div>
             <button class="story-shop-btn" ${can?'':'disabled'} onclick="buyShopItem('${it.id}',${it.price})">COMPRAR</button>
         </div>`;
     }).join('');
     screen.innerHTML = `
         <div class="story-container">
             <div class="story-header"><h1 class="story-title">🧙 CURANDEIRO</h1>
-            <p class="story-subtitle">"Tenho o que precisa, se tiver ouro." (${gold} 💰)</p></div>
+            <p class="story-subtitle">"Tenho o que precisa, se tiver ouro." (${gold} ${uiIcon('gold')})</p></div>
             <div class="story-shop-grid">${html}</div>
             <div class="story-footer"><button class="story-back-btn" onclick="renderAldeiaScreen()">← VOLTAR À ALDEIA</button></div>
         </div>`;
@@ -2332,10 +2121,10 @@ function renderPlaceholder(emoji, title, text){
             </div>
             <div class="story-footer"><button class="story-back-btn" onclick="renderAldeiaScreen()">← VOLTAR À ALDEIA</button></div>
         </div>`;
-}// =================================================================
-// historia.js — V5.0 — Bloco 4/7
-// showBossIntroDialog + showBossFinalDialog + applyStorySkill +
-// IA dos bosses (SKILLS LITERAIS DO entidades.js)
+}
+// =================================================================
+// historia.js — V5.1 — Bloco 4/6
+// showBossIntroDialog + showBossFinalDialog + applyStorySkill + IA
 // =================================================================
 
 // =================================================================
@@ -2395,7 +2184,7 @@ function showBossIntroDialog(enemyId){
                 </div>
                 <div class="story-saci-dialog-text">${intro.text}</div>
                 <button class="story-saci-dialog-btn" id="storySaciDialogContinue">
-                    CONTINUAR ▶
+                    CONTINUAR ${uiIcon('arrow')}
                 </button>
             </div>`;
 
@@ -2455,7 +2244,7 @@ function showBossFinalDialog(bossType){
                 </div>
                 <div class="story-saci-dialog-text">${finalData.text}</div>
                 <button class="story-saci-dialog-btn" id="storySaciFinalContinue">
-                    CONTINUAR ▶
+                    CONTINUAR ${uiIcon('arrow')}
                 </button>
             </div>`;
 
@@ -3258,8 +3047,9 @@ async function storyEnemyAI(){
     updateBossCard();
 }
 // =================================================================
-// historia.js — V5.0 — Bloco 5/7
-// handleStoryBossDefeat + purificação + overrides + iniciar fase + resultado
+// historia.js — V5.1 — Bloco 5/6
+// Morte + purificação + overrides + iniciar fase + resultado
+// Correções: B1, B2, B6, B7
 // =================================================================
 
 // =================================================================
@@ -3298,7 +3088,7 @@ async function handleStoryBossDefeat(){
     saveStoryProgress();
 
     addLog(`💀 ${getStoryEnemyName(enemyId)} foi derrotado!`);
-    addLog(dropTxt ? `🎁 Drops:${dropTxt}` : `🎁 Nenhum drop.`);
+    addLog(dropTxt ? `${uiIcon('gift')} Drops:${dropTxt}` : `${uiIcon('gift')} Nenhum drop.`);
 
     STORY_PROGRESS.enemiesDefeated++;
     saveStoryProgress();
@@ -3364,11 +3154,11 @@ function showPurificationMessage(enemyId){
 
         ov.innerHTML = `
             <div class="story-purification-panel">
-                <div class="story-purification-header">✨ PURIFICAÇÃO ✨</div>
+                <div class="story-purification-header">${uiIcon('sparkle')} PURIFICAÇÃO ${uiIcon('sparkle')}</div>
                 <div class="story-purification-sprite">${spriteHTML}</div>
                 <div class="story-purification-name">${name}</div>
                 <div class="story-purification-text">${msg}</div>
-                <button class="story-purification-btn" id="storyPurifContinue">CONTINUAR ▶</button>
+                <button class="story-purification-btn" id="storyPurifContinue">CONTINUAR ${uiIcon('arrow')}</button>
             </div>`;
         document.body.appendChild(ov);
 
@@ -3386,6 +3176,7 @@ function showPurificationMessage(enemyId){
 
 // =================================================================
 // 🎯 AVANÇA PARA O PRÓXIMO INIMIGO
+// Correções B1 (playBossTheme) + B6 (re-render)
 // =================================================================
 async function advanceStoryEnemy(){
     if(!storyBattleActive) return;
@@ -3429,7 +3220,6 @@ async function advanceStoryEnemy(){
                 if(bk && typeof SPRITES !== 'undefined' && SPRITES[bk]) sprite = SPRITES[bk];
             }
             const has = sprite && sprite.trim()!=='';
-            // Espectro → aplica classe .spectral-boss
             const imgClass = nextE.isSpectral ? 'normal spectral-boss' : 'normal';
             const spriteHTML = has
                 ? `<img id="imgBoss" src="${sprite}" class="${imgClass}">`
@@ -3451,6 +3241,11 @@ async function advanceStoryEnemy(){
         updateBossCard();
         updateHeroCard();
         addLog(`⚔️ ${nextE.name} entra em cena!`);
+
+        // ⚡ B1 — Toca o tema do próximo inimigo
+        if(typeof playBossTheme === 'function'){
+            try { playBossTheme(); } catch(e){ console.warn('[historia] playBossTheme falhou:', e); }
+        }
 
         // ---- Diálogo do boss apresentando o novo inimigo ----
         await sleep(400);
@@ -3495,7 +3290,6 @@ function applyStoryEnemyToBoss(enemyId){
         if(has){
             bimg.src = sprite;
             bimg.style.display = '';
-            // Espectro → aplica classe .spectral-boss
             if(enemy.isSpectral){
                 bimg.classList.add('spectral-boss');
             } else {
@@ -3579,6 +3373,7 @@ function finishStoryPhase(victory){
 
 // =================================================================
 // ✅ VITÓRIA DA FASE
+// Correções B6 (re-render)
 // =================================================================
 function handleStoryPhaseVictory(phase, drops){
     const cid = STORY_PROGRESS.currentChapter || 1;
@@ -3586,7 +3381,7 @@ function handleStoryPhaseVictory(phase, drops){
     players.forEach(p => { if(!p.dead) p.hp = p.maxHp; });
     completePhase(cid, phase.id, nextId);
 
-    // ⚡ GARANTIA: se completou o boss do capítulo, desbloqueia o próximo
+    // ⚡ B6 — Garante que o desbloqueio do próximo capítulo seja aplicado
     if(phase.isBoss){
         const nextCid = cid + 1;
         if(STORY_CHAPTERS[nextCid]){
@@ -3617,6 +3412,21 @@ function handleStoryPhaseVictory(phase, drops){
         if(!STORY_PROGRESS.bossesDefeated.includes(last)) STORY_PROGRESS.bossesDefeated.push(last);
     }
     saveStoryProgress();
+
+    // ⚡ B6 — Força re-render da tela atual antes de mostrar o resultado
+    // (garante que quando o jogador fechar o overlay, a tela esteja atualizada)
+    setTimeout(() => {
+        // Se o jogador já estiver de volta na Aldeia, re-renderiza
+        const storyScreen = document.getElementById('storyScreen');
+        if(storyScreen && storyScreen.classList.contains('active')){
+            if(currentScreen === 'story'){
+                renderAldeiaScreen();
+            } else if(currentScreen === 'atos'){
+                renderAtosScreen();
+            }
+        }
+    }, 100);
+
     showStoryVictoryScreen(phase, drops, {xp, gold: finalGold});
 }
 
@@ -3754,15 +3564,12 @@ function installStoryOverrides(){
         };
     }
 
-    // ---- handleBossDefeat (fallback) ----
     if(_origHandleBossDefeat){
         window.handleBossDefeat = function(){
             if(window._storyMode) return handleStoryBossDefeat();
             return _origHandleBossDefeat.apply(this, arguments);
         };
     }
-
-    // ---- bossAI (fallback) ----
     if(_origBossAI){
         window.bossAI = function(){
             if(window._storyMode) return storyEnemyAI();
@@ -3815,6 +3622,7 @@ function startStoryPhase(cid, pid){
 
 // =================================================================
 // ⚔️ INICIALIZA A BATALHA
+// Correções B2 (unlockAudio)
 // =================================================================
 async function initStoryBattle(){
     if(storyEnemiesRemaining.length===0) return;
@@ -3843,6 +3651,11 @@ async function initStoryBattle(){
     currentScreen = 'game';
 
     installStoryOverrides();
+
+    // ⚡ B2 — Garante que o áudio está liberado antes de iniciar
+    if(typeof unlockAudio === 'function'){
+        try { unlockAudio(); } catch(e){ console.warn('[historia] unlockAudio falhou:', e); }
+    }
 
     await initGame();
 
@@ -3929,15 +3742,14 @@ function showStoryVictoryScreen(phase, drops, rewards){
     const cid = STORY_PROGRESS.currentChapter || 1;
     const isBoss = phase.isBoss;
     const isFinal = phase.isFinalBoss;
-    const chapter = STORY_CHAPTERS[cid];
 
-    let title = '✨ FASE CONCLUÍDA!';
+    let title = `${uiIcon('sparkle')} FASE CONCLUÍDA!`;
     let sub = `${phase.name} superada.`;
     if(isFinal){
-        title = '👑 O ABISMO FOI FECHADO!';
+        title = `${uiIcon('crown')} O ABISMO FOI FECHADO!`;
         sub = 'Anhangá foi derrotado. As doze entidades estão livres para sempre. A mata respira.';
     } else if(isBoss){
-        title = '👑 ATO COMPLETO!';
+        title = `${uiIcon('crown')} ATO COMPLETO!`;
         const lastEnemy = phase.enemies[phase.enemies.length-1];
         const bossName = STORY_ENEMIES[lastEnemy]?.name || 'o guardião';
         sub = `${bossName} foi libertado da influência de Anhangá.`;
@@ -3962,12 +3774,12 @@ function showStoryVictoryScreen(phase, drops, rewards){
             <div class="story-result-body">
                 <div class="story-result-subtitle">${sub}</div>
                 ${extraHTML}
-                <div class="story-result-section-title">🎁 RECOMPENSAS</div>
+                <div class="story-result-section-title">${uiIcon('gift')} RECOMPENSAS</div>
                 ${dropsHTML}
-                <div class="story-result-xp">+${rewards.xp} XP | +${rewards.gold} 💰</div>
+                <div class="story-result-xp">+${rewards.xp} XP | +${rewards.gold} ${uiIcon('gold')}</div>
                 <div class="story-result-actions">
-                    ${nextPh ? `<button class="story-result-btn primary" onclick="continueToNextPhase('${nextPh.id}')">PRÓXIMA FASE ▶ ${nextPh.name}</button>` : ''}
-                    <button class="story-result-btn secondary" onclick="returnFromStoryVictory()">🏘️ VOLTAR À ALDEIA</button>
+                    ${nextPh ? `<button class="story-result-btn primary" onclick="continueToNextPhase('${nextPh.id}')">PRÓXIMA FASE ${uiIcon('play')} ${nextPh.name}</button>` : ''}
+                    <button class="story-result-btn secondary" onclick="returnFromStoryVictory()">${uiIcon('home')} VOLTAR À ALDEIA</button>
                 </div>
             </div>
         </div>`;
@@ -3986,12 +3798,12 @@ function showStoryDefeatScreen(phase, drops){
     ov.className = 'story-result-overlay';
     ov.innerHTML = `
         <div class="story-result-panel defeat">
-            <div class="story-result-scroll-top defeat"><h1 class="story-result-title defeat">💀 DERROTA</h1></div>
+            <div class="story-result-scroll-top defeat"><h1 class="story-result-title defeat">${uiIcon('skull')} DERROTA</h1></div>
             <div class="story-result-body">
                 <div class="story-result-subtitle">Os heróis caíram em ${phase.name}.</div>
                 <div class="story-result-actions">
-                    <button class="story-result-btn primary" onclick="retryStoryPhase()">🔄 TENTAR NOVAMENTE</button>
-                    <button class="story-result-btn secondary" onclick="returnFromStoryVictory()">🏘️ VOLTAR À ALDEIA</button>
+                    <button class="story-result-btn primary" onclick="retryStoryPhase()">${uiIcon('swap')} TENTAR NOVAMENTE</button>
+                    <button class="story-result-btn secondary" onclick="returnFromStoryVictory()">${uiIcon('home')} VOLTAR À ALDEIA</button>
                 </div>
             </div>
         </div>`;
@@ -4018,7 +3830,17 @@ function returnFromStoryVictory(){
     restoreBaseGameFunctions();
     const gs = document.getElementById('gameScreen');
     if(gs){ gs.classList.remove('active'); gs.style.display='none'; }
+
+    // ⚡ B6 — Força re-render da Aldeia para refletir desbloqueios
     showStoryScreen();
+
+    // Re-renderiza a Aldeia (caso a tela já esteja visível)
+    setTimeout(() => {
+        const ss = document.getElementById('storyScreen');
+        if(ss && ss.classList.contains('active')){
+            renderAldeiaScreen();
+        }
+    }, 50);
 }
 
 function retryStoryPhase(){
@@ -4031,7 +3853,7 @@ function retryStoryPhase(){
     else returnFromStoryVictory();
 }
 // =================================================================
-// historia.js — V5.0 — Bloco 6/7 (FINAL)
+// historia.js — V5.1 — Bloco 6/6 (FINAL)
 // Auto-init + exposição no window + testes
 // =================================================================
 
@@ -4053,6 +3875,8 @@ window.continueToNextPhase = continueToNextPhase;
 window.returnFromStoryVictory = returnFromStoryVictory;
 window.retryStoryPhase = retryStoryPhase;
 window.renderAldeiaScreen = renderAldeiaScreen;
+window.uiIcon = uiIcon;
+window.elemIcon = elemIcon;
 
 // =================================================================
 // 🚀 AUTO-INIT
@@ -4067,7 +3891,7 @@ window.renderAldeiaScreen = renderAldeiaScreen;
             } else {
                 console.log('📖 Nenhum save. O modal aparecerá ao entrar.');
             }
-            console.log('📖 historia.js V5.0 pronto.');
+            console.log('📖 historia.js V5.1 pronto.');
         } catch(e){
             console.error('❌ Erro no auto-init:', e);
         }
@@ -4123,6 +3947,49 @@ window.unlockAllStoryChapters = function(){
     renderAldeiaScreen();
 };
 
+// Reseta o save atual pra Ato 1 (útil depois de aplicar B5)
+window.resetProgressToAct1 = function(){
+    if(!confirm('Resetar progresso para o Ato 1? (mantém ouro, XP e materiais)')) return;
+    STORY_PROGRESS.unlockedChapters = [1];
+    STORY_PROGRESS.unlockedPhases = {1:['1-1']};
+    STORY_PROGRESS.completedPhases = [];
+    STORY_PROGRESS.currentChapter = 1;
+    saveStoryProgress();
+    console.log('✅ Progresso resetado para o Ato 1');
+    renderAldeiaScreen();
+};
+
+// Verifica quais ícones estão preenchidos (imagem) e quais usam emoji
+window.testUiIcons = function(){
+    const keys = [
+        // UI
+        'ui_gold','ui_xp','ui_swap','ui_home','ui_play','ui_gift','ui_crown',
+        'ui_sparkle','ui_skull','ui_lock','ui_check','ui_arrow','ui_warn','ui_medal',
+        // Elementos
+        'elem_fogo','elem_agua','elem_terra','elem_ar',
+        // Aldeia
+        'aldeia_bg','aldeia_atos','aldeia_oca','aldeia_loja','aldeia_ritual',
+        'aldeia_bestiario','aldeia_tesouraria',
+        // Capas
+        'capa_ato1','capa_ato2','capa_ato3','capa_ato4','capa_ato5','capa_ato6',
+        'capa_ato7','capa_ato8','capa_ato9','capa_ato10','capa_ato11','capa_ato12','capa_ato13'
+    ];
+    const preenchidos = [];
+    const vazios = [];
+    keys.forEach(k => {
+        const url = SPRITES_STORY[k];
+        if(url && url.trim() !== ''){
+            preenchidos.push(`✅ ${k} → ${url}`);
+        } else {
+            vazios.push(`⚪ ${k}`);
+        }
+    });
+    console.log(`\n=== ÍCONES COM IMAGEM (${preenchidos.length}/${keys.length}) ===`);
+    preenchidos.forEach(p => console.log(p));
+    console.log(`\n=== AINDA EM EMOJI (${vazios.length}) ===`);
+    vazios.forEach(v => console.log(v));
+};
+
 // =================================================================
-// FIM — historia.js V5.0
+// FIM — historia.js V5.1
 // =================================================================
