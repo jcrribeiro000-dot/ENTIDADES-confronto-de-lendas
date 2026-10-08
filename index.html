@@ -3802,6 +3802,7 @@
             <button class="title-btn secondary" onclick="openRanking()">RANKING GLOBAL</button>
             <button class="title-btn secondary" onclick="showTitlesPanel()">TÍTULOS</button>
             <button class="title-btn secondary" onclick="showBestiaryModal()">BESTIÁRIO</button>
+            <button class="title-btn" onclick="showStoryScreen()" style="background: linear-gradient(135deg, #8a3030, #4a1010); border-color: #c9a227;">📖 MODO HISTÓRIA</button>
         </div>
         
         <div class="version-tag">V 10.4</div>
@@ -4214,6 +4215,7 @@
     </div>
     
     <!-- 🏆 NOVA TELA DE VITÓRIA/DERROTA -->
+    <div id="storyScreen"></div>
     <div id="gameOverlay">
         <!-- O conteúdo vai ser injetado via JS (showEndGame) -->
     </div>
@@ -4946,6 +4948,7 @@
         });
     </script>
     <script src="entidades.js"></script>
+    <script src="historia.js"></script>
     <script>
         // ================================================================
         // APLICA AS CORREÇÕES DEPOIS QUE entidades.js CARREGOU
