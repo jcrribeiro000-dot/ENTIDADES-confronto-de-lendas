@@ -349,15 +349,15 @@
 const SPRITES_STORY = {
     // --- Ato 1 — Inimigos ---
     'porco_espinho':'https://i.imgur.com/vO5J9ft.gif',
-    'jacare':'https://i.imgur.com/mhrjrrq.gif','cervo':'https://i.imgur.com/iH2bRRx.gif','onca_parda':'https://i.imgur.com/gTeDNQ5.gif',
+    'jacare':'https://i.imgur.com/oTZzXX2.gif','cervo':'https://i.imgur.com/iH2bRRx.gif','onca_parda':'https://i.imgur.com/jN7AuyW.gif',
     // --- Ato 2 — Inimigos ---
     'tamandua':'https://i.imgur.com/8Breoi9.gif','anta':'https://i.imgur.com/0avAEnD.gif','queixada':'https://i.imgur.com/0fsGkKs.gif','sucuri':'https://i.imgur.com/0dt6Jk2.gif',
     // --- Ato 3 — Iara (rio) ---
-    'piranha':'https://i.imgur.com/5yTVSbh.gif','lontra':'https://i.imgur.com/wOHYX2a.gif','ariranha':'https://i.imgur.com/7obkFIq.gif','pirarucu':'https://i.imgur.com/4dHWgkT.gif',
+    'piranha':'https://i.imgur.com/KKOPhc5.gif','lontra':'https://i.imgur.com/wOHYX2a.gif','ariranha':'https://i.imgur.com/7obkFIq.gif','pirarucu':'https://i.imgur.com/4dHWgkT.gif',
     // --- Ato 4 — Boitatá (caverna) ---
-    'cascavel':'','coral':'','jararaca':'','tartaruga':'',
+    'cascavel':'https://i.imgur.com/4QjmPV2.gif','coral':'https://i.imgur.com/8kstFde.gif','jararaca':'https://i.imgur.com/5Ll9B9h.gif','tartaruga':'https://i.imgur.com/wr0u1rt.gif',
     // --- Ato 5 — Mula (campos) ---
-    'bode':'','carneiro':'','cavalo_selvagem':'','touro_bravo':'',
+    'bode':'https://i.imgur.com/vknDxdA.gif','carneiro':'','cavalo_selvagem':'','touro_bravo':'',
     // --- Ato 6 — Corpo Seco (sertão) ---
     'urubu':'','carcara':'','tatu':'','lobo_guara':'',
     // --- Ato 7 — Lobisomem (mata fria) ---
@@ -378,7 +378,7 @@ const SPRITES_STORY = {
     'espectro_boto':'','espectro_boi':'','espectro_jaci':'','espectro_guaraci':'',
 
     // --- Cenários ---
-    'bg_1_1':'https://i.imgur.com/OWIsmOc.png','bg_1_2':'','bg_1_3':'','bg_1_4':'','bg_1_boss':'',
+    'bg_1_1':'https://i.imgur.com/OWIsmOc.png','bg_1_2':'https://i.imgur.com/XBd9za6.png','bg_1_3':'https://i.imgur.com/iNDxFfh.png','bg_1_4':'https://i.imgur.com/A25ehvZ.png','bg_1_boss':'https://i.imgur.com/s6xi6kN.png',
     'bg_2_1':'','bg_2_2':'','bg_2_3':'','bg_2_4':'','bg_2_boss':'',
     'bg_3_1':'','bg_3_2':'','bg_3_3':'','bg_3_4':'','bg_3_boss':'',
     'bg_4_1':'','bg_4_2':'','bg_4_3':'','bg_4_4':'','bg_4_boss':'',
