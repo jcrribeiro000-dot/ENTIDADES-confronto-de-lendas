@@ -2075,10 +2075,9 @@ function renderOcaScreen(){
 }
 
 function toggleHeroSelection(hc){
-    const i = STORY_PROGRESS.selectedHeroes.indexOf(hc);
-    if(i>=0){ if(STORY_PROGRESS.selectedHeroes.length>1) STORY_PROGRESS.selectedHeroes.splice(i,1); }
-    else STORY_PROGRESS.selectedHeroes.push(hc);
-    saveStoryProgress(); renderOcaScreen();
+    STORY_PROGRESS.selectedHeroes = [hc];
+    saveStoryProgress();
+    renderOcaScreen();
 }
 
 function renderLojaScreen(){
@@ -3376,7 +3375,7 @@ function finishStoryPhase(victory){
 // Correções B6 (re-render)
 // =================================================================
 function handleStoryPhaseVictory(phase, drops){
-    const cid = STORY_PROGRESS.currentChapter || 1;
+    const cid = parseInt(String(phase.id).split('-')[0]) || 1;
     const nextId = getNextPhaseId(phase.id, cid);
     players.forEach(p => { if(!p.dead) p.hp = p.maxHp; });
     completePhase(cid, phase.id, nextId);
@@ -3603,8 +3602,11 @@ function startStoryPhase(cid, pid){
         STORY_PROGRESS.selectedHeroes = ['Tupa'];
         saveStoryProgress();
     }
+    if(STORY_PROGRESS.selectedHeroes.length > 1){
+        STORY_PROGRESS.selectedHeroes = [STORY_PROGRESS.selectedHeroes[0]];
+    }
 
-    STORY_PROGRESS.currentChapter = cid;
+    STORY_PROGRESS.currentChapter = parseInt(cid) || 1;
     saveStoryProgress();
 
     storyCurrentPhase = ph;
