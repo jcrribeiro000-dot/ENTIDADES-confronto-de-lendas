@@ -357,7 +357,7 @@ const SPRITES_STORY = {
     // --- Ato 4 — Boitatá (caverna) ---
     'cascavel':'https://i.imgur.com/4QjmPV2.gif','coral':'https://i.imgur.com/8kstFde.gif','jararaca':'https://i.imgur.com/5Ll9B9h.gif','tartaruga':'https://i.imgur.com/wr0u1rt.gif',
     // --- Ato 5 — Mula (campos) ---
-    'bode':'https://i.imgur.com/vknDxdA.gif','carneiro':'','cavalo_selvagem':'','touro_bravo':'',
+    'bode':'https://i.imgur.com/vknDxdA.gif','carneiro':'https://i.imgur.com/UlmnSrt.gif','cavalo_selvagem':'https://i.imgur.com/Y8LuBY1.gif','touro_bravo':'https://i.imgur.com/YAGfZmd.gif',
     // --- Ato 6 — Corpo Seco (sertão) ---
     'urubu':'','carcara':'','tatu':'','lobo_guara':'',
     // --- Ato 7 — Lobisomem (mata fria) ---
