@@ -393,10 +393,10 @@ const SPRITES_STORY = {
     // --- Ato 6 — Corpo Seco (sertão) ---
     'urubu':'https://i.imgur.com/h4N8ZzS.gif',
     'carcara':'https://i.imgur.com/1A2lqg8.gif',
-    'tatu':'',
-    'lobo_guara':'',
+    'tatu':'https://i.imgur.com/5unG9x9.gif',
+    'lobo_guara':'https://i.imgur.com/f7KgIRB.gif',
     // --- Ato 7 — Lobisomem (mata fria) ---
-    'cachorro_mato':'',
+    'cachorro_mato':'https://i.imgur.com/easvBrN.gif',
     'raposa':'',
     'guaxinim':'',
     'jaguatirica':'',
@@ -1862,32 +1862,32 @@ const STORY_ENEMIES = {
 // =================================================================
 const STORY_FX_SPRITES = {
     spike_burst:      'https://i.imgur.com/rEKf5aV.png',
-    spike_roll:       '',
-    jaw_snap:         '',
-    tail_whip:        '',
-    antler_charge:    '',
-    hoof_stomp:       '',
-    pounce_arc:       '',
-    claw_slash:       '',
-    fang_bite:        '',
-    wing_gust:        'https://i.imgur.com/UAoEfoT.png',
-    peck_beak:        '',
-    coil_wrap:        '',
-    sting_venom:      '',
-    splash_wave:      '',
-    fin_slash:        '',
+    spike_roll:       'https://i.imgur.com/jMfwakW.png',
+    jaw_snap:         'https://i.imgur.com/xSvWvNx.png',
+    tail_whip:        'https://i.imgur.com/H5ZbfwL.png',
+    antler_charge:    'https://i.imgur.com/jSLWgto.png',
+    hoof_stomp:       'https://i.imgur.com/SdClPec.png',
+    pounce_arc:       'https://i.imgur.com/23VkeNf.png',
+    claw_slash:       'https://i.imgur.com/23VkeNf.png',
+    fang_bite:        'https://i.imgur.com/LGPJ1nD.png',
+    wing_gust:        'https://i.imgur.com/ZLoFtuS.png',
+    peck_beak:        'https://i.imgur.com/9NqS6ye.png',
+    coil_wrap:        'https://i.imgur.com/WqNakSK.png',
+    sting_venom:      'https://i.imgur.com/GcHFnVX.png',
+    splash_wave:      'https://i.imgur.com/4kfuSUg.png',
+    fin_slash:        'https://i.imgur.com/HbejI8O.png',
     tentacle_glow:    '',
-    ground_crack:     '',
-    shockwave:        '',
-    fog_cloud:        '',
-    swarm_cloud:      '',
+    ground_crack:     'https://i.imgur.com/z7IdFsb.png',
+    shockwave:        'https://i.imgur.com/9cKQQ07.png',
+    fog_cloud:        'https://i.imgur.com/DJIefCf.png',
+    swarm_cloud:      'https://i.imgur.com/6IRNOli.png',
     spectral_veil:    '',
     push_arrow:       '',
     pull_chain:       '',
     heal_orb:         '',
     tile_flip:        '',
-    element_pulse:    '',
-    flame_short:      '',
+    element_pulse:    'https://i.imgur.com/9Zxsavx.png',
+    flame_short:      'https://i.imgur.com/taNG7Pw.png',
     impact:           '',
     heavy_slash:      '',
 };
@@ -3152,38 +3152,41 @@ STORY_ANIMAL_SKILLS['onca_garra_dupla'] = async (enemy, skill) => {
 
     const alive = players.filter(p => !p.dead);
     if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
+    const hero = alive[0];
+    const dir = dirToward(boss.x, boss.y, hero.x, hero.y);
+    const tiles = [];
+    const anchorX = boss.x + dir.dx * 2;    // desloca 2 tiles na direção
+    const anchorY = boss.y + dir.dy * 2;
+    for (let dx = -1; dx <= 2; dx++) {
+        for (let dy = -1; dy <= 2; dy++) {
+            const fx = anchorX + dx;
+            const fy = anchorY + dy;
+            if (fx < 0 || fx >= 8 || fy < 0 || fy >= 8) continue;
+            tiles.push({ x: fx, y: fy });
+        }
+    }
+    playSkillSound('onca_garra_dupla');
+
+    // FX em cada tile da área 4x4
+    tiles.forEach((t, i) => {
+        setTimeout(() => {
+            spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { 
+                duration: 400, 
+                scale: 0.85 
+            });
+        }, i * 25);
     });
 
-    // Onça ataca 2x no MESMO tile — total ≤ atk
-    const dmg1 = Math.ceil(atk / 2);      // 2
-    const dmg2 = Math.floor(atk / 2);     // 1
-    const tx = nearest.x;
-    const ty = nearest.y;
+    await sleep(350);
+    // Multi-alvo grande (16 tiles) → atk - 1
+    const dmg = Math.max(1, atk - 1);
+    damagePlayersAt(tiles, dmg);
 
-    // Hit 1
-    spawnFxAt('claw_slash', 'fx-claw-slash', tx, ty, { duration: 400 });
-    playSfx('garras');
     await sleep(250);
-    players.forEach(p => {
-        if (!p.dead && p.x === tx && p.y === ty) applyDmg(p, dmg1);
-    });
-
-    // Hit 2
-    await sleep(180);
-    spawnFxAt('claw_slash', 'fx-claw-slash', tx, ty, { duration: 400, scale: 1.2 });
-    playSfx('garras');
-    await sleep(250);
-    players.forEach(p => {
-        if (!p.dead && p.x === tx && p.y === ty) applyDmg(p, dmg2);
-    });
-
-    await sleep(200);
 };
+    
+
+    
 
 STORY_ANIMAL_SKILLS['onca_salto'] = async (enemy, skill) => {
     const atk = enemy.atk;
