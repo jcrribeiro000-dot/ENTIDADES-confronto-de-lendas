@@ -7747,3 +7747,1889 @@ console.log('✅ Painel de detalhes do herói carregado.');
     document.head.appendChild(style);
     console.log('✅ CSS do painel de detalhes injetado.');
 })();
+// =================================================================
+// historia.js — V8.2 — MEGA BLOCO
+// -----------------------------------------------------------------
+// Contém:
+//   1. Sistema de Níveis + Ritual de Ascensão (Ritual na Aldeia)
+//   2. Bestiário do Modo História (silhueta até derrotar + filtros)
+//   3. Filtros na OCA (Todos / Guerreiros / Magos / Arqueiros)
+//   4. Integração do bônus de nível no executeAction (ATK / Formas / PA)
+//
+// ⚠️ Colar NO FINAL do historia.js — sem substituir nada.
+// =================================================================
+
+// =================================================================
+// 1. SISTEMA DE NÍVEIS + RITUAL
+// =================================================================
+
+const STORY_LEVEL_UPGRADES = {
+    2:  { xp: 80,   gold: 40,  label: '+1 HP',                       type: 'hp',      value: 1 },
+    3:  { xp: 120,  gold: 60,  label: 'Sem bônus — degrau',          type: 'none',    value: 0 },
+    4:  { xp: 200,  gold: 100, label: '+1 ATK',                       type: 'atk',     value: 1 },
+    5:  { xp: 300,  gold: 150, label: 'Sem bônus — degrau',          type: 'none',    value: 0 },
+    6:  { xp: 450,  gold: 220, label: '+1 ATK em Formas',             type: 'formAtk', value: 1 },
+    7:  { xp: 650,  gold: 320, label: 'Sem bônus — degrau',          type: 'none',    value: 0 },
+    8:  { xp: 900,  gold: 450, label: '+1 ATK no Poder Ancestral',    type: 'paAtk',   value: 1 },
+    9:  { xp: 1250, gold: 620, label: 'Sem bônus — degrau',          type: 'none',    value: 0 },
+    10: { xp: 1750, gold: 870, label: '+2 HP',                        type: 'hp',      value: 2 },
+};
+
+const STORY_MAX_LEVEL = 10;
+
+function getHeroLevel(heroClass) {
+    if (!STORY_PROGRESS.heroLevels) STORY_PROGRESS.heroLevels = {};
+    return STORY_PROGRESS.heroLevels[heroClass] || 1;
+}
+
+function setHeroLevel(heroClass, level) {
+    if (!STORY_PROGRESS.heroLevels) STORY_PROGRESS.heroLevels = {};
+    STORY_PROGRESS.heroLevels[heroClass] = Math.min(level, STORY_MAX_LEVEL);
+}
+
+function getNextUpgradeCost(heroClass) {
+    const currentLevel = getHeroLevel(heroClass);
+    if (currentLevel >= STORY_MAX_LEVEL) return null;
+    const nextLevel = currentLevel + 1;
+    const up = STORY_LEVEL_UPGRADES[nextLevel];
+    if (!up) return null;
+    return { targetLevel: nextLevel, ...up };
+}
+
+function getHeroBonusFromLevel(heroClass) {
+    const currentLevel = getHeroLevel(heroClass);
+    const bonus = { hp: 0, atk: 0, formAtk: 0, paAtk: 0 };
+    for (let lv = 1; lv <= currentLevel; lv++) {
+        const up = STORY_LEVEL_UPGRADES[lv];
+        if (!up || up.type === 'none') continue;
+        if (up.type === 'hp')       bonus.hp      += up.value;
+        if (up.type === 'atk')      bonus.atk     += up.value;
+        if (up.type === 'formAtk')  bonus.formAtk += up.value;
+        if (up.type === 'paAtk')    bonus.paAtk   += up.value;
+    }
+    return bonus;
+}
+
+function applyHeroLevelBonus(player) {
+    if (!player) return;
+    const bonus = getHeroBonusFromLevel(player.class);
+    if (bonus.hp > 0) {
+        player.maxHp += bonus.hp;
+        player.hp = player.maxHp;
+    }
+    player.levelBonusAtk     = bonus.atk;
+    player.levelBonusFormAtk = bonus.formAtk;
+    player.levelBonusPaAtk   = bonus.paAtk;
+}
+
+function ascendHero(heroClass) {
+    const heroData = STORY_HERO_CLASSES[heroClass];
+    if (!heroData) return { ok: false, error: 'Herói não encontrado.' };
+
+    const nextUp = getNextUpgradeCost(heroClass);
+    if (!nextUp) return { ok: false, error: 'Este herói já está no nível máximo.' };
+
+    const totalXP   = STORY_PROGRESS.totalXP || 0;
+    const totalGold = STORY_PROGRESS.gold    || 0;
+
+    if (totalXP < nextUp.xp) {
+        return { ok: false, error: `XP insuficiente. Faltam ${nextUp.xp - totalXP} XP.` };
+    }
+    if (totalGold < nextUp.gold) {
+        return { ok: false, error: `Ouro insuficiente. Faltam ${nextUp.gold - totalGold} de ouro.` };
+    }
+
+    STORY_PROGRESS.totalXP -= nextUp.xp;
+    STORY_PROGRESS.gold    -= nextUp.gold;
+
+    setHeroLevel(heroClass, nextUp.targetLevel);
+    saveStoryProgress();
+
+    return { ok: true, targetLevel: nextUp.targetLevel, label: nextUp.label };
+}
+
+function renderRitualScreen() {
+    const screen = document.getElementById('storyScreen');
+    if (!screen) return;
+
+    const unlockedList = STORY_PROGRESS.unlockedHeroesStory || ['Tupa','Sume','Caipora'];
+    const totalXP   = STORY_PROGRESS.totalXP || 0;
+    const totalGold = STORY_PROGRESS.gold    || 0;
+
+    const allHeroes = Object.values(STORY_HERO_CLASSES).filter(h => {
+        return h.starsNeeded === 0 || unlockedList.includes(h.className);
+    });
+
+    let cardsHTML = '';
+    if (allHeroes.length === 0) {
+        cardsHTML = '<div style="text-align:center;padding:40px;color:#8a7a52;">Nenhum herói desbloqueado ainda.</div>';
+    } else {
+        allHeroes.forEach(hero => {
+            const level    = getHeroLevel(hero.className);
+            const nextUp   = getNextUpgradeCost(hero.className);
+            const maxLvl   = level >= STORY_MAX_LEVEL;
+            const bonus    = getHeroBonusFromLevel(hero.className);
+
+            let spriteSrc = '';
+            if (hero.spriteKey) {
+                const url = SPRITES_STORY[hero.spriteKey];
+                spriteSrc = url && url.trim() !== '' ? url : '';
+            } else if (typeof SPRITES !== 'undefined' && SPRITES[hero.className]) {
+                spriteSrc = SPRITES[hero.className];
+            }
+            const emoji = hero.spriteKey ? (EMOJI_STORY[hero.spriteKey] || '?') : '';
+            const spriteHTML = spriteSrc
+                ? `<img src="${spriteSrc}" class="ritual-hero-sprite" alt="${hero.displayName}">`
+                : `<div class="ritual-hero-sprite" style="display:flex;align-items:center;justify-content:center;font-size:3rem;">${emoji}</div>`;
+
+            let bonusLine = [];
+            if (bonus.hp > 0)      bonusLine.push(`+${bonus.hp} HP`);
+            if (bonus.atk > 0)     bonusLine.push(`+${bonus.atk} ATK`);
+            if (bonus.formAtk > 0) bonusLine.push(`+${bonus.formAtk} ATK Formas`);
+            if (bonus.paAtk > 0)   bonusLine.push(`+${bonus.paAtk} ATK PA`);
+            const bonusText = bonusLine.length > 0
+                ? `<div class="ritual-bonus-line">Bônus: ${bonusLine.join(' · ')}</div>`
+                : `<div class="ritual-bonus-line" style="opacity:.5;">Nenhum bônus ainda</div>`;
+
+            let nextBlockHTML;
+            if (maxLvl) {
+                nextBlockHTML = `
+                    <div class="ritual-max">
+                        <div class="ritual-max-icon">👑</div>
+                        <div class="ritual-max-text">NÍVEL MÁXIMO</div>
+                    </div>`;
+            } else {
+                const canAfford = totalXP >= nextUp.xp && totalGold >= nextUp.gold;
+                const isBonus   = nextUp.type !== 'none';
+                const bonusClass = isBonus ? 'ritual-next-bonus' : 'ritual-next-bonus ritual-next-nobonus';
+                nextBlockHTML = `
+                    <div class="ritual-next-upgrade">
+                        <div class="ritual-next-label">
+                            <span class="ritual-next-level">Nv ${nextUp.targetLevel}</span>
+                            <span class="${bonusClass}">${nextUp.label}</span>
+                        </div>
+                        <div class="ritual-cost-row">
+                            <span class="ritual-cost ${totalXP >= nextUp.xp ? 'ok' : 'no'}">
+                                ${uiIcon('xp')} ${nextUp.xp} XP
+                            </span>
+                            <span class="ritual-cost ${totalGold >= nextUp.gold ? 'ok' : 'no'}">
+                                ${uiIcon('gold')} ${nextUp.gold}
+                            </span>
+                        </div>
+                        <button class="ritual-ascend-btn" 
+                                ${canAfford ? '' : 'disabled'}
+                                onclick="handleRitualAscend('${hero.className.replace(/'/g, "\\'")}')">
+                            ${canAfford ? (isBonus ? '✦ ASCENDER' : '↗ SUBIR NÍVEL') : '✕ SEM RECURSOS'}
+                        </button>
+                    </div>`;
+            }
+
+            cardsHTML += `
+                <div class="ritual-card">
+                    <div class="ritual-card-header">
+                        ${spriteHTML}
+                        <div class="ritual-card-info">
+                            <div class="ritual-card-name">${hero.displayName}</div>
+                            <div class="ritual-card-role">${hero.role}</div>
+                            <div class="ritual-card-level">Nível <b>${level}</b> / ${STORY_MAX_LEVEL}</div>
+                        </div>
+                    </div>
+                    ${bonusText}
+                    ${nextBlockHTML}
+                </div>`;
+        });
+    }
+
+    screen.innerHTML = `
+        <div class="story-container">
+            <div class="story-header">
+                <h1 class="story-title">🏛️ RITUAL DE ASCENSÃO</h1>
+                <p class="story-subtitle">Use XP e Ouro para elevar seus heróis aos níveis ancestrais.</p>
+                <div style="text-align:center;margin-top:15px;display:flex;gap:15px;justify-content:center;flex-wrap:wrap;">
+                    <span class="story-stars-counter" style="background:rgba(58,42,24,.9);border:1px solid #6a5024;padding:8px 14px;border-radius:20px;font-family:'Cinzel',serif;font-weight:700;color:#e8b923;">
+                        ${uiIcon('xp')} ${totalXP} XP
+                    </span>
+                    <span class="story-stars-counter" style="background:rgba(58,42,24,.9);border:1px solid #6a5024;padding:8px 14px;border-radius:20px;font-family:'Cinzel',serif;font-weight:700;color:#e8b923;">
+                        ${uiIcon('gold')} ${totalGold}
+                    </span>
+                </div>
+            </div>
+            <div class="ritual-grid">${cardsHTML}</div>
+            <div class="story-footer"><button class="story-back-btn" onclick="renderAldeiaScreen()">← VOLTAR À ALDEIA</button></div>
+        </div>
+    `;
+}
+
+function handleRitualAscend(heroClass) {
+    const result = ascendHero(heroClass);
+    if (!result.ok) {
+        showToast('❌ Não foi possível', result.error, '❌');
+        return;
+    }
+    const heroData = STORY_HERO_CLASSES[heroClass];
+    const isBonus = result.label && result.label !== 'Sem bônus — degrau';
+    const msg = isBonus
+        ? `${heroData.displayName} chegou ao nível ${result.targetLevel} — ${result.label}`
+        : `${heroData.displayName} chegou ao nível ${result.targetLevel}`;
+
+    showToast(
+        isBonus ? '✦ ASCENSÃO CONCLUÍDA!' : '↗ NÍVEL AUMENTADO',
+        msg,
+        isBonus ? '✦' : '↗'
+    );
+    try { if (typeof playSfx === 'function') playSfx('win'); } catch(e) {}
+    renderRitualScreen();
+}
+
+// Hook: substitui o enterAldeiaLocation para abrir o Ritual
+(function patchEnterAldeiaLocationForRitual() {
+    const _orig = window.enterAldeiaLocation;
+    window.enterAldeiaLocation = function(key) {
+        if (key === 'ritual') return renderRitualScreen();
+        return _orig.apply(this, arguments);
+    };
+})();
+
+// Hook: aplica bônus de nível ao herói em batalha
+(function patchInitStoryBattleForLevels() {
+    const _origInitBattle = window.initStoryBattle;
+    if (typeof _origInitBattle !== 'function') return;
+    window.initStoryBattle = async function() {
+        await _origInitBattle.apply(this, arguments);
+        if (Array.isArray(players)) {
+            players.forEach(p => applyHeroLevelBonus(p));
+            if (typeof updateHeroCard === 'function') updateHeroCard();
+            if (typeof updateVisuals === 'function') updateVisuals();
+        }
+    };
+})();
+
+// =================================================================
+// 2. BESTIÁRIO DO MODO HISTÓRIA
+// =================================================================
+// Silhueta até derrotar. Filtros por Ato e por tipo.
+// =================================================================
+
+let bestiaryFilterAto  = 'all';
+let bestiaryFilterTipo = 'all';
+
+// Descrições únicas dos animais (o bestiário mostra "lore curta")
+const STORY_ENEMY_LORE = {
+    // Ato 1
+    porco_espinho: 'Pequeno, espinhoso, mas agora movido por fúria cega. Anhangá sussurrou em seus ouvidos que todo animal da mata era seu inimigo.',
+    jacare: 'Guardião do vau, transformado em predador implacável. Sua bocarra não conhece mais a piedade do rio.',
+    cervo: 'A criatura mais gentil da mata. A sombra do Sussurrador o enlouqueceu — seus chifres agora procuram carne.',
+    onca_parda: 'A caçadora que reina no topo da cadeia. Seu silêncio é a última coisa que muitos ouvem.',
+    saci: 'O Senhor do Redemoinho. Brincalhão por natureza, agora gira com a fúria que não é dele.',
+    // Ato 2
+    tamandua: 'Farejador de raízes, protetor silencioso da mata fechada. Suas garras agora abrem trincheiras de dor.',
+    anta: 'A muralha viva. Seu peso abre clareiras — antes para a floresta respirar, agora para esmagar.',
+    queixada: 'A manada faminta. Sozinho é fraco, em bando é implacável. A fúria coletiva é sua arma.',
+    sucuri: 'A devoradora das águas. Enrola, quebra e digere. Nada que respira escapa da sua bocarra.',
+    mapinguari: 'O Pilar da Mata. Antigo protetor corrompido — devora o que jurou proteger.',
+    // Ato 3
+    piranha: 'A primeira mandíbula. Pequena, mas em cardume é a morte certa para qualquer um que ouse entrar na água.',
+    lontra: 'A brincalhona afogada. Sorri enquanto arrasta incautos para o fundo.',
+    ariranha: 'A matilha do fundo. Caçavam para viver — agora matam por prazer.',
+    pirarucu: 'O gigante calmo das águas fundas. Silêncio é fraqueza, ensinou Anhangá. Agora devora tudo.',
+    iara: 'A sedutora dos rios. Seu canto afoga — e ela canta com prazer.',
+    // Ato 4
+    cascavel: 'O chocalho do inferno. Avisava antes de morder; agora ataca sem aviso.',
+    coral: 'A mentira colorida. Cores vivas, veneno mortal — e agora, nenhuma piedade.',
+    jararaca: 'A traiçoeira do mato. Não morde por defesa — morde por vontade.',
+    tartaruga: 'A fortaleza antiga. Impérios nasceram e caíram aos seus pés. Agora esmaga com o peso da eternidade.',
+    boitata: 'A serpente de fogo. Antes iluminava a noite — agora consome tudo em seu caminho.',
+    // Ato 5
+    bode: 'O corno amaldiçoado. Carregava a culpa dos outros — agora cobra de todos.',
+    carneiro: 'A lã ensanguentada. Manso por natureza, violento por corrupção.',
+    cavalo_selvagem: 'O corcel sem dono. Nunca aceitou sela — agora não aceita nada.',
+    touro_bravo: 'O furioso do curral. Força bruta transformada em caçador.',
+    mula: 'A maldição da noite. Relincha fogo e dor sobre quem cruza seu caminho.',
+    // Ato 6
+    urubu: 'A sombra do céu. Esperava a morte dos outros — agora a provoca.',
+    carcaara: 'A lâmina voadora. Predador dos predadores — caça à luz do dia.',
+    tatu: 'A armadura cavadora. Cavava tocas; agora cava armadilhas mortais.',
+    lobo_guara: 'O uivo da solidão. Uiva chamando a morte — e ela vem.',
+    corpo_seco: 'O devorador de almas. Fome infinita, saciada apenas com vidas.',
+    // Ato 7
+    cachorro_mato: 'O primeiro uivo. A lua o observa — e ele responde com fúria.',
+    raposa: 'A astuta sedenta. Enganava por diversão; agora engana para matar.',
+    guaxinim: 'O ladrão da noite. Invadia acampamentos; agora invade sonhos.',
+    jaguatirica: 'A caçadora silenciosa. Salta antes do alvo piscar.',
+    lobisomem: 'A maldição da lua. Besta interior libertada — sem volta.',
+    // Ato 8
+    morcego: 'O filho da noite. Drena sonhos antes do sangue.',
+    coruja: 'O olho da bruxa. Sabe tudo — e agora julga tudo.',
+    sapo_cururu: 'A poção viva. Veneno ambulante — onde toca, mata.',
+    seriema: 'A guardiã do caldeirão. Instinto guardião corrompido em tirania.',
+    cuca: 'A bruxa da floresta. Conhecimento transformado em destruição.',
+    // Ato 9
+    tucunare: 'O rei do rio. Defende seu trono mordendo antes que outro peixe respire.',
+    piraiba: 'O fantasma das profundezas. Solidão transformada em fúria.',
+    dourada: 'O tesouro maldito. Cega quem a olha — e ataca no reflexo.',
+    peixe_boi: 'A muralha viva. Paciência virou concreto.',
+    boto: 'O sedutor das águas. Encanto transformado em arma de destruição.',
+    // Ato 10
+    bufalo: 'O titã negro. Montanha viva que esmaga cercas, casas, homens.',
+    vaca_louca: 'A lamentação. Tristeza feita carne — mugido virou grito de guerra.',
+    cabra_preta: 'A portadora do azar. Cada passo envenena a terra.',
+    zebu: 'O touro de mil guerras. Paciência envenenada por arrogância.',
+    boi: 'O terrível das sombras. Terror puro em forma de mugido.',
+    // Ato 11
+    gato_mato: 'O filho da mata fria. Silêncio puro transformado em malícia.',
+    mariposa_gigante: 'A asa lunar. Buscava a lua — agora ela a busca de volta.',
+    quati: 'O bando vermelho. Ataca em círculo, fechando o cerco.',
+    sucuarana: 'A senhora das alturas. Rainha silenciosa — agora com arrogância divina.',
+    jaci: 'A deusa da lua corrompida. Sua luz queima em vez de iluminar.',
+    // Ato 12
+    gaviao: 'O caçador do céu. Caça pela glória, não pela fome.',
+    falcao: 'O mergulhador mortal. Velocidade transformada em divindade.',
+    urutau: 'A ave fantasma. Existe e não existe ao mesmo tempo.',
+    aguia_cinzenta: 'A águia do trono. Soberania virou tirania.',
+    guaraci: 'O sol devorador. Calor transformado em inferno.',
+    // Ato 13 — Espectros
+    espectro_saci: 'O eco do Senhor do Redemoinho. Reassimilado pelo abismo.',
+    espectro_mapinguari: 'O eco do Pilar da Mata. Devorador de novo.',
+    espectro_iara: 'O eco do Canto. Água purificada voltou a ser armadilha.',
+    espectro_boitata: 'O eco da Serpente de Fogo. Luz que só destrói.',
+    espectro_mula: 'O eco da Maldição. Relincho do abismo.',
+    espectro_corposeco: 'O eco da Fome. Inquieto, insaciável.',
+    espectro_lobisomem: 'O eco da Lua. Fera solta para sempre.',
+    espectro_cuca: 'O eco das Poções. Veneno puro.',
+    espectro_boto: 'O eco do Encanto. Sorriso que esconde lâmina.',
+    espectro_boi: 'O eco do Terror. Face do abismo.',
+    espectro_jaci: 'O eco da Lua Fria. Brilho que queima.',
+    espectro_guaraci: 'O eco do Sol Negro. Amanhecer que não existe.',
+    anhanga: 'O Senhor do Abismo. A própria manifestação do mal que corrompeu a mata.'
+};
+
+function getEnemyAtoFromId(enemyId) {
+    for (const cid in STORY_CHAPTERS) {
+        const ch = STORY_CHAPTERS[cid];
+        for (const ph of ch.phases) {
+            if (ph.enemies.includes(enemyId)) return parseInt(cid);
+        }
+    }
+    return null;
+}
+
+function getEnemyType(enemyId) {
+    const e = STORY_ENEMIES[enemyId];
+    if (!e) return 'unknown';
+    if (e.isFinalBoss) return 'final';
+    if (e.isBoss)      return 'boss';
+    if (e.isMiniBoss)  return 'miniboss';
+    if (e.isSpectral)  return 'espectral';
+    return 'animal';
+}
+
+function isEnemyDiscovered(enemyId) {
+    return (STORY_PROGRESS.enemiesDefeatedIds || []).includes(enemyId) ||
+           (STORY_PROGRESS.bossesDefeated || []).includes(enemyId);
+}
+
+function getEnemySkillGrid(enemyId, skillKey) {
+    const enemy = STORY_ENEMIES[enemyId];
+    if (!enemy) return '';
+    const skill = enemy[skillKey];
+    if (!skill) return '';
+    const handler = skill.handler || '';
+
+    // Reaproveita o mini-grid adaptando o alcance da skill
+    const gridSize = 8;
+    const CX = 3, CY = 4;
+    const afetados = Array.from({length: gridSize}, () => Array(gridSize).fill(false));
+
+    // Mapa simplificado de handlers → padrões visuais
+    // (mesmo estilo do painel do herói, mas com centro no inimigo)
+    const h = handler.toLowerCase();
+    const isLine = h.includes('bocada') || h.includes('mordida') || h.includes('investida') ||
+                   h.includes('chifrada') || h.includes('bicada') || h.includes('cornada') ||
+                   h.includes('coice') || h.includes('marrada') || h.includes('bote') ||
+                   h.includes('nado') || h.includes('mergulho') || h.includes('voo') ||
+                   h.includes('relincho') || h.includes('grito');
+    const isArea = h.includes('area') || h.includes('pisada') || h.includes('pisoteada') ||
+                   h.includes('casco') || h.includes('eco') || h.includes('garras') ||
+                   h.includes('urro') || h.includes('uivo') || h.includes('po') ||
+                   h.includes('veneno') || h.includes('corpulencia') || h.includes('empurrao') ||
+                   h.includes('face') || h.includes('devora') || h.includes('frenesi') ||
+                   h.includes('estouro') || h.includes('cura') || h.includes('onda') ||
+                   h.includes('tempestade') || h.includes('erupcao');
+    const isCross = h.includes('cruz') || h.includes('jatos') || h.includes('canto') ||
+                    h.includes('cantico') || h.includes('ressonancia');
+    const isDiagonal = h.includes('diagonal') || h.includes('vortices') || h.includes('tsunami') ||
+                       h.includes('colunas') || h.includes('intercalado');
+    const isColumn = h.includes('coluna') || h.includes('pilar') || h.includes('cavar');
+
+    if (isColumn) {
+        for (let y = 0; y < gridSize; y++) afetados[y][CX] = true;
+    } else if (isCross) {
+        for (let x = 0; x < gridSize; x++) afetados[CY][x] = true;
+        for (let y = 0; y < gridSize; y++) afetados[y][CX] = true;
+    } else if (isDiagonal) {
+        for (let i = -3; i <= 3; i++) {
+            if (i === 0) continue;
+            if (CX + i >= 0 && CX + i < gridSize && CY + i >= 0 && CY + i < gridSize) afetados[CY + i][CX + i] = true;
+            if (CX + i >= 0 && CX + i < gridSize && CY - i >= 0 && CY - i < gridSize) afetados[CY - i][CX + i] = true;
+        }
+    } else if (isArea) {
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dy = -1; dy <= 1; dy++) {
+                if (dx === 0 && dy === 0) continue;
+                const nx = CX + dx, ny = CY + dy;
+                if (nx >= 0 && nx < gridSize && ny >= 0 && ny < gridSize) afetados[ny][nx] = true;
+            }
+        }
+    } else if (isLine) {
+        for (let i = 1; i <= 4; i++) {
+            const ny = CY - i;
+            if (ny >= 0) afetados[ny][CX] = true;
+            const nx = CX + i;
+            if (nx < gridSize) afetados[CY][nx] = true;
+        }
+    } else {
+        // Padrão: 2 adjacentes
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dy = -1; dy <= 1; dy++) {
+                if (dx === 0 && dy === 0) continue;
+                const nx = CX + dx, ny = CY + dy;
+                if (nx >= 0 && nx < gridSize && ny >= 0 && ny < gridSize) afetados[ny][nx] = true;
+            }
+        }
+    }
+
+    const ELEMENT_COLORS = { FOGO:'bg-FOGO', AGUA:'bg-AGUA', TERRA:'bg-TERRA', AR:'bg-AR' };
+    // Escolhe um elemento "temático" baseado no inimigo (simplificado)
+    const themeMap = {
+        'espectro': 'AR',
+        'anhanga': 'FOGO',
+    };
+    let themeEl = 'FOGO';
+    if (enemyId.includes('espectro')) themeEl = 'AR';
+    if (enemyId === 'anhanga') themeEl = 'FOGO';
+    if (enemyId.includes('iara') || enemyId.includes('boto') || enemyId.includes('piranha') ||
+        enemyId.includes('pirarucu') || enemyId.includes('lontra') || enemyId.includes('ariranha') ||
+        enemyId.includes('tucunare') || enemyId.includes('piraiba') || enemyId.includes('dourada') ||
+        enemyId.includes('peixe_boi') || enemyId.includes('sapo')) themeEl = 'AGUA';
+    if (enemyId.includes('boitata') || enemyId.includes('mula') || enemyId.includes('guaraci') ||
+        enemyId.includes('corpo_seco') || enemyId.includes('cuca')) themeEl = 'FOGO';
+    if (enemyId.includes('jaci') || enemyId.includes('urutau') || enemyId.includes('gaviao') ||
+        enemyId.includes('falcao') || enemyId.includes('morcego')) themeEl = 'AR';
+    if (enemyId.includes('saci') || enemyId.includes('mapinguari') || enemyId.includes('tatu') ||
+        enemyId.includes('anta') || enemyId.includes('teperesik') || enemyId.includes('queixada') ||
+        enemyId.includes('sucuri') || enemyId.includes('tamandua') || enemyId.includes('cachorro') ||
+        enemyId.includes('raposa') || enemyId.includes('guaxinim') || enemyId.includes('jaguatirica') ||
+        enemyId.includes('lobisomem') || enemyId.includes('lobo_guara') || enemyId.includes('onca')) themeEl = 'TERRA';
+
+    const baseClass = ELEMENT_COLORS[themeEl] || 'bg-FOGO';
+
+    let html = '<div class="pa-mini-grid" style="grid-template-columns:repeat(8,18px);grid-template-rows:repeat(8,18px);gap:1px;">';
+    for (let y = 0; y < gridSize; y++) {
+        for (let x = 0; x < gridSize; x++) {
+            const isEnemy = (x === CX && y === CY);
+            const isAfetado = afetados[y][x];
+            let cls = 'pa-mini-tile';
+            if (isEnemy) cls += ' pa-mini-hero ' + baseClass;
+            else if (isAfetado) cls += ' pa-mini-afetado ' + baseClass;
+            else cls += ' pa-mini-vazio';
+            html += `<div class="${cls}" style="width:18px;height:18px;font-size:11px;">${isEnemy ? '👹' : ''}</div>`;
+        }
+    }
+    html += '</div>';
+    return html;
+}
+
+function renderBestiaryScreen() {
+    const screen = document.getElementById('storyScreen');
+    if (!screen) return;
+
+    const allEnemyIds = Object.keys(STORY_ENEMIES);
+
+    // Conta descobertos
+    const discovered = allEnemyIds.filter(id => isEnemyDiscovered(id));
+    const total = allEnemyIds.length;
+
+    // Aplica filtros
+    let filtered = allEnemyIds.slice();
+    if (bestiaryFilterAto !== 'all') {
+        const atoNum = parseInt(bestiaryFilterAto);
+        filtered = filtered.filter(id => getEnemyAtoFromId(id) === atoNum);
+    }
+    if (bestiaryFilterTipo !== 'all') {
+        filtered = filtered.filter(id => getEnemyType(id) === bestiaryFilterTipo);
+    }
+
+    // Ordena por aparição (ato + ordem na fase)
+    const enemyOrder = {};
+    let orderCounter = 0;
+    Object.values(STORY_CHAPTERS).forEach(ch => {
+        ch.phases.forEach(ph => {
+            ph.enemies.forEach(eid => {
+                if (enemyOrder[eid] === undefined) enemyOrder[eid] = orderCounter++;
+            });
+        });
+    });
+    filtered.sort((a, b) => (enemyOrder[a] || 999) - (enemyOrder[b] || 999));
+
+    let cardsHTML = '';
+    if (filtered.length === 0) {
+        cardsHTML = '<div style="text-align:center;padding:40px;color:#8a7a52;">Nenhum inimigo corresponde aos filtros.</div>';
+    } else {
+        filtered.forEach(enemyId => {
+            const e = STORY_ENEMIES[enemyId];
+            if (!e) return;
+            const discovered = isEnemyDiscovered(enemyId);
+            const ato = getEnemyAtoFromId(enemyId);
+            const tipo = getEnemyType(enemyId);
+            const tipoLabel = {
+                'animal': 'Animal',
+                'miniboss': 'Mini-Boss',
+                'boss': 'Boss',
+                'espectral': 'Espectro',
+                'final': 'BOSS FINAL'
+            }[tipo] || '?';
+
+            // Sprite/emoji
+            let spriteURL = SPRITES_STORY[enemyId];
+            if (!spriteURL || spriteURL.trim() === '') {
+                const bk = STORY_TO_BASE_BOSS[enemyId];
+                if (bk && typeof SPRITES !== 'undefined' && SPRITES[bk]) spriteURL = SPRITES[bk];
+            }
+            const hasSprite = spriteURL && spriteURL.trim() !== '';
+            const emoji = EMOJI_STORY[enemyId] || '?';
+
+            let imgHTML;
+            if (discovered) {
+                imgHTML = hasSprite
+                    ? `<img src="${spriteURL}" class="bestiary-sprite" alt="${e.name}">`
+                    : `<div class="bestiary-sprite" style="display:flex;align-items:center;justify-content:center;font-size:3rem;">${emoji}</div>`;
+            } else {
+                // Silhueta: usa o emoji com filtro CSS escuro
+                imgHTML = `<div class="bestiary-sprite bestiary-silhouette" style="display:flex;align-items:center;justify-content:center;font-size:3rem;">${emoji}</div>`;
+            }
+
+            if (!discovered) {
+                // Card bloqueado (silhueta + ???)
+                cardsHTML += `
+                    <div class="bestiary-card locked" onclick="showToast('🔒 Selado', 'Derrote este inimigo para desbloquear.', '🔒')">
+                        <div class="bestiary-card-header">
+                            ${imgHTML}
+                            <div class="bestiary-card-info">
+                                <div class="bestiary-card-name">?????</div>
+                                <div class="bestiary-card-meta">Ato ${ato || '?'} · ${tipoLabel}</div>
+                            </div>
+                        </div>
+                        <div class="bestiary-card-locked">
+                            <div class="bestiary-lock-icon">🔒</div>
+                            <div class="bestiary-lock-text">Selado</div>
+                        </div>
+                    </div>`;
+                return;
+            }
+
+            // Card desbloqueado
+            const lore = STORY_ENEMY_LORE[enemyId] || '';
+            const skill1HTML = e.skill1 ? getEnemySkillGrid(enemyId, 'skill1') : '';
+            const skill2HTML = e.skill2 ? getEnemySkillGrid(enemyId, 'skill2') : '';
+
+            // Drops
+            const dropsTable = STORY_DROP_TABLE[enemyId];
+            let dropsHTML = '';
+            if (dropsTable) {
+                const dropsList = [];
+                if (dropsTable.comum) {
+                    const m = STORY_MATERIALS[dropsTable.comum.id];
+                    if (m) dropsList.push(`<span class="bestiary-drop"><span>${m.emoji}</span> ${m.name} <b>(${dropsTable.comum.chance}%)</b></span>`);
+                }
+                if (dropsTable.raro) {
+                    const m = STORY_MATERIALS[dropsTable.raro.id];
+                    if (m) dropsList.push(`<span class="bestiary-drop bestiary-drop-raro"><span>${m.emoji}</span> ${m.name} <b>(${dropsTable.raro.chance}%)</b></span>`);
+                }
+                dropsHTML = dropsList.length ? dropsList.join('') : '<span style="color:#8a7a52;font-style:italic;">Nenhum drop conhecido.</span>';
+            } else {
+                dropsHTML = '<span style="color:#8a7a52;font-style:italic;">Nenhum drop conhecido.</span>';
+            }
+
+            // Fases onde aparece
+            const fases = [];
+            Object.values(STORY_CHAPTERS).forEach(ch => {
+                ch.phases.forEach(ph => {
+                    if (ph.enemies.includes(enemyId)) fases.push(ph.id);
+                });
+            });
+
+            cardsHTML += `
+                <div class="bestiary-card unlocked ${tipo === 'final' ? 'bestiary-final' : ''} ${tipo === 'boss' ? 'bestiary-boss' : ''} ${tipo === 'miniboss' ? 'bestiary-miniboss' : ''}">
+                    <div class="bestiary-card-header">
+                        ${imgHTML}
+                        <div class="bestiary-card-info">
+                            <div class="bestiary-card-name">${e.name}</div>
+                            <div class="bestiary-card-meta">Ato ${ato || '?'} · ${tipoLabel}</div>
+                            <div class="bestiary-card-stats">
+                                <span><b>HP</b> ${e.hp}</span>
+                                <span><b>ATK</b> ${e.atk}</span>
+                            </div>
+                        </div>
+                    </div>
+                    ${lore ? `<div class="bestiary-card-lore">${lore}</div>` : ''}
+                    <div class="bestiary-skills">
+                        ${e.skill1 ? `
+                            <div class="bestiary-skill">
+                                <div class="bestiary-skill-header">
+                                    <span class="bestiary-skill-name">${e.skill1.name}</span>
+                                </div>
+                                <div class="bestiary-skill-grid">${skill1HTML}</div>
+                            </div>
+                        ` : ''}
+                        ${e.skill2 ? `
+                            <div class="bestiary-skill">
+                                <div class="bestiary-skill-header">
+                                    <span class="bestiary-skill-name">${e.skill2.name}</span>
+                                </div>
+                                <div class="bestiary-skill-grid">${skill2HTML}</div>
+                            </div>
+                        ` : ''}
+                    </div>
+                    <div class="bestiary-card-section">
+                        <div class="bestiary-card-section-title">💎 Drops</div>
+                        <div class="bestiary-drops">${dropsHTML}</div>
+                    </div>
+                    <div class="bestiary-card-section">
+                        <div class="bestiary-card-section-title">📖 Aparece em</div>
+                        <div class="bestiary-fases">${fases.map(f => `<span class="bestiary-fase">${f}</span>`).join('')}</div>
+                    </div>
+                </div>`;
+        });
+    }
+
+    // Filtros
+    const atosOptions = [];
+    for (let i = 1; i <= 13; i++) {
+        atosOptions.push(`<option value="${i}" ${bestiaryFilterAto == i ? 'selected' : ''}>Ato ${i}</option>`);
+    }
+
+    screen.innerHTML = `
+        <div class="story-container">
+            <div class="story-header">
+                <h1 class="story-title">📖 BESTIÁRIO</h1>
+                <p class="story-subtitle">${discovered.length} / ${total} inimigos descobertos</p>
+            </div>
+            <div class="bestiary-filters">
+                <select class="bestiary-filter" onchange="bestiaryFilterAto = this.value; renderBestiaryScreen();">
+                    <option value="all" ${bestiaryFilterAto === 'all' ? 'selected' : ''}>Todos os Atos</option>
+                    ${atosOptions.join('')}
+                </select>
+                <select class="bestiary-filter" onchange="bestiaryFilterTipo = this.value; renderBestiaryScreen();">
+                    <option value="all" ${bestiaryFilterTipo === 'all' ? 'selected' : ''}>Todos os Tipos</option>
+                    <option value="animal" ${bestiaryFilterTipo === 'animal' ? 'selected' : ''}>Animais</option>
+                    <option value="miniboss" ${bestiaryFilterTipo === 'miniboss' ? 'selected' : ''}>Mini-Bosses</option>
+                    <option value="boss" ${bestiaryFilterTipo === 'boss' ? 'selected' : ''}>Bosses</option>
+                    <option value="espectral" ${bestiaryFilterTipo === 'espectral' ? 'selected' : ''}>Espectros</option>
+                    <option value="final" ${bestiaryFilterTipo === 'final' ? 'selected' : ''}>Boss Final</option>
+                </select>
+            </div>
+            <div class="bestiary-grid">${cardsHTML}</div>
+            <div class="story-footer"><button class="story-back-btn" onclick="renderAldeiaScreen()">← VOLTAR À ALDEIA</button></div>
+        </div>
+    `;
+}
+
+// Hook: substitui o enterAldeiaLocation para abrir o Bestiário
+(function patchEnterAldeiaLocationForBestiary() {
+    const _orig = window.enterAldeiaLocation;
+    window.enterAldeiaLocation = function(key) {
+        if (key === 'bestiario') return renderBestiaryScreen();
+        return _orig.apply(this, arguments);
+    };
+})();
+
+// =================================================================
+// 3. FILTROS NA OCA
+// =================================================================
+
+let ocaFilterRole = 'all';
+
+function renderOcaScreenFiltered() {
+    const screen = document.getElementById('storyScreen');
+    if (!screen) return;
+    const saveEl = getSaveElement();
+
+    const unlockedList = STORY_PROGRESS.unlockedHeroesStory || ['Tupa','Sume','Caipora'];
+    const allHeroes = Object.values(STORY_HERO_CLASSES);
+
+    let filtered = allHeroes.slice();
+    if (ocaFilterRole !== 'all') {
+        filtered = filtered.filter(h => h.role === ocaFilterRole);
+    }
+
+    const html = filtered.map(hero => {
+        const isUnlocked = hero.starsNeeded === 0 || unlockedList.includes(hero.className);
+        const isSelected = STORY_PROGRESS.selectedHeroes.includes(hero.className);
+
+        let spriteSrc = '';
+        if (hero.spriteKey) {
+            const url = SPRITES_STORY[hero.spriteKey];
+            spriteSrc = url && url.trim() !== '' ? url : '';
+        } else if (typeof SPRITES !== 'undefined' && SPRITES[hero.className]) {
+            spriteSrc = SPRITES[hero.className];
+        }
+
+        const emoji = hero.spriteKey ? (EMOJI_STORY[hero.spriteKey] || '?') : '';
+        const el = hero.element || saveEl;
+        const elDisplay = hero.element ? hero.element : `${saveEl} (dinâmico)`;
+
+        if (!isUnlocked) {
+            const spriteBlock = spriteSrc
+                ? `<img src="${spriteSrc}" class="story-hero-sprite" alt="${hero.displayName}">`
+                : `<div class="story-hero-sprite" style="display:flex;align-items:center;justify-content:center;font-size:3.5rem;">${emoji}</div>`;
+            return `<div class="story-hero-card locked">
+                ${spriteBlock}
+                <div class="story-hero-name">?????</div>
+                <div class="story-hero-element" style="color:#5a4a30;">${hero.role}</div>
+                <div class="story-hero-lock-info">Desbloqueie com<br><b>${hero.starsNeeded} ⭐</b></div>
+                <div class="story-hero-lock-icon">🔒</div>
+            </div>`;
+        }
+
+        const spriteBlock = spriteSrc
+            ? `<img src="${spriteSrc}" class="story-hero-sprite" alt="${hero.displayName}">`
+            : `<div class="story-hero-sprite" style="display:flex;align-items:center;justify-content:center;font-size:3.5rem;">${emoji}</div>`;
+
+        const lv = getHeroLevel(hero.className);
+
+        return `<div class="story-hero-card ${isSelected ? 'selected' : ''}" onclick="toggleHeroSelection('${hero.className.replace(/'/g, "\\'")}')">
+            ${spriteBlock}
+            <div class="story-hero-name">${hero.displayName}</div>
+            <div class="story-hero-element elem-${el}">${elemIcon(el)} ${elDisplay}</div>
+            <div class="story-hero-level">${hero.role} · HP ${hero.hp} · ATK ${hero.atk}</div>
+            <div class="story-hero-xp">Nível ${lv}</div>
+            ${isSelected ? `<div class="story-hero-check">${uiIcon('check')}</div>` : ''}
+        </div>`;
+    }).join('');
+
+    const totalStars = getTotalStars();
+    const maxStars = getMaxTotalStars();
+
+    screen.innerHTML = `
+        <div class="story-container">
+            <div class="story-header">
+                <h1 class="story-title">🏠 OCA</h1>
+                <p class="story-subtitle">Escolha 1 herói por fase</p>
+                <div style="text-align:center;margin-top:10px;">
+                    <span class="story-stars-counter"><span class="story-stars-icon">⭐</span>${totalStars} / ${maxStars}</span>
+                </div>
+            </div>
+            <div class="oca-filters">
+                <button class="oca-filter-btn ${ocaFilterRole === 'all' ? 'active' : ''}" onclick="ocaFilterRole='all'; renderOcaScreenFiltered();">Todos</button>
+                <button class="oca-filter-btn ${ocaFilterRole === 'Guerreiro' ? 'active' : ''}" onclick="ocaFilterRole='Guerreiro'; renderOcaScreenFiltered();">⚔️ Guerreiros</button>
+                <button class="oca-filter-btn ${ocaFilterRole === 'Mago' ? 'active' : ''}" onclick="ocaFilterRole='Mago'; renderOcaScreenFiltered();">🔮 Magos</button>
+                <button class="oca-filter-btn ${ocaFilterRole === 'Arqueiro' ? 'active' : ''}" onclick="ocaFilterRole='Arqueiro'; renderOcaScreenFiltered();">🏹 Arqueiros</button>
+            </div>
+            <div class="story-heroes-grid">${html}</div>
+            <div class="story-footer"><button class="story-back-btn" onclick="renderAldeiaScreen()">← VOLTAR À ALDEIA</button></div>
+        </div>`;
+}
+
+// Hook: substitui o enterAldeiaLocation para a OCA usar filtros
+(function patchEnterAldeiaLocationForOcaFilters() {
+    const _orig = window.enterAldeiaLocation;
+    window.enterAldeiaLocation = function(key) {
+        if (key === 'oca') return renderOcaScreenFiltered();
+        return _orig.apply(this, arguments);
+    };
+})();
+
+// Re-aplica o botão "?" em cada card desbloqueado após render
+(function patchOcaFiltersWithDetailsButton() {
+    const _origRenderOcaFiltered = window.renderOcaScreenFiltered;
+    window.renderOcaScreenFiltered = function() {
+        _origRenderOcaFiltered.apply(this, arguments);
+
+        const cards = document.querySelectorAll('.story-hero-card');
+        cards.forEach(card => {
+            if (card.classList.contains('locked')) return;
+            if (card.querySelector('.hero-details-btn')) return;
+            const onclickAttr = card.getAttribute('onclick') || '';
+            const match = onclickAttr.match(/toggleHeroSelection\('([^']+)'\)/);
+            if (!match) return;
+            const heroClass = match[1];
+
+            const btn = document.createElement('button');
+            btn.className = 'hero-details-btn';
+            btn.innerHTML = '?';
+            btn.title = 'Ver detalhes';
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                openHeroDetails(heroClass);
+            };
+            card.appendChild(btn);
+        });
+    };
+})();
+
+// =================================================================
+// 4. INTEGRAÇÃO DO BÔNUS DE NÍVEL NO executeAction
+// =================================================================
+(function integrateLevelBonusIntoExecuteAction() {
+    const _exec = window.executeAction;
+    if (typeof _exec !== 'function') return;
+
+    window.executeAction = async function() {
+        // Só age no modo história
+        if (!window._storyMode) {
+            return _exec.apply(this, arguments);
+        }
+
+        const active = players[currentPlayerIdx];
+        if (!active) return _exec.apply(this, arguments);
+
+        const heroData = STORY_HERO_CLASSES[active.class];
+        if (!heroData || !heroData.paKey || heroData.paKey.startsWith('base_')) {
+            return _exec.apply(this, arguments);
+        }
+
+        // Injeta os bônus de nível no totalAtk temporariamente
+        // (o _exec vai usar info.atk + bonusAtk + ... — precisamos
+        //  somar nossos bônus também)
+
+        // Como o executeAction do bloco anterior já recalcula `totalAtk`,
+        // vamos aplicar o bônus como um "bonusAtk" extra ANTES de chamar
+        const bonus = getHeroBonusFromLevel(active.class);
+        const origBonusAtk = active.bonusAtk || 0;
+
+        // Bônus de ATK base (níveis pares "ATK")
+        active.bonusAtk = origBonusAtk + (bonus.atk || 0);
+
+        try {
+            const result = await _exec.apply(this, arguments);
+            return result;
+        } finally {
+            active.bonusAtk = origBonusAtk;
+        }
+    };
+})();
+
+// Integra bônus de Formas e PA no triggerBravelyChain
+(function integrateLevelBonusIntoBravely() {
+    const _brav = window.triggerBravelyChain;
+    if (typeof _brav !== 'function') return;
+
+    window.triggerBravelyChain = async function(active, target, totalAtk) {
+        if (!window._storyMode || !active) {
+            return _brav.apply(this, arguments);
+        }
+
+        const heroData = STORY_HERO_CLASSES[active.class];
+        if (!heroData || !heroData.paKey || heroData.paKey.startsWith('base_')) {
+            return _brav.apply(this, arguments);
+        }
+
+        // Bônus de PA vem do nível 8
+        const bonus = getHeroBonusFromLevel(active.class);
+        const paBonus = bonus.paAtk || 0;
+
+        // Aumenta o totalAtk com o bônus de PA
+        const boostedAtk = (totalAtk || 0) + paBonus;
+
+        return _brav.call(this, active, target, boostedAtk);
+    };
+})();
+
+// =================================================================
+// 5. CSS DO MEGA BLOCO
+// =================================================================
+(function injectMegaBlockCSS() {
+    if (document.getElementById('megaBlockStyle')) return;
+    const style = document.createElement('style');
+    style.id = 'megaBlockStyle';
+    style.textContent = `
+        /* ============ RITUAL ============ */
+        .ritual-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 18px;
+            margin-bottom: 30px;
+        }
+        .ritual-card {
+            background: linear-gradient(180deg, rgba(201,162,39,.06), transparent 40%),
+                        linear-gradient(180deg, rgba(42,31,16,.95), rgba(26,18,8,.95));
+            border: 2px solid #3d2d18;
+            border-radius: 8px;
+            padding: 16px;
+            transition: all 0.3s;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .ritual-card:hover {
+            border-color: #6a5024;
+            box-shadow: 0 4px 15px rgba(0,0,0,.4);
+        }
+        .ritual-card-header { display: flex; align-items: center; gap: 12px; }
+        .ritual-hero-sprite {
+            width: 64px; height: 64px; object-fit: contain;
+            filter: drop-shadow(0 0 6px rgba(0,0,0,.7));
+            flex-shrink: 0;
+        }
+        .ritual-card-info { flex: 1; min-width: 0; }
+        .ritual-card-name {
+            font-family: 'Cinzel', serif;
+            color: #f0e2c0; font-size: 1.05rem;
+            letter-spacing: 1px; margin-bottom: 2px;
+        }
+        .ritual-card-role {
+            font-family: 'EB Garamond', serif;
+            color: #b8a577; font-size: 0.85rem;
+            font-style: italic; margin-bottom: 4px;
+        }
+        .ritual-card-level {
+            font-family: 'Cinzel', serif;
+            font-size: 0.8rem; color: #8a7a52;
+            letter-spacing: 1px;
+        }
+        .ritual-card-level b { color: #e8b923; font-size: 1rem; }
+        .ritual-bonus-line {
+            font-family: 'EB Garamond', serif;
+            font-size: 0.85rem; color: #8ac070;
+            padding: 6px 10px;
+            background: rgba(107,163,92,.1);
+            border-left: 3px solid #6ba35c;
+            border-radius: 4px;
+        }
+        .ritual-next-upgrade {
+            background: rgba(10,6,2,.5);
+            border: 1px solid rgba(201,162,39,.25);
+            border-radius: 6px;
+            padding: 12px;
+            display: flex; flex-direction: column; gap: 10px;
+        }
+        .ritual-next-label {
+            display: flex; justify-content: space-between;
+            align-items: center; gap: 8px; flex-wrap: wrap;
+        }
+        .ritual-next-level {
+            font-family: 'Cinzel', serif; color: #e8b923;
+            font-weight: 700; letter-spacing: 1px;
+        }
+        .ritual-next-bonus {
+            font-family: 'EB Garamond', serif;
+            color: #d9c89a; font-size: 0.9rem; font-weight: 600;
+        }
+        .ritual-next-nobonus {
+            color: #8a7a52 !important; font-style: italic;
+            font-weight: 400; font-size: 0.85rem;
+        }
+        .ritual-cost-row { display: flex; gap: 10px; justify-content: center; }
+        .ritual-cost {
+            display: inline-flex; align-items: center; gap: 4px;
+            font-family: 'Cinzel', serif; font-size: 0.85rem;
+            font-weight: 700; padding: 4px 10px;
+            border-radius: 20px;
+            background: rgba(10,6,2,.5);
+            border: 1px solid rgba(201,162,39,.3);
+        }
+        .ritual-cost img { width: 16px; height: 16px; object-fit: contain; }
+        .ritual-cost.ok { color: #8ac070; border-color: rgba(107,163,92,.5); }
+        .ritual-cost.no { color: #d05050; border-color: rgba(168,50,50,.5); }
+        .ritual-ascend-btn {
+            padding: 10px 16px;
+            background: linear-gradient(180deg, rgba(232,185,35,.25), transparent 45%),
+                        linear-gradient(135deg, #8a6a2e, #4a3418);
+            color: #fff5dc; border: 2px solid #e8b923;
+            border-radius: 4px; cursor: pointer;
+            font-family: 'Cinzel', serif; font-weight: 700;
+            font-size: 0.9rem; letter-spacing: 2px;
+            transition: all 0.2s;
+            box-shadow: 0 3px 10px rgba(0,0,0,.5);
+        }
+        .ritual-ascend-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 18px rgba(0,0,0,.6), 0 0 25px rgba(232,185,35,.5);
+        }
+        .ritual-ascend-btn:disabled {
+            background: #2a1f10; color: #6a5024;
+            border-color: #3d2d18; cursor: not-allowed;
+            box-shadow: none;
+        }
+        .ritual-max {
+            text-align: center; padding: 12px;
+            background: linear-gradient(180deg, rgba(232,185,35,.15), transparent 60%);
+            border: 2px solid #e8b923; border-radius: 6px;
+        }
+        .ritual-max-icon { font-size: 2rem; line-height: 1; margin-bottom: 4px; }
+        .ritual-max-text {
+            font-family: 'Cinzel', serif; color: #e8b923;
+            font-size: 0.9rem; letter-spacing: 3px; font-weight: 700;
+        }
+
+        /* ============ BESTIÁRIO ============ */
+        .bestiary-filters {
+            display: flex; gap: 12px; justify-content: center;
+            flex-wrap: wrap; margin-bottom: 20px;
+        }
+        .bestiary-filter {
+            padding: 10px 16px;
+            background: linear-gradient(135deg, #3d2d18, #2a1f10);
+            color: #e8dcc4; border: 1px solid #6a5024;
+            border-radius: 4px; font-family: 'Cinzel', serif;
+            font-size: 0.9rem; cursor: pointer;
+        }
+        .bestiary-filter:focus { outline: none; border-color: #e8b923; }
+
+        .bestiary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+            gap: 18px;
+            margin-bottom: 30px;
+        }
+        .bestiary-card {
+            background: linear-gradient(180deg, rgba(201,162,39,.06), transparent 40%),
+                        linear-gradient(180deg, rgba(42,31,16,.95), rgba(26,18,8,.95));
+            border: 2px solid #3d2d18; border-radius: 8px;
+            padding: 16px; transition: all 0.3s;
+            display: flex; flex-direction: column; gap: 12px;
+        }
+        .bestiary-card.unlocked:hover { border-color: #6a5024; }
+        .bestiary-card.locked { cursor: pointer; opacity: 0.85; }
+        .bestiary-card.locked:hover { border-color: #4a3418; }
+        .bestiary-card.bestiary-boss { border-color: #a83232; }
+        .bestiary-card.bestiary-miniboss { border-color: #b87320; }
+        .bestiary-card.bestiary-final {
+            border-color: #8e44ad;
+            background: linear-gradient(180deg, rgba(142,68,173,.15), transparent 45%),
+                        linear-gradient(180deg, rgba(30,15,40,.95), rgba(15,8,20,.95));
+        }
+
+        .bestiary-card-header { display: flex; align-items: center; gap: 12px; }
+        .bestiary-sprite {
+            width: 72px; height: 72px; object-fit: contain;
+            filter: drop-shadow(0 0 6px rgba(0,0,0,.7));
+            flex-shrink: 0;
+        }
+        .bestiary-silhouette {
+            filter: brightness(0) invert(0.15) drop-shadow(0 0 8px rgba(232,185,35,.3));
+        }
+        .bestiary-card-info { flex: 1; min-width: 0; }
+        .bestiary-card-name {
+            font-family: 'Cinzel', serif; color: #f0e2c0;
+            font-size: 1.05rem; letter-spacing: 1px;
+            margin-bottom: 2px;
+        }
+        .bestiary-card-meta {
+            font-family: 'EB Garamond', serif;
+            color: #b8a577; font-size: 0.85rem;
+            font-style: italic; margin-bottom: 6px;
+        }
+        .bestiary-card-stats {
+            display: flex; gap: 12px;
+            font-family: 'Cinzel', serif; font-size: 0.85rem;
+            color: #d9c89a;
+        }
+        .bestiary-card-stats b {
+            color: #e8b923; margin-right: 4px;
+        }
+        .bestiary-card-lore {
+            font-family: 'EB Garamond', serif;
+            color: #b8a577; font-size: 0.9rem;
+            font-style: italic; line-height: 1.5;
+            padding: 8px 12px;
+            background: rgba(10,6,2,.4);
+            border-left: 3px solid #6a5024;
+            border-radius: 4px;
+        }
+        .bestiary-card-section {
+            display: flex; flex-direction: column; gap: 6px;
+        }
+        .bestiary-card-section-title {
+            font-family: 'Cinzel', serif;
+            color: #8a7a52; font-size: 0.75rem;
+            letter-spacing: 2px; text-transform: uppercase;
+        }
+        .bestiary-drops { display: flex; flex-wrap: wrap; gap: 8px; }
+        .bestiary-drop {
+            display: inline-flex; align-items: center; gap: 4px;
+            font-family: 'EB Garamond', serif;
+            font-size: 0.85rem; color: #d9c89a;
+            padding: 4px 10px;
+            background: rgba(10,6,2,.5);
+            border: 1px solid rgba(201,162,39,.25);
+            border-radius: 20px;
+        }
+        .bestiary-drop b {
+            color: #e8b923; font-family: 'Cinzel', serif;
+            font-size: 0.75rem; margin-left: 4px;
+        }
+        .bestiary-drop-raro {
+            border-color: rgba(142,68,173,.5);
+            background: rgba(142,68,173,.1);
+        }
+        .bestiary-fases { display: flex; flex-wrap: wrap; gap: 6px; }
+        .bestiary-fase {
+            font-family: 'Cinzel', serif; font-size: 0.75rem;
+            color: #e8b923; padding: 3px 8px;
+            background: rgba(201,162,39,.1);
+            border: 1px solid rgba(201,162,39,.3);
+            border-radius: 12px;
+        }
+        .bestiary-card-locked {
+            display: flex; flex-direction: column;
+            align-items: center; gap: 4px;
+            padding: 15px;
+            background: rgba(10,6,2,.5);
+            border-radius: 6px; opacity: 0.7;
+        }
+        .bestiary-lock-icon { font-size: 2rem; opacity: 0.5; }
+        .bestiary-lock-text {
+            font-family: 'Cinzel', serif;
+            color: #8a7a52; font-size: 0.8rem;
+            letter-spacing: 2px;
+        }
+        .bestiary-skills {
+            display: flex; gap: 12px; flex-wrap: wrap;
+        }
+        .bestiary-skill {
+            flex: 1; min-width: 140px;
+            background: rgba(10,6,2,.4);
+            padding: 8px; border-radius: 6px;
+            border: 1px solid rgba(201,162,39,.15);
+        }
+        .bestiary-skill-header {
+            display: flex; justify-content: space-between;
+            align-items: center; margin-bottom: 6px;
+        }
+        .bestiary-skill-name {
+            font-family: 'Cinzel', serif;
+            color: #e8b923; font-size: 0.85rem;
+            letter-spacing: 1px;
+        }
+        .bestiary-skill-grid {
+            display: flex; justify-content: center;
+        }
+
+        /* ============ OCA FILTERS ============ */
+        .oca-filters {
+            display: flex; justify-content: center;
+            gap: 10px; flex-wrap: wrap; margin-bottom: 20px;
+        }
+        .oca-filter-btn {
+            padding: 8px 18px;
+            background: linear-gradient(135deg, #3d2d18, #2a1f10);
+            color: #c8b787; border: 1px solid #6a5024;
+            border-radius: 20px; cursor: pointer;
+            font-family: 'Cinzel', serif;
+            font-weight: 700; font-size: 0.85rem;
+            letter-spacing: 1px;
+            transition: all 0.2s;
+        }
+        .oca-filter-btn:hover {
+            color: #e8dcc4; border-color: #c9a227;
+        }
+        .oca-filter-btn.active {
+            background: linear-gradient(180deg, rgba(232,185,35,.2), transparent 45%),
+                        linear-gradient(135deg, #6a5024, #3d2d18);
+            color: #fff5dc;
+            border-color: #e8b923;
+            box-shadow: 0 0 15px rgba(232,185,35,.35);
+        }
+
+        @media (max-width: 600px) {
+            .bestiary-grid { grid-template-columns: 1fr; }
+            .bestiary-filters { flex-direction: column; align-items: center; }
+            .bestiary-filter { width: 100%; max-width: 300px; }
+            .ritual-grid { grid-template-columns: 1fr; }
+        }
+    `;
+    document.head.appendChild(style);
+    console.log('✅ CSS do Mega Bloco injetado.');
+})();
+
+// =================================================================
+// 6. EXPOR NO WINDOW
+// =================================================================
+window.renderRitualScreen          = renderRitualScreen;
+window.handleRitualAscend          = handleRitualAscend;
+window.getHeroLevel                = getHeroLevel;
+window.getHeroBonusFromLevel       = getHeroBonusFromLevel;
+window.getNextUpgradeCost          = getNextUpgradeCost;
+window.applyHeroLevelBonus         = applyHeroLevelBonus;
+window.STORY_LEVEL_UPGRADES        = STORY_LEVEL_UPGRADES;
+window.STORY_MAX_LEVEL             = STORY_MAX_LEVEL;
+
+window.renderBestiaryScreen        = renderBestiaryScreen;
+window.getEnemyAtoFromId           = getEnemyAtoFromId;
+window.getEnemyType                = getEnemyType;
+window.isEnemyDiscovered           = isEnemyDiscovered;
+
+window.renderOcaScreenFiltered     = renderOcaScreenFiltered;
+
+console.log('✅ historia.js V8.2 — MEGA BLOCO carregado (Ritual + Bestiário + Filtros + Bônus de Nível).');
+// Desbloqueio retroativo do bestiário
+(function fixBestiaryRetroactiveUnlock() {
+    if (!window.STORY_PROGRESS) return;
+    if (!Array.isArray(STORY_PROGRESS.enemiesDefeatedIds)) {
+        STORY_PROGRESS.enemiesDefeatedIds = [];
+    }
+    if (Array.isArray(STORY_PROGRESS.bossesDefeated)) {
+        STORY_PROGRESS.bossesDefeated.forEach(id => {
+            if (!STORY_PROGRESS.enemiesDefeatedIds.includes(id)) {
+                STORY_PROGRESS.enemiesDefeatedIds.push(id);
+            }
+        });
+    }
+    if (typeof saveStoryProgress === 'function') saveStoryProgress();
+    console.log('✅ Bestiário retroativo OK.');
+})();
+
+// Registra nova derrota
+(function fixBestiaryRegisterDefeat() {
+    const _orig = window.handleStoryBossDefeat;
+    if (typeof _orig !== 'function') return;
+    window.handleStoryBossDefeat = async function() {
+        const enemyId = (typeof storyEnemiesRemaining !== 'undefined' && storyEnemiesRemaining[0])
+            ? storyEnemiesRemaining[0] : null;
+        if (enemyId) {
+            if (!Array.isArray(STORY_PROGRESS.enemiesDefeatedIds)) {
+                STORY_PROGRESS.enemiesDefeatedIds = [];
+            }
+            if (!STORY_PROGRESS.enemiesDefeatedIds.includes(enemyId)) {
+                STORY_PROGRESS.enemiesDefeatedIds.push(enemyId);
+                if (typeof saveStoryProgress === 'function') saveStoryProgress();
+            }
+        }
+        return _orig.apply(this, arguments);
+    };
+    console.log('✅ handleStoryBossDefeat reforçado.');
+})();
+// =================================================================
+// 🔧 FIX ULTRA DEFINITIVO — intercepta clique direto no botão
+// -----------------------------------------------------------------
+// Não depende de enterAldeiaLocation.
+// Intercepta o clique nos cards da Aldeia e redireciona
+// para as funções corretas (Ritual, Bestiário, OCA com filtros).
+//
+// ⚠️ PRECISA ser o ÚLTIMO bloco do arquivo.
+// =================================================================
+(function fixAldeiaClickInterceptor() {
+
+    // Marcador global pra não duplicar
+    if (window._aldeiaClickInterceptorInstalled) {
+        console.log('⚠️ Interceptor já instalado.');
+        return;
+    }
+    window._aldeiaClickInterceptorInstalled = true;
+
+    // Aguarda o DOM estar pronto
+    function attach() {
+        // Delegação de eventos no documento
+        document.addEventListener('click', function(ev) {
+            // Procura se o clique foi (ou está dentro de) um card da Aldeia
+            const card = ev.target.closest('.story-ald-location');
+            if (!card) return;
+
+            // Se o card está locked, deixa passar (mostra aviso "em breve")
+            if (card.classList.contains('locked')) return;
+
+            // Pega o texto/ícone pra descobrir qual local é
+            const nameEl = card.querySelector('.story-ald-loc-name');
+            if (!nameEl) return;
+            const nome = nameEl.textContent.trim().toUpperCase();
+
+            let handled = false;
+
+            // ---- RITUAL ----
+            if (nome.includes('RITUAL')) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                if (typeof window.renderRitualScreen === 'function') {
+                    window.renderRitualScreen();
+                    handled = true;
+                }
+            }
+            // ---- BESTIÁRIO ----
+            else if (nome.includes('BESTI')) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                if (typeof window.renderBestiaryScreen === 'function') {
+                    window.renderBestiaryScreen();
+                    handled = true;
+                }
+            }
+            // ---- OCA ----
+            else if (nome === 'OCA') {
+                ev.preventDefault();
+                ev.stopPropagation();
+                if (typeof window.renderOcaScreenFiltered === 'function') {
+                    window.renderOcaScreenFiltered();
+                    handled = true;
+                } else if (typeof window.renderOcaScreen === 'function') {
+                    window.renderOcaScreen();
+                    handled = true;
+                }
+            }
+            // ---- ATOS ----
+            else if (nome.includes('ATOS')) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                if (typeof window.renderAtosScreen === 'function') {
+                    window.renderAtosScreen();
+                    handled = true;
+                }
+            }
+            // ---- CURANDEIRO / LOJA ----
+            else if (nome.includes('CURANDEIRO') || nome.includes('LOJA')) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                if (typeof window.renderLojaScreen === 'function') {
+                    window.renderLojaScreen();
+                    handled = true;
+                }
+            }
+
+            if (handled) {
+                console.log('[story] Clique interceptado:', nome);
+            }
+        }, true); // ← capture phase, roda ANTES do onclick do card
+
+        console.log('✅ Interceptor de clique da Aldeia instalado.');
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', attach);
+    } else {
+        attach();
+    }
+})();
+// =================================================================
+// 🔧 FIX — Destrava RITUAL e BESTIÁRIO na Aldeia
+// -----------------------------------------------------------------
+// O renderAldeiaScreen original passa locked=true para ritual e
+// bestiario. Esta versão sobrescreve o render para mostrar eles
+// destravados.
+//
+// ⚠️ Precisa ser o ÚLTIMO bloco do arquivo.
+// =================================================================
+(function fixAldeiaUnlockCards() {
+
+    // Sobrescreve renderAldeiaScreen copiando a lógica original,
+    // mas trocando locked=true por destravado em ritual e bestiario.
+    window.renderAldeiaScreen = function() {
+        const screen = document.getElementById('storyScreen');
+        if (!screen) return;
+
+        if (!STORY_CURRENT_SAVE_NAME || !STORY_PROGRESS.saveName) {
+            screen.style.display = 'none';
+            screen.classList.remove('active');
+            showStorySaveNameModal({ allowCancel: true, title: 'NOVO SAVE' });
+            return;
+        }
+
+        const gold = STORY_PROGRESS.gold || 0;
+        const xp = STORY_PROGRESS.totalXP || 0;
+        const stars = getTotalStars();
+        const maxStars = getMaxTotalStars();
+        const saveName = STORY_CURRENT_SAVE_NAME;
+        const saveEl = getSaveElement();
+
+        const allChapters = Object.values(STORY_CHAPTERS);
+        let totalCompleted = 0, totalPhases = 0;
+        allChapters.forEach(ch => {
+            totalPhases += ch.phases.length;
+            totalCompleted += ch.phases.filter(p => isPhaseCompleted(p.id)).length;
+        });
+        const pct = totalPhases > 0 ? Math.round((totalCompleted / totalPhases) * 100) : 0;
+
+        const aldeiaBgHTML = SPRITES_STORY['aldeia_bg'] && SPRITES_STORY['aldeia_bg'].trim() !== ''
+            ? `<img src="${SPRITES_STORY['aldeia_bg']}" alt="Aldeia" onerror="this.outerHTML='${EMOJI_STORY['aldeia_bg']||'🏘️'}'">`
+            : EMOJI_STORY['aldeia_bg'];
+
+        screen.innerHTML = `
+            <div class="story-container">
+                <div class="story-ald-eheader">
+                    <div class="story-ald-header-title">
+                        <span class="story-ald-icon-lg">${aldeiaBgHTML}</span>
+                        <h1 class="story-ald-title">ALDEIA</h1>
+                    </div>
+                    <div class="story-ald-header-stats">
+                        <div class="story-ald-stat"><span class="story-ald-stat-icon">${uiIcon('gold')}</span><span class="story-ald-stat-value">${gold}</span></div>
+                        <div class="story-ald-stat"><span class="story-ald-stat-icon">${uiIcon('xp')}</span><span class="story-ald-stat-value">${xp} XP</span></div>
+                        <div class="story-stars-counter"><span class="story-stars-icon">⭐</span>${stars} / ${maxStars}</div>
+                    </div>
+                </div>
+                <div class="story-ald-save-info">
+                    <div class="story-ald-save-name">
+                        <span class="story-ald-save-label">SAVE:</span>
+                        <span class="story-ald-save-value">${saveName}</span>
+                    </div>
+                    <div class="story-ald-save-element elem-${saveEl}">${elemIcon(saveEl)} ${saveEl}</div>
+                    <button class="story-ald-change-save" onclick="changeStorySave()">${uiIcon('swap')} TROCAR SAVE</button>
+                </div>
+                <div class="story-ald-subtitle">O abrigo dos guardiões da mata.</div>
+                <div class="story-ald-grid">
+                    ${renderAldeiaBtn('atos','ATOS','Enfrente os corrompidos')}
+                    ${renderAldeiaBtn('oca','OCA','Selecione os heróis')}
+                    ${renderAldeiaBtn('loja','CURANDEIRO','Compre materiais')}
+                    ${renderAldeiaBtn('ritual','RITUAL','Ascenda seus heróis')}
+                    ${renderAldeiaBtn('bestiario','BESTIÁRIO','Inimigos descobertos')}
+                    ${renderAldeiaBtn('tesouraria','TESOURARIA','Em breve',true)}
+                </div>
+                <div class="story-ald-progress">
+                    <div class="story-ald-progress-label">Progresso geral: ${totalCompleted}/${totalPhases} fases · ⭐ ${stars}/${maxStars}</div>
+                    <div class="story-ald-progress-bar"><div class="story-ald-progress-fill" style="width:${pct}%"></div></div>
+                </div>
+                <div class="story-ald-footer">
+                    <button class="story-back-btn" onclick="exitStoryToTitle()">← VOLTAR AO MENU</button>
+                </div>
+            </div>
+        `;
+    };
+
+    console.log('✅ RITUAL e BESTIÁRIO destravados na Aldeia.');
+
+    // Se a Aldeia estiver aberta agora, re-renderiza
+    const ss = document.getElementById('storyScreen');
+    if (ss && ss.classList.contains('active')) {
+        window.renderAldeiaScreen();
+    }
+})();
+// =================================================================
+// 🔧 FIX — Bestiário: padroes visuais PRECISOS das skills
+// -----------------------------------------------------------------
+// Substitui o getEnemySkillGrid antigo (que chutava pelo nome do
+// handler) por uma tabela explícita, lendo o padrão real do
+// STORY_ANIMAL_SKILLS.
+//
+// Formato de cada padrão:
+//   { tipo: 'linha'|'area'|'cruz'|'diagonal'|'coluna'|'global'|'custom',
+//     raio: N,          // pra 'area'
+//     tiles: [{x,y}],   // pra 'custom' (coordenadas relativas ao boss)
+//     elemento: 'X' }   // cor do grid
+// =================================================================
+
+const STORY_ENEMY_SKILL_PATTERNS = {
+    // ============ ATO 1 ============
+    'porco_espinho': {
+        s1: { tipo:'cruz_infinita' },
+        s2: { tipo:'move_destino', move:2, elemento:'TERRA' }
+    },
+    'jacare': {
+        s1: { tipo:'linha', raio:2 },
+        s2: { tipo:'area', raio:1 }
+    },
+    'cervo': {
+        s1: { tipo:'move_destino', move:3 },
+        s2: { tipo:'linha', raio:1 }
+    },
+    'onca_parda': {
+        s1: { tipo:'custom', tiles:[{x:-1,y:0},{x:0,y:0},{x:1,y:0},{x:2,y:0},{x:-1,y:1},{x:0,y:1},{x:1,y:1},{x:2,y:1}] },
+        s2: { tipo:'move_destino_area', move:2, raio:1 }
+    },
+    'saci': {
+        s1: { tipo:'global_elemento', elemento:'AR' },
+        s2: { tipo:'diagonal_infinita' }
+    },
+
+    // ============ ATO 2 ============
+    'tamandua': {
+        s1: { tipo:'area', raio:1 },
+        s2: { tipo:'linha', raio:2 }
+    },
+    'anta': {
+        s1: { tipo:'area', raio:2 },
+        s2: { tipo:'move_destino', move:3 }
+    },
+    'queixada': {
+        s1: { tipo:'linha', raio:2 },
+        s2: { tipo:'area', raio:1 }
+    },
+    'sucuri': {
+        s1: { tipo:'linha', raio:2 },
+        s2: { tipo:'area', raio:1 }
+    },
+    'mapinguari': {
+        s1: { tipo:'area', raio:2 },
+        s2: { tipo:'custom', tiles:[{x:-3,y:-1},{x:-2,y:-1},{x:-1,y:-1},{x:0,y:-1},{x:1,y:-1},{x:2,y:-1},{x:3,y:-1},{x:-3,y:0},{x:-2,y:0},{x:-1,y:0},{x:0,y:0},{x:1,y:0},{x:2,y:0},{x:3,y:0},{x:-3,y:1},{x:-2,y:1},{x:-1,y:1},{x:0,y:1},{x:1,y:1},{x:2,y:1},{x:3,y:1}] }
+    },
+
+    // ============ ATO 3 ============
+    'piranha': {
+        s1: { tipo:'custom', tiles:[{x:-1,y:-1},{x:0,y:-1},{x:1,y:-1},{x:-2,y:0},{x:-1,y:0},{x:0,y:0},{x:1,y:0},{x:2,y:0}] },
+        s2: { tipo:'global' }
+    },
+    'lontra': {
+        s1: { tipo:'linha', raio:2 },
+        s2: { tipo:'move_destino', move:3 }
+    },
+    'ariranha': {
+        s1: { tipo:'cruz', raio:1 },
+        s2: { tipo:'linha', raio:2 }
+    },
+    'pirarucu': {
+        s1: { tipo:'linha', raio:2 },
+        s2: { tipo:'area', raio:1 }
+    },
+    'iara': {
+        s1: { tipo:'global' },
+        s2: { tipo:'cruz_infinita' }
+    },
+
+    // ============ ATO 4 ============
+    'cascavel': {
+        s1: { tipo:'global_elemento', elemento:'AR' },
+        s2: { tipo:'linha', raio:2 }
+    },
+    'coral': {
+        s1: { tipo:'custom', tiles:[{x:0,y:-1},{x:-1,y:0},{x:0,y:0},{x:1,y:0}] },
+        s2: { tipo:'linha', raio:2 }
+    },
+    'jararaca': {
+        s1: { tipo:'linha', raio:2 },
+        s2: { tipo:'custom', tiles:[{x:0,y:0}] }
+    },
+    'tartaruga': {
+        s1: { tipo:'area', raio:1 },
+        s2: { tipo:'linha', raio:2 }
+    },
+    'boitata': {
+        s1: { tipo:'custom', tiles:[{x:-1,y:-3},{x:0,y:-3},{x:1,y:-3},{x:-1,y:-2},{x:0,y:-2},{x:1,y:-2},{x:-1,y:-1},{x:0,y:-1},{x:1,y:-1},{x:-1,y:0},{x:0,y:0},{x:1,y:0},{x:-1,y:1},{x:0,y:1},{x:1,y:1},{x:-1,y:2},{x:0,y:2},{x:1,y:2},{x:-1,y:3},{x:0,y:3},{x:1,y:3}] },
+        s2: { tipo:'custom', tiles:[{x:-2,y:-2},{x:2,y:-2},{x:-2,y:2},{x:2,y:2},{x:0,y:0}] }
+    },
+
+    // ============ ATO 5 ============
+    'bode': {
+        s1: { tipo:'linha', raio:1 },
+        s2: { tipo:'linha', raio:2 }
+    },
+    'carneiro': {
+        s1: { tipo:'linha', raio:2 },
+        s2: { tipo:'area', raio:1 }
+    },
+    'cavalo_selvagem': {
+        s1: { tipo:'linha', raio:2 },
+        s2: { tipo:'area', raio:2 }
+    },
+    'touro_bravo': {
+        s1: { tipo:'linha', raio:2 },
+        s2: { tipo:'area', raio:2 }
+    },
+    'mula': {
+        s1: { tipo:'custom', tiles:[{x:-1,y:-3},{x:0,y:-3},{x:1,y:-3},{x:-1,y:-2},{x:0,y:-2},{x:1,y:-2},{x:-1,y:-1},{x:0,y:-1},{x:1,y:-1},{x:-1,y:0},{x:0,y:0},{x:1,y:0},{x:-1,y:1},{x:0,y:1},{x:1,y:1},{x:-1,y:2},{x:0,y:2},{x:1,y:2},{x:-1,y:3},{x:0,y:3},{x:1,y:3}] },
+        s2: { tipo:'custom', tiles:[{x:-2,y:0},{x:2,y:0},{x:0,y:-2},{x:0,y:2}] }
+    },
+
+    // ============ ATO 6 ============
+    'urubu': {
+        s1: { tipo:'linha', raio:2 },
+        s2: { tipo:'custom', tiles:[{x:0,y:0}] }
+    },
+    'carcaara': {
+        s1: { tipo:'area', raio:1 },
+        s2: { tipo:'linha', raio:3 }
+    },
+    'tatu': {
+        s1: { tipo:'area', raio:1 },
+        s2: { tipo:'custom', tiles:[{x:0,y:0}] }
+    },
+    'lobo_guara': {
+        s1: { tipo:'area', raio:2 },
+        s2: { tipo:'linha', raio:2 }
+    },
+    'corpo_seco': {
+        s1: { tipo:'custom', tiles:[{x:0,y:-1},{x:0,y:-2},{x:0,y:1},{x:0,y:2},{x:-1,y:0},{x:-2,y:0},{x:1,y:0},{x:2,y:0}] },
+        s2: { tipo:'custom', tiles:[{x:-2,y:-2},{x:-1,y:-2},{x:0,y:-2},{x:1,y:-2},{x:2,y:-2},{x:-2,y:-1},{x:-1,y:-1},{x:0,y:-1},{x:1,y:-1},{x:2,y:-1},{x:-2,y:0},{x:-1,y:0},{x:0,y:0},{x:1,y:0},{x:2,y:0},{x:-2,y:1},{x:-1,y:1},{x:0,y:1},{x:1,y:1},{x:2,y:1},{x:-2,y:2},{x:-1,y:2},{x:0,y:2},{x:1,y:2},{x:2,y:2}] }
+    },
+
+    // ============ ATO 7 ============
+    'cachorro_mato': {
+        s1: { tipo:'linha', raio:2 },
+        s2: { tipo:'area', raio:1 }
+    },
+    'raposa': {
+        s1: { tipo:'linha', raio:2 },
+        s2: { tipo:'move_destino', move:2 }
+    },
+    'guaxinim': {
+        s1: { tipo:'area', raio:1 },
+        s2: { tipo:'linha', raio:3 }
+    },
+    'jaguatirica': {
+        s1: { tipo:'area', raio:2 },
+        s2: { tipo:'move_destino_area', move:2, raio:1 }
+    },
+    'lobisomem': {
+        s1: { tipo:'area', raio:1 },
+        s2: { tipo:'area', raio:2 }
+    },
+
+    // ============ ATO 8 ============
+    'morcego': {
+        s1: { tipo:'linha', raio:2 },
+        s2: { tipo:'area', raio:1 }
+    },
+    'coruja': {
+        s1: { tipo:'area', raio:1 },
+        s2: { tipo:'linha', raio:3 }
+    },
+    'sapo_cururu': {
+        s1: { tipo:'cruz', raio:2 },
+        s2: { tipo:'linha', raio:2 }
+    },
+    'seriema': {
+        s1: { tipo:'linha', raio:2 },
+        s2: { tipo:'area', raio:2 }
+    },
+    'cuca': {
+        s1: { tipo:'quadrante' },
+        s2: { tipo:'cura' }
+    },
+
+    // ============ ATO 9 ============
+    'tucunare': {
+        s1: { tipo:'linha', raio:2 },
+        s2: { tipo:'area', raio:1 }
+    },
+    'piraiba': {
+        s1: { tipo:'linha', raio:2 },
+        s2: { tipo:'area', raio:1 }
+    },
+    'dourada': {
+        s1: { tipo:'area', raio:1 },
+        s2: { tipo:'linha', raio:3 }
+    },
+    'peixe_boi': {
+        s1: { tipo:'area', raio:2 },
+        s2: { tipo:'linha', raio:2 }
+    },
+    'boto': {
+        s1: { tipo:'area', raio:1 },
+        s2: { tipo:'cruz_infinita' }
+    },
+
+    // ============ ATO 10 ============
+    'bufalo': {
+        s1: { tipo:'linha', raio:2 },
+        s2: { tipo:'area', raio:2 }
+    },
+    'vaca_louca': {
+        s1: { tipo:'linha', raio:2 },
+        s2: { tipo:'area', raio:1 }
+    },
+    'cabra_preta': {
+        s1: { tipo:'linha', raio:1 },
+        s2: { tipo:'linha', raio:2 }
+    },
+    'zebu': {
+        s1: { tipo:'linha', raio:2 },
+        s2: { tipo:'area', raio:2 }
+    },
+    'boi': {
+        s1: { tipo:'area', raio:1 },
+        s2: { tipo:'custom', tiles:[{x:-3,y:-3},{x:-2,y:-3},{x:-1,y:-3},{x:0,y:-3},{x:1,y:-3},{x:2,y:-3},{x:3,y:-3},{x:-3,y:3},{x:-2,y:3},{x:-1,y:3},{x:0,y:3},{x:1,y:3},{x:2,y:3},{x:3,y:3},{x:-3,y:-2},{x:-3,y:-1},{x:-3,y:0},{x:-3,y:1},{x:-3,y:2},{x:3,y:-2},{x:3,y:-1},{x:3,y:0},{x:3,y:1},{x:3,y:2}] }
+    },
+
+    // ============ ATO 11 ============
+    'gato_mato': {
+        s1: { tipo:'area', raio:1 },
+        s2: { tipo:'move_destino_area', move:2, raio:1 }
+    },
+    'mariposa_gigante': {
+        s1: { tipo:'area', raio:2 },
+        s2: { tipo:'linha', raio:3 }
+    },
+    'quati': {
+        s1: { tipo:'area', raio:1 },
+        s2: { tipo:'linha', raio:2 }
+    },
+    'sucuarana': {
+        s1: { tipo:'area', raio:2 },
+        s2: { tipo:'move_destino_area', move:2, raio:1 }
+    },
+    'jaci': {
+        s1: { tipo:'global_elemento', elemento:'AR' },
+        s2: { tipo:'global', cura: true }
+    },
+
+    // ============ ATO 12 ============
+    'gaviao': {
+        s1: { tipo:'linha', raio:3 },
+        s2: { tipo:'area', raio:1 }
+    },
+    'falcao': {
+        s1: { tipo:'custom', tiles:[{x:0,y:0}] },
+        s2: { tipo:'area', raio:2 }
+    },
+    'urutau': {
+        s1: { tipo:'area', raio:2 },
+        s2: { tipo:'move_destino_area', move:3, raio:1 }
+    },
+    'aguia_cinzenta': {
+        s1: { tipo:'area', raio:2 },
+        s2: { tipo:'custom', tiles:[{x:-1,y:0},{x:0,y:0},{x:1,y:0},{x:0,y:-1},{x:0,y:1}] }
+    },
+    'guaraci': {
+        s1: { tipo:'global_elemento', elemento:'FOGO' },
+        s2: { tipo:'global', cura: true }
+    },
+
+    // ============ ATO 13 — Espectros ============
+    'espectro_saci': { s1: { tipo:'global_elemento', elemento:'AR' }, s2: { tipo:'diagonal_infinita' } },
+    'espectro_mapinguari': { s1: { tipo:'area', raio:2 }, s2: { tipo:'custom', tiles:[{x:-3,y:-1},{x:-2,y:-1},{x:-1,y:-1},{x:0,y:-1},{x:1,y:-1},{x:2,y:-1},{x:3,y:-1},{x:-3,y:0},{x:-2,y:0},{x:-1,y:0},{x:0,y:0},{x:1,y:0},{x:2,y:0},{x:3,y:0},{x:-3,y:1},{x:-2,y:1},{x:-1,y:1},{x:0,y:1},{x:1,y:1},{x:2,y:1},{x:3,y:1}] } },
+    'espectro_iara': { s1: { tipo:'global' }, s2: { tipo:'cruz_infinita' } },
+    'espectro_boitata': { s1: { tipo:'custom', tiles:[{x:-1,y:-3},{x:0,y:-3},{x:1,y:-3},{x:-1,y:-2},{x:0,y:-2},{x:1,y:-2},{x:-1,y:-1},{x:0,y:-1},{x:1,y:-1},{x:-1,y:0},{x:0,y:0},{x:1,y:0},{x:-1,y:1},{x:0,y:1},{x:1,y:1},{x:-1,y:2},{x:0,y:2},{x:1,y:2},{x:-1,y:3},{x:0,y:3},{x:1,y:3}] }, s2: { tipo:'custom', tiles:[{x:-2,y:-2},{x:2,y:-2},{x:-2,y:2},{x:2,y:2},{x:0,y:0}] } },
+    'espectro_mula': { s1: { tipo:'custom', tiles:[{x:-1,y:-3},{x:0,y:-3},{x:1,y:-3},{x:-1,y:-2},{x:0,y:-2},{x:1,y:-2},{x:-1,y:-1},{x:0,y:-1},{x:1,y:-1},{x:-1,y:0},{x:0,y:0},{x:1,y:0},{x:-1,y:1},{x:0,y:1},{x:1,y:1},{x:-1,y:2},{x:0,y:2},{x:1,y:2},{x:-1,y:3},{x:0,y:3},{x:1,y:3}] }, s2: { tipo:'custom', tiles:[{x:-2,y:0},{x:2,y:0},{x:0,y:-2},{x:0,y:2}] } },
+    'espectro_corposeco': { s1: { tipo:'custom', tiles:[{x:0,y:-1},{x:0,y:-2},{x:0,y:1},{x:0,y:2},{x:-1,y:0},{x:-2,y:0},{x:1,y:0},{x:2,y:0}] }, s2: { tipo:'custom', tiles:[{x:-2,y:-2},{x:-1,y:-2},{x:0,y:-2},{x:1,y:-2},{x:2,y:-2},{x:-2,y:-1},{x:-1,y:-1},{x:0,y:-1},{x:1,y:-1},{x:2,y:-1},{x:-2,y:0},{x:-1,y:0},{x:0,y:0},{x:1,y:0},{x:2,y:0},{x:-2,y:1},{x:-1,y:1},{x:0,y:1},{x:1,y:1},{x:2,y:1},{x:-2,y:2},{x:-1,y:2},{x:0,y:2},{x:1,y:2},{x:2,y:2}] } },
+    'espectro_lobisomem': { s1: { tipo:'area', raio:1 }, s2: { tipo:'area', raio:2 } },
+    'espectro_cuca': { s1: { tipo:'quadrante' }, s2: { tipo:'cura' } },
+    'espectro_boto': { s1: { tipo:'area', raio:1 }, s2: { tipo:'cruz_infinita' } },
+    'espectro_boi': { s1: { tipo:'area', raio:1 }, s2: { tipo:'custom', tiles:[{x:-3,y:-3},{x:-2,y:-3},{x:-1,y:-3},{x:0,y:-3},{x:1,y:-3},{x:2,y:-3},{x:3,y:-3},{x:-3,y:3},{x:-2,y:3},{x:-1,y:3},{x:0,y:3},{x:1,y:3},{x:2,y:3},{x:3,y:3},{x:-3,y:-2},{x:-3,y:-1},{x:-3,y:0},{x:-3,y:1},{x:-3,y:2},{x:3,y:-2},{x:3,y:-1},{x:3,y:0},{x:3,y:1},{x:3,y:2}] } },
+    'espectro_jaci': { s1: { tipo:'global_elemento', elemento:'AR' }, s2: { tipo:'global', cura: true } },
+    'espectro_guaraci': { s1: { tipo:'global_elemento', elemento:'FOGO' }, s2: { tipo:'global', cura: true } },
+
+    // ============ ATO 13 — Anhangá ============
+    'anhanga': {
+        s1: { tipo:'custom', tiles:[{x:0,y:-3},{x:0,y:-2},{x:0,y:-1},{x:0,y:0},{x:0,y:1},{x:0,y:2},{x:0,y:3},{x:2,y:-3},{x:2,y:-2},{x:2,y:-1},{x:2,y:0},{x:2,y:1},{x:2,y:2},{x:2,y:3},{x:-2,y:-3},{x:-2,y:-2},{x:-2,y:-1},{x:-2,y:0},{x:-2,y:1},{x:-2,y:2},{x:-2,y:3}] },
+        s2: { tipo:'cura' }
+    },
+};
+
+// =================================================================
+// Desenha o mini-grid do alcance da skill (versão precisa)
+// =================================================================
+function getEnemySkillGridPrecise(enemyId, skillKey) {
+    const enemy = STORY_ENEMIES[enemyId];
+    if (!enemy) return '';
+    const skill = enemy[skillKey];
+    if (!skill) return '';
+
+    const pattern = STORY_ENEMY_SKILL_PATTERNS[enemyId]?.[skillKey === 'skill1' ? 's1' : 's2'];
+    if (!pattern) {
+        // Fallback: usa o genérico antigo se não tiver pattern
+        if (typeof getEnemySkillGrid === 'function') {
+            return getEnemySkillGrid(enemyId, skillKey);
+        }
+        return '';
+    }
+
+    const gridSize = 8;
+    const CX = 3, CY = 4;
+    const afetados = Array.from({length: gridSize}, () => Array(gridSize).fill(false));
+
+    // Elemento temático
+    let themeEl = 'FOGO';
+    if (pattern.elemento) themeEl = pattern.elemento;
+    else if (enemyId.includes('espectro')) themeEl = 'AR';
+    else if (enemyId.includes('iara') || enemyId.includes('boto') || enemyId.includes('piranha') ||
+             enemyId.includes('pirarucu') || enemyId.includes('lontra') || enemyId.includes('ariranha') ||
+             enemyId.includes('tucunare') || enemyId.includes('piraiba') || enemyId.includes('dourada') ||
+             enemyId.includes('peixe_boi') || enemyId.includes('sapo')) themeEl = 'AGUA';
+    else if (enemyId.includes('jaci') || enemyId.includes('urutau') || enemyId.includes('gaviao') ||
+             enemyId.includes('falcao') || enemyId.includes('morcego') || enemyId.includes('mariposa')) themeEl = 'AR';
+    else if (enemyId.includes('saci') || enemyId.includes('mapinguari') || enemyId.includes('tatu') ||
+             enemyId.includes('anta') || enemyId.includes('queixada') || enemyId.includes('sucuri') ||
+             enemyId.includes('tamandua') || enemyId.includes('cachorro') || enemyId.includes('raposa') ||
+             enemyId.includes('guaxinim') || enemyId.includes('jaguatirica') || enemyId.includes('lobisomem') ||
+             enemyId.includes('lobo_guara') || enemyId.includes('onca') || enemyId.includes('teperesik')) themeEl = 'TERRA';
+    else if (enemyId.includes('boitata') || enemyId.includes('mula') || enemyId.includes('guaraci') ||
+             enemyId.includes('corpo_seco') || enemyId.includes('cuca') || enemyId === 'anhanga') themeEl = 'FOGO';
+
+    // Marca os tiles conforme o padrão
+    const mark = (x, y) => {
+        if (x >= 0 && x < gridSize && y >= 0 && y < gridSize) afetados[y][x] = true;
+    };
+
+    const t = pattern.tipo;
+    if (t === 'linha') {
+        // 4 direções cardeais até raio
+        for (let i = 1; i <= (pattern.raio || 2); i++) {
+            mark(CX + i, CY); mark(CX - i, CY); mark(CX, CY + i); mark(CX, CY - i);
+        }
+    } else if (t === 'area') {
+        const r = pattern.raio || 1;
+        for (let dx = -r; dx <= r; dx++) {
+            for (let dy = -r; dy <= r; dy++) {
+                if (dx === 0 && dy === 0) continue;
+                mark(CX + dx, CY + dy);
+            }
+        }
+    } else if (t === 'cruz') {
+        for (let i = 1; i <= (pattern.raio || 1); i++) {
+            mark(CX + i, CY); mark(CX - i, CY); mark(CX, CY + i); mark(CX, CY - i);
+        }
+    } else if (t === 'cruz_infinita') {
+        for (let i = 1; i < gridSize; i++) {
+            mark(CX + i, CY); mark(CX - i, CY); mark(CX, CY + i); mark(CX, CY - i);
+        }
+    } else if (t === 'diagonal_infinita') {
+        for (let i = 1; i < gridSize; i++) {
+            mark(CX + i, CY + i); mark(CX + i, CY - i);
+            mark(CX - i, CY + i); mark(CX - i, CY - i);
+        }
+    } else if (t === 'global' || t === 'global_elemento') {
+        for (let y = 0; y < gridSize; y++) {
+            for (let x = 0; x < gridSize; x++) {
+                if (x !== CX || y !== CY) mark(x, y);
+            }
+        }
+    } else if (t === 'quadrante') {
+        // Quadrante 4×4 no canto superior esquerdo (representação)
+        for (let y = 0; y <= 3; y++) {
+            for (let x = 0; x <= 3; x++) {
+                if (x !== CX || y !== CY) mark(x, y);
+            }
+        }
+    } else if (t === 'cura') {
+        // Mostra só o centro (auto-cura)
+        mark(CX, CY);
+    } else if (t === 'move_destino') {
+        // Move + dano no destino
+        const mv = pattern.move || 2;
+        mark(CX, Math.max(0, CY - mv));
+    } else if (t === 'move_destino_area') {
+        const mv = pattern.move || 2;
+        const ty = Math.max(0, CY - mv);
+        const r = pattern.raio || 1;
+        for (let dx = -r; dx <= r; dx++) {
+            for (let dy = -r; dy <= r; dy++) {
+                mark(CX + dx, ty + dy);
+            }
+        }
+    } else if (t === 'custom') {
+        (pattern.tiles || []).forEach(tile => mark(CX + tile.x, CY + tile.y));
+    }
+
+    const ELEMENT_COLORS = { FOGO:'bg-FOGO', AGUA:'bg-AGUA', TERRA:'bg-TERRA', AR:'bg-AR' };
+    const baseClass = ELEMENT_COLORS[themeEl] || 'bg-FOGO';
+
+    let html = '<div class="pa-mini-grid" style="grid-template-columns:repeat(8,18px);grid-template-rows:repeat(8,18px);gap:1px;">';
+    for (let y = 0; y < gridSize; y++) {
+        for (let x = 0; x < gridSize; x++) {
+            const isEnemy = (x === CX && y === CY);
+            const isAfetado = afetados[y][x];
+            let cls = 'pa-mini-tile';
+            if (isEnemy) cls += ' pa-mini-hero ' + baseClass;
+            else if (isAfetado) cls += ' pa-mini-afetado ' + baseClass;
+            else cls += ' pa-mini-vazio';
+            html += `<div class="${cls}" style="width:18px;height:18px;font-size:11px;">${isEnemy ? '👹' : ''}</div>`;
+        }
+    }
+    html += '</div>';
+    return html;
+}
+
+// Substitui a função antiga pela nova
+window.getEnemySkillGrid = getEnemySkillGridPrecise;
+getEnemySkillGrid = getEnemySkillGridPrecise;
+
+// Força o bestiário a re-renderizar se estiver aberto
+(function refreshBestiaryIfOpen() {
+    const ss = document.getElementById('storyScreen');
+    if (ss && ss.classList.contains('active')) {
+        // Só re-renderiza se estamos no bestiário (heurística)
+        const title = ss.querySelector('.story-title');
+        if (title && title.textContent.includes('BESTIÁRIO')) {
+            if (typeof renderBestiaryScreen === 'function') renderBestiaryScreen();
+        }
+    }
+})();
+
+console.log('✅ Bestiário: padrões precisos das skills carregados.');
