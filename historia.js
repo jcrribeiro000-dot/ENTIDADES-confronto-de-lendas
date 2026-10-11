@@ -6929,3 +6929,821 @@ console.log('✅ historia.js — Parte 6/6 (V8.1) carregada. Arquivo completo.')
 
     console.log('✅ Fix de ordem de inserção dos FX aplicado.');
 })();
+// =================================================================
+// 📖 PAINEL DE DETALHES DO HERÓI — OCA
+// -----------------------------------------------------------------
+// Adiciona botão "?" no card do herói na OCA.
+// Ao clicar, abre painel lateral com:
+//   • Stats detalhados (HP, ATK, alcance, papel, elemento)
+//   • Descrição do Poder Ancestral
+//   • Mini-grid 8×8 mostrando os tiles afetados pelo PA
+//   • Números: quantos tiles ativa o ATK, tiles de caminho, etc.
+//
+// Slot opcional de imagem real do PA: STORY_HERO_PA_IMAGES.
+// Se o link estiver vazio, cai no mini-grid (visual).
+// =================================================================
+
+// =================================================================
+// 🎨 Slot de imagens reais do PA (opcional)
+// -----------------------------------------------------------------
+// Preencha com o link de uma imagem/gif do PA.
+// Se vazio, usa o mini-grid visual.
+// =================================================================
+const STORY_HERO_PA_IMAGES = {
+    'Tupa':              '',
+    'Sume':              '',
+    'Caipora':           '',
+    'Kanarott':          '',
+    'Juruá':             '',
+    'Bicho Folharal':    '',
+    'Eru':               '',
+    'Teperesik':         '',
+    'Anduré':            '',
+    'Mãe da Mata':       '',
+    'Pajé Anhanguera':   '',
+    'Araci':             '',
+    "Tapyra'yawara":     '',
+};
+
+// =================================================================
+// 📖 Metadados de cada herói (descrições, táticas, números)
+// =================================================================
+const STORY_HERO_DETAILS = {
+    // ---- BASE ----
+    'Tupa': {
+        paName: 'Coluna de Fogo',
+        paDesc: 'Tupã ergue o cajado e invoca uma coluna vertical do elemento dele que atravessa o tabuleiro de cima a baixo. Todos os inimigos na coluna são atingidos.',
+        paExtra: 'Afeta 8 tiles. Também empurra tiles para o elemento do herói.',
+        tactical: 'Alcance: 1 (corpo a corpo). Cada tile do caminho até 1 do alvo causa dano.',
+        notes: 'Herói base — elemento definido pelo nome do save.'
+    },
+    'Sume': {
+        paName: 'Linha Curativa',
+        paDesc: 'Sumé abre os braços e envia uma onda horizontal de luz. Toda a linha é atingida e todos os heróis na mesma linha são curados.',
+        paExtra: 'Cura +2 HP em todos os aliados na linha. Afeta 8 tiles.',
+        tactical: 'Alcance: 4 (ataca à distância). Precisa de 4+ tiles de caminho.',
+        notes: 'Herói base — elemento definido pelo nome do save.'
+    },
+    'Caipora': {
+        paName: 'Chuva de Flechas',
+        paDesc: 'Caipora dispara uma saraivada de flechas que cai em área 3×3 ao redor do alvo.',
+        paExtra: 'Afeta 9 tiles ao redor do alvo. Dano concentrado.',
+        tactical: 'Alcance: 3 (ataca à distância). Precisa de 3+ tiles de caminho.',
+        notes: 'Herói base — elemento definido pelo nome do save.'
+    },
+
+    // ---- GUERREIROS ----
+    'Kanarott': {
+        paName: 'Cruz do Guerreiro',
+        paDesc: 'Kanarott bate a borduna no chão. Uma cruz de pedra irrompe do solo, atravessando o tabuleiro em 5 tiles na horizontal e 5 na vertical, empurrando tudo que estiver no caminho.',
+        paExtra: 'Empurra o alvo 2 tiles para trás. Afeta 9 tiles em cruz.',
+        tactical: 'Alcance: 1 (corpo a corpo). Cada tile do caminho adjacente ao alvo causa dano.',
+        notes: 'Empurra o inimigo para longe do centro da cruz.'
+    },
+    'Teperesik': {
+        paName: 'Fortaleza de Pedra',
+        paDesc: 'Teperesik se ancora no chão e ergue um bloco quadrado de pedra e musgo ao seu redor. Uma muralha protetora que também esmaga os inimigos próximos.',
+        paExtra: 'Área 3×3 (8 tiles ao redor). Dano de esmagamento.',
+        tactical: 'Alcance: 1 (corpo a corpo). Alto HP (20).',
+        notes: 'Tanque. Não se move longe do centro.'
+    },
+    'Eru': {
+        paName: 'Chama Horizontal',
+        paDesc: 'Eru eleva seu machado de pedra e uma parede de fogo corre horizontalmente por todo o tabuleiro, queimando tudo em seu caminho.',
+        paExtra: 'Afeta 8 tiles em linha horizontal. Dano em todos.',
+        tactical: 'Alcance: 1 (corpo a corpo). ATK 5 — o guerreiro mais forte.',
+        notes: 'Forte, mas HP baixo (12). Deve atacar e recuar.'
+    },
+
+    // ---- MAGOS ----
+    'Anduré': {
+        paName: 'Esfera Curativa',
+        paDesc: 'Anduré levita e uma esfera de água pura se forma ao seu redor, curando suas feridas enquanto protege a área.',
+        paExtra: 'Área 3×3 (9 tiles com o centro). Cura +3 HP em si mesmo.',
+        tactical: 'Alcance: 4 (ataca à distância). Precisar 4+ tiles.',
+        notes: 'Suporte curador. Recarrega rápido.'
+    },
+    'Mãe da Mata': {
+        paName: 'Floração Ancestral',
+        paDesc: 'Mãe da Mata abre os braços e o chão floresce em um raio enorme. Flores, trepadeiras e cogumelos luminosos brotam do solo enquanto ela cura as feridas dos aliados.',
+        paExtra: 'Área 5×5 (25 tiles). Cura +4 HP em si mesma.',
+        tactical: 'Alcance: 4 (ataca à distância). O PA com maior área.',
+        notes: 'Cura mais forte do jogo. Área gigante.'
+    },
+    'Pajé Anhanguera': {
+        paName: 'Pilar de Fogo Sagrado',
+        paDesc: 'O Pajé entoa um canto ancestral e uma coluna de fogo sagrado desce do céu, atravessando todo o tabuleiro. Se o alvo estiver em um tile de FOGO, o dano é dobrado.',
+        paExtra: 'Coluna vertical inteira (8 tiles). Dano dobrado se alvo em FOGO.',
+        tactical: 'Alcance: 4 (ataca à distância). Depende do tabuleiro.',
+        notes: 'Sinergia com tiles de FOGO. ATK 3 (o mais alto dos magos).'
+    },
+
+    // ---- ARQUEIROS ----
+    'Juruá': {
+        paName: 'Flecha em Área',
+        paDesc: 'Juruá dispara uma flecha especial que explode em área 3×3 ao atingir o alvo, causando dano a tudo ao redor.',
+        paExtra: 'Área 3×3 centrada no alvo.',
+        tactical: 'Alcance: 3 (ataca à distância). Precisa 3+ tiles.',
+        notes: 'Excelente contra múltiplos inimigos.'
+    },
+    'Araci': {
+        paName: 'Lâmina do Vento',
+        paDesc: 'Araci dispara uma flecha que corta o ar em linha reta horizontal, criando uma lâmina de vento que atravessa o tabuleiro.',
+        paExtra: 'Linha horizontal inteira (8 tiles).',
+        tactical: 'Alcance: 3 (ataca à distância). Rápida.',
+        notes: 'Ideal contra linhas de inimigos.'
+    },
+    'Bicho Folharal': {
+        paName: 'Cruz Completa',
+        paDesc: 'Bicho Folharal dispara uma flecha que se divide em quatro, criando uma cruz perfeita de vento ao redor do alvo — linha horizontal + coluna vertical.',
+        paExtra: 'Cruz completa: 8 tiles na horizontal + 7 na vertical (15 tiles).',
+        tactical: 'Alcance: 3 (ataca à distância). O PA com maior cobertura.',
+        notes: 'Não sobra inimigo em linha reta.'
+    },
+    "Tapyra'yawara": {
+        paName: 'Coluna do Caçador',
+        paDesc: "Tapyra'yawara mira o alvo e dispara uma flecha de pedra que invoca uma coluna vertical de terra, prendendo e esmagando tudo na coluna do alvo.",
+        paExtra: 'Coluna vertical inteira no alvo (8 tiles).',
+        tactical: 'Alcance: 3 (ataca à distância). 12 HP.',
+        notes: 'Um dos mais resistentes dos arqueiros.'
+    },
+};
+
+// =================================================================
+// 🎯 Mini-grid visual — desenha os tiles afetados pelo PA
+// =================================================================
+function renderPAMiniGrid(heroClass) {
+    const heroData = STORY_HERO_CLASSES[heroClass];
+    if (!heroData) return '';
+
+    // Centro (posição do herói) — para o mini-grid fica em (3, 4)
+    const CX = 3;
+    const CY = 4;
+    const gridSize = 8;
+
+    // Matriz 8×8 de flags
+    const afetados = Array.from({ length: gridSize }, () => Array(gridSize).fill(false));
+
+    const paKey = heroData.paKey;
+    const targetMock = { x: 3, y: 2 };  // alvo fica 2 tiles acima do herói
+
+    // ---- Define os tiles afetados por cada PA ----
+    if (paKey === 'base_coluna' || paKey === 'paje_coluna_fogo' || paKey === 'tapyra_coluna_alvo') {
+        // Coluna vertical — se for no alvo, usa coluna do alvo; senão, coluna do herói
+        const col = (paKey === 'tapyra_coluna_alvo') ? targetMock.x : CX;
+        for (let y = 0; y < gridSize; y++) afetados[y][col] = true;
+    }
+    else if (paKey === 'base_linha_cura' || paKey === 'eru_linha_horizontal' || paKey === 'araci_linha_horizontal') {
+        // Linha horizontal no herói
+        for (let x = 0; x < gridSize; x++) afetados[CY][x] = true;
+    }
+    else if (paKey === 'base_area_alvo') {
+        // Área 3×3 no alvo
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dy = -1; dy <= 1; dy++) {
+                const nx = targetMock.x + dx;
+                const ny = targetMock.y + dy;
+                if (nx >= 0 && nx < gridSize && ny >= 0 && ny < gridSize) afetados[ny][nx] = true;
+            }
+        }
+    }
+    else if (paKey === 'kanarott_cruz_empurra') {
+        // Cruz 5×5
+        for (let i = -2; i <= 2; i++) {
+            const ny = CY + i;
+            if (ny >= 0 && ny < gridSize) afetados[ny][CX] = true;
+        }
+        for (let i = -2; i <= 2; i++) {
+            if (i === 0) continue;
+            const nx = CX + i;
+            if (nx >= 0 && nx < gridSize) afetados[CY][nx] = true;
+        }
+    }
+    else if (paKey === 'teperesik_area2x2') {
+        // Área 3×3 (sem centro)
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dy = -1; dy <= 1; dy++) {
+                if (dx === 0 && dy === 0) continue;
+                const nx = CX + dx;
+                const ny = CY + dy;
+                if (nx >= 0 && nx < gridSize && ny >= 0 && ny < gridSize) afetados[ny][nx] = true;
+            }
+        }
+    }
+    else if (paKey === 'andure_area2x2_cura') {
+        // Área 3×3 (com centro)
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dy = -1; dy <= 1; dy++) {
+                const nx = CX + dx;
+                const ny = CY + dy;
+                if (nx >= 0 && nx < gridSize && ny >= 0 && ny < gridSize) afetados[ny][nx] = true;
+            }
+        }
+    }
+    else if (paKey === 'maedamata_area3x3_cura') {
+        // Área 5×5
+        for (let dx = -2; dx <= 2; dx++) {
+            for (let dy = -2; dy <= 2; dy++) {
+                const nx = CX + dx;
+                const ny = CY + dy;
+                if (nx >= 0 && nx < gridSize && ny >= 0 && ny < gridSize) afetados[ny][nx] = true;
+            }
+        }
+    }
+    else if (paKey === 'jurua_area_alvo_3x3') {
+        // Área 3×3 no alvo
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dy = -1; dy <= 1; dy++) {
+                const nx = targetMock.x + dx;
+                const ny = targetMock.y + dy;
+                if (nx >= 0 && nx < gridSize && ny >= 0 && ny < gridSize) afetados[ny][nx] = true;
+            }
+        }
+    }
+    else if (paKey === 'bicho_cruz_completa') {
+        // Cruz completa no alvo
+        for (let x = 0; x < gridSize; x++) afetados[targetMock.y][x] = true;
+        for (let y = 0; y < gridSize; y++) afetados[y][targetMock.x] = true;
+    }
+
+    // ---- Desenha o mini-grid usando as mesmas classes dos tiles ----
+    const ELEMENT_COLORS = {
+        FOGO:  'bg-FOGO',
+        AGUA:  'bg-AGUA',
+        TERRA: 'bg-TERRA',
+        AR:    'bg-AR',
+    };
+
+    // Elemento mostrado no grid
+    const heroElement = heroData.element || 'FOGO';
+    const baseClass = ELEMENT_COLORS[heroElement] || 'bg-FOGO';
+
+    let html = '<div class="pa-mini-grid">';
+    for (let y = 0; y < gridSize; y++) {
+        for (let x = 0; x < gridSize; x++) {
+            const isHero = (x === CX && y === CY);
+            const isAfetado = afetados[y][x];
+
+            let cls = 'pa-mini-tile';
+            if (isHero) {
+                cls += ' pa-mini-hero ' + baseClass;
+            } else if (isAfetado) {
+                cls += ' pa-mini-afetado ' + baseClass;
+            } else {
+                cls += ' pa-mini-vazio';
+            }
+
+            html += `<div class="${cls}">${isHero ? '⭐' : ''}</div>`;
+        }
+    }
+    html += '</div>';
+    return html;
+}
+
+// =================================================================
+// 📖 Painel lateral de detalhes do herói
+// =================================================================
+function openHeroDetails(heroClass) {
+    const heroData = STORY_HERO_CLASSES[heroClass];
+    if (!heroData) return;
+
+    const details = STORY_HERO_DETAILS[heroClass];
+    if (!details) return;
+
+    // Fecha se já estiver aberto
+    closeHeroDetails();
+
+    // Elemento mostrado
+    const saveEl = getSaveElement();
+    const el = heroData.element || saveEl;
+    const elDisplay = heroData.element ? heroData.element : `${saveEl} (dinâmico)`;
+
+    // Sprite do herói
+    let spriteSrc = '';
+    if (heroData.spriteKey) {
+        const url = SPRITES_STORY[heroData.spriteKey];
+        spriteSrc = url && url.trim() !== '' ? url : '';
+    } else if (typeof SPRITES !== 'undefined' && SPRITES[heroClass]) {
+        spriteSrc = SPRITES[heroClass];
+    }
+
+    const spriteHTML = spriteSrc
+        ? `<img src="${spriteSrc}" class="hero-details-sprite" alt="${heroData.displayName}">`
+        : `<div class="hero-details-sprite" style="display:flex;align-items:center;justify-content:center;font-size:4rem;">${EMOJI_STORY[heroData.spriteKey] || '?'}</div>`;
+
+    // Imagem real do PA (opcional)
+    const paImageUrl = STORY_HERO_PA_IMAGES[heroClass];
+    const hasPaImage = paImageUrl && paImageUrl.trim() !== '';
+
+    const paImageHTML = hasPaImage
+        ? `<div class="hero-details-pa-image-wrap"><img src="${paImageUrl}" class="hero-details-pa-image" alt="${details.paName}" onerror="this.parentNode.innerHTML='${renderPAMiniGrid(heroClass).replace(/'/g, "\\'")}'"></div>`
+        : `<div class="hero-details-pa-image-wrap">${renderPAMiniGrid(heroClass)}</div>`;
+
+    // Overlay + painel
+    const overlay = document.createElement('div');
+    overlay.id = 'heroDetailsOverlay';
+    overlay.className = 'hero-details-overlay';
+    overlay.onclick = (e) => { if (e.target === overlay) closeHeroDetails(); };
+
+    const panel = document.createElement('div');
+    panel.className = 'hero-details-panel';
+
+    panel.innerHTML = `
+        <div class="hero-details-header">
+            ${spriteHTML}
+            <div class="hero-details-title-wrap">
+                <h2 class="hero-details-name">${heroData.displayName}</h2>
+                <div class="hero-details-role elem-${el}">${elemIcon(el)} ${heroData.role} · ${elDisplay}</div>
+            </div>
+            <button class="hero-details-close" onclick="closeHeroDetails()">✕</button>
+        </div>
+
+        <div class="hero-details-section">
+            <div class="hero-details-section-title">📊 ATRIBUTOS</div>
+            <div class="hero-details-stats">
+                <div class="hero-details-stat">
+                    <div class="hero-details-stat-label">HP</div>
+                    <div class="hero-details-stat-value">${heroData.hp}</div>
+                </div>
+                <div class="hero-details-stat">
+                    <div class="hero-details-stat-label">ATK</div>
+                    <div class="hero-details-stat-value">${heroData.atk}</div>
+                </div>
+                <div class="hero-details-stat">
+                    <div class="hero-details-stat-label">Alcance</div>
+                    <div class="hero-details-stat-value">${heroData.range === 0 ? '1 (corpo)' : heroData.range}</div>
+                </div>
+                <div class="hero-details-stat">
+                    <div class="hero-details-stat-label">Papel</div>
+                    <div class="hero-details-stat-value">${heroData.role}</div>
+                </div>
+            </div>
+            <div class="hero-details-note">${details.tactical}</div>
+        </div>
+
+        <div class="hero-details-section">
+            <div class="hero-details-section-title">⚡ PODER ANCESTRAL</div>
+            <div class="hero-details-pa-name">${details.paName}</div>
+            <div class="hero-details-pa-desc">${details.paDesc}</div>
+            <div class="hero-details-pa-extra">${details.paExtra}</div>
+        </div>
+
+        <div class="hero-details-section">
+            <div class="hero-details-section-title">🎯 ÁREA AFETADA</div>
+            ${paImageHTML}
+            <div class="hero-details-legend">
+                <span class="hero-details-legend-item"><span class="hero-details-legend-mark pa-mini-hero-mark">⭐</span> Herói</span>
+                <span class="hero-details-legend-item"><span class="hero-details-legend-mark pa-mini-afetado-mark"></span> Tile afetado</span>
+                <span class="hero-details-legend-item"><span class="hero-details-legend-mark pa-mini-vazio-mark"></span> Não afetado</span>
+            </div>
+        </div>
+
+        <div class="hero-details-section hero-details-notes">
+            <div class="hero-details-section-title">📝 NOTAS</div>
+            <div class="hero-details-note">${details.notes}</div>
+        </div>
+    `;
+
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+
+    // Pequeno delay pra animação do painel
+    requestAnimationFrame(() => overlay.classList.add('open'));
+}
+
+function closeHeroDetails() {
+    const ov = document.getElementById('heroDetailsOverlay');
+    if (!ov) return;
+    ov.classList.remove('open');
+    setTimeout(() => {
+        if (ov.parentNode) ov.parentNode.removeChild(ov);
+    }, 300);
+}
+
+// =================================================================
+// 🎨 Modifica o card do herói na OCA para incluir o botão "?"
+// -----------------------------------------------------------------
+// Sobrescreve renderOcaScreen (do bloco anterior) para adicionar o botão.
+// =================================================================
+(function patchOcaScreenWithDetailsButton() {
+    const _origRenderOcaScreen = window.renderOcaScreen;
+
+    window.renderOcaScreen = function() {
+        // Chama a versão original
+        if (typeof _origRenderOcaScreen === 'function') {
+            _origRenderOcaScreen.apply(this, arguments);
+        }
+
+        // Depois de renderizar, injeta o botão "?" em cada card desbloqueado
+        const cards = document.querySelectorAll('.story-hero-card');
+        cards.forEach(card => {
+            if (card.classList.contains('locked')) return;
+            if (card.querySelector('.hero-details-btn')) return;  // já tem
+
+            // Descobre qual herói é esse card
+            const onclickAttr = card.getAttribute('onclick') || '';
+            const match = onclickAttr.match(/toggleHeroSelection\('([^']+)'\)/);
+            if (!match) return;
+            const heroClass = match[1];
+
+            // Cria o botão
+            const btn = document.createElement('button');
+            btn.className = 'hero-details-btn';
+            btn.innerHTML = '?';
+            btn.title = 'Ver detalhes';
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                openHeroDetails(heroClass);
+            };
+            card.appendChild(btn);
+        });
+    };
+
+    console.log('✅ OCA patcheada com botão de detalhes.');
+})();
+
+// =================================================================
+// 🌐 Expõe no window
+// =================================================================
+window.openHeroDetails = openHeroDetails;
+window.closeHeroDetails = closeHeroDetails;
+window.renderPAMiniGrid = renderPAMiniGrid;
+window.STORY_HERO_DETAILS = STORY_HERO_DETAILS;
+window.STORY_HERO_PA_IMAGES = STORY_HERO_PA_IMAGES;
+
+console.log('✅ Painel de detalhes do herói carregado.');
+// =================================================================
+// 🎨 CSS do painel de detalhes do herói
+// =================================================================
+(function injectHeroDetailsCSS() {
+    if (document.getElementById('heroDetailsStyle')) return;
+    const style = document.createElement('style');
+    style.id = 'heroDetailsStyle';
+    style.textContent = `
+        /* ---- Botão "?" no card ---- */
+        .hero-details-btn {
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #3a7ca5, #1e4a70);
+            color: #d0e8f5;
+            border: 2px solid #4a8cb5;
+            font-family: 'Cinzel', serif;
+            font-weight: 900;
+            font-size: 1rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            z-index: 10;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+        }
+        .hero-details-btn:hover {
+            transform: scale(1.15);
+            background: linear-gradient(135deg, #4a8cb5, #2a5570);
+            border-color: #6ab0d8;
+            box-shadow: 0 4px 12px rgba(74, 140, 181, 0.5);
+        }
+        .hero-details-btn:active { transform: scale(0.95); }
+
+        /* ---- Overlay ---- */
+        .hero-details-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(10, 6, 2, 0.85);
+            z-index: 10050;
+            display: flex;
+            justify-content: flex-end;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            backdrop-filter: blur(3px);
+        }
+        .hero-details-overlay.open { opacity: 1; }
+
+        /* ---- Painel lateral ---- */
+        .hero-details-panel {
+            width: 100%;
+            max-width: 460px;
+            height: 100%;
+            background:
+                radial-gradient(ellipse at top, rgba(201, 162, 39, 0.06), transparent 50%),
+                linear-gradient(180deg, #2a1f10 0%, #1a1208 100%);
+            border-left: 3px solid #c9a227;
+            overflow-y: auto;
+            padding: 0;
+            transform: translateX(100%);
+            transition: transform 0.35s cubic-bezier(0.25, 0.8, 0.3, 1);
+            box-shadow: -15px 0 40px rgba(0, 0, 0, 0.7);
+            display: flex;
+            flex-direction: column;
+            scrollbar-width: thin;
+            scrollbar-color: #6a5024 transparent;
+        }
+        .hero-details-overlay.open .hero-details-panel {
+            transform: translateX(0);
+        }
+        .hero-details-panel::-webkit-scrollbar { width: 6px; }
+        .hero-details-panel::-webkit-scrollbar-thumb {
+            background: #6a5024;
+            border-radius: 3px;
+        }
+
+        /* ---- Cabeçalho ---- */
+        .hero-details-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 20px;
+            background:
+                linear-gradient(180deg, rgba(232, 185, 35, 0.1), transparent 100%),
+                rgba(10, 6, 2, 0.5);
+            border-bottom: 2px solid rgba(201, 162, 39, 0.3);
+            position: relative;
+            flex-shrink: 0;
+        }
+        .hero-details-sprite {
+            width: 72px;
+            height: 72px;
+            object-fit: contain;
+            filter: drop-shadow(0 0 8px rgba(232, 185, 35, 0.5));
+            flex-shrink: 0;
+        }
+        .hero-details-title-wrap {
+            flex: 1;
+            min-width: 0;
+        }
+        .hero-details-name {
+            font-family: 'Cinzel Decorative', serif;
+            color: #e8b923;
+            font-size: 1.4rem;
+            letter-spacing: 2px;
+            margin: 0 0 4px 0;
+            text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8);
+            line-height: 1.1;
+        }
+        .hero-details-role {
+            font-family: 'Cinzel', serif;
+            font-size: 0.85rem;
+            letter-spacing: 1px;
+            font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .hero-details-role img {
+            width: 18px;
+            height: 18px;
+            object-fit: contain;
+        }
+        .hero-details-close {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #6a2020, #3a1010);
+            color: #f5c8c8;
+            border: 1px solid #a83232;
+            font-family: 'Cinzel', serif;
+            font-weight: 900;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .hero-details-close:hover {
+            background: linear-gradient(135deg, #8a3030, #4a1414);
+            transform: rotate(90deg);
+        }
+
+        /* ---- Seções ---- */
+        .hero-details-section {
+            padding: 16px 20px;
+            border-bottom: 1px solid rgba(201, 162, 39, 0.15);
+        }
+        .hero-details-section:last-child { border-bottom: none; }
+
+        .hero-details-section-title {
+            font-family: 'Cinzel', serif;
+            color: #e8b923;
+            font-size: 0.8rem;
+            letter-spacing: 2px;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* ---- Stats em grade ---- */
+        .hero-details-stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        .hero-details-stat {
+            background: rgba(10, 6, 2, 0.6);
+            border: 1px solid rgba(201, 162, 39, 0.25);
+            border-radius: 6px;
+            padding: 8px 4px;
+            text-align: center;
+            transition: all 0.2s;
+        }
+        .hero-details-stat:hover {
+            border-color: #c9a227;
+            background: rgba(201, 162, 39, 0.08);
+        }
+        .hero-details-stat-label {
+            font-family: 'Cinzel', serif;
+            font-size: 0.65rem;
+            color: #8a7a52;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+        .hero-details-stat-value {
+            font-family: 'Cinzel', serif;
+            font-size: 1.1rem;
+            color: #e8b923;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        /* ---- Nome do PA ---- */
+        .hero-details-pa-name {
+            font-family: 'Cinzel Decorative', serif;
+            color: #c39bd3;
+            font-size: 1.1rem;
+            letter-spacing: 1.5px;
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px rgba(142, 68, 173, 0.5);
+        }
+        .hero-details-pa-desc {
+            font-family: 'EB Garamond', serif;
+            color: #e8dcc4;
+            font-size: 1rem;
+            line-height: 1.55;
+            margin-bottom: 10px;
+            font-style: italic;
+        }
+        .hero-details-pa-extra {
+            font-family: 'EB Garamond', serif;
+            color: #8ac070;
+            font-size: 0.9rem;
+            line-height: 1.45;
+            padding: 10px 12px;
+            background: rgba(107, 163, 92, 0.1);
+            border-left: 3px solid #6ba35c;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+        .hero-details-note {
+            font-family: 'EB Garamond', serif;
+            color: #b8a577;
+            font-size: 0.9rem;
+            line-height: 1.45;
+            font-style: italic;
+            padding: 8px 12px;
+            background: rgba(10, 6, 2, 0.4);
+            border-left: 3px solid #6a5024;
+            border-radius: 4px;
+        }
+
+        /* ---- Mini-grid 8×8 ---- */
+        .hero-details-pa-image-wrap {
+            display: flex;
+            justify-content: center;
+            padding: 15px;
+            background: rgba(10, 6, 2, 0.5);
+            border: 1px solid rgba(201, 162, 39, 0.2);
+            border-radius: 8px;
+            margin-bottom: 12px;
+            min-height: 200px;
+            align-items: center;
+        }
+        .hero-details-pa-image {
+            max-width: 100%;
+            max-height: 280px;
+            object-fit: contain;
+            border-radius: 6px;
+            filter: drop-shadow(0 0 15px rgba(232, 185, 35, 0.5));
+        }
+
+        .pa-mini-grid {
+            display: grid;
+            grid-template-columns: repeat(8, 24px);
+            grid-template-rows: repeat(8, 24px);
+            gap: 2px;
+            padding: 8px;
+            background: linear-gradient(180deg, #1f1608, #0d0805);
+            border: 2px solid #3d2d18;
+            border-radius: 6px;
+            box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.6);
+        }
+        .pa-mini-tile {
+            width: 24px;
+            height: 24px;
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            transition: transform 0.2s;
+            position: relative;
+        }
+        .pa-mini-hero {
+            border: 2px solid #e8b923;
+            box-shadow:
+                0 0 10px rgba(232, 185, 35, 0.9),
+                inset 0 0 6px rgba(255, 255, 255, 0.3);
+            transform: scale(1.15);
+            z-index: 3;
+            font-size: 13px;
+            line-height: 1;
+        }
+        .pa-mini-afetado {
+            opacity: 0.95;
+            box-shadow:
+                inset 0 0 6px rgba(0, 0, 0, 0.4),
+                0 0 4px rgba(232, 185, 35, 0.4);
+            border: 1px solid rgba(232, 185, 35, 0.5);
+        }
+        .pa-mini-vazio {
+            background: rgba(10, 6, 2, 0.5);
+            border: 1px solid rgba(61, 45, 24, 0.6);
+        }
+
+        /* ---- Legenda ---- */
+        .hero-details-legend {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+            font-family: 'EB Garamond', serif;
+            font-size: 0.8rem;
+            color: #b8a577;
+        }
+        .hero-details-legend-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .hero-details-legend-mark {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border-radius: 3px;
+        }
+        .pa-mini-hero-mark {
+            background: linear-gradient(135deg, #b73a3a, #8a2424);
+            border: 2px solid #e8b923;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            color: #fff;
+            line-height: 1;
+        }
+        .pa-mini-afetado-mark {
+            background: linear-gradient(135deg, #b73a3a, #8a2424);
+            opacity: 0.95;
+            border: 1px solid rgba(232, 185, 35, 0.5);
+        }
+        .pa-mini-vazio-mark {
+            background: rgba(10, 6, 2, 0.5);
+            border: 1px solid rgba(61, 45, 24, 0.6);
+        }
+
+        /* ---- Notas finais ---- */
+        .hero-details-notes {
+            background: rgba(201, 162, 39, 0.03);
+        }
+
+        /* ---- Responsivo ---- */
+        @media (max-width: 600px) {
+            .hero-details-panel { max-width: 100%; }
+            .hero-details-name { font-size: 1.15rem; }
+            .hero-details-sprite { width: 56px; height: 56px; }
+            .hero-details-stats { grid-template-columns: repeat(2, 1fr); }
+            .pa-mini-grid {
+                grid-template-columns: repeat(8, 18px);
+                grid-template-rows: repeat(8, 18px);
+                gap: 1px;
+            }
+            .pa-mini-tile { width: 18px; height: 18px; font-size: 11px; }
+            .pa-mini-hero { font-size: 10px; }
+        }
+    `;
+    document.head.appendChild(style);
+    console.log('✅ CSS do painel de detalhes injetado.');
+})();
