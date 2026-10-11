@@ -6780,3 +6780,152 @@ window.giveStars = function(count){
 // FIM — historia.js V8.1
 // =================================================================
 console.log('✅ historia.js — Parte 6/6 (V8.1) carregada. Arquivo completo.');
+// =================================================================
+// 🔧 FIX DE Z-INDEX — Efeitos acima do tabuleiro
+// =================================================================
+(function fixStoryFxZIndex() {
+    if (document.getElementById('storyFxZIndexFix')) return;
+    const style = document.createElement('style');
+    style.id = 'storyFxZIndexFix';
+    style.textContent = `
+        /* O board vira o stacking context raiz */
+        #board {
+            position: relative !important;
+            z-index: 0 !important;
+            isolation: isolate;  /* força stacking context isolado */
+        }
+
+        /* O grid fica na base */
+        #board > .grid {
+            position: relative;
+            z-index: 1 !important;
+        }
+
+        /* Tokens (heróis + boss) ficam acima do grid, mas abaixo dos FX */
+        #board > .token {
+            z-index: 10 !important;
+        }
+
+        /* Todos os FX do historia.js ficam acima de tudo */
+        #board > .story-fx,
+        #board > .fx-spike-burst,
+        #board > .fx-spike-travel,
+        #board > .fx-spike-roll,
+        #board > .fx-jaw-snap,
+        #board > .fx-tail-whip,
+        #board > .fx-antler-charge,
+        #board > .fx-pounce-arc,
+        #board > .fx-claw-slash,
+        #board > .fx-heavy-slash,
+        #board > .fx-fang-bite,
+        #board > .fx-wing-gust,
+        #board > .fx-peck-beak,
+        #board > .fx-coil-wrap,
+        #board > .fx-sting-venom,
+        #board > .fx-splash-wave,
+        #board > .fx-fin-slash,
+        #board > .fx-hoof-stomp,
+        #board > .fx-ground-crack,
+        #board > .fx-shockwave,
+        #board > .fx-fog-cloud,
+        #board > .fx-swarm-cloud,
+        #board > .fx-spectral-veil,
+        #board > .fx-push-arrow,
+        #board > .fx-pull-chain,
+        #board > .fx-heal-orb,
+        #board > .fx-tile-flip,
+        #board > .fx-element-pulse,
+        #board > .fx-flame-short,
+        #board > .fx-impact {
+            z-index: 50 !important;
+            pointer-events: none !important;
+        }
+
+        /* FX do entidades.js (base) também sobem */
+        #board > .fire-column,
+        #board > .fire-row,
+        #board > .flare-fx,
+        #board > .bite-fx,
+        #board > .rock-projectile,
+        #board > .tsunami-fx,
+        #board > .vortex-fx,
+        #board > .pororoca-fx,
+        #board > .water-cross-fx,
+        #board > .sword-fx,
+        #board > .projectile,
+        #board > .arrow-fx,
+        #board > .fireball-fx,
+        #board > .claw-spin-fx,
+        #board > .potion-fx,
+        #board > .poison-gas-fx,
+        #board > .earthquake-fx,
+        #board > .broken-heart-fx,
+        #board > .scary-face-fx,
+        #board > .moon-fx,
+        #board > .moon-ray-fx,
+        #board > .sun-fx,
+        #board > .sun-ray-fx,
+        #board > .heat-wave-fx,
+        #board > .storm-fx {
+            z-index: 50 !important;
+            pointer-events: none !important;
+        }
+
+        /* Números flutuantes de dano/cura — sempre acima de tudo */
+        #board > .dmg-float,
+        #board > .heal-float {
+            z-index: 80 !important;
+        }
+
+        /* Bravely GIF overlay — topo absoluto */
+        #board > .bravely-animation-overlay {
+            z-index: 200 !important;
+        }
+
+        /* Poder Ancestral — topo absoluto */
+        #board > .poder-ancestral-vignette,
+        #board > .poder-ancestral-text,
+        #board > .poder-ancestral-runes,
+        #board > .poder-ancestral-burst {
+            z-index: 150 !important;
+        }
+
+        /* Purificação — acima de tudo */
+        #board > .purificacao-overlay {
+            z-index: 300 !important;
+        }
+
+        /* Tutorial (mesma lógica) */
+        #tutorialBoard {
+            position: relative !important;
+            isolation: isolate;
+        }
+        #tutorialBoard > .grid { z-index: 1 !important; }
+        #tutorialBoard > .token { z-index: 10 !important; }
+        #tutorialBoard > .story-fx,
+        #tutorialBoard > .dmg-float,
+        #tutorialBoard > .heal-float {
+            z-index: 50 !important;
+        }
+    `;
+    document.head.appendChild(style);
+    console.log('✅ Fix de z-index dos FX aplicado.');
+})();
+// =================================================================
+// 🔧 FIX — Insere FX sempre como ÚLTIMO filho do #board
+// =================================================================
+(function fixStoryFxInsertion() {
+    const board = document.getElementById('board');
+    if (!board) return;
+
+    // Observer que garante que o .grid fique sempre na primeira posição
+    const observer = new MutationObserver(() => {
+        const grid = board.querySelector(':scope > .grid');
+        if (grid && grid !== board.firstElementChild) {
+            board.insertBefore(grid, board.firstElementChild);
+        }
+    });
+    observer.observe(board, { childList: true });
+
+    console.log('✅ Fix de ordem de inserção dos FX aplicado.');
+})();
