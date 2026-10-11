@@ -1,34 +1,29 @@
 // =================================================================
 // ENTIDADES: Confronto de Lendas — MODO HISTÓRIA
-// historia.js — V6.0
+// historia.js — V7.0
 // =================================================================
 //
 // ⚠️ NÃO TOCA EM entidades.js
 // Sobrescreve applyDmg/manageTurns/saveAndRefresh SÓ quando _storyMode === true.
 //
-// V6.0 — MUDANÇAS PRINCIPAIS:
-//   • Skills ÚNICAS para cada animal dos 13 atos (nada mais genérico)
+// V7.0 — MUDANÇAS PRINCIPAIS:
+//   • Sistema de estrelas por fase (⭐⭐⭐)
+//   • 10 heróis desbloqueáveis por estrelas totais
+//   • Heróis novos com PA único (override do executeAction em _storyMode)
+//   • OCA mostra heróis bloqueados em silhueta
+//   • Sprites dos heróis novos em tabela editável (emoji por padrão)
+//   • CLASS_DB estendido no modo história (sem tocar no entidades.js)
+//
+// V6.x — CORREÇÕES ACUMULADAS:
+//   • Skills únicas para cada animal dos 13 atos
 //   • Sistema STORY_FX_SPRITES com fallback CSS → sprite
-//   • 27 efeitos visuais CSS novos + 12 helpers de FX
-//   • STORY_ENEMIES reescrito com campo 'handler' (todos com 2 skills)
-//   • applyStorySkill() delega pros handlers customizados
-//
-// V5.x — CORREÇÕES ACUMULADAS:
-//   • B1 — playBossTheme no avanço de fase
-//   • B2 — unlockAudio antes de iniciar batalha
-//   • B4 — aldeia_bg aceita imagem
-//   • B5 — loadStoryProgressByName NÃO libera todos os atos
-//   • B6 — re-render da Aldeia após desbloqueio
-//   • B7 — Sistema uiIcon() universal
-//   • Desbloqueio de capítulo correto (sem pular atos)
+//   • 27 efeitos visuais CSS + 12 helpers de FX
+//   • Bosses fiéis ao entidades.js (mesma IA, som, comportamento)
+//   • Sistema de som por arquétipo com fallback
+//   • skill.dmg sobrescreve enemy.atk
+//   • B1..B7 (playBossTheme, unlockAudio, aldeia_bg, save, re-render, uiIcon)
+//   • Desbloqueio de capítulo correto
 //   • OCA — só permite 1 herói por vez
-//
-// ⏭️ Pendências anotadas (NÃO implementadas ainda):
-//   • Sistema de estrelas por fase (reaproveitar calculateFinalScore)
-//   • Aviso visual de "fase já concluída — recompensa reduzida"
-//   • Botão "pular diálogo" nos overlays
-//   • Substituir arcadeBossTransition por _storyTransitioning
-//   • Unificar desbloqueio de capítulo (hoje em 2 lugares)
 // =================================================================
 
 // =================================================================
@@ -108,8 +103,9 @@
         .story-phase-card.final-boss{border-color:#8e44ad;background:linear-gradient(180deg,rgba(142,68,173,.2),transparent 45%),linear-gradient(180deg,rgba(30,15,40,.95),rgba(15,8,20,.95))}
         .story-phase-card.final-boss.unlocked:hover{border-color:#c39bd3;box-shadow:0 8px 20px rgba(0,0,0,.5),0 0 30px rgba(142,68,173,.6)}
         .story-phase-bg{background:radial-gradient(circle at center,rgba(0,0,0,.3),rgba(0,0,0,.6));padding:20px;text-align:center;border-bottom:1px solid rgba(201,162,39,.15);min-height:80px;display:flex;align-items:center;justify-content:center}
-        .story-phase-header{display:flex;justify-content:space-between;align-items:center;padding:10px 15px;background:rgba(10,6,2,.5);border-bottom:1px solid rgba(201,162,39,.15)}
+        .story-phase-header{display:flex;justify-content:space-between;align-items:center;padding:10px 15px;background:rgba(10,6,2,.5);border-bottom:1px solid rgba(201,162,39,.15);gap:8px}
         .story-phase-num{font-family:'Cinzel',serif;font-size:.85rem;color:#e8b923;letter-spacing:1.5px;font-weight:700}
+        .story-phase-stars{display:flex;gap:2px;font-size:.9rem;line-height:1}
         .story-phase-status{font-size:1.1rem;display:inline-flex;align-items:center;justify-content:center}
         .story-phase-status img{width:22px;height:22px;object-fit:contain}
         .story-phase-available{color:#e8b923;animation:storyPulseArrow 1s ease-in-out infinite alternate;display:inline-flex;align-items:center;justify-content:center}
@@ -123,18 +119,37 @@
         .story-phase-enemy img{width:32px;height:32px;object-fit:contain;filter:drop-shadow(0 0 3px rgba(0,0,0,.6))}
         .story-phase-arrow{color:#8a7a52;font-size:.85rem;margin:0 2px}
         .story-enemy-mini{font-size:1.3rem}
+        /* ===== ESTRELAS ===== */
+        .story-star{display:inline-block;font-size:1em;line-height:1;filter:drop-shadow(0 0 3px rgba(0,0,0,.6))}
+        .story-star.on{color:#e8b923;text-shadow:0 0 6px rgba(232,185,35,.7)}
+        .story-star.off{color:#4a3a20;opacity:.6}
+        .story-stars-counter{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;background:linear-gradient(135deg,rgba(58,42,24,.9),rgba(26,18,8,.9));border:1px solid #6a5024;border-radius:20px;font-family:'Cinzel',serif;font-weight:700;font-size:.95rem;color:#e8b923;letter-spacing:1px}
+        .story-stars-counter .story-stars-icon{font-size:1.15em;filter:drop-shadow(0 0 6px rgba(232,185,35,.6))}
+        .story-stars-big{display:flex;justify-content:center;gap:14px;font-size:3.5rem;line-height:1;margin:10px 0;letter-spacing:4px}
+        .story-stars-big .story-star{opacity:0;transform:scale(0.3);transition:opacity .3s ease-out,transform .3s cubic-bezier(.34,1.56,.64,1)}
+        .story-stars-big .story-star.show{opacity:1;transform:scale(1)}
+        .story-stars-big .story-star.big-on{color:#e8b923;text-shadow:0 0 15px rgba(232,185,35,.9),0 0 30px rgba(232,185,35,.5)}
+        .story-stars-big .story-star.big-off{color:#3a2d18;opacity:.5}
+        .story-stars-big .story-star.big-off.show{opacity:.5}
+        /* ===== HERÓIS BLOQUEADOS ===== */
         .story-heroes-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:20px;margin-bottom:30px}
         .story-hero-card{background:linear-gradient(180deg,rgba(201,162,39,.05),transparent 40%),linear-gradient(180deg,rgba(42,31,16,.9),rgba(26,18,8,.9));border:2px solid #3d2d18;border-radius:8px;padding:20px 15px;text-align:center;cursor:pointer;transition:all .3s;position:relative}
-        .story-hero-card:hover{transform:translateY(-4px);border-color:#6a5024}
+        .story-hero-card:hover:not(.locked){transform:translateY(-4px);border-color:#6a5024}
         .story-hero-card.selected{border-color:#e8b923;background:linear-gradient(180deg,rgba(232,185,35,.15),transparent 50%),linear-gradient(180deg,rgba(58,42,24,.9),rgba(26,18,8,.9));box-shadow:0 0 25px rgba(232,185,35,.35)}
+        .story-hero-card.locked{cursor:not-allowed;background:linear-gradient(180deg,rgba(20,15,10,.9),rgba(10,6,2,.95));border-color:#2a1f10;opacity:.75}
         .story-hero-sprite{width:80px;height:80px;object-fit:contain;display:block;margin:0 auto 12px;filter:drop-shadow(0 0 6px rgba(0,0,0,.7))}
+        .story-hero-card.locked .story-hero-sprite{filter:brightness(0) invert(0.15) drop-shadow(0 0 8px rgba(232,185,35,.3));opacity:.85}
         .story-hero-name{font-family:'Cinzel',serif;color:#f0e2c0;font-size:1rem;letter-spacing:1px;margin-bottom:4px}
+        .story-hero-card.locked .story-hero-name{color:#5a4a30;font-style:italic}
         .story-hero-element{font-family:'Cinzel',serif;font-size:.8rem;font-weight:700;letter-spacing:1px;margin-bottom:6px;display:inline-flex;align-items:center;gap:4px;justify-content:center}
         .story-hero-element img{width:16px;height:16px;object-fit:contain}
         .story-hero-level{font-family:'EB Garamond',serif;color:#e8b923;font-size:.85rem;font-weight:700;margin-bottom:2px}
         .story-hero-xp{font-family:'EB Garamond',serif;color:#8a7a52;font-size:.8rem}
         .story-hero-check{position:absolute;top:10px;right:10px;font-size:1.2rem}
         .story-hero-check img{width:22px;height:22px;object-fit:contain}
+        .story-hero-lock-info{font-family:'EB Garamond',serif;font-size:.85rem;font-style:italic;color:#8a7a52;margin-top:6px;line-height:1.3}
+        .story-hero-lock-info b{color:#e8b923;font-family:'Cinzel',serif;font-style:normal}
+        .story-hero-lock-icon{position:absolute;top:10px;right:10px;font-size:1.1rem;opacity:.7}
         .story-shop-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px;margin-bottom:30px}
         .story-shop-item{background:linear-gradient(180deg,rgba(201,162,39,.05),transparent 40%),linear-gradient(180deg,rgba(42,31,16,.9),rgba(26,18,8,.9));border:2px solid #3d2d18;border-radius:8px;padding:20px 15px;text-align:center;transition:all .3s;display:flex;flex-direction:column}
         .story-shop-item:hover:not(.disabled){transform:translateY(-4px);border-color:#c9a227}
@@ -225,6 +240,13 @@
         .story-result-btn.primary:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,.6),0 0 25px rgba(232,185,35,.4)}
         .story-result-btn.secondary{background:linear-gradient(180deg,rgba(201,162,39,.08),transparent 40%),linear-gradient(135deg,#3d2d18,#2a1f10);color:#c8b787;border-color:#6a5024}
         .story-result-btn.secondary:hover{background:linear-gradient(180deg,rgba(201,162,39,.2),transparent 45%),linear-gradient(135deg,#5a4220,#3a2a14);color:#f0e2c0;border-color:#c9a227}
+        /* ===== TOAST ===== */
+        .story-toast{position:fixed;top:20px;right:20px;background:linear-gradient(135deg,#2c3e50,#34495e);color:white;padding:15px 20px;border-radius:8px;border-left:4px solid #f1c40f;box-shadow:0 5px 15px rgba(0,0,0,.5);z-index:10010;max-width:320px;transform:translateX(120%);transition:transform .35s cubic-bezier(.34,1.56,.64,1);animation:storyToastIn .35s cubic-bezier(.34,1.56,.64,1) forwards}
+        @keyframes storyToastIn{from{transform:translateX(120%)}to{transform:translateX(0)}}
+        .story-toast .toast-title{font-family:'Cinzel',serif;font-weight:700;font-size:.8rem;letter-spacing:2px;color:#f1c40f;margin-bottom:4px}
+        .story-toast .toast-body{font-family:'EB Garamond',serif;font-size:.95rem;line-height:1.35}
+        .story-toast .toast-icon{font-size:1.6rem;flex-shrink:0}
+        .story-toast .toast-wrap{display:flex;align-items:center;gap:12px}
         @media (max-width:600px){
             .story-title{font-size:1.6rem}
             .story-ald-title{font-size:1.4rem}
@@ -232,6 +254,8 @@
             .story-heroes-grid{grid-template-columns:repeat(2,1fr)}
             .story-result-title{font-size:1.3rem}
             .story-save-input-wrap{flex-direction:column}
+            .story-stars-big{font-size:2.4rem;gap:10px}
+            .story-toast{right:10px;left:10px;max-width:none}
         }
         /* ===== DIÁLOGO DO BOSS ===== */
         .story-saci-dialog-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(10,6,2,.92);z-index:10003;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto;animation:storyFadeIn .4s ease}
@@ -363,6 +387,9 @@
 
 // =================================================================
 // 🎨 SPRITES / EMOJIS
+// -----------------------------------------------------------------
+// Preserva 100% dos links já configurados.
+// Novos slots (heróis, inimigos sem sprite) começam vazios e caem em emoji.
 // =================================================================
 const SPRITES_STORY = {
     // --- Ato 1 — Inimigos ---
@@ -439,6 +466,19 @@ const SPRITES_STORY = {
     'espectro_jaci':'',
     'espectro_guaraci':'',
 
+    // --- HERÓIS NOVOS (desbloqueáveis) ---
+    // Deixe vazio para usar emoji. Quando tiver sprite, coloque o link.
+    'heroi_Kanarott':'https://i.imgur.com/6Y2qBQh.gif',
+    'heroi_Jurua':'https://i.imgur.com/R8Tf3nI.gif',
+    'heroi_BichoFolharal':'https://i.imgur.com/NCbRRFK.gif',
+    'heroi_Eru':'https://i.imgur.com/WJZUsKI.gif',
+    'heroi_Teperesik':'https://i.imgur.com/SzgasL5.gif',
+    'heroi_Andure':'https://i.imgur.com/XKsY67z.gif',
+    'heroi_PajeAnhanguera':'https://i.imgur.com/gpb5vvQ.gif',
+    'heroi_MaeDaMata':'https://i.imgur.com/MjcLAzy.gif',
+    'heroi_Araci':'https://i.imgur.com/x8gAPJH.gif',
+    'heroi_Tapyrayawara':'https://i.imgur.com/m0tdSWA.gif',
+
     // --- Cenários ---
     'bg_1_1':'https://i.imgur.com/OWIsmOc.png','bg_1_2':'https://i.imgur.com/XBd9za6.png',
     'bg_1_3':'https://i.imgur.com/iNDxFfh.png','bg_1_4':'https://i.imgur.com/A25ehvZ.png',
@@ -474,7 +514,7 @@ const SPRITES_STORY = {
     // --- Armas ---
     'arma_cajado':'','arma_arco':'','arma_manopla':'',
 
-    // --- Ícones UI (B7) ---
+    // --- Ícones UI ---
     'ui_gold':'https://i.imgur.com/LIfKWB8.png',
     'ui_xp':'https://i.imgur.com/sksvz3H.png',
     'ui_swap':'https://i.imgur.com/12PFW5I.png',
@@ -489,6 +529,8 @@ const SPRITES_STORY = {
     'ui_arrow':'https://i.imgur.com/mXodqS6.png',
     'ui_warn':'',
     'ui_medal':'https://i.imgur.com/ViAr1EO.png',
+    'ui_star':'',              // ← estrela (deixe vazio = emoji ⭐)
+    'ui_star_empty':'',        // ← estrela vazia (deixe vazio = emoji ☆)
     'elem_fogo':'https://i.imgur.com/JouEZbM.png',
     'elem_agua':'https://i.imgur.com/tMRUv48.png',
     'elem_terra':'https://i.imgur.com/ZVPQ9iH.png',
@@ -498,6 +540,12 @@ const SPRITES_STORY = {
     'icon_skull':'https://i.imgur.com/GPSPBly.png','icon_drop':'https://i.imgur.com/a5t2pWl.png','icon_gold':'https://i.imgur.com/LIfKWB8.png'
 };
 
+// =================================================================
+// 🔤 EMOJIS (fallback quando não há sprite no slot acima)
+// -----------------------------------------------------------------
+// Toda chave usada no código direto (ex: heroi_Kanarott) deve ter
+// um emoji aqui para não quebrar quando o sprite estiver vazio.
+// =================================================================
 const EMOJI_STORY = {
     // --- Ato 1 ---
     'porco_espinho':'🦔','jacare':'🐊','cervo':'🦌','onca_parda':'🐆','saci':'👺',
@@ -529,6 +577,18 @@ const EMOJI_STORY = {
     'espectro_boto':'🐬','espectro_boi':'🐂','espectro_jaci':'🌙','espectro_guaraci':'☀️',
     'anhanga':'👹',
 
+    // --- HERÓIS NOVOS (fallback emoji) ---
+    'heroi_Kanarott':'🦅',
+    'heroi_Jurua':'🐆',
+    'heroi_BichoFolharal':'🐿️',
+    'heroi_Eru':'🦌',
+    'heroi_Teperesik':'🐢',
+    'heroi_Andure':'🐬',
+    'heroi_PajeAnhanguera':'🦉',
+    'heroi_MaeDaMata':'🌳',
+    'heroi_Araci':'🦜',
+    'heroi_Tapyrayawara':'🐆',
+
     // --- Cenários ---
     'bg_1_1':'🌲','bg_1_2':'🏞️','bg_1_3':'🌳','bg_1_4':'🌲','bg_1_boss':'🌪️',
     'bg_2_1':'🌿','bg_2_2':'🌳','bg_2_3':'🌲','bg_2_4':'🪨','bg_2_boss':'🌋',
@@ -556,10 +616,11 @@ const EMOJI_STORY = {
     // --- Armas ---
     'arma_cajado':'🪄','arma_arco':'🏹','arma_manopla':'🪓',
 
-    // --- Ícones UI (B7) ---
+    // --- Ícones UI ---
     'ui_gold':'💰','ui_xp':'⭐','ui_swap':'🔄','ui_home':'🏘️','ui_play':'▶',
     'ui_gift':'🎁','ui_crown':'👑','ui_sparkle':'✨','ui_skull':'💀','ui_lock':'🔒',
     'ui_check':'✅','ui_arrow':'▶','ui_warn':'⚠️','ui_medal':'🏅',
+    'ui_star':'⭐','ui_star_empty':'☆',
     'elem_fogo':'🔥','elem_agua':'💧','elem_terra':'⛰️','elem_ar':'🌪️',
     // Aliases
     'icon_story':'📖','icon_locked':'🔒','icon_unlocked':'✅',
@@ -596,11 +657,10 @@ const SPECTRAL_IDS = [
 ];
 
 // =================================================================
-// 🎯 SISTEMA UNIVERSAL DE ÍCONES (B7)
+// 🎯 SISTEMA UNIVERSAL DE ÍCONES
 // =================================================================
-
 function uiIcon(nome, extraCls){
-    const spriteKey = nome.startsWith('ui_') || nome.startsWith('elem_') || nome.startsWith('icon_') ? nome : 'ui_' + nome;
+    const spriteKey = nome.startsWith('ui_') || nome.startsWith('elem_') || nome.startsWith('icon_') || nome.startsWith('heroi_') ? nome : 'ui_' + nome;
     const url = SPRITES_STORY[spriteKey];
     const emoji = EMOJI_STORY[spriteKey] || '?';
     const cls = extraCls ? `ui-icon ${extraCls}` : 'ui-icon';
@@ -630,7 +690,7 @@ function storySpriteLarge(key){
 }
 
 // =================================================================
-// 💾 SAVE (B5 — sem liberação geral)
+// 💾 SAVE
 // =================================================================
 const STORY_SAVE_KEY_CURRENT = 'entity_story_current_save';
 const STORY_SAVE_PREFIX = 'entity_story_save_';
@@ -642,9 +702,12 @@ function createEmptyStoryProgress(){
         unlockedPhases:{1:['1-1']},
         completedPhases:[], currentChapter:1,
         inventory:{}, totalXP:0, gold:0, enemiesDefeated:0, bossesDefeated:[],
-        unlockedHeroes:['Tupa','Sume','Caipora'], selectedHeroes:['Tupa'],
+        unlockedHeroes:['Tupa','Sume','Caipora'],
+        selectedHeroes:['Tupa'],
         heroLevels:{Tupa:1,Sume:1,Caipora:1}, heroXP:{Tupa:0,Sume:0,Caipora:0},
-        craftedWeapons:[], phasesEverCompleted:[]
+        craftedWeapons:[], phasesEverCompleted:[],
+        starsByPhase:{},              // ⭐ NOVO — estrelas por fase
+        unlockedHeroesStory:['Tupa','Sume','Caipora'],  // ⭐ NOVO — heróis desbloqueados no modo história
     };
 }
 
@@ -661,7 +724,6 @@ function saveStoryProgress(){
     } catch(e){ console.warn('save falhou', e); }
 }
 
-// ⚡ B5 — NÃO libera todos os atos ao carregar
 function loadStoryProgressByName(saveName){
     try {
         const raw = localStorage.getItem(getSaveKey(saveName));
@@ -669,11 +731,18 @@ function loadStoryProgressByName(saveName){
         const loaded = JSON.parse(raw);
         STORY_PROGRESS = Object.assign(createEmptyStoryProgress(), loaded);
 
+        // Garante defaults mínimos
         if(!Array.isArray(STORY_PROGRESS.unlockedChapters) || STORY_PROGRESS.unlockedChapters.length === 0){
             STORY_PROGRESS.unlockedChapters = [1];
         }
         if(!STORY_PROGRESS.unlockedPhases || Object.keys(STORY_PROGRESS.unlockedPhases).length === 0){
             STORY_PROGRESS.unlockedPhases = {1:['1-1']};
+        }
+        if(!STORY_PROGRESS.starsByPhase || typeof STORY_PROGRESS.starsByPhase !== 'object'){
+            STORY_PROGRESS.starsByPhase = {};
+        }
+        if(!Array.isArray(STORY_PROGRESS.unlockedHeroesStory)){
+            STORY_PROGRESS.unlockedHeroesStory = ['Tupa','Sume','Caipora'];
         }
 
         STORY_CURRENT_SAVE_NAME = STORY_PROGRESS.saveName || saveName;
@@ -702,6 +771,7 @@ function listStorySaves(){
                         gold: data.gold||0,
                         xp: data.totalXP||0,
                         completed: (data.completedPhases||[]).length,
+                        stars: Object.values(data.starsByPhase || {}).reduce((a,b)=>a+b, 0),
                         createdAt: data.createdAt||0
                     });
                 } catch(e){}
@@ -720,7 +790,19 @@ function getLastUsedSaveName(){
 // =================================================================
 // 🎨 ELEMENTO por nome do save
 // =================================================================
-const HERO_FIXED_ELEMENTS = {};
+const HERO_FIXED_ELEMENTS = {
+    // Heróis novos (fixo). Heróis base ficam dinâmicos (não listados aqui).
+    'Kanarott': 'TERRA',
+    'Teperesik': 'TERRA',
+    'Eru': 'FOGO',
+    'Anduré': 'AGUA',
+    'Mãe da Mata': 'TERRA',
+    'Pajé Anhanguera': 'FOGO',
+    'Juruá': 'TERRA',
+    'Araci': 'AR',
+    'Bicho Folharal': 'AR',
+    "Tapyra'yawara": 'TERRA',
+};
 
 function getElementFromName(name){
     if(!name) return 'FOGO';
@@ -1020,9 +1102,203 @@ const STORY_SHOP_ITEMS = [
 // 🏁 FIM DA PARTE 1/5
 // =================================================================
 // =================================================================
-// historia.js — V6.0 — Bloco 2/5
-// Diálogos dos bosses + finais + purificação + STORY_ENEMIES (handlers)
+// historia.js — V7.0 — Bloco 2/5
+// Tabelas dos heróis + diálogos + STORY_ENEMIES
 // =================================================================
+
+// =================================================================
+// 🎯 SISTEMA DE ESTRELAS — CONFIGURAÇÃO
+// =================================================================
+const STORY_STARS_CONFIG = {
+    MAX_STARS_PER_PHASE: 3,
+    TOTAL_PHASES: 64,           // 13 atos × ~5 fases = 64 (ajustável)
+    // Limiares em % do score máximo teórico
+    THRESHOLD_3_STARS: 0.90,    // ≥90% → 3 estrelas
+    THRESHOLD_2_STARS: 0.60,    // ≥60% → 2 estrelas
+    THRESHOLD_1_STAR:  0.30,    // ≥30% → 1 estrela
+    // Valores de referência pra "score máximo teórico"
+    REF_ULTIMATE_BONUS: 150,    // bônus por Poder Ancestral
+    REF_AMULET_BONUS: 100,      // bônus por muiraquitã
+    REF_SHAPE_LINHA: 50,
+    REF_SHAPE_L: 75,
+    REF_SHAPE_ZIGZAG: 100,
+    REF_SHAPE_QUADRADO: 80,
+    REF_MAX_TURNS_MULT: 1.5,    // melhor multiplicador de turnos
+    REF_MAX_ULTIMATES: 2,       // assume no máximo 2 PAs por fase
+    REF_MAX_AMULETS: 5,         // assume no máximo 5 muiraquitãs por fase
+};
+
+// =================================================================
+// 🦸 TABELA DE HERÓIS DO MODO HISTÓRIA
+// -----------------------------------------------------------------
+// Cada herói tem:
+//   displayName  → nome exibido (com acento)
+//   spriteKey    → chave em SPRITES_STORY (heroi_X)
+//   className    → chave técnica (usada em playerConfigs)
+//   role         → 'Guerreiro' | 'Mago' | 'Arqueiro'
+//   hp, atk      → atributos base
+//   range        → alcance mínimo pra atacar a distância (0 = corpo-a-corpo)
+//   element      → 'FOGO' | 'AGUA' | 'TERRA' | 'AR' | null (dinâmico)
+//   paKey        → chave do Poder Ancestral (STORY_HERO_PA)
+//   starsNeeded  → estrelas totais necessárias (0 = já desbloqueado)
+// =================================================================
+const STORY_HERO_CLASSES = {
+    // ---- BASE (sempre desbloqueados, elemento dinâmico) ----
+    'Tupa': {
+        displayName: 'Tupã',
+        spriteKey: null,       // usa SPRITES.Tupa do entidades.js
+        className: 'Tupa',
+        role: 'Guerreiro',
+        hp: 16, atk: 3, range: 0,
+        element: null,
+        paKey: 'base_coluna',  // usa PA original do entidades.js
+        starsNeeded: 0,
+    },
+    'Sume': {
+        displayName: 'Sumé',
+        spriteKey: null,
+        className: 'Sume',
+        role: 'Mago',
+        hp: 8, atk: 2, range: 4,
+        element: null,
+        paKey: 'base_linha_cura',
+        starsNeeded: 0,
+    },
+    'Caipora': {
+        displayName: 'Caipora',
+        spriteKey: null,
+        className: 'Caipora',
+        role: 'Arqueiro',
+        hp: 10, atk: 2, range: 3,
+        element: null,
+        paKey: 'base_area_alvo',
+        starsNeeded: 0,
+    },
+
+    // ---- GUERREIROS (elemento fixo, desbloqueáveis) ----
+    'Kanarott': {
+        displayName: 'Kanarott',
+        spriteKey: 'heroi_Kanarott',
+        className: 'Kanarott',
+        role: 'Guerreiro',
+        hp: 14, atk: 4, range: 0,
+        element: 'TERRA',
+        paKey: 'kanarott_cruz_empurra',
+        starsNeeded: 10,
+    },
+    'Teperesik': {
+        displayName: 'Teperesik',
+        spriteKey: 'heroi_Teperesik',
+        className: 'Teperesik',
+        role: 'Guerreiro',
+        hp: 20, atk: 2, range: 0,
+        element: 'TERRA',
+        paKey: 'teperesik_area2x2',
+        starsNeeded: 60,
+    },
+    'Eru': {
+        displayName: 'Eru',
+        spriteKey: 'heroi_Eru',
+        className: 'Eru',
+        role: 'Guerreiro',
+        hp: 12, atk: 5, range: 0,
+        element: 'FOGO',
+        paKey: 'eru_linha_horizontal',
+        starsNeeded: 45,
+    },
+
+    // ---- MAGOS (alcance 4, elemento fixo) ----
+    'Anduré': {
+        displayName: 'Anduré',
+        spriteKey: 'heroi_Andure',
+        className: 'Anduré',
+        role: 'Mago',
+        hp: 10, atk: 1, range: 4,
+        element: 'AGUA',
+        paKey: 'andure_area2x2_cura',
+        starsNeeded: 75,
+    },
+    'Mãe da Mata': {
+        displayName: 'Mãe da Mata',
+        spriteKey: 'heroi_MaeDaMata',
+        className: 'Mãe da Mata',
+        role: 'Mago',
+        hp: 11, atk: 1, range: 4,
+        element: 'TERRA',
+        paKey: 'maedamata_area3x3_cura',
+        starsNeeded: 110,
+    },
+    'Pajé Anhanguera': {
+        displayName: 'Pajé Anhanguera',
+        spriteKey: 'heroi_PajeAnhanguera',
+        className: 'Pajé Anhanguera',
+        role: 'Mago',
+        hp: 9, atk: 3, range: 4,
+        element: 'FOGO',
+        paKey: 'paje_coluna_fogo',
+        starsNeeded: 90,
+    },
+
+    // ---- ARQUEIROS (alcance 3, elemento fixo) ----
+    'Juruá': {
+        displayName: 'Juruá',
+        spriteKey: 'heroi_Jurua',
+        className: 'Juruá',
+        role: 'Arqueiro',
+        hp: 11, atk: 3, range: 3,
+        element: 'TERRA',
+        paKey: 'jurua_area_alvo_3x3',
+        starsNeeded: 20,
+    },
+    'Araci': {
+        displayName: 'Araci',
+        spriteKey: 'heroi_Araci',
+        className: 'Araci',
+        role: 'Arqueiro',
+        hp: 9, atk: 2, range: 3,
+        element: 'AR',
+        paKey: 'araci_linha_horizontal',
+        starsNeeded: 130,
+    },
+    'Bicho Folharal': {
+        displayName: 'Bicho Folharal',
+        spriteKey: 'heroi_BichoFolharal',
+        className: 'Bicho Folharal',
+        role: 'Arqueiro',
+        hp: 10, atk: 2, range: 3,
+        element: 'AR',
+        paKey: 'bicho_cruz_completa',
+        starsNeeded: 30,
+    },
+    "Tapyra'yawara": {
+        displayName: "Tapyra'yawara",
+        spriteKey: 'heroi_Tapyrayawara',
+        className: "Tapyra'yawara",
+        role: 'Arqueiro',
+        hp: 12, atk: 3, range: 3,
+        element: 'TERRA',
+        paKey: 'tapyra_coluna_alvo',
+        starsNeeded: 150,
+    },
+};
+
+// =================================================================
+// 🎯 DESBLOQUEIO DE HERÓIS POR ESTRELAS
+// -----------------------------------------------------------------
+// Lista ordenada do menor pro maior (pra facilitar loop de check)
+// =================================================================
+const STORY_HERO_UNLOCKS = [
+    { className: 'Kanarott',        displayName: 'Kanarott',        starsNeeded: 10  },
+    { className: 'Juruá',           displayName: 'Juruá',           starsNeeded: 20  },
+    { className: 'Bicho Folharal',  displayName: 'Bicho Folharal',  starsNeeded: 30  },
+    { className: 'Eru',             displayName: 'Eru',             starsNeeded: 45  },
+    { className: 'Teperesik',       displayName: 'Teperesik',       starsNeeded: 60  },
+    { className: 'Anduré',          displayName: 'Anduré',          starsNeeded: 75  },
+    { className: 'Pajé Anhanguera', displayName: 'Pajé Anhanguera', starsNeeded: 90  },
+    { className: 'Mãe da Mata',     displayName: 'Mãe da Mata',     starsNeeded: 110 },
+    { className: 'Araci',           displayName: 'Araci',           starsNeeded: 130 },
+    { className: "Tapyra'yawara",   displayName: "Tapyra'yawara",   starsNeeded: 150 },
+];
 
 // =================================================================
 // 💬 DIÁLOGOS DE ABERTURA — ATO 1 (Saci)
@@ -1584,9 +1860,6 @@ const STORY_PURIFICATION = {
 
 // =================================================================
 // 👹 STORY_ENEMIES — Animais + bosses com HANDLERS únicos
-// -----------------------------------------------------------------
-// Cada skill aponta pra um 'handler' em STORY_ANIMAL_SKILLS.
-// Os handlers são definidos nos Blocos 7B (Atos 1-7) e 7C (Atos 8-13).
 // =================================================================
 const STORY_ENEMIES = {
     // ---- ATO 1 ----
@@ -1677,7 +1950,7 @@ const STORY_ENEMIES = {
     // ---- ATO 6 ----
     urubu: {id:'urubu',name:'Urubu',hp:14,atk:2,
         skill1:{name:'Voo Rasante',handler:'urubu_voo'},
-        skill2:{name:'Bicada',handler:'urubu_bicada',dmg:1}},
+        skill2:{name:'Bicada',handler:'urubu_bicada'}},
     carcaara: {id:'carcaara',name:'Carcará',hp:16,atk:3,
         skill1:{name:'Garras Afiadas',handler:'carcara_garras'},
         skill2:{name:'Mergulho Mortal',handler:'carcara_mergulho'}},
@@ -1841,24 +2114,14 @@ const STORY_ENEMIES = {
 // 🏁 FIM DA PARTE 2/5
 // =================================================================
 // =================================================================
-// historia.js — V6.0 — Bloco 3/5
-// Sistema fxSprite() + 27 efeitos CSS + 12 helpers de FX
-// =================================================================
-//
-// 📖 COMO FUNCIONA O SISTEMA DE FX
-// -----------------------------------------------------------------
-// Cada efeito tem um slot em STORY_FX_SPRITES.
-//   • Se o slot estiver VAZIO → usa CSS puro (formas animadas)
-//   • Se o slot tiver uma URL → usa o SPRITE (GIF/PNG) automaticamente
-//
-// Pra trocar CSS por sprite, basta preencher:
-//   STORY_FX_SPRITES['spike_burst'] = 'https://i.imgur.com/xxxx.gif';
-//
-// Nenhum handler de skill precisa mudar — o sistema troca sozinho.
+// historia.js — V7.0 — Bloco 3/5
+// Sistema de FX + helpers + SISTEMA DE ESTRELAS + desbloqueio de heróis
 // =================================================================
 
 // =================================================================
-// 🎨 SLOTS DE SPRITES (preencha com URLs quando tiver os sprites)
+// 🎨 SLOTS DE SPRITES DE FX (preencha com URLs quando tiver os sprites)
+// -----------------------------------------------------------------
+// ⚠️ PRESERVADOS: todos os links que você já configurou estão mantidos.
 // =================================================================
 const STORY_FX_SPRITES = {
     spike_burst:      'https://i.imgur.com/rEKf5aV.png',
@@ -1919,7 +2182,7 @@ function fxElement(key, cssFallbackHTML) {
 }
 
 // =================================================================
-// 🎨 CSS DOS EFEITOS
+// 🎨 CSS DOS EFEITOS (fallback)
 // =================================================================
 (function injectStoryFxCSS() {
     if (document.getElementById('storyFxStyle')) return;
@@ -1933,441 +2196,65 @@ function fxElement(key, cssFallbackHTML) {
             transform-origin: center center;
             will-change: transform, opacity;
         }
-
-        /* ============================================================
-           🦔 PORCO-ESPINHO
-           ============================================================ */
-        .fx-spike-burst {
-            position: absolute;
-            width: 14px; height: 14px;
-            background: radial-gradient(circle, #fff5dc 0%, #d9b840 40%, #8a7018 100%);
-            border-radius: 50%;
-            box-shadow: 0 0 12px #d9b840, 0 0 24px rgba(217,184,64,0.5);
-            animation: fxSpikeBurst 0.6s ease-out forwards;
-        }
-        @keyframes fxSpikeBurst {
-            0%   { transform: scale(0);   opacity: 0; }
-            40%  { transform: scale(1.4); opacity: 1; }
-            100% { transform: scale(2.2); opacity: 0; }
-        }
-        .fx-spike-travel {
-            position: absolute;
-            width: 8px; height: 8px;
-            background: linear-gradient(135deg, #d9b840, #8a7018);
-            border-radius: 50%;
-            box-shadow: 0 0 8px #d9b840;
-            z-index: 56;
-            transition: left 0.25s linear, top 0.25s linear, opacity 0.25s;
-        }
-
-        .fx-spike-roll {
-            position: absolute;
-            width: 40px; height: 40px;
-            background: radial-gradient(circle, #d9b840 0%, #8a7018 70%, transparent 100%);
-            border-radius: 50%;
-            box-shadow: 0 0 15px #d9b840;
-            animation: fxSpikeRoll 0.5s linear forwards;
-        }
-        @keyframes fxSpikeRoll {
-            0%   { transform: rotate(0deg) scale(0.8); opacity: 0.6; }
-            50%  { transform: rotate(180deg) scale(1.1); opacity: 1; }
-            100% { transform: rotate(360deg) scale(0.8); opacity: 0; }
-        }
-
-        /* ============================================================
-           🐊 JACARÉ
-           ============================================================ */
-        .fx-jaw-snap {
-            position: absolute;
-            width: 100%; height: 100%;
-            background:
-                linear-gradient(180deg, transparent 30%, rgba(74,122,58,0.9) 48%, transparent 52%),
-                linear-gradient(0deg, transparent 30%, rgba(74,122,58,0.9) 48%, transparent 52%);
-            border-radius: 6px;
-            animation: fxJawSnap 0.45s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-        }
-        @keyframes fxJawSnap {
-            0%   { transform: scaleY(2.5); opacity: 0; }
-            40%  { transform: scaleY(1);   opacity: 1; }
-            70%  { transform: scaleY(0.85); opacity: 1; }
-            100% { transform: scaleY(1);   opacity: 0; }
-        }
-        .fx-tail-whip {
-            position: absolute;
-            width: 200%; height: 200%;
-            left: -50%; top: -50%;
-            border: 4px solid rgba(74,122,58,0.8);
-            border-top-color: transparent;
-            border-bottom-color: transparent;
-            border-radius: 50%;
-            box-shadow: 0 0 15px rgba(74,122,58,0.6);
-            animation: fxTailWhip 0.6s ease-out forwards;
-        }
-        @keyframes fxTailWhip {
-            0%   { transform: rotate(0deg)   scale(0.4); opacity: 0; }
-            50%  { transform: rotate(180deg) scale(1);   opacity: 1; }
-            100% { transform: rotate(360deg) scale(1.1); opacity: 0; }
-        }
-
-        /* ============================================================
-           🦌 CERVO
-           ============================================================ */
-        .fx-antler-charge {
-            position: absolute;
-            width: 100%; height: 100%;
-            background:
-                radial-gradient(circle at 20% 50%, rgba(217,184,64,0.9) 0%, transparent 30%),
-                radial-gradient(circle at 80% 50%, rgba(217,184,64,0.9) 0%, transparent 30%);
-            animation: fxAntlerCharge 0.5s ease-out forwards;
-        }
-        @keyframes fxAntlerCharge {
-            0%   { transform: translateX(-30px); opacity: 0; }
-            50%  { transform: translateX(0);     opacity: 1; }
-            100% { transform: translateX(20px);  opacity: 0; }
-        }
-
-        /* ============================================================
-           🐆 ONÇA / FELINOS
-           ============================================================ */
-        .fx-pounce-arc {
-            position: absolute;
-            width: 30px; height: 30px;
-            background: radial-gradient(circle, #d9b840 0%, #8a3030 70%, transparent 100%);
-            border-radius: 50%;
-            box-shadow: 0 0 20px #d9b840;
-            animation: fxPounceArc 0.65s cubic-bezier(0.4, 0, 0.3, 1) forwards;
-        }
-        @keyframes fxPounceArc {
-            0%   { transform: translate(0, 0) scale(0.6); opacity: 0; }
-            40%  { transform: translate(50%, -40px) scale(1.2); opacity: 1; }
-            100% { transform: translate(100%, 0) scale(0.8); opacity: 0; }
-        }
-        .fx-claw-slash {
-            position: absolute;
-            width: 100%; height: 100%;
-            background:
-                linear-gradient(45deg, transparent 40%, rgba(217,80,80,0.95) 48%, rgba(255,255,255,1) 50%, rgba(217,80,80,0.95) 52%, transparent 60%),
-                linear-gradient(-45deg, transparent 40%, rgba(217,80,80,0.95) 48%, rgba(255,255,255,1) 50%, rgba(217,80,80,0.95) 52%, transparent 60%);
-            animation: fxClawSlash 0.4s ease-out forwards;
-        }
-        @keyframes fxClawSlash {
-            0%   { transform: scale(0.3) rotate(-20deg); opacity: 0; }
-            50%  { transform: scale(1.1) rotate(0deg);   opacity: 1; }
-            100% { transform: scale(1.3) rotate(20deg);  opacity: 0; }
-        }
-        .fx-heavy-slash {
-            position: absolute;
-            width: 100%; height: 100%;
-            background:
-                linear-gradient(45deg, transparent 42%, rgba(255,80,80,0.95) 48%, rgba(255,255,255,1) 50%, rgba(255,80,80,0.95) 52%, transparent 58%);
-            animation: fxHeavySlash 0.45s ease-out forwards;
-        }
-        @keyframes fxHeavySlash {
-            0%   { transform: scale(0.5) rotate(-15deg); opacity: 0; }
-            50%  { transform: scale(1.3) rotate(0deg);   opacity: 1; }
-            100% { transform: scale(1.6) rotate(15deg);  opacity: 0; }
-        }
-
-        /* ============================================================
-           🐺 CANÍDEOS — Mordida
-           ============================================================ */
-        .fx-fang-bite {
-            position: absolute;
-            width: 100%; height: 100%;
-            background:
-                radial-gradient(ellipse at 50% 20%, rgba(255,255,255,0.9) 0%, transparent 25%),
-                radial-gradient(ellipse at 50% 80%, rgba(255,255,255,0.9) 0%, transparent 25%);
-            animation: fxFangBite 0.45s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-        }
-        @keyframes fxFangBite {
-            0%   { transform: scaleY(1.5); opacity: 0; }
-            40%  { transform: scaleY(0.9); opacity: 1; }
-            70%  { transform: scaleY(0.75); opacity: 1; }
-            100% { transform: scaleY(1);   opacity: 0; }
-        }
-
-        /* ============================================================
-           🦅 AVES
-           ============================================================ */
-        .fx-wing-gust {
-            position: absolute;
-            width: 100%; height: 100%;
-            background:
-                radial-gradient(ellipse at 30% 50%, rgba(217,184,64,0.7) 0%, transparent 40%),
-                radial-gradient(ellipse at 70% 50%, rgba(217,184,64,0.7) 0%, transparent 40%);
-            animation: fxWingGust 0.6s ease-out forwards;
-        }
-        @keyframes fxWingGust {
-            0%   { transform: scaleX(0.3); opacity: 0; }
-            50%  { transform: scaleX(1.2); opacity: 1; }
-            100% { transform: scaleX(1.5); opacity: 0; }
-        }
-        .fx-peck-beak {
-            position: absolute;
-            width: 0; height: 0;
-            border-left: 12px solid transparent;
-            border-right: 12px solid transparent;
-            border-top: 20px solid #d9b840;
-            filter: drop-shadow(0 0 6px #d9b840);
-            animation: fxPeckBeak 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-        }
-        @keyframes fxPeckBeak {
-            0%   { transform: translateY(-20px) scale(0.5); opacity: 0; }
-            50%  { transform: translateY(0)     scale(1);   opacity: 1; }
-            100% { transform: translateY(8px)   scale(0.8); opacity: 0; }
-        }
-
-        /* ============================================================
-           🐍 COBRAS
-           ============================================================ */
-        .fx-coil-wrap {
-            position: absolute;
-            width: 120%; height: 120%;
-            left: -10%; top: -10%;
-            border: 4px solid rgba(74,122,58,0.85);
-            border-radius: 50%;
-            box-shadow: 0 0 15px rgba(74,122,58,0.7), inset 0 0 15px rgba(74,122,58,0.5);
-            animation: fxCoilWrap 0.7s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-        }
-        @keyframes fxCoilWrap {
-            0%   { transform: rotate(0deg) scale(1.4); opacity: 0; }
-            40%  { transform: rotate(90deg) scale(1);  opacity: 1; }
-            80%  { transform: rotate(180deg) scale(0.85); opacity: 1; }
-            100% { transform: rotate(220deg) scale(0.95); opacity: 0; }
-        }
-        .fx-sting-venom {
-            position: absolute;
-            width: 100%; height: 100%;
-            background: radial-gradient(circle, rgba(107,163,92,0.9) 0%, rgba(74,122,58,0.5) 40%, transparent 70%);
-            border-radius: 50%;
-            animation: fxStingVenom 0.7s ease-out forwards;
-        }
-        @keyframes fxStingVenom {
-            0%   { transform: scale(0);   opacity: 0; }
-            40%  { transform: scale(1.3); opacity: 1; }
-            100% { transform: scale(1.8); opacity: 0; }
-        }
-
-        /* ============================================================
-           💧 ÁGUA / PEIXES
-           ============================================================ */
-        .fx-splash-wave {
-            position: absolute;
-            width: 100%; height: 100%;
-            background: radial-gradient(circle at 50% 100%, rgba(74,140,181,0.9) 0%, rgba(74,140,181,0.5) 30%, transparent 70%);
-            animation: fxSplashWave 0.7s ease-out forwards;
-        }
-        @keyframes fxSplashWave {
-            0%   { transform: scaleY(0.3); opacity: 0; }
-            40%  { transform: scaleY(1.2); opacity: 1; }
-            100% { transform: scaleY(1.5); opacity: 0; }
-        }
-        .fx-fin-slash {
-            position: absolute;
-            width: 100%; height: 100%;
-            background: linear-gradient(135deg, transparent 40%, rgba(74,140,181,0.95) 48%, rgba(200,230,245,1) 50%, rgba(74,140,181,0.95) 52%, transparent 60%);
-            animation: fxFinSlash 0.4s ease-out forwards;
-        }
-        @keyframes fxFinSlash {
-            0%   { transform: scale(0.4) rotate(-30deg); opacity: 0; }
-            50%  { transform: scale(1.1) rotate(0deg);   opacity: 1; }
-            100% { transform: scale(1.4) rotate(30deg);  opacity: 0; }
-        }
-
-        /* ============================================================
-           🐘 PESADOS
-           ============================================================ */
-        .fx-hoof-stomp {
-            position: absolute;
-            width: 100%; height: 100%;
-            background: radial-gradient(ellipse, rgba(139,90,43,0.8) 0%, transparent 60%);
-            border-radius: 50%;
-            animation: fxHoofStomp 0.5s ease-out forwards;
-        }
-        @keyframes fxHoofStomp {
-            0%   { transform: scale(0.5); opacity: 0; }
-            30%  { transform: scale(1.4); opacity: 1; }
-            100% { transform: scale(1.8); opacity: 0; }
-        }
-        .fx-ground-crack {
-            position: absolute;
-            width: 100%; height: 100%;
-            background:
-                linear-gradient(0deg,   transparent 48%, rgba(74,60,30,0.95) 49%, rgba(74,60,30,0.95) 51%, transparent 52%),
-                linear-gradient(60deg,  transparent 48%, rgba(74,60,30,0.95) 49%, rgba(74,60,30,0.95) 51%, transparent 52%),
-                linear-gradient(-60deg, transparent 48%, rgba(74,60,30,0.95) 49%, rgba(74,60,30,0.95) 51%, transparent 52%);
-            animation: fxGroundCrack 0.6s ease-out forwards;
-        }
-        @keyframes fxGroundCrack {
-            0%   { opacity: 0; transform: scale(0.6); }
-            40%  { opacity: 1; transform: scale(1.1); }
-            100% { opacity: 0; transform: scale(1.2); }
-        }
-        .fx-shockwave {
-            position: absolute;
-            width: 100%; height: 100%;
-            border: 3px solid rgba(217,184,64,0.85);
-            border-radius: 50%;
-            animation: fxShockwave 0.6s ease-out forwards;
-        }
-        @keyframes fxShockwave {
-            0%   { transform: scale(0.2); opacity: 0; }
-            30%  { transform: scale(1.2); opacity: 1; }
-            100% { transform: scale(2.5); opacity: 0; }
-        }
-
-        /* ============================================================
-           🌫️ NÉVOA / ENXAME / ESPECTRAL
-           ============================================================ */
-        .fx-fog-cloud {
-            position: absolute;
-            width: 140%; height: 140%;
-            left: -20%; top: -20%;
-            background: radial-gradient(circle, rgba(200,200,220,0.7) 0%, rgba(200,200,220,0.3) 40%, transparent 70%);
-            border-radius: 50%;
-            filter: blur(6px);
-            animation: fxFogCloud 0.9s ease-out forwards;
-        }
-        @keyframes fxFogCloud {
-            0%   { transform: scale(0.4); opacity: 0; }
-            40%  { transform: scale(1);   opacity: 0.9; }
-            100% { transform: scale(1.6); opacity: 0; }
-        }
-        .fx-swarm-cloud {
-            position: absolute;
-            width: 120%; height: 120%;
-            left: -10%; top: -10%;
-            background:
-                radial-gradient(circle at 20% 30%, rgba(168,50,50,0.9) 0%, transparent 15%),
-                radial-gradient(circle at 70% 40%, rgba(168,50,50,0.9) 0%, transparent 15%),
-                radial-gradient(circle at 40% 70%, rgba(168,50,50,0.9) 0%, transparent 15%),
-                radial-gradient(circle at 80% 80%, rgba(168,50,50,0.9) 0%, transparent 15%),
-                radial-gradient(circle at 50% 50%, rgba(168,50,50,0.5) 0%, transparent 40%);
-            border-radius: 50%;
-            animation: fxSwarmCloud 0.7s ease-out forwards;
-        }
-        @keyframes fxSwarmCloud {
-            0%   { transform: scale(0.3) rotate(0deg); opacity: 0; }
-            40%  { transform: scale(1.1) rotate(180deg); opacity: 1; }
-            100% { transform: scale(1.4) rotate(360deg); opacity: 0; }
-        }
-        .fx-spectral-veil {
-            position: absolute;
-            width: 140%; height: 140%;
-            left: -20%; top: -20%;
-            background: radial-gradient(circle, rgba(142,68,173,0.9) 0%, rgba(142,68,173,0.5) 40%, transparent 70%);
-            border-radius: 50%;
-            filter: blur(4px);
-            animation: fxSpectralVeil 0.8s ease-out forwards;
-        }
-        @keyframes fxSpectralVeil {
-            0%   { transform: scale(0.4); opacity: 0; }
-            40%  { transform: scale(1.1); opacity: 1; }
-            100% { transform: scale(1.5); opacity: 0; }
-        }
-        .fx-tentacle-glow {
-            position: absolute;
-            width: 100%; height: 100%;
-            background:
-                linear-gradient(90deg, transparent 40%, rgba(200,128,224,0.9) 48%, rgba(255,255,255,1) 50%, rgba(200,128,224,0.9) 52%, transparent 60%),
-                linear-gradient(0deg,  transparent 40%, rgba(200,128,224,0.9) 48%, rgba(255,255,255,1) 50%, rgba(200,128,224,0.9) 52%, transparent 60%);
-            animation: fxTentacleGlow 0.6s ease-out forwards;
-        }
-        @keyframes fxTentacleGlow {
-            0%   { transform: scale(0.5); opacity: 0; }
-            40%  { transform: scale(1.2); opacity: 1; }
-            100% { transform: scale(1.5); opacity: 0; }
-        }
-
-        /* ============================================================
-           🎯 ÍCONES AUXILIARES
-           ============================================================ */
-        .fx-push-arrow {
-            position: absolute;
-            width: 100%; height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 28px;
-            color: #e8b923;
-            text-shadow: 0 0 8px #000, 0 0 12px #e8b923;
-            animation: fxPushArrow 0.5s ease-out forwards;
-        }
-        @keyframes fxPushArrow {
-            0%   { transform: translate(0,0)   scale(0.6); opacity: 0; }
-            40%  { transform: translate(8px,0) scale(1.2); opacity: 1; }
-            100% { transform: translate(20px,0) scale(0.9); opacity: 0; }
-        }
-        .fx-pull-chain {
-            position: absolute;
-            width: 100%; height: 100%;
-            background: linear-gradient(90deg, transparent 30%, rgba(217,184,64,0.9) 48%, rgba(255,245,220,1) 50%, rgba(217,184,64,0.9) 52%, transparent 70%);
-            animation: fxPullChain 0.5s ease-out forwards;
-        }
-        @keyframes fxPullChain {
-            0%   { transform: translate(20px,0) scaleX(0.4); opacity: 0; }
-            40%  { transform: translate(0,0)    scaleX(1);   opacity: 1; }
-            100% { transform: translate(-15px,0) scaleX(0.6); opacity: 0; }
-        }
-        .fx-heal-orb {
-            position: absolute;
-            width: 100%; height: 100%;
-            background: radial-gradient(circle, #7fc060 0%, #4a7040 50%, transparent 80%);
-            border-radius: 50%;
-            box-shadow: 0 0 20px #7fc060, inset 0 0 15px rgba(255,255,255,0.5);
-            animation: fxHealOrb 0.8s ease-out forwards;
-        }
-        @keyframes fxHealOrb {
-            0%   { transform: translateY(20px) scale(0.3); opacity: 0; }
-            40%  { transform: translateY(0)    scale(1.1); opacity: 1; }
-            100% { transform: translateY(-20px) scale(0.8); opacity: 0; }
-        }
-        .fx-tile-flip {
-            position: absolute;
-            width: 100%; height: 100%;
-            background: rgba(232,185,35,0.4);
-            border: 2px dashed rgba(232,185,35,0.9);
-            animation: fxTileFlip 0.6s ease-out forwards;
-        }
-        @keyframes fxTileFlip {
-            0%   { transform: rotateY(0deg)   scale(1);   opacity: 0; }
-            40%  { transform: rotateY(90deg)  scale(1.1); opacity: 1; }
-            100% { transform: rotateY(180deg) scale(1);   opacity: 0; }
-        }
-        .fx-element-pulse {
-            position: absolute;
-            width: 100%; height: 100%;
-            border: 3px solid currentColor;
-            border-radius: 50%;
-            animation: fxElementPulse 0.7s ease-out forwards;
-        }
-        @keyframes fxElementPulse {
-            0%   { transform: scale(0.3); opacity: 0; }
-            40%  { transform: scale(1.2); opacity: 1; }
-            100% { transform: scale(1.8); opacity: 0; }
-        }
-        .fx-flame-short {
-            position: absolute;
-            width: 100%; height: 100%;
-            background: radial-gradient(circle at 50% 80%, #fff5dc 0%, #e8b923 20%, #a83232 50%, transparent 80%);
-            animation: fxFlameShort 0.5s ease-out forwards;
-        }
-        @keyframes fxFlameShort {
-            0%   { transform: scale(0.4); opacity: 0; }
-            50%  { transform: scale(1.2); opacity: 1; }
-            100% { transform: scale(1.4); opacity: 0; }
-        }
-        .fx-impact {
-            position: absolute;
-            width: 100%; height: 100%;
-            background: radial-gradient(circle, rgba(255,245,220,0.95) 0%, rgba(232,185,35,0.6) 30%, transparent 70%);
-            animation: fxImpact 0.4s ease-out forwards;
-        }
-        @keyframes fxImpact {
-            0%   { transform: scale(0.2); opacity: 0; }
-            40%  { transform: scale(1.3); opacity: 1; }
-            100% { transform: scale(1.6); opacity: 0; }
-        }
+        .fx-spike-burst { position:absolute;width:14px;height:14px;background:radial-gradient(circle,#fff5dc 0%,#d9b840 40%,#8a7018 100%);border-radius:50%;box-shadow:0 0 12px #d9b840,0 0 24px rgba(217,184,64,0.5);animation:fxSpikeBurst 0.6s ease-out forwards; }
+        @keyframes fxSpikeBurst { 0%{transform:scale(0);opacity:0;} 40%{transform:scale(1.4);opacity:1;} 100%{transform:scale(2.2);opacity:0;} }
+        .fx-spike-travel { position:absolute;width:8px;height:8px;background:linear-gradient(135deg,#d9b840,#8a7018);border-radius:50%;box-shadow:0 0 8px #d9b840;z-index:56;transition:left 0.25s linear,top 0.25s linear,opacity 0.25s; }
+        .fx-spike-roll { position:absolute;width:40px;height:40px;background:radial-gradient(circle,#d9b840 0%,#8a7018 70%,transparent 100%);border-radius:50%;box-shadow:0 0 15px #d9b840;animation:fxSpikeRoll 0.5s linear forwards; }
+        @keyframes fxSpikeRoll { 0%{transform:rotate(0deg) scale(0.8);opacity:0.6;} 50%{transform:rotate(180deg) scale(1.1);opacity:1;} 100%{transform:rotate(360deg) scale(0.8);opacity:0;} }
+        .fx-jaw-snap { position:absolute;width:100%;height:100%;background:linear-gradient(180deg,transparent 30%,rgba(74,122,58,0.9) 48%,transparent 52%),linear-gradient(0deg,transparent 30%,rgba(74,122,58,0.9) 48%,transparent 52%);border-radius:6px;animation:fxJawSnap 0.45s cubic-bezier(0.4,0,0.2,1) forwards; }
+        @keyframes fxJawSnap { 0%{transform:scaleY(2.5);opacity:0;} 40%{transform:scaleY(1);opacity:1;} 70%{transform:scaleY(0.85);opacity:1;} 100%{transform:scaleY(1);opacity:0;} }
+        .fx-tail-whip { position:absolute;width:200%;height:200%;left:-50%;top:-50%;border:4px solid rgba(74,122,58,0.8);border-top-color:transparent;border-bottom-color:transparent;border-radius:50%;box-shadow:0 0 15px rgba(74,122,58,0.6);animation:fxTailWhip 0.6s ease-out forwards; }
+        @keyframes fxTailWhip { 0%{transform:rotate(0deg) scale(0.4);opacity:0;} 50%{transform:rotate(180deg) scale(1);opacity:1;} 100%{transform:rotate(360deg) scale(1.1);opacity:0;} }
+        .fx-antler-charge { position:absolute;width:100%;height:100%;background:radial-gradient(circle at 20% 50%,rgba(217,184,64,0.9) 0%,transparent 30%),radial-gradient(circle at 80% 50%,rgba(217,184,64,0.9) 0%,transparent 30%);animation:fxAntlerCharge 0.5s ease-out forwards; }
+        @keyframes fxAntlerCharge { 0%{transform:translateX(-30px);opacity:0;} 50%{transform:translateX(0);opacity:1;} 100%{transform:translateX(20px);opacity:0;} }
+        .fx-pounce-arc { position:absolute;width:30px;height:30px;background:radial-gradient(circle,#d9b840 0%,#8a3030 70%,transparent 100%);border-radius:50%;box-shadow:0 0 20px #d9b840;animation:fxPounceArc 0.65s cubic-bezier(0.4,0,0.3,1) forwards; }
+        @keyframes fxPounceArc { 0%{transform:translate(0,0) scale(0.6);opacity:0;} 40%{transform:translate(50%,-40px) scale(1.2);opacity:1;} 100%{transform:translate(100%,0) scale(0.8);opacity:0;} }
+        .fx-claw-slash { position:absolute;width:100%;height:100%;background:linear-gradient(45deg,transparent 40%,rgba(217,80,80,0.95) 48%,rgba(255,255,255,1) 50%,rgba(217,80,80,0.95) 52%,transparent 60%),linear-gradient(-45deg,transparent 40%,rgba(217,80,80,0.95) 48%,rgba(255,255,255,1) 50%,rgba(217,80,80,0.95) 52%,transparent 60%);animation:fxClawSlash 0.4s ease-out forwards; }
+        @keyframes fxClawSlash { 0%{transform:scale(0.3) rotate(-20deg);opacity:0;} 50%{transform:scale(1.1) rotate(0deg);opacity:1;} 100%{transform:scale(1.3) rotate(20deg);opacity:0;} }
+        .fx-heavy-slash { position:absolute;width:100%;height:100%;background:linear-gradient(45deg,transparent 42%,rgba(255,80,80,0.95) 48%,rgba(255,255,255,1) 50%,rgba(255,80,80,0.95) 52%,transparent 58%);animation:fxHeavySlash 0.45s ease-out forwards; }
+        @keyframes fxHeavySlash { 0%{transform:scale(0.5) rotate(-15deg);opacity:0;} 50%{transform:scale(1.3) rotate(0deg);opacity:1;} 100%{transform:scale(1.6) rotate(15deg);opacity:0;} }
+        .fx-fang-bite { position:absolute;width:100%;height:100%;background:radial-gradient(ellipse at 50% 20%,rgba(255,255,255,0.9) 0%,transparent 25%),radial-gradient(ellipse at 50% 80%,rgba(255,255,255,0.9) 0%,transparent 25%);animation:fxFangBite 0.45s cubic-bezier(0.4,0,0.2,1) forwards; }
+        @keyframes fxFangBite { 0%{transform:scaleY(1.5);opacity:0;} 40%{transform:scaleY(0.9);opacity:1;} 70%{transform:scaleY(0.75);opacity:1;} 100%{transform:scaleY(1);opacity:0;} }
+        .fx-wing-gust { position:absolute;width:100%;height:100%;background:radial-gradient(ellipse at 30% 50%,rgba(217,184,64,0.7) 0%,transparent 40%),radial-gradient(ellipse at 70% 50%,rgba(217,184,64,0.7) 0%,transparent 40%);animation:fxWingGust 0.6s ease-out forwards; }
+        @keyframes fxWingGust { 0%{transform:scaleX(0.3);opacity:0;} 50%{transform:scaleX(1.2);opacity:1;} 100%{transform:scaleX(1.5);opacity:0;} }
+        .fx-peck-beak { position:absolute;width:0;height:0;border-left:12px solid transparent;border-right:12px solid transparent;border-top:20px solid #d9b840;filter:drop-shadow(0 0 6px #d9b840);animation:fxPeckBeak 0.35s cubic-bezier(0.4,0,0.2,1) forwards; }
+        @keyframes fxPeckBeak { 0%{transform:translateY(-20px) scale(0.5);opacity:0;} 50%{transform:translateY(0) scale(1);opacity:1;} 100%{transform:translateY(8px) scale(0.8);opacity:0;} }
+        .fx-coil-wrap { position:absolute;width:120%;height:120%;left:-10%;top:-10%;border:4px solid rgba(74,122,58,0.85);border-radius:50%;box-shadow:0 0 15px rgba(74,122,58,0.7),inset 0 0 15px rgba(74,122,58,0.5);animation:fxCoilWrap 0.7s cubic-bezier(0.4,0,0.2,1) forwards; }
+        @keyframes fxCoilWrap { 0%{transform:rotate(0deg) scale(1.4);opacity:0;} 40%{transform:rotate(90deg) scale(1);opacity:1;} 80%{transform:rotate(180deg) scale(0.85);opacity:1;} 100%{transform:rotate(220deg) scale(0.95);opacity:0;} }
+        .fx-sting-venom { position:absolute;width:100%;height:100%;background:radial-gradient(circle,rgba(107,163,92,0.9) 0%,rgba(74,122,58,0.5) 40%,transparent 70%);border-radius:50%;animation:fxStingVenom 0.7s ease-out forwards; }
+        @keyframes fxStingVenom { 0%{transform:scale(0);opacity:0;} 40%{transform:scale(1.3);opacity:1;} 100%{transform:scale(1.8);opacity:0;} }
+        .fx-splash-wave { position:absolute;width:100%;height:100%;background:radial-gradient(circle at 50% 100%,rgba(74,140,181,0.9) 0%,rgba(74,140,181,0.5) 30%,transparent 70%);animation:fxSplashWave 0.7s ease-out forwards; }
+        @keyframes fxSplashWave { 0%{transform:scaleY(0.3);opacity:0;} 40%{transform:scaleY(1.2);opacity:1;} 100%{transform:scaleY(1.5);opacity:0;} }
+        .fx-fin-slash { position:absolute;width:100%;height:100%;background:linear-gradient(135deg,transparent 40%,rgba(74,140,181,0.95) 48%,rgba(200,230,245,1) 50%,rgba(74,140,181,0.95) 52%,transparent 60%);animation:fxFinSlash 0.4s ease-out forwards; }
+        @keyframes fxFinSlash { 0%{transform:scale(0.4) rotate(-30deg);opacity:0;} 50%{transform:scale(1.1) rotate(0deg);opacity:1;} 100%{transform:scale(1.4) rotate(30deg);opacity:0;} }
+        .fx-hoof-stomp { position:absolute;width:100%;height:100%;background:radial-gradient(ellipse,rgba(139,90,43,0.8) 0%,transparent 60%);border-radius:50%;animation:fxHoofStomp 0.5s ease-out forwards; }
+        @keyframes fxHoofStomp { 0%{transform:scale(0.5);opacity:0;} 30%{transform:scale(1.4);opacity:1;} 100%{transform:scale(1.8);opacity:0;} }
+        .fx-ground-crack { position:absolute;width:100%;height:100%;background:linear-gradient(0deg,transparent 48%,rgba(74,60,30,0.95) 49%,rgba(74,60,30,0.95) 51%,transparent 52%),linear-gradient(60deg,transparent 48%,rgba(74,60,30,0.95) 49%,rgba(74,60,30,0.95) 51%,transparent 52%),linear-gradient(-60deg,transparent 48%,rgba(74,60,30,0.95) 49%,rgba(74,60,30,0.95) 51%,transparent 52%);animation:fxGroundCrack 0.6s ease-out forwards; }
+        @keyframes fxGroundCrack { 0%{opacity:0;transform:scale(0.6);} 40%{opacity:1;transform:scale(1.1);} 100%{opacity:0;transform:scale(1.2);} }
+        .fx-shockwave { position:absolute;width:100%;height:100%;border:3px solid rgba(217,184,64,0.85);border-radius:50%;animation:fxShockwave 0.6s ease-out forwards; }
+        @keyframes fxShockwave { 0%{transform:scale(0.2);opacity:0;} 30%{transform:scale(1.2);opacity:1;} 100%{transform:scale(2.5);opacity:0;} }
+        .fx-fog-cloud { position:absolute;width:140%;height:140%;left:-20%;top:-20%;background:radial-gradient(circle,rgba(200,200,220,0.7) 0%,rgba(200,200,220,0.3) 40%,transparent 70%);border-radius:50%;filter:blur(6px);animation:fxFogCloud 0.9s ease-out forwards; }
+        @keyframes fxFogCloud { 0%{transform:scale(0.4);opacity:0;} 40%{transform:scale(1);opacity:0.9;} 100%{transform:scale(1.6);opacity:0;} }
+        .fx-swarm-cloud { position:absolute;width:120%;height:120%;left:-10%;top:-10%;background:radial-gradient(circle at 20% 30%,rgba(168,50,50,0.9) 0%,transparent 15%),radial-gradient(circle at 70% 40%,rgba(168,50,50,0.9) 0%,transparent 15%),radial-gradient(circle at 40% 70%,rgba(168,50,50,0.9) 0%,transparent 15%),radial-gradient(circle at 80% 80%,rgba(168,50,50,0.9) 0%,transparent 15%),radial-gradient(circle at 50% 50%,rgba(168,50,50,0.5) 0%,transparent 40%);border-radius:50%;animation:fxSwarmCloud 0.7s ease-out forwards; }
+        @keyframes fxSwarmCloud { 0%{transform:scale(0.3) rotate(0deg);opacity:0;} 40%{transform:scale(1.1) rotate(180deg);opacity:1;} 100%{transform:scale(1.4) rotate(360deg);opacity:0;} }
+        .fx-spectral-veil { position:absolute;width:140%;height:140%;left:-20%;top:-20%;background:radial-gradient(circle,rgba(142,68,173,0.9) 0%,rgba(142,68,173,0.5) 40%,transparent 70%);border-radius:50%;filter:blur(4px);animation:fxSpectralVeil 0.8s ease-out forwards; }
+        @keyframes fxSpectralVeil { 0%{transform:scale(0.4);opacity:0;} 40%{transform:scale(1.1);opacity:1;} 100%{transform:scale(1.5);opacity:0;} }
+        .fx-tentacle-glow { position:absolute;width:100%;height:100%;background:linear-gradient(90deg,transparent 40%,rgba(200,128,224,0.9) 48%,rgba(255,255,255,1) 50%,rgba(200,128,224,0.9) 52%,transparent 60%),linear-gradient(0deg,transparent 40%,rgba(200,128,224,0.9) 48%,rgba(255,255,255,1) 50%,rgba(200,128,224,0.9) 52%,transparent 60%);animation:fxTentacleGlow 0.6s ease-out forwards; }
+        @keyframes fxTentacleGlow { 0%{transform:scale(0.5);opacity:0;} 40%{transform:scale(1.2);opacity:1;} 100%{transform:scale(1.5);opacity:0;} }
+        .fx-push-arrow { position:absolute;width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:28px;color:#e8b923;text-shadow:0 0 8px #000,0 0 12px #e8b923;animation:fxPushArrow 0.5s ease-out forwards; }
+        @keyframes fxPushArrow { 0%{transform:translate(0,0) scale(0.6);opacity:0;} 40%{transform:translate(8px,0) scale(1.2);opacity:1;} 100%{transform:translate(20px,0) scale(0.9);opacity:0;} }
+        .fx-pull-chain { position:absolute;width:100%;height:100%;background:linear-gradient(90deg,transparent 30%,rgba(217,184,64,0.9) 48%,rgba(255,245,220,1) 50%,rgba(217,184,64,0.9) 52%,transparent 70%);animation:fxPullChain 0.5s ease-out forwards; }
+        @keyframes fxPullChain { 0%{transform:translate(20px,0) scaleX(0.4);opacity:0;} 40%{transform:translate(0,0) scaleX(1);opacity:1;} 100%{transform:translate(-15px,0) scaleX(0.6);opacity:0;} }
+        .fx-heal-orb { position:absolute;width:100%;height:100%;background:radial-gradient(circle,#7fc060 0%,#4a7040 50%,transparent 80%);border-radius:50%;box-shadow:0 0 20px #7fc060,inset 0 0 15px rgba(255,255,255,0.5);animation:fxHealOrb 0.8s ease-out forwards; }
+        @keyframes fxHealOrb { 0%{transform:translateY(20px) scale(0.3);opacity:0;} 40%{transform:translateY(0) scale(1.1);opacity:1;} 100%{transform:translateY(-20px) scale(0.8);opacity:0;} }
+        .fx-tile-flip { position:absolute;width:100%;height:100%;background:rgba(232,185,35,0.4);border:2px dashed rgba(232,185,35,0.9);animation:fxTileFlip 0.6s ease-out forwards; }
+        @keyframes fxTileFlip { 0%{transform:rotateY(0deg) scale(1);opacity:0;} 40%{transform:rotateY(90deg) scale(1.1);opacity:1;} 100%{transform:rotateY(180deg) scale(1);opacity:0;} }
+        .fx-element-pulse { position:absolute;width:100%;height:100%;border:3px solid currentColor;border-radius:50%;animation:fxElementPulse 0.7s ease-out forwards; }
+        @keyframes fxElementPulse { 0%{transform:scale(0.3);opacity:0;} 40%{transform:scale(1.2);opacity:1;} 100%{transform:scale(1.8);opacity:0;} }
+        .fx-flame-short { position:absolute;width:100%;height:100%;background:radial-gradient(circle at 50% 80%,#fff5dc 0%,#e8b923 20%,#a83232 50%,transparent 80%);animation:fxFlameShort 0.5s ease-out forwards; }
+        @keyframes fxFlameShort { 0%{transform:scale(0.4);opacity:0;} 50%{transform:scale(1.2);opacity:1;} 100%{transform:scale(1.4);opacity:0;} }
+        .fx-impact { position:absolute;width:100%;height:100%;background:radial-gradient(circle,rgba(255,245,220,0.95) 0%,rgba(232,185,35,0.6) 30%,transparent 70%);animation:fxImpact 0.4s ease-out forwards; }
+        @keyframes fxImpact { 0%{transform:scale(0.2);opacity:0;} 40%{transform:scale(1.3);opacity:1;} 100%{transform:scale(1.6);opacity:0;} }
     `;
     document.head.appendChild(style);
 })();
@@ -2375,7 +2262,6 @@ function fxElement(key, cssFallbackHTML) {
 // =================================================================
 // 🧭 HELPERS DE POSICIONAMENTO
 // =================================================================
-
 function fxPos(x, y) {
     const s = (typeof getStep === 'function') ? getStep() : 59;
     const board = document.getElementById('board');
@@ -2441,7 +2327,7 @@ function spawnFxLine(fxKey, cssClass, fromX, fromY, dir, length, opts = {}) {
 }
 
 // =================================================================
-// 🎬 spawnFxArea — FX em área quadrada ao redor de (cx, cy)
+// 🎬 spawnFxArea — FX em área quadrada
 // =================================================================
 function spawnFxArea(fxKey, cssClass, cx, cy, radius, opts = {}) {
     const results = [];
@@ -2464,19 +2350,14 @@ function spawnFxArea(fxKey, cssClass, cx, cy, radius, opts = {}) {
 }
 
 // =================================================================
-// 🎬 spawnFxCross — FX em cruz (4 direções)
+// 🎬 spawnFxCross — FX em cruz
 // =================================================================
 function spawnFxCross(fxKey, cssClass, cx, cy, length, opts = {}) {
     const results = [];
     if (opts.includeCenter) {
         results.push({ x: cx, y: cy, el: spawnFxAt(fxKey, cssClass, cx, cy, opts) });
     }
-    const dirs = [
-        { dx:  1, dy:  0 },
-        { dx: -1, dy:  0 },
-        { dx:  0, dy:  1 },
-        { dx:  0, dy: -1 },
-    ];
+    const dirs = [{dx:1,dy:0},{dx:-1,dy:0},{dx:0,dy:1},{dx:0,dy:-1}];
     dirs.forEach(dir => {
         for (let i = 1; i <= length; i++) {
             const nx = cx + dir.dx * i;
@@ -2494,16 +2375,11 @@ function spawnFxCross(fxKey, cssClass, cx, cy, length, opts = {}) {
 }
 
 // =================================================================
-// 🎬 spawnFxDiagonal — FX nas 4 diagonais
+// 🎬 spawnFxDiagonal — FX nas diagonais
 // =================================================================
 function spawnFxDiagonal(fxKey, cssClass, cx, cy, length, opts = {}) {
     const results = [];
-    const dirs = [
-        { dx:  1, dy:  1 },
-        { dx:  1, dy: -1 },
-        { dx: -1, dy:  1 },
-        { dx: -1, dy: -1 },
-    ];
+    const dirs = [{dx:1,dy:1},{dx:1,dy:-1},{dx:-1,dy:1},{dx:-1,dy:-1}];
     dirs.forEach(dir => {
         for (let i = 1; i <= length; i++) {
             const nx = cx + dir.dx * i;
@@ -2521,7 +2397,7 @@ function spawnFxDiagonal(fxKey, cssClass, cx, cy, length, opts = {}) {
 }
 
 // =================================================================
-// 🎬 spawnTravelingFx — FX que viaja de A até B
+// 🎬 spawnTravelingFx — FX viajando de A até B
 // =================================================================
 function spawnTravelingFx(fxKey, cssClass, fromX, fromY, toX, toY, opts = {}) {
     const board = opts.appendTo || document.getElementById('board');
@@ -2559,58 +2435,40 @@ function spawnTravelingFx(fxKey, cssClass, fromX, fromY, toX, toY, opts = {}) {
 }
 
 // =================================================================
-// 🎬 spawnPushArrow — seta visual de empurrão
+// 🎬 Helpers auxiliares
 // =================================================================
 function spawnPushArrow(x, y, direction) {
     const arrowMap = { right: '▶', left: '◀', up: '▲', down: '▼' };
     const glyph = arrowMap[direction] || '▶';
     const board = document.getElementById('board');
     if (!board) return;
-
     const { left, top, step } = fxPos(x, y);
     const el = fxElement('push_arrow', `<div class="fx-push-arrow">${glyph}</div>`);
     el.style.left = left + 'px';
     el.style.top  = top + 'px';
     el.style.width  = step + 'px';
     el.style.height = step + 'px';
-
-    const dx = direction === 'right' ? 1 : direction === 'left' ? -1 : 0;
-    const dy = direction === 'down'  ? 1 : direction === 'up'   ? -1 : 0;
-
-    if (el.style.transform) {
-        el.style.transform = `translate(${dx * 20}px, ${dy * 20}px) scale(1.1)`;
-    }
-
     board.appendChild(el);
     setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 600);
 }
 
-// =================================================================
-// 🎬 spawnPullChain — corrente visual de puxão
-// =================================================================
 function spawnPullChain(fromX, fromY, toX, toY) {
     const board = document.getElementById('board');
     if (!board) return;
-
     const from = fxPos(fromX, fromY);
     const el = fxElement('pull_chain', '<div class="fx-pull-chain"></div>');
     el.style.left = from.left + 'px';
     el.style.top  = from.top  + 'px';
     el.style.width  = from.step + 'px';
     el.style.height = from.step + 'px';
-
     const dx = toX - fromX;
     const dy = toY - fromY;
     const angle = Math.atan2(dy, dx) * (180 / Math.PI);
     el.style.transform = `rotate(${angle}deg)`;
-
     board.appendChild(el);
     setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 600);
 }
 
-// =================================================================
-// 🎬 spawnHealOrb — orbe de cura no boss
-// =================================================================
 function spawnHealOrb(x, y) {
     const board = document.getElementById('board');
     if (!board) return;
@@ -2624,9 +2482,6 @@ function spawnHealOrb(x, y) {
     setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 900);
 }
 
-// =================================================================
-// 🎬 spawnTileFlip — tile virando
-// =================================================================
 function spawnTileFlip(x, y, delay = 0) {
     const board = document.getElementById('board');
     if (!board) return;
@@ -2641,16 +2496,8 @@ function spawnTileFlip(x, y, delay = 0) {
     setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 800 + delay);
 }
 
-// =================================================================
-// 🎬 spawnElementPulse — pulso de elemento
-// =================================================================
 function spawnElementPulse(x, y, elementColor) {
-    const colorMap = {
-        FOGO:  '#e74c3c',
-        AGUA:  '#3498db',
-        TERRA: '#27ae60',
-        AR:    '#f1c40f',
-    };
+    const colorMap = { FOGO:'#e74c3c', AGUA:'#3498db', TERRA:'#27ae60', AR:'#f1c40f' };
     const board = document.getElementById('board');
     if (!board) return;
     const { left, top, step } = fxPos(x, y);
@@ -2664,16 +2511,11 @@ function spawnElementPulse(x, y, elementColor) {
     setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 800);
 }
 
-// =================================================================
-// 🎬 spawnMovingSprite — move um sprite visualmente de A até B
-// =================================================================
 function spawnMovingSprite(fromX, fromY, toX, toY, sprite, opts = {}) {
     const board = document.getElementById('board');
     if (!board) return null;
-
     const from = fxPos(fromX, fromY);
     const to   = fxPos(toX, toY);
-
     const el = document.createElement('img');
     el.src = sprite;
     el.className = 'story-fx';
@@ -2683,79 +2525,20 @@ function spawnMovingSprite(fromX, fromY, toX, toY, sprite, opts = {}) {
     el.style.height = from.step + 'px';
     el.style.zIndex = '60';
     el.style.transition = `left ${opts.duration || 250}ms ease-in-out, top ${opts.duration || 250}ms ease-in-out, opacity 200ms`;
-
     if (opts.extraClass) el.classList.add(...String(opts.extraClass).split(' '));
-
     board.appendChild(el);
-
     setTimeout(() => {
         el.style.left = to.left + 'px';
         el.style.top  = to.top  + 'px';
     }, 30);
-
-    setTimeout(() => {
-        el.style.opacity = '0';
-    }, (opts.duration || 250) + 100);
-
-    setTimeout(() => {
-        if (el.parentNode) el.parentNode.removeChild(el);
-    }, (opts.duration || 250) + 400);
-
+    setTimeout(() => { el.style.opacity = '0'; }, (opts.duration || 250) + 100);
+    setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, (opts.duration || 250) + 400);
     return el;
 }
 
 // =================================================================
-// 🧪 DEBUG — testa visualmente todos os efeitos
+// 🎯 HELPERS COMBATENTES
 // =================================================================
-window.storyTestFx = function() {
-    const board = document.getElementById('board');
-    if (!board) { console.warn('Board não disponível'); return; }
-
-    const efectos = [
-        ['spike_burst',     'fx-spike-burst'],
-        ['spike_roll',      'fx-spike-roll'],
-        ['jaw_snap',        'fx-jaw-snap'],
-        ['tail_whip',       'fx-tail-whip'],
-        ['antler_charge',   'fx-antler-charge'],
-        ['pounce_arc',      'fx-pounce-arc'],
-        ['claw_slash',      'fx-claw-slash'],
-        ['fang_bite',       'fx-fang-bite'],
-        ['wing_gust',       'fx-wing-gust'],
-        ['peck_beak',       'fx-peck-beak'],
-        ['coil_wrap',       'fx-coil-wrap'],
-        ['sting_venom',     'fx-sting-venom'],
-        ['splash_wave',     'fx-splash-wave'],
-        ['fin_slash',       'fx-fin-slash'],
-        ['hoof_stomp',      'fx-hoof-stomp'],
-        ['ground_crack',    'fx-ground-crack'],
-        ['shockwave',       'fx-shockwave'],
-        ['fog_cloud',       'fx-fog-cloud'],
-        ['swarm_cloud',     'fx-swarm-cloud'],
-        ['spectral_veil',   'fx-spectral-veil'],
-        ['tentacle_glow',   'fx-tentacle-glow'],
-        ['heal_orb',        'fx-heal-orb'],
-        ['tile_flip',       'fx-tile-flip'],
-        ['element_pulse',   'fx-element-pulse'],
-        ['flame_short',     'fx-flame-short'],
-        ['impact',          'fx-impact'],
-        ['heavy_slash',     'fx-heavy-slash'],
-    ];
-
-    console.log(`Testando ${efectos.length} efeitos...`);
-    efectos.forEach(([key, cls], i) => {
-        const x = i % 8;
-        const y = Math.floor(i / 8) % 8;
-        setTimeout(() => {
-            spawnFxAt(key, cls, x, y, { duration: 1500 });
-        }, i * 200);
-    });
-};
-
-// =================================================================
-// 🎯 HELPERS COMBATENTES (reutilizáveis pelas skills)
-// =================================================================
-
-// Aplica empurrão em um jogador — devolve true se moveu
 function tryPushPlayer(p, dirX, dirY, distance = 1) {
     if (!p || p.dead) return false;
     let moved = false;
@@ -2764,9 +2547,7 @@ function tryPushPlayer(p, dirX, dirY, distance = 1) {
         const ny = p.y + dirY;
         if (nx < 0 || nx >= 8 || ny < 0 || ny >= 8) break;
         if (typeof isOccupied === 'function' && isOccupied(nx, ny, p.id)) break;
-        p.x = nx;
-        p.y = ny;
-        moved = true;
+        p.x = nx; p.y = ny; moved = true;
     }
     if (moved) {
         if (typeof spawnPushArrow === 'function') spawnPushArrow(p.x, p.y, dirX > 0 ? 'right' : dirX < 0 ? 'left' : dirY > 0 ? 'down' : 'up');
@@ -2775,7 +2556,6 @@ function tryPushPlayer(p, dirX, dirY, distance = 1) {
     return moved;
 }
 
-// Aplica puxão em um jogador na direção de (toX, toY) — puxa em direção a esse ponto
 function tryPullPlayer(p, toX, toY, distance = 1) {
     if (!p || p.dead) return false;
     const dirX = Math.sign(toX - p.x);
@@ -2786,10 +2566,7 @@ function tryPullPlayer(p, toX, toY, distance = 1) {
         const ny = p.y + dirY;
         if (nx < 0 || nx >= 8 || ny < 0 || ny >= 8) break;
         if (typeof isOccupied === 'function' && isOccupied(nx, ny, p.id)) break;
-        p.x = nx;
-        p.y = ny;
-        moved = true;
-        // Para se chegou no destino
+        p.x = nx; p.y = ny; moved = true;
         if (p.x === toX && p.y === toY) break;
     }
     if (moved) {
@@ -2799,7 +2576,6 @@ function tryPullPlayer(p, toX, toY, distance = 1) {
     return moved;
 }
 
-// Encontra a direção cardeal mais próxima de um ponto
 function dirToward(fromX, fromY, toX, toY) {
     const dx = toX - fromX;
     const dy = toY - fromY;
@@ -2807,7 +2583,6 @@ function dirToward(fromX, fromY, toX, toY) {
     return { dx: 0, dy: Math.sign(dy), name: dy > 0 ? 'down' : 'up' };
 }
 
-// Aplica dano em todos os jogadores que estejam em um conjunto de tiles
 function damagePlayersAt(tiles, dmg) {
     if (!tiles || tiles.length === 0) return;
     const keySet = new Set(tiles.map(t => `${t.x},${t.y}`));
@@ -2819,7 +2594,6 @@ function damagePlayersAt(tiles, dmg) {
     });
 }
 
-// Constrói lista de tiles em linha/cruz/área (para aplicar dano depois do FX)
 function buildLineTiles(fromX, fromY, dir, length) {
     const tiles = [];
     const dx = dir === 'right' ? 1 : dir === 'left' ? -1 : 0;
@@ -2875,18 +2649,144 @@ function buildDiagonalTiles(cx, cy, length) {
 }
 
 // =================================================================
+// ⭐ SISTEMA DE ESTRELAS — FUNÇÕES
+// =================================================================
+
+/**
+ * Calcula o score máximo teórico de uma fase.
+ * Base: mesma fórmula do calculateFinalScore() do entidades.js
+ *      1000 + ((bossMaxHp - 30) * 50)
+ * Multiplicador: assume melhor caso (1.5x — ≤10 turnos)
+ * Bônus máximo: ultimates + muiraquitãs + formas
+ */
+function calcularMaxScorePossivel(cid, phase) {
+    if (!phase || !phase.enemies || phase.enemies.length === 0) return 1;
+
+    // HP do último inimigo (boss ou miniboss) — que define o teto do score no jogo base
+    const lastEnemyId = phase.enemies[phase.enemies.length - 1];
+    const lastEnemy = STORY_ENEMIES[lastEnemyId];
+    const bossHp = lastEnemy ? lastEnemy.hp : 30;
+
+    const cfg = STORY_STARS_CONFIG;
+    const base = 1000 + Math.max(0, (bossHp - 30) * 50);
+    const baseMult = base * cfg.REF_MAX_TURNS_MULT;
+    const ultimatesBonus = cfg.REF_MAX_ULTIMATES * cfg.REF_ULTIMATE_BONUS;
+    const amuletsBonus = cfg.REF_MAX_AMULETS * cfg.REF_AMULET_BONUS;
+    const shapesBonus = cfg.REF_SHAPE_LINHA + cfg.REF_SHAPE_L + cfg.REF_SHAPE_ZIGZAG + cfg.REF_SHAPE_QUADRADO;
+
+    return Math.floor(baseMult + ultimatesBonus + amuletsBonus + shapesBonus);
+}
+
+/**
+ * Calcula as estrelas (0-3) a partir do score e do máximo teórico.
+ */
+function calcularEstrelas(score, maxScore) {
+    if (!maxScore || maxScore <= 0) return 0;
+    const ratio = score / maxScore;
+    const cfg = STORY_STARS_CONFIG;
+    if (ratio >= cfg.THRESHOLD_3_STARS) return 3;
+    if (ratio >= cfg.THRESHOLD_2_STARS) return 2;
+    if (ratio >= cfg.THRESHOLD_1_STAR)  return 1;
+    return 0;
+}
+
+/**
+ * Devolve as estrelas salvas de uma fase (0 se não existir).
+ */
+function getStarsForPhase(phaseId) {
+    return STORY_PROGRESS.starsByPhase[phaseId] || 0;
+}
+
+/**
+ * Salva as estrelas de uma fase, mantendo o maior valor já conquistado.
+ * Devolve o valor efetivo salvo.
+ */
+function saveStarsForPhase(phaseId, stars) {
+    const current = getStarsForPhase(phaseId);
+    const effective = Math.max(current, stars);
+    STORY_PROGRESS.starsByPhase[phaseId] = effective;
+    return effective;
+}
+
+/**
+ * Soma total de estrelas do save atual.
+ */
+function getTotalStars() {
+    return Object.values(STORY_PROGRESS.starsByPhase || {}).reduce((a,b)=>a+b, 0);
+}
+
+/**
+ * Total máximo teórico de estrelas (todas as fases × 3).
+ */
+function getMaxTotalStars() {
+    let totalPhases = 0;
+    Object.values(STORY_CHAPTERS).forEach(ch => { totalPhases += ch.phases.length; });
+    return totalPhases * STORY_STARS_CONFIG.MAX_STARS_PER_PHASE;
+}
+
+/**
+ * Verifica se algum herói novo foi desbloqueado pelo total de estrelas.
+ * Devolve array de heróis recém-desbloqueados.
+ */
+function checkHeroUnlocks() {
+    if (!Array.isArray(STORY_PROGRESS.unlockedHeroesStory)) {
+        STORY_PROGRESS.unlockedHeroesStory = ['Tupa','Sume','Caipora'];
+    }
+    const totalStars = getTotalStars();
+    const unlocked = [];
+    STORY_HERO_UNLOCKS.forEach(entry => {
+        if (totalStars >= entry.starsNeeded && !STORY_PROGRESS.unlockedHeroesStory.includes(entry.className)) {
+            STORY_PROGRESS.unlockedHeroesStory.push(entry.className);
+            unlocked.push(entry);
+        }
+    });
+    if (unlocked.length > 0) {
+        saveStoryProgress();
+        unlocked.forEach(entry => {
+            showToast('🏅 HERÓI DESBLOQUEADO!', entry.displayName, '🏅');
+            try {
+                if (typeof playSfx === 'function') playSfx('win');
+            } catch(e) {}
+        });
+    }
+    return unlocked;
+}
+
+/**
+ * Toast de notificação — usado pra herói desbloqueado e outros avisos.
+ */
+function showToast(title, body, icon='⭐', durationMs = 4000) {
+    try {
+        const toast = document.createElement('div');
+        toast.className = 'story-toast';
+        toast.innerHTML = `
+            <div class="toast-wrap">
+                <div class="toast-icon">${icon}</div>
+                <div>
+                    <div class="toast-title">${title}</div>
+                    <div class="toast-body">${body}</div>
+                </div>
+            </div>`;
+        document.body.appendChild(toast);
+        setTimeout(() => {
+            toast.style.transition = 'transform .35s ease-in, opacity .35s ease-in';
+            toast.style.transform = 'translateX(120%)';
+            toast.style.opacity = '0';
+            setTimeout(() => {
+                if (toast.parentNode) toast.parentNode.removeChild(toast);
+            }, 400);
+        }, durationMs);
+    } catch(e) {
+        console.warn('showToast falhou:', e);
+    }
+}
+
+// =================================================================
 // 🏁 FIM DA PARTE 3/5
 // =================================================================
 // =================================================================
-// historia.js — V6.0 — Bloco 4/5
-// STORY_ANIMAL_SKILLS — Handlers dos Atos 1 a 7
-// -----------------------------------------------------------------
-// Cada handler é async (enemy, skill) → executa FX + dano
-// Regra: dano ≤ atk do animal (atk é teto)
-//   • alvo único → atk cheio
-//   • multi-alvo (4-8) → atk cheio (poucos)
-//   • multi-alvo grande (9+) → atk - 1
-//   • tabuleiro todo → 1 ou 2 fixo
+// historia.js — V7.0 — Bloco 4/5
+// Handlers dos Atos 1-7 + CLASS_DB_STORY + PA dos heróis novos
 // =================================================================
 
 const STORY_ANIMAL_SKILLS = {};
@@ -2897,15 +2797,9 @@ const STORY_ANIMAL_SKILLS = {};
 STORY_ANIMAL_SKILLS['porco_espinho_espinhos'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🦔 ${enemy.name} eriça os espinhos!`);
-
-    // FX: burst no porco + espinhos viajando em cruz até as bordas
     spawnFxAt('spike_burst', 'fx-spike-burst', boss.x, boss.y, { duration: 700 });
-
-    const dirs = [
-        { dx: 1, dy: 0 }, { dx: -1, dy: 0 }, { dx: 0, dy: 1 }, { dx: 0, dy: -1 }
-    ];
-    const tilesAtk = []; // { x, y, dmg }
-
+    const dirs = [{dx:1,dy:0},{dx:-1,dy:0},{dx:0,dy:1},{dx:0,dy:-1}];
+    const tilesAtk = [];
     dirs.forEach(dir => {
         let step = 0;
         while (true) {
@@ -2913,30 +2807,13 @@ STORY_ANIMAL_SKILLS['porco_espinho_espinhos'] = async (enemy, skill) => {
             const nx = boss.x + dir.dx * step;
             const ny = boss.y + dir.dy * step;
             if (nx < 0 || nx >= 8 || ny < 0 || ny >= 8) break;
-
-            // FX: espinho viajando
-            spawnTravelingFx('spike_burst', 'fx-spike-travel', boss.x, boss.y, nx, ny, {
-                duration: 150 + step * 40,
-            });
-
-            // Dano: 2 no adjacente, 1 nos distantes (cai com distância)
+            spawnTravelingFx('spike_burst', 'fx-spike-travel', boss.x, boss.y, nx, ny, { duration: 150 + step * 40 });
             const dmg = step === 1 ? atk : Math.max(1, atk - 1);
             tilesAtk.push({ x: nx, y: ny, dmg });
         }
     });
-
     await sleep(400);
-
-    // Aplica dano por tile (usa o dano específico por distância)
-    const board = document.getElementById('board');
-    const s = getStep();
-    const pad = 8;
-
-    tilesAtk.forEach(t => {
-        spawnFxAt('spike_burst', 'fx-spike-burst', t.x, t.y, { duration: 500, scale: 0.7 });
-    });
-
-    // Aplica dano — pega o MAIOR dano que cada player recebeu (não empilha)
+    tilesAtk.forEach(t => { spawnFxAt('spike_burst', 'fx-spike-burst', t.x, t.y, { duration: 500, scale: 0.7 }); });
     const dmgPerPlayer = new Map();
     tilesAtk.forEach(t => {
         players.forEach(p => {
@@ -2951,15 +2828,12 @@ STORY_ANIMAL_SKILLS['porco_espinho_espinhos'] = async (enemy, skill) => {
         const p = players.find(pl => pl.id === pid);
         if (p) applyDmg(p, dmg);
     });
-
     await sleep(400);
 };
 
 STORY_ANIMAL_SKILLS['porco_espinho_bote'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🦔 ${enemy.name} rola em bola de espinhos!`);
-
-    // Acha o player mais próximo
     const alive = players.filter(p => !p.dead);
     if (alive.length === 0) return;
     let nearest = alive[0];
@@ -2968,38 +2842,27 @@ STORY_ANIMAL_SKILLS['porco_espinho_bote'] = async (enemy, skill) => {
         const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
         if (d < minDist) { minDist = d; nearest = p; }
     });
-
     const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
     let lastX = boss.x, lastY = boss.y;
-
-    // Rola 2 tiles
     for (let i = 0; i < 2; i++) {
         const nx = boss.x + dir.dx;
         const ny = boss.y + dir.dy;
         if (nx < 0 || nx >= 8 || ny < 0 || ny >= 8) break;
         if (typeof isOccupied === 'function' && isOccupied(nx, ny, -1)) break;
-
         spawnFxAt('spike_roll', 'fx-spike-roll', nx, ny, { duration: 500 });
-        boss.x = nx;
-        boss.y = ny;
-        lastX = nx;
-        lastY = ny;
+        boss.x = nx; boss.y = ny;
+        lastX = nx; lastY = ny;
         if (typeof updateVisuals === 'function') updateVisuals();
         await sleep(180);
     }
-
     await sleep(200);
-
-    // Dano no tile final
     spawnFxAt('spike_burst', 'fx-spike-burst', lastX, lastY, { duration: 700, scale: 1.3 });
     players.forEach(p => {
         if (!p.dead && p.x === lastX && p.y === lastY) {
             applyDmg(p, atk);
-            // Empurra 1 tile na direção do movimento
             tryPushPlayer(p, dir.dx, dir.dy, 1);
         }
     });
-
     await sleep(300);
 };
 
@@ -3009,7 +2872,6 @@ STORY_ANIMAL_SKILLS['porco_espinho_bote'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['jacare_bocada'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🐊 ${enemy.name} abre a bocarra!`);
-
     const alive = players.filter(p => !p.dead);
     if (alive.length === 0) return;
     let nearest = alive[0];
@@ -3018,16 +2880,9 @@ STORY_ANIMAL_SKILLS['jacare_bocada'] = async (enemy, skill) => {
         const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
         if (d < minDist) { minDist = d; nearest = p; }
     });
-
     const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
     const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('jaw_snap', 'fx-jaw-snap', t.x, t.y, { duration: 500 });
-        }, i * 120);
-    });
-
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('jaw_snap', 'fx-jaw-snap', t.x, t.y, { duration: 500 }); }, i * 120); });
     await sleep(400);
     damagePlayersAt(tiles, atk);
     await sleep(300);
@@ -3036,20 +2891,11 @@ STORY_ANIMAL_SKILLS['jacare_bocada'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['jacare_giro'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🐊 ${enemy.name} gira a cauda em 360°!`);
-
     spawnFxAt('tail_whip', 'fx-tail-whip', boss.x, boss.y, { duration: 700, scale: 1.5 });
-
     const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('tail_whip', 'fx-tail-whip', t.x, t.y, { duration: 600 });
-        }, i * 30);
-    });
-
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('tail_whip', 'fx-tail-whip', t.x, t.y, { duration: 600 }); }, i * 30); });
     await sleep(500);
     damagePlayersAt(tiles, atk);
-
-    // Empurra cada player 1 tile pra fora
     players.forEach(p => {
         if (p.dead) return;
         if (tiles.some(t => t.x === p.x && t.y === p.y)) {
@@ -3058,7 +2904,6 @@ STORY_ANIMAL_SKILLS['jacare_giro'] = async (enemy, skill) => {
             tryPushPlayer(p, dx || 0, dy || 0, 1);
         }
     });
-
     await sleep(300);
 };
 
@@ -3068,7 +2913,6 @@ STORY_ANIMAL_SKILLS['jacare_giro'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['cervo_investida'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🦌 ${enemy.name} baixa os chifres e investe!`);
-
     const alive = players.filter(p => !p.dead);
     if (alive.length === 0) return;
     let nearest = alive[0];
@@ -3077,43 +2921,30 @@ STORY_ANIMAL_SKILLS['cervo_investida'] = async (enemy, skill) => {
         const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
         if (d < minDist) { minDist = d; nearest = p; }
     });
-
     const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    let targetX = boss.x;
-    let targetY = boss.y;
-
-    // Avança até 3 tiles em direção ao alvo
+    let targetX = boss.x, targetY = boss.y;
     for (let i = 0; i < 3; i++) {
         const nx = boss.x + dir.dx;
         const ny = boss.y + dir.dy;
         if (nx < 0 || nx >= 8 || ny < 0 || ny >= 8) break;
         if (typeof isOccupied === 'function' && isOccupied(nx, ny, -1)) break;
-
         spawnFxAt('antler_charge', 'fx-antler-charge', nx, ny, { duration: 400 });
-        boss.x = nx;
-        boss.y = ny;
-        targetX = nx;
-        targetY = ny;
+        boss.x = nx; boss.y = ny;
+        targetX = nx; targetY = ny;
         if (typeof updateVisuals === 'function') updateVisuals();
         await sleep(150);
     }
-
     await sleep(200);
     spawnFxAt('shockwave', 'fx-shockwave', targetX, targetY, { duration: 600 });
-
     players.forEach(p => {
-        if (!p.dead && p.x === targetX && p.y === targetY) {
-            applyDmg(p, atk);
-        }
+        if (!p.dead && p.x === targetX && p.y === targetY) applyDmg(p, atk);
     });
-
     await sleep(300);
 };
 
 STORY_ANIMAL_SKILLS['cervo_chifrada'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🦌 ${enemy.name} dá uma chifrada frontal!`);
-
     const alive = players.filter(p => !p.dead);
     if (alive.length === 0) return;
     let nearest = alive[0];
@@ -3122,24 +2953,16 @@ STORY_ANIMAL_SKILLS['cervo_chifrada'] = async (enemy, skill) => {
         const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
         if (d < minDist) { minDist = d; nearest = p; }
     });
-
     const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
     const tiles = buildLineTiles(boss.x, boss.y, dir.name, 1);
-
     spawnFxAt('antler_charge', 'fx-antler-charge', boss.x, boss.y, { duration: 600 });
-
     await sleep(400);
     damagePlayersAt(tiles, atk);
-
-    // Empurra quem foi acertado
     tiles.forEach(t => {
         players.forEach(p => {
-            if (!p.dead && p.x === t.x && p.y === t.y) {
-                tryPushPlayer(p, dir.dx, dir.dy, 1);
-            }
+            if (!p.dead && p.x === t.x && p.y === t.y) tryPushPlayer(p, dir.dx, dir.dy, 1);
         });
     });
-
     await sleep(300);
 };
 
@@ -3149,13 +2972,12 @@ STORY_ANIMAL_SKILLS['cervo_chifrada'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['onca_garra_dupla'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🐆 ${enemy.name} ataca com garra dupla!`);
-
     const alive = players.filter(p => !p.dead);
     if (alive.length === 0) return;
     const hero = alive[0];
     const dir = dirToward(boss.x, boss.y, hero.x, hero.y);
     const tiles = [];
-    const anchorX = boss.x + dir.dx * 2;    // desloca 2 tiles na direção
+    const anchorX = boss.x + dir.dx * 2;
     const anchorY = boss.y + dir.dy * 2;
     for (let dx = -1; dx <= 2; dx++) {
         for (let dy = -1; dy <= 2; dy++) {
@@ -3165,33 +2987,20 @@ STORY_ANIMAL_SKILLS['onca_garra_dupla'] = async (enemy, skill) => {
             tiles.push({ x: fx, y: fy });
         }
     }
-    playSkillSound('onca_garra_dupla');
-
-    // FX em cada tile da área 4x4
     tiles.forEach((t, i) => {
         setTimeout(() => {
-            spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { 
-                duration: 400, 
-                scale: 0.85 
-            });
+            spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 400, scale: 0.85 });
         }, i * 25);
     });
-
     await sleep(350);
-    // Multi-alvo grande (16 tiles) → atk - 1
     const dmg = Math.max(1, atk - 1);
     damagePlayersAt(tiles, dmg);
-
     await sleep(250);
 };
-    
-
-    
 
 STORY_ANIMAL_SKILLS['onca_salto'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🐆 ${enemy.name} salta mortalmente!`);
-
     const alive = players.filter(p => !p.dead);
     if (alive.length === 0) return;
     let nearest = alive[0];
@@ -3200,33 +3009,22 @@ STORY_ANIMAL_SKILLS['onca_salto'] = async (enemy, skill) => {
         const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
         if (d < minDist) { minDist = d; nearest = p; }
     });
-
     const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    const fromX = boss.x;
-    const fromY = boss.y;
+    const fromX = boss.x, fromY = boss.y;
     let landX = boss.x + dir.dx * 2;
     let landY = boss.y + dir.dy * 2;
     landX = Math.max(0, Math.min(7, landX));
     landY = Math.max(0, Math.min(7, landY));
-
-    // FX de salto em arco
     spawnFxAt('pounce_arc', 'fx-pounce-arc', fromX, fromY, { duration: 700 });
-
-    boss.x = landX;
-    boss.y = landY;
+    boss.x = landX; boss.y = landY;
     if (typeof updateVisuals === 'function') updateVisuals();
     await sleep(350);
-
-    // Impacto no pouso — dano em área 1
     spawnFxAt('shockwave', 'fx-shockwave', landX, landY, { duration: 600, scale: 1.4 });
     spawnFxAt('impact', 'fx-impact', landX, landY, { duration: 500 });
-
     const tiles = buildAreaTiles(landX, landY, 1, true);
-    // Multi-alvo (9 tiles) → atk - 1 (mín 1)
     const dmg = Math.max(1, atk - 1);
     await sleep(300);
     damagePlayersAt(tiles, dmg);
-
     await sleep(300);
 };
 
@@ -3234,56 +3032,37 @@ STORY_ANIMAL_SKILLS['onca_salto'] = async (enemy, skill) => {
 // 👺 ATO 1 — SACI (boss)
 // =================================================================
 STORY_ANIMAL_SKILLS['saci_vortices'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`💨 ${enemy.name} cria vórtices de vento nos tiles de AR!`);
-
-    let count = 0;
+    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 4;
+    playSfx('saci1');
+    addLog(`💨 Saci cria vórtices de vento!`);
     grid.forEach((element, idx) => {
         if (element === 'AR') {
-            const x = idx % 8;
-            const y = Math.floor(idx / 8);
-            spawnFxAt('spectral_veil', 'fx-spectral-veil', x, y, { duration: 800, delay: count * 30 });
-            // Só acerta quem estiver no tile AR → mantém atk cheio
+            triggerVortex(idx % 8, Math.floor(idx / 8), 0, true);
             players.forEach(p => {
-                if (!p.dead && p.x === x && p.y === y) {
-                    setTimeout(() => applyDmg(p, atk), count * 30);
-                }
+                if (!p.dead && p.x === idx % 8 && p.y === Math.floor(idx / 8)) applyDmg(p, bossAtk);
             });
-            count++;
         }
     });
-
-    addLog(`💨 ${count} tiles de AR foram ativados!`);
     await sleep(700);
 };
 
 STORY_ANIMAL_SKILLS['saci_diagonais'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`💨 ${enemy.name} lança vórtices diagonais!`);
-
-    const dirs = [
-        { dx: 1, dy: 1 }, { dx: 1, dy: -1 },
-        { dx: -1, dy: 1 }, { dx: -1, dy: -1 }
-    ];
-
-    dirs.forEach(dir => {
+    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 4;
+    playSfx('saci');
+    addLog(`💨 Saci lança vórtices diagonais!`);
+    const diagonals = [{dx:1,dy:1},{dx:1,dy:-1},{dx:-1,dy:1},{dx:-1,dy:-1}];
+    diagonals.forEach(dir => {
         for (let step = 1; step < 8; step++) {
-            const nx = boss.x + dir.dx * step;
-            const ny = boss.y + dir.dy * step;
-            if (nx < 0 || nx >= 8 || ny < 0 || ny >= 8) break;
-            spawnFxAt('spectral_veil', 'fx-spectral-veil', nx, ny, {
-                duration: 800,
-                delay: step * 80,
-            });
-            players.forEach(p => {
-                if (!p.dead && p.x === nx && p.y === ny) {
-                    setTimeout(() => applyDmg(p, atk), step * 80);
-                }
-            });
+            let nx = boss.x + dir.dx * step, ny = boss.y + dir.dy * step;
+            if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) {
+                triggerVortex(nx, ny, step * 100, true);
+                players.forEach(p => {
+                    if (!p.dead && p.x === nx && p.y === ny) setTimeout(() => applyDmg(p, bossAtk), step * 100);
+                });
+            }
         }
     });
-
-    await sleep(800);
+    await sleep(700);
 };
 
 // =================================================================
@@ -3292,15 +3071,9 @@ STORY_ANIMAL_SKILLS['saci_diagonais'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['tamandua_garras'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🐜 ${enemy.name} ataca com garras longas!`);
-
     spawnFxAt('claw_slash', 'fx-claw-slash', boss.x, boss.y, { duration: 500, scale: 1.4 });
-
-    // Atinge quem está a 1 tile (8 adjacentes) → atk cheio (poucos alvos)
     const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
-    tiles.forEach(t => {
-        spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 400, scale: 0.8 });
-    });
-
+    tiles.forEach(t => { spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 400, scale: 0.8 }); });
     await sleep(450);
     damagePlayersAt(tiles, atk);
     await sleep(300);
@@ -3309,7 +3082,6 @@ STORY_ANIMAL_SKILLS['tamandua_garras'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['tamandua_bicada'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🐜 ${enemy.name} dá uma bicada perfurante!`);
-
     const alive = players.filter(p => !p.dead);
     if (alive.length === 0) return;
     let nearest = alive[0];
@@ -3318,16 +3090,9 @@ STORY_ANIMAL_SKILLS['tamandua_bicada'] = async (enemy, skill) => {
         const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
         if (d < minDist) { minDist = d; nearest = p; }
     });
-
     const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
     const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('peck_beak', 'fx-peck-beak', t.x, t.y, { duration: 400 });
-        }, i * 120);
-    });
-
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('peck_beak', 'fx-peck-beak', t.x, t.y, { duration: 400 }); }, i * 120); });
     await sleep(400);
     damagePlayersAt(tiles, atk);
     await sleep(250);
@@ -3339,8 +3104,6 @@ STORY_ANIMAL_SKILLS['tamandua_bicada'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['anta_pisada'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🦛 ${enemy.name} dá uma pisada pesada!`);
-
-    // Área 2 = 24 tiles → muitos alvos → atk - 1
     const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
     tiles.forEach((t, i) => {
         const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
@@ -3349,7 +3112,6 @@ STORY_ANIMAL_SKILLS['anta_pisada'] = async (enemy, skill) => {
             if (dist === 1) spawnFxAt('ground_crack', 'fx-ground-crack', t.x, t.y, { duration: 500 });
         }, dist * 60 + i * 10);
     });
-
     await sleep(600);
     const dmg = Math.max(1, atk - 1);
     damagePlayersAt(tiles, dmg);
@@ -3359,7 +3121,6 @@ STORY_ANIMAL_SKILLS['anta_pisada'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['anta_atropelamento'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🦛 ${enemy.name} atropela!`);
-
     const alive = players.filter(p => !p.dead);
     if (alive.length === 0) return;
     let nearest = alive[0];
@@ -3368,16 +3129,13 @@ STORY_ANIMAL_SKILLS['anta_atropelamento'] = async (enemy, skill) => {
         const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
         if (d < minDist) { minDist = d; nearest = p; }
     });
-
     const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
     let hit = false;
-
     for (let i = 0; i < 3; i++) {
         const nx = boss.x + dir.dx;
         const ny = boss.y + dir.dy;
         if (nx < 0 || nx >= 8 || ny < 0 || ny >= 8) break;
         if (typeof isOccupied === 'function' && isOccupied(nx, ny, -1)) {
-            // Achou um jogador — bate e para
             spawnFxAt('shockwave', 'fx-shockwave', nx, ny, { duration: 600 });
             players.forEach(p => {
                 if (!p.dead && p.x === nx && p.y === ny) applyDmg(p, atk);
@@ -3386,15 +3144,11 @@ STORY_ANIMAL_SKILLS['anta_atropelamento'] = async (enemy, skill) => {
             break;
         }
         spawnFxAt('hoof_stomp', 'fx-hoof-stomp', nx, ny, { duration: 400 });
-        boss.x = nx;
-        boss.y = ny;
+        boss.x = nx; boss.y = ny;
         if (typeof updateVisuals === 'function') updateVisuals();
         await sleep(140);
     }
-
-    if (!hit) {
-        spawnFxAt('ground_crack', 'fx-ground-crack', boss.x, boss.y, { duration: 500 });
-    }
+    if (!hit) spawnFxAt('ground_crack', 'fx-ground-crack', boss.x, boss.y, { duration: 500 });
     await sleep(300);
 };
 
@@ -3404,7 +3158,6 @@ STORY_ANIMAL_SKILLS['anta_atropelamento'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['queixada_mordida'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🐗 ${enemy.name} morde em linha!`);
-
     const alive = players.filter(p => !p.dead);
     if (alive.length === 0) return;
     let nearest = alive[0];
@@ -3413,16 +3166,9 @@ STORY_ANIMAL_SKILLS['queixada_mordida'] = async (enemy, skill) => {
         const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
         if (d < minDist) { minDist = d; nearest = p; }
     });
-
     const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
     const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('fang_bite', 'fx-fang-bite', t.x, t.y, { duration: 500 });
-        }, i * 130);
-    });
-
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('fang_bite', 'fx-fang-bite', t.x, t.y, { duration: 500 }); }, i * 130); });
     await sleep(420);
     damagePlayersAt(tiles, atk);
     await sleep(250);
@@ -3431,19 +3177,10 @@ STORY_ANIMAL_SKILLS['queixada_mordida'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['queixada_estouro'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🐗 ${enemy.name} provoca um estouro de manada!`);
-
-    // Área 1 = 8 tiles → mantém atk cheio
     const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('impact', 'fx-impact', t.x, t.y, { duration: 500 });
-        }, i * 40);
-    });
-
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('impact', 'fx-impact', t.x, t.y, { duration: 500 }); }, i * 40); });
     await sleep(500);
     damagePlayersAt(tiles, atk);
-
-    // Empurra todos 1 tile pra fora
     players.forEach(p => {
         if (p.dead) return;
         if (tiles.some(t => t.x === p.x && t.y === p.y)) {
@@ -3452,7 +3189,6 @@ STORY_ANIMAL_SKILLS['queixada_estouro'] = async (enemy, skill) => {
             tryPushPlayer(p, dx || 0, dy || 0, 1);
         }
     });
-
     await sleep(300);
 };
 
@@ -3462,7 +3198,6 @@ STORY_ANIMAL_SKILLS['queixada_estouro'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['sucuri_bocarra'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🐍 ${enemy.name} abre a bocarra!`);
-
     const alive = players.filter(p => !p.dead);
     if (alive.length === 0) return;
     let nearest = alive[0];
@@ -3471,16 +3206,9 @@ STORY_ANIMAL_SKILLS['sucuri_bocarra'] = async (enemy, skill) => {
         const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
         if (d < minDist) { minDist = d; nearest = p; }
     });
-
     const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
     const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('jaw_snap', 'fx-jaw-snap', t.x, t.y, { duration: 500, scale: 1.2 });
-        }, i * 140);
-    });
-
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('jaw_snap', 'fx-jaw-snap', t.x, t.y, { duration: 500, scale: 1.2 }); }, i * 140); });
     await sleep(420);
     damagePlayersAt(tiles, atk);
     await sleep(250);
@@ -3489,21 +3217,11 @@ STORY_ANIMAL_SKILLS['sucuri_bocarra'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['sucuri_caudada'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🐍 ${enemy.name} dá uma caudada devastadora!`);
-
     spawnFxAt('tail_whip', 'fx-tail-whip', boss.x, boss.y, { duration: 700, scale: 1.8 });
-
-    // Área 1 = 8 tiles → atk cheio (poucos alvos)
     const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('tail_whip', 'fx-tail-whip', t.x, t.y, { duration: 500 });
-        }, i * 40);
-    });
-
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('tail_whip', 'fx-tail-whip', t.x, t.y, { duration: 500 }); }, i * 40); });
     await sleep(500);
     damagePlayersAt(tiles, atk);
-
-    // Empurra 2 tiles pra fora
     players.forEach(p => {
         if (p.dead) return;
         if (tiles.some(t => t.x === p.x && t.y === p.y)) {
@@ -3512,7 +3230,6 @@ STORY_ANIMAL_SKILLS['sucuri_caudada'] = async (enemy, skill) => {
             tryPushPlayer(p, dx || 0, dy || 0, 2);
         }
     });
-
     await sleep(300);
 };
 
@@ -3520,41 +3237,23 @@ STORY_ANIMAL_SKILLS['sucuri_caudada'] = async (enemy, skill) => {
 // 🦥 ATO 2 — MAPINGUARI (boss)
 // =================================================================
 STORY_ANIMAL_SKILLS['mapinguari_mordida'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🦥 ${enemy.name} dá uma mordida poderosa!`);
-
-    spawnFxAt('fang_bite', 'fx-fang-bite', boss.x, boss.y, { duration: 600, scale: 1.6 });
-
-    // Área 2 = 24 tiles → atk - 1
-    const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
-    await sleep(500);
-    const dmg = Math.max(1, atk - 1);
-    damagePlayersAt(tiles, dmg);
-    await sleep(300);
+    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 4;
+    playSfx('minoa1');
+    addLog(`🦥 Mapinguari dá uma mordida poderosa!`);
+    triggerBite(boss.x, boss.y);
+    await sleep(600);
+    players.forEach(p => {
+        if (!p.dead && Math.abs(p.x - boss.x) <= 2 && Math.abs(p.y - boss.y) <= 2) applyDmg(p, bossAtk);
+    });
 };
 
 STORY_ANIMAL_SKILLS['mapinguari_pedras'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🦥 ${enemy.name} lança pedras em 3 linhas!`);
-
-    // 3 linhas horizontais centradas no boss = 24 tiles → atk - 2 (mín 1) ou 2 fixo
-    const rows = [boss.y - 1, boss.y, boss.y + 1].filter(y => y >= 0 && y < 8);
-    const tiles = [];
-    rows.forEach(y => {
-        for (let x = 0; x < 8; x++) {
-            tiles.push({ x, y });
-            setTimeout(() => {
-                spawnTravelingFx('spike_burst', 'fx-spike-travel',
-                    boss.x, boss.y, x, y,
-                    { duration: 300 + Math.abs(x - boss.x) * 30 });
-            }, Math.abs(x - boss.x) * 40);
-        }
-    });
-
-    await sleep(700);
-    const dmg = Math.max(1, atk - 2);
-    damagePlayersAt(tiles, dmg);
-    await sleep(300);
+    playSfx('minoa2');
+    addLog(`🦥 Mapinguari lança pedras!`);
+    triggerRocks(boss.x, boss.y);
+    await sleep(600);
+    const rows = [boss.y - 1, boss.y, boss.y + 1];
+    players.forEach(p => { if (!p.dead && rows.includes(p.y)) applyDmg(p, 2); });
 };
 
 // =================================================================
@@ -3563,8 +3262,6 @@ STORY_ANIMAL_SKILLS['mapinguari_pedras'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['piranha_cardume'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🐟 ${enemy.name} chama o cardume!`);
-
-    // 3 linhas adjacentes em direção ao player mais próximo
     const alive = players.filter(p => !p.dead);
     if (alive.length === 0) return;
     let nearest = alive[0];
@@ -3573,12 +3270,10 @@ STORY_ANIMAL_SKILLS['piranha_cardume'] = async (enemy, skill) => {
         const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
         if (d < minDist) { minDist = d; nearest = p; }
     });
-
     const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
     const midTiles = buildLineTiles(boss.x, boss.y, dir.name, 3);
     const allTiles = [];
     midTiles.forEach(mt => {
-        // Adiciona o tile e os adjacentes perpendiculares
         allTiles.push(mt);
         const perpX = dir.dy !== 0 ? 1 : 0;
         const perpY = dir.dx !== 0 ? 1 : 0;
@@ -3589,13 +3284,7 @@ STORY_ANIMAL_SKILLS['piranha_cardume'] = async (enemy, skill) => {
             if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) allTiles.push({ x: nx, y: ny });
         }
     });
-
-    allTiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('swarm_cloud', 'fx-swarm-cloud', t.x, t.y, { duration: 500 });
-        }, i * 50);
-    });
-
+    allTiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('swarm_cloud', 'fx-swarm-cloud', t.x, t.y, { duration: 500 }); }, i * 50); });
     await sleep(600);
     damagePlayersAt(allTiles, atk);
     await sleep(300);
@@ -3604,24 +3293,17 @@ STORY_ANIMAL_SKILLS['piranha_cardume'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['piranha_frenesi'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🐟 ${enemy.name} entra em frenesi!`);
-
-    // Dano cai com distância
     spawnFxAt('swarm_cloud', 'fx-swarm-cloud', boss.x, boss.y, { duration: 700, scale: 1.4 });
-
     const alive = players.filter(p => !p.dead);
     await sleep(400);
-
     alive.forEach(p => {
         const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
         let dmg = atk;
-        if (d >= 3) dmg = Math.max(1, atk - 1);
-        // Piranha é rápida — se está adjacente recebe atk cheio, longe recebe menos
         if (d === 1) dmg = atk;
-        else if (d === 2) dmg = Math.max(1, atk - 0);
+        else if (d === 2) dmg = Math.max(1, atk);
         else dmg = Math.max(1, atk - 1);
         applyDmg(p, dmg);
     });
-
     await sleep(300);
 };
 
@@ -3631,7 +3313,6 @@ STORY_ANIMAL_SKILLS['piranha_frenesi'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['lontra_garras'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🦦 ${enemy.name} ataca com garras aquáticas!`);
-
     const alive = players.filter(p => !p.dead);
     if (alive.length === 0) return;
     let nearest = alive[0];
@@ -3640,16 +3321,9 @@ STORY_ANIMAL_SKILLS['lontra_garras'] = async (enemy, skill) => {
         const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
         if (d < minDist) { minDist = d; nearest = p; }
     });
-
     const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
     const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('fin_slash', 'fx-fin-slash', t.x, t.y, { duration: 400 });
-        }, i * 130);
-    });
-
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('fin_slash', 'fx-fin-slash', t.x, t.y, { duration: 400 }); }, i * 130); });
     await sleep(420);
     damagePlayersAt(tiles, atk);
     await sleep(250);
@@ -3658,7 +3332,6 @@ STORY_ANIMAL_SKILLS['lontra_garras'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['lontra_nado'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🦦 ${enemy.name} nada rapidamente!`);
-
     const alive = players.filter(p => !p.dead);
     if (alive.length === 0) return;
     let nearest = alive[0];
@@ -3667,28 +3340,22 @@ STORY_ANIMAL_SKILLS['lontra_nado'] = async (enemy, skill) => {
         const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
         if (d < minDist) { minDist = d; nearest = p; }
     });
-
     const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-
     for (let i = 0; i < 3; i++) {
         const nx = boss.x + dir.dx;
         const ny = boss.y + dir.dy;
         if (nx < 0 || nx >= 8 || ny < 0 || ny >= 8) break;
         if (typeof isOccupied === 'function' && isOccupied(nx, ny, -1)) break;
         spawnFxAt('splash_wave', 'fx-splash-wave', nx, ny, { duration: 500 });
-        boss.x = nx;
-        boss.y = ny;
+        boss.x = nx; boss.y = ny;
         if (typeof updateVisuals === 'function') updateVisuals();
         await sleep(150);
     }
-
     await sleep(200);
     spawnFxAt('splash_wave', 'fx-splash-wave', boss.x, boss.y, { duration: 600, scale: 1.4 });
-
     players.forEach(p => {
         if (!p.dead && p.x === boss.x && p.y === boss.y) applyDmg(p, atk);
     });
-
     await sleep(300);
 };
 
@@ -3698,8 +3365,6 @@ STORY_ANIMAL_SKILLS['lontra_nado'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['ariranha_matilha'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🦦 ${enemy.name} chama a matilha!`);
-
-    // Ataque em cruz (4 tiles) → atk cheio
     const tiles = buildCrossTiles(boss.x, boss.y, 1, false);
     tiles.forEach((t, i) => {
         setTimeout(() => {
@@ -3707,7 +3372,6 @@ STORY_ANIMAL_SKILLS['ariranha_matilha'] = async (enemy, skill) => {
             spawnFxAt('fang_bite', 'fx-fang-bite', t.x, t.y, { duration: 450 });
         }, i * 80);
     });
-
     await sleep(500);
     damagePlayersAt(tiles, atk);
     await sleep(250);
@@ -3716,7 +3380,6 @@ STORY_ANIMAL_SKILLS['ariranha_matilha'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['ariranha_bote'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🦦 ${enemy.name} dá o bote do rio!`);
-
     const alive = players.filter(p => !p.dead);
     if (alive.length === 0) return;
     let nearest = alive[0];
@@ -3725,16 +3388,9 @@ STORY_ANIMAL_SKILLS['ariranha_bote'] = async (enemy, skill) => {
         const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
         if (d < minDist) { minDist = d; nearest = p; }
     });
-
     const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
     const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('splash_wave', 'fx-splash-wave', t.x, t.y, { duration: 500 });
-        }, i * 130);
-    });
-
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('splash_wave', 'fx-splash-wave', t.x, t.y, { duration: 500 }); }, i * 130); });
     await sleep(400);
     damagePlayersAt(tiles, atk);
     await sleep(250);
@@ -3746,7 +3402,6 @@ STORY_ANIMAL_SKILLS['ariranha_bote'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['pirarucu_bocarra'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🐠 ${enemy.name} dá a bocarra!`);
-
     const alive = players.filter(p => !p.dead);
     if (alive.length === 0) return;
     let nearest = alive[0];
@@ -3755,16 +3410,9 @@ STORY_ANIMAL_SKILLS['pirarucu_bocarra'] = async (enemy, skill) => {
         const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
         if (d < minDist) { minDist = d; nearest = p; }
     });
-
     const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
     const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('jaw_snap', 'fx-jaw-snap', t.x, t.y, { duration: 500, scale: 1.3 });
-        }, i * 140);
-    });
-
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('jaw_snap', 'fx-jaw-snap', t.x, t.y, { duration: 500, scale: 1.3 }); }, i * 140); });
     await sleep(420);
     damagePlayersAt(tiles, atk);
     await sleep(250);
@@ -3773,20 +3421,11 @@ STORY_ANIMAL_SKILLS['pirarucu_bocarra'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['pirarucu_caudada'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🐠 ${enemy.name} dá uma caudada!`);
-
     spawnFxAt('tail_whip', 'fx-tail-whip', boss.x, boss.y, { duration: 700, scale: 1.7 });
-
     const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('splash_wave', 'fx-splash-wave', t.x, t.y, { duration: 500 });
-        }, i * 40);
-    });
-
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('splash_wave', 'fx-splash-wave', t.x, t.y, { duration: 500 }); }, i * 40); });
     await sleep(500);
     damagePlayersAt(tiles, atk);
-
-    // Empurra 2 tiles
     players.forEach(p => {
         if (p.dead) return;
         if (tiles.some(t => t.x === p.x && t.y === p.y)) {
@@ -3795,7 +3434,6 @@ STORY_ANIMAL_SKILLS['pirarucu_caudada'] = async (enemy, skill) => {
             tryPushPlayer(p, dx || 0, dy || 0, 2);
         }
     });
-
     await sleep(300);
 };
 
@@ -3803,65 +3441,34 @@ STORY_ANIMAL_SKILLS['pirarucu_caudada'] = async (enemy, skill) => {
 // 🧜‍♀️ ATO 3 — IARA (boss)
 // =================================================================
 STORY_ANIMAL_SKILLS['iara_tsunami'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🌊 ${enemy.name} invoca um tsunami!`);
-
-    // Tabuleiro todo → dano fixo baixo
-    const board = document.getElementById('board');
-    if (board) {
-        const wave = document.createElement('div');
-        wave.style.cssText = `position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(74,140,181,0.8),transparent);animation:tsunamiAnim 1.2s ease-out;z-index:55;pointer-events:none;`;
-        board.appendChild(wave);
-        setTimeout(() => wave.remove(), 1300);
-    }
-
-    await sleep(600);
-
-    // Dano 1 no tabuleiro todo
+    playSfx('iara1');
+    addLog(`🌊 Iara invoca um tsunami!`);
+    triggerTsunami();
+    await sleep(500);
     players.forEach(p => {
         if (!p.dead) {
             applyDmg(p, 1);
-            // Empurra 1 tile pra fora
-            const dx = p.x < 4 ? -1 : 1;
-            const dy = p.y < 4 ? -1 : 1;
+            let dx = p.x < 4 ? -1 : 1, dy = p.y < 4 ? -1 : 1, nx = p.x, ny = p.y;
             if (Math.abs(p.x - 3.5) > Math.abs(p.y - 3.5)) {
-                tryPushPlayer(p, dx, 0, 1);
+                if (p.x + dx >= 0 && p.x + dx < 8) nx += dx;
             } else {
-                tryPushPlayer(p, 0, dy, 1);
+                if (p.y + dy >= 0 && p.y + dy < 8) ny += dy;
             }
+            if (!isOccupied(nx, ny, p.id)) { p.x = nx; p.y = ny; }
         }
     });
-
-    await sleep(400);
+    updateVisuals();
 };
 
 STORY_ANIMAL_SKILLS['iara_jatos'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`💧 ${enemy.name} lança jatos d'água em cruz!`);
-
-    // Cruz completa — atinge linha e coluna do boss
-    const tiles = [];
-    for (let x = 0; x < 8; x++) tiles.push({ x, y: boss.y });
-    for (let y = 0; y < 8; y++) if (y !== boss.y) tiles.push({ x: boss.x, y });
-
-    // FX em cruz
-    spawnFxAt('splash_wave', 'fx-splash-wave', boss.x, boss.y, { duration: 700 });
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('splash_wave', 'fx-splash-wave', t.x, t.y, { duration: 400, scale: 0.7 });
-        }, i * 20);
-    });
-
+    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 4;
+    playSfx('iara2');
+    addLog(`💧 Iara lança jatos d'água!`);
+    triggerWaterJet(boss.x, boss.y);
     await sleep(600);
-
-    // Só atinge quem está na cruz → poucos alvos → mantém atk
-    const cruxSet = new Set(tiles.map(t => `${t.x},${t.y}`));
     players.forEach(p => {
-        if (p.dead) return;
-        if (cruxSet.has(`${p.x},${p.y}`)) applyDmg(p, atk);
+        if (!p.dead && (p.x === boss.x || p.y === boss.y)) applyDmg(p, bossAtk);
     });
-
-    await sleep(300);
 };
 
 // =================================================================
@@ -3870,7 +3477,6 @@ STORY_ANIMAL_SKILLS['iara_jatos'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['cascavel_chocalho'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🐍 ${enemy.name} agita o chocalho e ataca tiles de AR!`);
-
     let count = 0;
     grid.forEach((element, idx) => {
         if (element === 'AR') {
@@ -3878,14 +3484,11 @@ STORY_ANIMAL_SKILLS['cascavel_chocalho'] = async (enemy, skill) => {
             const y = Math.floor(idx / 8);
             spawnFxAt('sting_venom', 'fx-sting-venom', x, y, { duration: 700, delay: count * 40 });
             players.forEach(p => {
-                if (!p.dead && p.x === x && p.y === y) {
-                    setTimeout(() => applyDmg(p, atk), count * 40);
-                }
+                if (!p.dead && p.x === x && p.y === y) setTimeout(() => applyDmg(p, atk), count * 40);
             });
             count++;
         }
     });
-
     addLog(`🐍 ${count} tiles de AR foram atingidos!`);
     await sleep(700);
 };
@@ -3893,7 +3496,6 @@ STORY_ANIMAL_SKILLS['cascavel_chocalho'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['cascavel_bote'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🐍 ${enemy.name} dá o bote peçonhento!`);
-
     const alive = players.filter(p => !p.dead);
     if (alive.length === 0) return;
     let nearest = alive[0];
@@ -3902,17 +3504,14 @@ STORY_ANIMAL_SKILLS['cascavel_bote'] = async (enemy, skill) => {
         const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
         if (d < minDist) { minDist = d; nearest = p; }
     });
-
     const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
     const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-
     tiles.forEach((t, i) => {
         setTimeout(() => {
             spawnFxAt('sting_venom', 'fx-sting-venom', t.x, t.y, { duration: 600 });
             spawnFxAt('fang_bite', 'fx-fang-bite', t.x, t.y, { duration: 450 });
         }, i * 140);
     });
-
     await sleep(430);
     damagePlayersAt(tiles, atk);
     await sleep(250);
@@ -3924,8 +3523,6 @@ STORY_ANIMAL_SKILLS['cascavel_bote'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['coral_aneis'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🐍 ${enemy.name} enrola em anéis coloridos!`);
-
-    // Ataque em 3 tiles: esquerda, direita e frente (V)
     const alive = players.filter(p => !p.dead);
     if (alive.length === 0) return;
     let nearest = alive[0];
@@ -3934,13 +3531,11 @@ STORY_ANIMAL_SKILLS['coral_aneis'] = async (enemy, skill) => {
         const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
         if (d < minDist) { minDist = d; nearest = p; }
     });
-
     const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
     const tiles = [];
     const frontX = boss.x + dir.dx;
     const frontY = boss.y + dir.dy;
     if (frontX >= 0 && frontX < 8 && frontY >= 0 && frontY < 8) tiles.push({ x: frontX, y: frontY });
-    // Laterais
     const perpX = dir.dy !== 0 ? 1 : 0;
     const perpY = dir.dx !== 0 ? 1 : 0;
     [[1,0],[-1,0]].forEach(([k]) => {
@@ -3948,13 +3543,7 @@ STORY_ANIMAL_SKILLS['coral_aneis'] = async (enemy, skill) => {
         const ny = frontY + perpY * k;
         if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) tiles.push({ x: nx, y: ny });
     });
-
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('coil_wrap', 'fx-coil-wrap', t.x, t.y, { duration: 600 });
-        }, i * 100);
-    });
-
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('coil_wrap', 'fx-coil-wrap', t.x, t.y, { duration: 600 }); }, i * 100); });
     await sleep(450);
     damagePlayersAt(tiles, atk);
     await sleep(250);
@@ -3963,7 +3552,6 @@ STORY_ANIMAL_SKILLS['coral_aneis'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['coral_peconha'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🐍 ${enemy.name} espirra peçonha!`);
-
     const alive = players.filter(p => !p.dead);
     if (alive.length === 0) return;
     let nearest = alive[0];
@@ -3972,16 +3560,9 @@ STORY_ANIMAL_SKILLS['coral_peconha'] = async (enemy, skill) => {
         const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
         if (d < minDist) { minDist = d; nearest = p; }
     });
-
     const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
     const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('sting_venom', 'fx-sting-venom', t.x, t.y, { duration: 700 });
-        }, i * 130);
-    });
-
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('sting_venom', 'fx-sting-venom', t.x, t.y, { duration: 700 }); }, i * 130); });
     await sleep(430);
     damagePlayersAt(tiles, atk);
     await sleep(250);
@@ -3993,7 +3574,6 @@ STORY_ANIMAL_SKILLS['coral_peconha'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['jararaca_bote'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🐍 ${enemy.name} dá o bote traiçoeiro!`);
-
     const alive = players.filter(p => !p.dead);
     if (alive.length === 0) return;
     let nearest = alive[0];
@@ -4002,17 +3582,14 @@ STORY_ANIMAL_SKILLS['jararaca_bote'] = async (enemy, skill) => {
         const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
         if (d < minDist) { minDist = d; nearest = p; }
     });
-
     const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
     const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-
     tiles.forEach((t, i) => {
         setTimeout(() => {
             spawnFxAt('fang_bite', 'fx-fang-bite', t.x, t.y, { duration: 500 });
             spawnFxAt('sting_venom', 'fx-sting-venom', t.x, t.y, { duration: 600 });
         }, i * 140);
     });
-
     await sleep(430);
     damagePlayersAt(tiles, atk);
     await sleep(250);
@@ -4021,7 +3598,6 @@ STORY_ANIMAL_SKILLS['jararaca_bote'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['jararaca_enrolar'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🐍 ${enemy.name} enrola e puxa!`);
-
     const alive = players.filter(p => !p.dead);
     if (alive.length === 0) return;
     let nearest = alive[0];
@@ -4030,13 +3606,10 @@ STORY_ANIMAL_SKILLS['jararaca_enrolar'] = async (enemy, skill) => {
         const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
         if (d < minDist) { minDist = d; nearest = p; }
     });
-
     spawnFxAt('coil_wrap', 'fx-coil-wrap', nearest.x, nearest.y, { duration: 700, scale: 1.3 });
     await sleep(400);
     applyDmg(nearest, atk);
-    // Puxa 1 tile na direção do boss
     tryPullPlayer(nearest, boss.x, boss.y, 1);
-
     await sleep(300);
 };
 
@@ -4046,15 +3619,8 @@ STORY_ANIMAL_SKILLS['jararaca_enrolar'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['tartaruga_casco'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🐢 ${enemy.name} ergue o casco duro!`);
-
-    // Área 1 = 8 tiles → mantém atk cheio
     const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('shockwave', 'fx-shockwave', t.x, t.y, { duration: 600, scale: 0.9 });
-        }, i * 40);
-    });
-
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('shockwave', 'fx-shockwave', t.x, t.y, { duration: 600, scale: 0.9 }); }, i * 40); });
     await sleep(500);
     damagePlayersAt(tiles, atk);
     await sleep(250);
@@ -4063,7 +3629,6 @@ STORY_ANIMAL_SKILLS['tartaruga_casco'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['tartaruga_pancada'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🐢 ${enemy.name} dá uma pancada pesada!`);
-
     const alive = players.filter(p => !p.dead);
     if (alive.length === 0) return;
     let nearest = alive[0];
@@ -4072,29 +3637,21 @@ STORY_ANIMAL_SKILLS['tartaruga_pancada'] = async (enemy, skill) => {
         const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
         if (d < minDist) { minDist = d; nearest = p; }
     });
-
     const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
     const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-
     tiles.forEach((t, i) => {
         setTimeout(() => {
             spawnFxAt('hoof_stomp', 'fx-hoof-stomp', t.x, t.y, { duration: 500, scale: 1.3 });
             spawnFxAt('ground_crack', 'fx-ground-crack', t.x, t.y, { duration: 500 });
         }, i * 130);
     });
-
     await sleep(430);
     damagePlayersAt(tiles, atk);
-
-    // Empurra 1 tile
     tiles.forEach(t => {
         players.forEach(p => {
-            if (!p.dead && p.x === t.x && p.y === t.y) {
-                tryPushPlayer(p, dir.dx, dir.dy, 1);
-            }
+            if (!p.dead && p.x === t.x && p.y === t.y) tryPushPlayer(p, dir.dx, dir.dy, 1);
         });
     });
-
     await sleep(300);
 };
 
@@ -4102,53 +3659,32 @@ STORY_ANIMAL_SKILLS['tartaruga_pancada'] = async (enemy, skill) => {
 // 🔥 ATO 4 — BOITATÁ (boss)
 // =================================================================
 STORY_ANIMAL_SKILLS['boitata_colunas'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🔥 ${enemy.name} lança colunas de fogo!`);
-
-    const columns = [boss.x - 1, boss.x, boss.x + 1].filter(c => c >= 0 && c <= 7);
-
-    columns.forEach(col => {
-        // FX: coluna subindo
-        if (typeof triggerFireColumn === 'function') {
-            triggerFireColumn(col);
-        } else {
-            for (let y = 0; y < 8; y++) {
-                spawnFxAt('flame_short', 'fx-flame-short', col, y, { duration: 500, delay: y * 30 });
-            }
-        }
-    });
-
+    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 4;
+    playSfx('skill1');
+    addLog(`🔥 Boitatá lança colunas de fogo!`);
+    const columns = [boss.x - 1, boss.x, boss.x + 1];
+    columns.forEach(col => { if (col >= 0 && col <= 7) triggerFireColumn(col); });
     await sleep(600);
-
-    // Só atinge quem está nas colunas → mantém atk
-    players.forEach(p => {
-        if (!p.dead && columns.includes(p.x)) applyDmg(p, atk);
-    });
-
-    await sleep(300);
+    players.forEach(p => { if (!p.dead && columns.includes(p.x)) applyDmg(p, bossAtk); });
 };
 
 STORY_ANIMAL_SKILLS['boitata_explosoes'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🔥 ${enemy.name} invoca explosões em tiles de FOGO!`);
-
+    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 4;
+    playSfx('skill1');
+    addLog(`🔥 Boitatá invoca explosões de fogo!`);
     let count = 0, attempts = 0;
     while (count < 5 && attempts < 50) {
-        const idx = Math.floor(Math.random() * 64);
+        let idx = Math.floor(Math.random() * 64);
         if (grid[idx] === 'FOGO') {
-            const x = idx % 8;
-            const y = Math.floor(idx / 8);
-            spawnFxAt('flame_short', 'fx-flame-short', x, y, { duration: 700, scale: 1.3 });
+            triggerFlare(idx % 8, Math.floor(idx / 8));
             players.forEach(p => {
-                if (!p.dead && p.x === x && p.y === y) applyDmg(p, atk);
+                if (!p.dead && p.x === idx % 8 && p.y === Math.floor(idx / 8)) applyDmg(p, bossAtk);
             });
             count++;
         }
         attempts++;
     }
-
-    addLog(`🔥 ${count} explosões em tiles de FOGO!`);
-    await sleep(600);
+    await sleep(500);
 };
 
 // =================================================================
@@ -4157,7 +3693,6 @@ STORY_ANIMAL_SKILLS['boitata_explosoes'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['bode_cornada'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🐐 ${enemy.name} dá uma cornada!`);
-
     const alive = players.filter(p => !p.dead);
     if (alive.length === 0) return;
     let nearest = alive[0];
@@ -4166,12 +3701,9 @@ STORY_ANIMAL_SKILLS['bode_cornada'] = async (enemy, skill) => {
         const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
         if (d < minDist) { minDist = d; nearest = p; }
     });
-
     const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
     const tiles = buildLineTiles(boss.x, boss.y, dir.name, 1);
-
     spawnFxAt('antler_charge', 'fx-antler-charge', boss.x + dir.dx, boss.y + dir.dy, { duration: 500 });
-
     await sleep(380);
     damagePlayersAt(tiles, atk);
     await sleep(220);
@@ -4180,7 +3712,6 @@ STORY_ANIMAL_SKILLS['bode_cornada'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['bode_marrada'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🐐 ${enemy.name} dá uma marrada!`);
-
     const alive = players.filter(p => !p.dead);
     if (alive.length === 0) return;
     let nearest = alive[0];
@@ -4189,37 +3720,25 @@ STORY_ANIMAL_SKILLS['bode_marrada'] = async (enemy, skill) => {
         const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
         if (d < minDist) { minDist = d; nearest = p; }
     });
-
     const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
     const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('antler_charge', 'fx-antler-charge', t.x, t.y, { duration: 450 });
-        }, i * 130);
-    });
-
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('antler_charge', 'fx-antler-charge', t.x, t.y, { duration: 450 }); }, i * 130); });
     await sleep(420);
     damagePlayersAt(tiles, atk);
-
     tiles.forEach(t => {
         players.forEach(p => {
-            if (!p.dead && p.x === t.x && p.y === t.y) {
-                tryPushPlayer(p, dir.dx, dir.dy, 1);
-            }
+            if (!p.dead && p.x === t.x && p.y === t.y) tryPushPlayer(p, dir.dx, dir.dy, 1);
         });
     });
-
     await sleep(280);
 };
 
 // =================================================================
-// 🐏 ATO 5 — CARNEIRO SELVAGEM
+// 🐏 ATO 5 — CARNEIRO
 // =================================================================
 STORY_ANIMAL_SKILLS['carneiro_trombada'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🐏 ${enemy.name} tromba!`);
-
     const alive = players.filter(p => !p.dead);
     if (alive.length === 0) return;
     let nearest = alive[0];
@@ -4228,16 +3747,9 @@ STORY_ANIMAL_SKILLS['carneiro_trombada'] = async (enemy, skill) => {
         const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
         if (d < minDist) { minDist = d; nearest = p; }
     });
-
     const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
     const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('hoof_stomp', 'fx-hoof-stomp', t.x, t.y, { duration: 450 });
-        }, i * 130);
-    });
-
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('hoof_stomp', 'fx-hoof-stomp', t.x, t.y, { duration: 450 }); }, i * 130); });
     await sleep(420);
     damagePlayersAt(tiles, atk);
     await sleep(250);
@@ -4246,14 +3758,8 @@ STORY_ANIMAL_SKILLS['carneiro_trombada'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['carneiro_pisada'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🐏 ${enemy.name} pisa com força!`);
-
     const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('hoof_stomp', 'fx-hoof-stomp', t.x, t.y, { duration: 500 });
-        }, i * 40);
-    });
-
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('hoof_stomp', 'fx-hoof-stomp', t.x, t.y, { duration: 500 }); }, i * 40); });
     await sleep(500);
     damagePlayersAt(tiles, atk);
     await sleep(250);
@@ -4265,7 +3771,6 @@ STORY_ANIMAL_SKILLS['carneiro_pisada'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['cavalo_coice'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🐎 ${enemy.name} dá um coice!`);
-
     const alive = players.filter(p => !p.dead);
     if (alive.length === 0) return;
     let nearest = alive[0];
@@ -4274,43 +3779,27 @@ STORY_ANIMAL_SKILLS['cavalo_coice'] = async (enemy, skill) => {
         const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
         if (d < minDist) { minDist = d; nearest = p; }
     });
-
     const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
     const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('hoof_stomp', 'fx-hoof-stomp', t.x, t.y, { duration: 450, scale: 1.2 });
-        }, i * 130);
-    });
-
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('hoof_stomp', 'fx-hoof-stomp', t.x, t.y, { duration: 450, scale: 1.2 }); }, i * 130); });
     await sleep(420);
     damagePlayersAt(tiles, atk);
-
     tiles.forEach(t => {
         players.forEach(p => {
-            if (!p.dead && p.x === t.x && p.y === t.y) {
-                tryPushPlayer(p, dir.dx, dir.dy, 1);
-            }
+            if (!p.dead && p.x === t.x && p.y === t.y) tryPushPlayer(p, dir.dx, dir.dy, 1);
         });
     });
-
     await sleep(280);
 };
 
 STORY_ANIMAL_SKILLS['cavalo_relincho'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🐎 ${enemy.name} relincha furiosamente!`);
-
-    // Área 2 = 24 tiles → atk - 1
     const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
     tiles.forEach((t, i) => {
         const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
-        setTimeout(() => {
-            spawnFxAt('shockwave', 'fx-shockwave', t.x, t.y, { duration: 500, scale: 0.8 });
-        }, dist * 50);
+        setTimeout(() => { spawnFxAt('shockwave', 'fx-shockwave', t.x, t.y, { duration: 500, scale: 0.8 }); }, dist * 50);
     });
-
     await sleep(550);
     const dmg = Math.max(1, atk - 1);
     damagePlayersAt(tiles, dmg);
@@ -4323,7 +3812,6 @@ STORY_ANIMAL_SKILLS['cavalo_relincho'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['touro_cornada'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🐂 ${enemy.name} dá uma cornada violenta!`);
-
     const alive = players.filter(p => !p.dead);
     if (alive.length === 0) return;
     let nearest = alive[0];
@@ -4332,35 +3820,22 @@ STORY_ANIMAL_SKILLS['touro_cornada'] = async (enemy, skill) => {
         const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
         if (d < minDist) { minDist = d; nearest = p; }
     });
-
     const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
     const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('antler_charge', 'fx-antler-charge', t.x, t.y, { duration: 500, scale: 1.3 });
-        }, i * 130);
-    });
-
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('antler_charge', 'fx-antler-charge', t.x, t.y, { duration: 500, scale: 1.3 }); }, i * 130); });
     await sleep(420);
     damagePlayersAt(tiles, atk);
-
     tiles.forEach(t => {
         players.forEach(p => {
-            if (!p.dead && p.x === t.x && p.y === t.y) {
-                tryPushPlayer(p, dir.dx, dir.dy, 1);
-            }
+            if (!p.dead && p.x === t.x && p.y === t.y) tryPushPlayer(p, dir.dx, dir.dy, 1);
         });
     });
-
     await sleep(280);
 };
 
 STORY_ANIMAL_SKILLS['touro_pisoteada'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🐂 ${enemy.name} pisoteia o chão!`);
-
-    // Área 2 → atk - 1
     const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
     tiles.forEach((t, i) => {
         const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
@@ -4369,7 +3844,6 @@ STORY_ANIMAL_SKILLS['touro_pisoteada'] = async (enemy, skill) => {
             if (dist === 1) spawnFxAt('hoof_stomp', 'fx-hoof-stomp', t.x, t.y, { duration: 500 });
         }, dist * 55);
     });
-
     await sleep(550);
     const dmg = Math.max(1, atk - 1);
     damagePlayersAt(tiles, dmg);
@@ -4380,55 +3854,31 @@ STORY_ANIMAL_SKILLS['touro_pisoteada'] = async (enemy, skill) => {
 // 🐴 ATO 5 — MULA SEM CABEÇA (boss)
 // =================================================================
 STORY_ANIMAL_SKILLS['mula_relincho'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐴 ${enemy.name} relincha fogo em 3 colunas!`);
-
-    const columns = [boss.x - 1, boss.x, boss.x + 1].filter(c => c >= 0 && c <= 7);
-
-    columns.forEach(col => {
-        if (typeof triggerFireColumn === 'function') {
-            triggerFireColumn(col);
-        } else {
-            for (let y = 0; y < 8; y++) {
-                spawnFxAt('flame_short', 'fx-flame-short', col, y, { duration: 500, delay: y * 30 });
-            }
-        }
-    });
-
+    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 4;
+    playSfx('skill1');
+    addLog(`🐴 Mula sem Cabeça relincha fogo em 3 colunas!`);
+    const columns = [boss.x - 1, boss.x, boss.x + 1].filter(col => col >= 0 && col <= 7);
+    columns.forEach(col => triggerFireColumn(col));
     await sleep(600);
-
-    players.forEach(p => {
-        if (!p.dead && columns.includes(p.x)) applyDmg(p, atk);
-    });
-
-    await sleep(300);
+    players.forEach(p => { if (!p.dead && columns.includes(p.x)) applyDmg(p, bossAtk); });
 };
 
 STORY_ANIMAL_SKILLS['mula_bolas'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐴 ${enemy.name} lança bolas de fogo!`);
-
-    const dirs = [
-        { dx: 2, dy: 0 }, { dx: -2, dy: 0 },
-        { dx: 0, dy: 2 }, { dx: 0, dy: -2 }
-    ];
-
-    dirs.forEach(dir => {
-        const tx = boss.x + dir.dx;
-        const ty = boss.y + dir.dy;
-        if (tx < 0 || tx >= 8 || ty < 0 || ty >= 8) return;
-
-        spawnTravelingFx('flame_short', 'fx-flame-short', boss.x, boss.y, tx, ty, {
-            duration: 400,
-        });
-        players.forEach(p => {
-            if (!p.dead && p.x === tx && p.y === ty) {
-                setTimeout(() => applyDmg(p, atk), 420);
-            }
-        });
+    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 4;
+    playSfx('skill1');
+    addLog(`🐴 Mula sem Cabeça lança bolas de fogo!`);
+    const directions = [{dx:2,dy:0},{dx:-2,dy:0},{dx:0,dy:2},{dx:0,dy:-2}];
+    directions.forEach(dir => {
+        let targetX = boss.x + dir.dx;
+        let targetY = boss.y + dir.dy;
+        if (targetX >= 0 && targetX < 8 && targetY >= 0 && targetY < 8) {
+            triggerFireball(boss.x, boss.y, targetX, targetY);
+            players.forEach(p => {
+                if (!p.dead && p.x === targetX && p.y === targetY) setTimeout(() => applyDmg(p, bossAtk), 400);
+            });
+        }
     });
-
-    await sleep(800);
+    await sleep(700);
 };
 
 // =================================================================
@@ -4437,7 +3887,6 @@ STORY_ANIMAL_SKILLS['mula_bolas'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['urubu_voo'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🦅 ${enemy.name} faz voo rasante!`);
-
     const alive = players.filter(p => !p.dead);
     if (alive.length === 0) return;
     let nearest = alive[0];
@@ -4446,17 +3895,14 @@ STORY_ANIMAL_SKILLS['urubu_voo'] = async (enemy, skill) => {
         const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
         if (d < minDist) { minDist = d; nearest = p; }
     });
-
     const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
     const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-
     tiles.forEach((t, i) => {
         setTimeout(() => {
             spawnFxAt('wing_gust', 'fx-wing-gust', t.x, t.y, { duration: 500 });
             spawnFxAt('peck_beak', 'fx-peck-beak', t.x, t.y, { duration: 400 });
         }, i * 130);
     });
-
     await sleep(420);
     damagePlayersAt(tiles, atk);
     await sleep(250);
@@ -4465,7 +3911,6 @@ STORY_ANIMAL_SKILLS['urubu_voo'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['urubu_bicada'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🦅 ${enemy.name} dá uma bicada!`);
-
     const alive = players.filter(p => !p.dead);
     if (alive.length === 0) return;
     let nearest = alive[0];
@@ -4474,9 +3919,7 @@ STORY_ANIMAL_SKILLS['urubu_bicada'] = async (enemy, skill) => {
         const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
         if (d < minDist) { minDist = d; nearest = p; }
     });
-
     spawnFxAt('peck_beak', 'fx-peck-beak', nearest.x, nearest.y, { duration: 450, scale: 1.3 });
-
     await sleep(380);
     players.forEach(p => {
         if (!p.dead && p.x === nearest.x && p.y === nearest.y) applyDmg(p, atk);
@@ -4490,14 +3933,8 @@ STORY_ANIMAL_SKILLS['urubu_bicada'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['carcara_garras'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🦅 ${enemy.name} ataca com garras afiadas!`);
-
     const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 450 });
-        }, i * 40);
-    });
-
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 450 }); }, i * 40); });
     await sleep(480);
     damagePlayersAt(tiles, atk);
     await sleep(250);
@@ -4506,7 +3943,6 @@ STORY_ANIMAL_SKILLS['carcara_garras'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['carcara_mergulho'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🦅 ${enemy.name} mergulha mortalmente!`);
-
     const alive = players.filter(p => !p.dead);
     if (alive.length === 0) return;
     let nearest = alive[0];
@@ -4515,16 +3951,9 @@ STORY_ANIMAL_SKILLS['carcara_mergulho'] = async (enemy, skill) => {
         const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
         if (d < minDist) { minDist = d; nearest = p; }
     });
-
     const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
     const tiles = buildLineTiles(boss.x, boss.y, dir.name, 3);
-
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('wing_gust', 'fx-wing-gust', t.x, t.y, { duration: 400, scale: 0.7 });
-        }, i * 100);
-    });
-
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('wing_gust', 'fx-wing-gust', t.x, t.y, { duration: 400, scale: 0.7 }); }, i * 100); });
     await sleep(450);
     damagePlayersAt(tiles, atk);
     await sleep(250);
@@ -4536,14 +3965,8 @@ STORY_ANIMAL_SKILLS['carcara_mergulho'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['tatu_casco'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🦔 ${enemy.name} endurece o casco!`);
-
     const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('shockwave', 'fx-shockwave', t.x, t.y, { duration: 550, scale: 0.9 });
-        }, i * 40);
-    });
-
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('shockwave', 'fx-shockwave', t.x, t.y, { duration: 550, scale: 0.9 }); }, i * 40); });
     await sleep(500);
     damagePlayersAt(tiles, atk);
     await sleep(250);
@@ -4552,7 +3975,6 @@ STORY_ANIMAL_SKILLS['tatu_casco'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['tatu_cavar'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🦔 ${enemy.name} cava uma armadilha!`);
-
     const alive = players.filter(p => !p.dead);
     if (alive.length === 0) return;
     let nearest = alive[0];
@@ -4561,19 +3983,13 @@ STORY_ANIMAL_SKILLS['tatu_cavar'] = async (enemy, skill) => {
         const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
         if (d < minDist) { minDist = d; nearest = p; }
     });
-
     const tx = nearest.x;
     const ty = nearest.y;
-
-    // FX: buraco abrindo
     spawnFxAt('ground_crack', 'fx-ground-crack', tx, ty, { duration: 600, scale: 1.3 });
     await sleep(400);
-
-    // Dano se ainda estiver no tile
     players.forEach(p => {
         if (!p.dead && p.x === tx && p.y === ty) applyDmg(p, atk);
     });
-
     await sleep(280);
 };
 
@@ -4583,16 +3999,11 @@ STORY_ANIMAL_SKILLS['tatu_cavar'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['lobo_guara_uivo'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🐺 ${enemy.name} uiva!`);
-
-    // Área 2 → atk - 1
     const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
     tiles.forEach((t, i) => {
         const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
-        setTimeout(() => {
-            spawnFxAt('shockwave', 'fx-shockwave', t.x, t.y, { duration: 500, scale: 0.9 });
-        }, dist * 55);
+        setTimeout(() => { spawnFxAt('shockwave', 'fx-shockwave', t.x, t.y, { duration: 500, scale: 0.9 }); }, dist * 55);
     });
-
     await sleep(550);
     const dmg = Math.max(1, atk - 1);
     damagePlayersAt(tiles, dmg);
@@ -4602,7 +4013,6 @@ STORY_ANIMAL_SKILLS['lobo_guara_uivo'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['lobo_guara_bote'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🐺 ${enemy.name} dá o bote selvagem!`);
-
     const alive = players.filter(p => !p.dead);
     if (alive.length === 0) return;
     let nearest = alive[0];
@@ -4611,16 +4021,9 @@ STORY_ANIMAL_SKILLS['lobo_guara_bote'] = async (enemy, skill) => {
         const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
         if (d < minDist) { minDist = d; nearest = p; }
     });
-
     const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
     const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('fang_bite', 'fx-fang-bite', t.x, t.y, { duration: 500 });
-        }, i * 130);
-    });
-
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('fang_bite', 'fx-fang-bite', t.x, t.y, { duration: 500 }); }, i * 130); });
     await sleep(420);
     damagePlayersAt(tiles, atk);
     await sleep(250);
@@ -4630,71 +4033,53 @@ STORY_ANIMAL_SKILLS['lobo_guara_bote'] = async (enemy, skill) => {
 // 💀 ATO 6 — CORPO SECO (boss)
 // =================================================================
 STORY_ANIMAL_SKILLS['corpo_seco_vapor'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`💀 ${enemy.name} sopra vapor podre em 8 direções!`);
-
-    // 8 tiles em volta (adjacentes e 2ª camada nas direções cardeais)
-    const dirs = [
-        { dx: 0, dy: -1 }, { dx: 0, dy: -2 },
-        { dx: 0, dy: 1 }, { dx: 0, dy: 2 },
-        { dx: -1, dy: 0 }, { dx: -2, dy: 0 },
-        { dx: 1, dy: 0 }, { dx: 2, dy: 0 }
-    ];
-
-    const tiles = [];
-    dirs.forEach(dir => {
-        const tx = boss.x + dir.dx;
-        const ty = boss.y + dir.dy;
-        if (tx < 0 || tx >= 8 || ty < 0 || ty >= 8) return;
-        tiles.push({ x: tx, y: ty });
-        spawnFxAt('sting_venom', 'fx-sting-venom', tx, ty, { duration: 700 });
+    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 4;
+    playSfx('garras');
+    addLog(`💀 Corpo Seco sopra vapor podre!`);
+    const directions = [{dx:0,dy:-1},{dx:0,dy:-2},{dx:0,dy:1},{dx:0,dy:2},{dx:-1,dy:0},{dx:-2,dy:0},{dx:1,dy:0},{dx:2,dy:0}];
+    directions.forEach(dir => {
+        let tileX = boss.x + dir.dx;
+        let tileY = boss.y + dir.dy;
+        if (tileX >= 0 && tileX < 8 && tileY >= 0 && tileY < 8) {
+            triggerPoisonGas(tileX, tileY);
+            players.forEach(p => {
+                if (!p.dead && p.x === tileX && p.y === tileY) applyDmg(p, bossAtk);
+            });
+        }
     });
-
     await sleep(600);
-    damagePlayersAt(tiles, atk);
-    await sleep(300);
 };
 
 STORY_ANIMAL_SKILLS['corpo_seco_garras'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`💀 ${enemy.name} ataca com garras em um quadrante!`);
-
-    // Ataque em quadrante (área 3x3 em direção ao jogador mais próximo)
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    const tiles = [];
-    const perpX = dir.dy !== 0 ? 1 : 0;
-    const perpY = dir.dx !== 0 ? 1 : 0;
-
-    for (let k = -1; k <= 1; k++) {
-        for (let j = 1; j <= 2; j++) {
-            const nx = boss.x + dir.dx * j + perpX * k;
-            const ny = boss.y + dir.dy * j + perpY * k;
-            if (nx < 0 || nx >= 8 || ny < 0 || ny >= 8) continue;
-            tiles.push({ x: nx, y: ny });
-        }
+    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 4;
+    playSfx('garras');
+    addLog(`💀 Corpo Seco ataca com garras!`);
+    const attackDirections = ['left', 'right', 'up', 'down'];
+    const direction = attackDirections[Math.floor(Math.random() * 4)];
+    let targetTiles = [];
+    switch (direction) {
+        case 'left':
+            for (let dx = -2; dx <= 0; dx++) for (let dy = -2; dy <= 2; dy++) targetTiles.push({ x: boss.x + dx, y: boss.y + dy });
+            break;
+        case 'right':
+            for (let dx = 0; dx <= 2; dx++) for (let dy = -2; dy <= 2; dy++) targetTiles.push({ x: boss.x + dx, y: boss.y + dy });
+            break;
+        case 'up':
+            for (let dx = -2; dx <= 2; dx++) for (let dy = -2; dy <= 0; dy++) targetTiles.push({ x: boss.x + dx, y: boss.y + dy });
+            break;
+        case 'down':
+            for (let dx = -2; dx <= 2; dx++) for (let dy = 0; dy <= 2; dy++) targetTiles.push({ x: boss.x + dx, y: boss.y + dy });
+            break;
     }
-
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 500, scale: 1.1 });
-            playSfx('garras');
-        }, i * 60);
+    targetTiles.forEach(tile => {
+        if (tile.x >= 0 && tile.x < 8 && tile.y >= 0 && tile.y < 8) {
+            triggerClawSpin(tile.x, tile.y);
+            players.forEach(p => {
+                if (!p.dead && p.x === tile.x && p.y === tile.y) applyDmg(p, bossAtk + 1);
+            });
+        }
     });
-
-    await sleep(500);
-    // 6 tiles → atk + 0 (poucos alvos, mas dano aumentado é do boss original)
-    // Respeitando regra: multi-alvo pequeno = atk cheio
-    damagePlayersAt(tiles, atk);
-    await sleep(300);
+    await sleep(600);
 };
 
 // =================================================================
@@ -4703,7 +4088,6 @@ STORY_ANIMAL_SKILLS['corpo_seco_garras'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['cachorro_mordida'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🐕 ${enemy.name} morde!`);
-
     const alive = players.filter(p => !p.dead);
     if (alive.length === 0) return;
     let nearest = alive[0];
@@ -4712,16 +4096,9 @@ STORY_ANIMAL_SKILLS['cachorro_mordida'] = async (enemy, skill) => {
         const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
         if (d < minDist) { minDist = d; nearest = p; }
     });
-
     const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
     const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('fang_bite', 'fx-fang-bite', t.x, t.y, { duration: 500 });
-        }, i * 130);
-    });
-
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('fang_bite', 'fx-fang-bite', t.x, t.y, { duration: 500 }); }, i * 130); });
     await sleep(400);
     damagePlayersAt(tiles, atk);
     await sleep(220);
@@ -4730,14 +4107,8 @@ STORY_ANIMAL_SKILLS['cachorro_mordida'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['cachorro_rosnado'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🐕 ${enemy.name} rosna ferozmente!`);
-
     const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('fang_bite', 'fx-fang-bite', t.x, t.y, { duration: 450, scale: 0.8 });
-        }, i * 40);
-    });
-
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('fang_bite', 'fx-fang-bite', t.x, t.y, { duration: 450, scale: 0.8 }); }, i * 40); });
     await sleep(480);
     damagePlayersAt(tiles, atk);
     await sleep(250);
@@ -4749,8 +4120,6 @@ STORY_ANIMAL_SKILLS['cachorro_rosnado'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['raposa_astucia'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🦊 ${enemy.name} usa de astúcia!`);
-
-    // Raposa ataca por trás — pega o tile atrás do jogador mais próximo
     const alive = players.filter(p => !p.dead);
     if (alive.length === 0) return;
     let nearest = alive[0];
@@ -4759,16 +4128,9 @@ STORY_ANIMAL_SKILLS['raposa_astucia'] = async (enemy, skill) => {
         const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
         if (d < minDist) { minDist = d; nearest = p; }
     });
-
     const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
     const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('fang_bite', 'fx-fang-bite', t.x, t.y, { duration: 500, scale: 0.9 });
-        }, i * 130);
-    });
-
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('fang_bite', 'fx-fang-bite', t.x, t.y, { duration: 500, scale: 0.9 }); }, i * 130); });
     await sleep(400);
     damagePlayersAt(tiles, atk);
     await sleep(220);
@@ -4777,7 +4139,6 @@ STORY_ANIMAL_SKILLS['raposa_astucia'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['raposa_bote'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🦊 ${enemy.name} dá um bote ágil!`);
-
     const alive = players.filter(p => !p.dead);
     if (alive.length === 0) return;
     let nearest = alive[0];
@@ -4786,27 +4147,21 @@ STORY_ANIMAL_SKILLS['raposa_bote'] = async (enemy, skill) => {
         const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
         if (d < minDist) { minDist = d; nearest = p; }
     });
-
     const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-
-    // Raposa pula 2 tiles e ataca no destino
     for (let i = 0; i < 2; i++) {
         const nx = boss.x + dir.dx;
         const ny = boss.y + dir.dy;
         if (nx < 0 || nx >= 8 || ny < 0 || ny >= 8) break;
         if (typeof isOccupied === 'function' && isOccupied(nx, ny, -1)) break;
         spawnFxAt('pounce_arc', 'fx-pounce-arc', nx, ny, { duration: 500, scale: 0.7 });
-        boss.x = nx;
-        boss.y = ny;
+        boss.x = nx; boss.y = ny;
         if (typeof updateVisuals === 'function') updateVisuals();
         await sleep(160);
     }
-
     await sleep(200);
     players.forEach(p => {
         if (!p.dead && p.x === boss.x && p.y === boss.y) applyDmg(p, atk);
     });
-
     await sleep(280);
 };
 
@@ -4816,14 +4171,8 @@ STORY_ANIMAL_SKILLS['raposa_bote'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['guaxinim_garras'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🦝 ${enemy.name} ataca com garras noturnas!`);
-
     const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 450 });
-        }, i * 40);
-    });
-
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 450 }); }, i * 40); });
     await sleep(480);
     damagePlayersAt(tiles, atk);
     await sleep(250);
@@ -4832,7 +4181,6 @@ STORY_ANIMAL_SKILLS['guaxinim_garras'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['guaxinim_surpresa'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🦝 ${enemy.name} ataca de surpresa!`);
-
     const alive = players.filter(p => !p.dead);
     if (alive.length === 0) return;
     let nearest = alive[0];
@@ -4841,16 +4189,9 @@ STORY_ANIMAL_SKILLS['guaxinim_surpresa'] = async (enemy, skill) => {
         const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
         if (d < minDist) { minDist = d; nearest = p; }
     });
-
     const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
     const tiles = buildLineTiles(boss.x, boss.y, dir.name, 3);
-
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('fang_bite', 'fx-fang-bite', t.x, t.y, { duration: 450 });
-        }, i * 110);
-    });
-
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('fang_bite', 'fx-fang-bite', t.x, t.y, { duration: 450 }); }, i * 110); });
     await sleep(400);
     damagePlayersAt(tiles, atk);
     await sleep(220);
@@ -4862,15 +4203,11 @@ STORY_ANIMAL_SKILLS['guaxinim_surpresa'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['jaguatirica_garras'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🐆 ${enemy.name} ataca com garras selvagens!`);
-
     const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
     tiles.forEach((t, i) => {
         const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
-        setTimeout(() => {
-            spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 500, scale: 0.9 });
-        }, dist * 55);
+        setTimeout(() => { spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 500, scale: 0.9 }); }, dist * 55);
     });
-
     await sleep(550);
     const dmg = Math.max(1, atk - 1);
     damagePlayersAt(tiles, dmg);
@@ -4880,7 +4217,6 @@ STORY_ANIMAL_SKILLS['jaguatirica_garras'] = async (enemy, skill) => {
 STORY_ANIMAL_SKILLS['jaguatirica_salto'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🐆 ${enemy.name} dá um salto mortal!`);
-
     const alive = players.filter(p => !p.dead);
     if (alive.length === 0) return;
     let nearest = alive[0];
@@ -4889,22 +4225,16 @@ STORY_ANIMAL_SKILLS['jaguatirica_salto'] = async (enemy, skill) => {
         const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
         if (d < minDist) { minDist = d; nearest = p; }
     });
-
     const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
     const fromX = boss.x, fromY = boss.y;
     let landX = Math.max(0, Math.min(7, boss.x + dir.dx * 2));
     let landY = Math.max(0, Math.min(7, boss.y + dir.dy * 2));
-
     spawnFxAt('pounce_arc', 'fx-pounce-arc', fromX, fromY, { duration: 700, scale: 1.3 });
-
-    boss.x = landX;
-    boss.y = landY;
+    boss.x = landX; boss.y = landY;
     if (typeof updateVisuals === 'function') updateVisuals();
     await sleep(350);
-
     spawnFxAt('shockwave', 'fx-shockwave', landX, landY, { duration: 600, scale: 1.4 });
     spawnFxAt('impact', 'fx-impact', landX, landY, { duration: 500 });
-
     const tiles = buildAreaTiles(landX, landY, 1, true);
     const dmg = Math.max(1, atk - 1);
     await sleep(300);
@@ -4916,1394 +4246,48 @@ STORY_ANIMAL_SKILLS['jaguatirica_salto'] = async (enemy, skill) => {
 // 🐺 ATO 7 — LOBISOMEM (boss)
 // =================================================================
 STORY_ANIMAL_SKILLS['lobisomem_garras'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐺 ${enemy.name} ataca com garras da fera!`);
-
-    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 500, scale: 1.2 });
-            playSfx('garras');
-        }, i * 50);
-    });
-
-    await sleep(500);
-    damagePlayersAt(tiles, atk);
-    await sleep(280);
+    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 4;
+    playSfx('garras');
+    addLog(`🐺 Lobisomem ataca com garras!`);
+    triggerClawSpin(boss.x, boss.y);
+    setTimeout(() => {
+        players.forEach(p => {
+            if (!p.dead && Math.abs(p.x - boss.x) <= 1 && Math.abs(p.y - boss.y) <= 1) applyDmg(p, bossAtk);
+        });
+    }, 300);
+    await sleep(600);
 };
 
 STORY_ANIMAL_SKILLS['lobisomem_tremor'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐺 ${enemy.name} faz a terra tremer!`);
-
-    // Tremor: rachaduras em área 2 + puxa heróis para perto
-    if (typeof triggerEarthquake === 'function') triggerEarthquake();
-    await sleep(300);
-
-    const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
-    tiles.forEach((t, i) => {
-        const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
-        setTimeout(() => {
-            if (dist === 1) spawnFxAt('ground_crack', 'fx-ground-crack', t.x, t.y, { duration: 500 });
-        }, dist * 55);
-    });
-
-    await sleep(450);
-    const dmg = Math.max(1, atk - 1);
-    damagePlayersAt(tiles, dmg);
-
-    // Puxa todos 1 tile na direção do boss
-    players.forEach(p => {
-        if (!p.dead) tryPullPlayer(p, boss.x, boss.y, 1);
-    });
-
-    await sleep(300);
-};
-
-// =================================================================
-// 🏁 FIM DA PARTE 4/5
-// =================================================================
-// =================================================================
-// historia.js — V6.0 — Bloco 5/5
-// Handlers Atos 8-13 + applyStorySkill + morte + overrides + init
-// =================================================================
-
-// =================================================================
-// 🦇 ATO 8 — MORCEGO
-// =================================================================
-STORY_ANIMAL_SKILLS['morcego_voo'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🦇 ${enemy.name} faz voo sombrio!`);
-
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('wing_gust', 'fx-wing-gust', t.x, t.y, { duration: 450 });
-            spawnFxAt('swarm_cloud', 'fx-swarm-cloud', t.x, t.y, { duration: 500, scale: 0.8 });
-        }, i * 130);
-    });
-
-    await sleep(420);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-STORY_ANIMAL_SKILLS['morcego_eco'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🦇 ${enemy.name} emite um eco estridente!`);
-
-    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('shockwave', 'fx-shockwave', t.x, t.y, { duration: 500, scale: 0.9 });
-            spawnFxAt('spectral_veil', 'fx-spectral-veil', t.x, t.y, { duration: 500, scale: 0.5 });
-        }, i * 40);
-    });
-
-    await sleep(500);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-// =================================================================
-// 🦉 ATO 8 — CORUJA
-// =================================================================
-STORY_ANIMAL_SKILLS['coruja_garras'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🦉 ${enemy.name} ataca com garras noturnas!`);
-
-    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 450 });
-            spawnFxAt('fog_cloud', 'fx-fog-cloud', t.x, t.y, { duration: 600, scale: 0.7 });
-        }, i * 45);
-    });
-
-    await sleep(500);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-STORY_ANIMAL_SKILLS['coruja_voo'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🦉 ${enemy.name} faz voo silencioso!`);
-
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 3);
-
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('fog_cloud', 'fx-fog-cloud', t.x, t.y, { duration: 500, scale: 0.7 });
-        }, i * 100);
-    });
-
-    await sleep(420);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-// =================================================================
-// 🐸 ATO 8 — SAPO-CURURU
-// =================================================================
-STORY_ANIMAL_SKILLS['sapo_veneno'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐸 ${enemy.name} espirra veneno em cruz!`);
-
-    const tiles = buildCrossTiles(boss.x, boss.y, 2, false);
-
-    spawnFxAt('sting_venom', 'fx-sting-venom', boss.x, boss.y, { duration: 700, scale: 1.5 });
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('sting_venom', 'fx-sting-venom', t.x, t.y, { duration: 700, scale: 0.8 });
-        }, i * 50);
-    });
-
-    await sleep(600);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-STORY_ANIMAL_SKILLS['sapo_lingua'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐸 ${enemy.name} lança a língua pegajosa!`);
-
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('fin_slash', 'fx-fin-slash', t.x, t.y, { duration: 450, scale: 0.9 });
-        }, i * 130);
-    });
-
-    await sleep(420);
-    damagePlayersAt(tiles, atk);
-
-    // Puxa o herói acertado 1 tile em direção ao sapo
-    tiles.forEach(t => {
-        players.forEach(p => {
-            if (!p.dead && p.x === t.x && p.y === t.y) {
-                tryPullPlayer(p, boss.x, boss.y, 1);
-            }
-        });
-    });
-
-    await sleep(250);
-};
-
-// =================================================================
-// 🐦 ATO 8 — SERIEMA (mini-boss)
-// =================================================================
-STORY_ANIMAL_SKILLS['seriema_bicada'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐦 ${enemy.name} dá uma bicada feroz!`);
-
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('peck_beak', 'fx-peck-beak', t.x, t.y, { duration: 450, scale: 1.3 });
-        }, i * 130);
-    });
-
-    await sleep(420);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-STORY_ANIMAL_SKILLS['seriema_grito'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐦 ${enemy.name} dá um grito de guerra!`);
-
-    // Área 2 → atk - 1
-    const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
-    tiles.forEach((t, i) => {
-        const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
-        setTimeout(() => {
-            spawnFxAt('shockwave', 'fx-shockwave', t.x, t.y, { duration: 500, scale: 0.9 });
-        }, dist * 55);
-    });
-
-    await sleep(550);
-    const dmg = Math.max(1, atk - 1);
-    damagePlayersAt(tiles, dmg);
-    await sleep(280);
-};
-
-// =================================================================
-// 🧙‍♀️ ATO 8 — CUCA (boss)
-// =================================================================
-STORY_ANIMAL_SKILLS['cuca_pocao'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🧙 ${enemy.name} lança uma poção corrompida em um quadrante!`);
-
-    const qx = Math.random() < 0.5 ? 0 : 4;
-    const qy = Math.random() < 0.5 ? 0 : 4;
-
-    // 4x4 = 16 tiles → atk - 1
-    const tiles = [];
-    for (let x = qx; x < qx + 4; x++) {
-        for (let y = qy; y < qy + 4; y++) {
-            if (x < 0 || x >= 8 || y < 0 || y >= 8) continue;
-            tiles.push({ x, y });
-            spawnFxAt('sting_venom', 'fx-sting-venom', x, y, {
-                duration: 700,
-                delay: (x - qx) * 40 + (y - qy) * 40,
-            });
-        }
-    }
-
-    await sleep(700);
-    const dmg = Math.max(1, atk - 1);
-    damagePlayersAt(tiles, dmg);
-    await sleep(300);
-};
-
-STORY_ANIMAL_SKILLS['cuca_cura'] = async (enemy, skill) => {
-    addLog(`🧙 ${enemy.name} bebe uma poção curativa!`);
-
-    spawnHealOrb(boss.x, boss.y);
-    playSfx('cucask2');
-
-    await sleep(600);
-    boss.hp = Math.min(boss.maxHp, boss.hp + 2);
-    if (typeof showHealEffect === 'function') showHealEffect(boss.x, boss.y, 2);
-    if (typeof updateVisuals === 'function') updateVisuals();
-    addLog(`💊 ${enemy.name} recuperou 2 HP!`);
-
+    playSfx('minoa2');
+    addLog(`🐺 Lobisomem treme a terra!`);
+    triggerEarthquake();
     await sleep(400);
-};
-
-// =================================================================
-// 🐟 ATO 9 — TUCUNARÉ
-// =================================================================
-STORY_ANIMAL_SKILLS['tucunare_bote'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐟 ${enemy.name} dá o bote aquático!`);
-
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('splash_wave', 'fx-splash-wave', t.x, t.y, { duration: 500 });
-            spawnFxAt('fang_bite', 'fx-fang-bite', t.x, t.y, { duration: 450 });
-        }, i * 130);
-    });
-
-    await sleep(420);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-STORY_ANIMAL_SKILLS['tucunare_cardume'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐟 ${enemy.name} chama o cardume!`);
-
-    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('swarm_cloud', 'fx-swarm-cloud', t.x, t.y, { duration: 500 });
-        }, i * 45);
-    });
-
-    await sleep(500);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-// =================================================================
-// 🐟 ATO 9 — PIRAÍBA
-// =================================================================
-STORY_ANIMAL_SKILLS['piraiba_bocarra'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐟 ${enemy.name} dá a bocarra!`);
-
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('jaw_snap', 'fx-jaw-snap', t.x, t.y, { duration: 500, scale: 1.3 });
-        }, i * 130);
-    });
-
-    await sleep(420);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-STORY_ANIMAL_SKILLS['piraiba_caudada'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐟 ${enemy.name} dá uma caudada!`);
-
-    spawnFxAt('tail_whip', 'fx-tail-whip', boss.x, boss.y, { duration: 700, scale: 1.6 });
-
-    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('splash_wave', 'fx-splash-wave', t.x, t.y, { duration: 500, scale: 0.8 });
-        }, i * 40);
-    });
-
-    await sleep(500);
-    damagePlayersAt(tiles, atk);
-
-    players.forEach(p => {
-        if (p.dead) return;
-        if (tiles.some(t => t.x === p.x && t.y === p.y)) {
-            const dx = Math.sign(p.x - boss.x);
-            const dy = Math.sign(p.y - boss.y);
-            tryPushPlayer(p, dx || 0, dy || 0, 2);
-        }
-    });
-
-    await sleep(300);
-};
-
-// =================================================================
-// 🐟 ATO 9 — DOURADA
-// =================================================================
-STORY_ANIMAL_SKILLS['dourada_escamas'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐟 ${enemy.name} ergue as escamas douradas!`);
-
-    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('fin_slash', 'fx-fin-slash', t.x, t.y, { duration: 450 });
-            spawnFxAt('element_pulse', 'fx-element-pulse', t.x, t.y, { duration: 500, scale: 0.8 });
-        }, i * 45);
-    });
-
-    await sleep(500);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-STORY_ANIMAL_SKILLS['dourada_nado'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐟 ${enemy.name} nada rapidamente!`);
-
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 3);
-
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('splash_wave', 'fx-splash-wave', t.x, t.y, { duration: 400, scale: 0.7 });
-        }, i * 100);
-    });
-
-    await sleep(420);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-// =================================================================
-// 🦭 ATO 9 — PEIXE-BOI (mini-boss)
-// =================================================================
-STORY_ANIMAL_SKILLS['peixe_boi_corpulencia'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🦭 ${enemy.name} usa a corpulência!`);
-
-    const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
-    tiles.forEach((t, i) => {
-        const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
-        setTimeout(() => {
-            spawnFxAt('splash_wave', 'fx-splash-wave', t.x, t.y, { duration: 500, scale: 0.9 });
-        }, dist * 55);
-    });
-
-    await sleep(550);
-    const dmg = Math.max(1, atk - 1);
-    damagePlayersAt(tiles, dmg);
-    await sleep(280);
-};
-
-STORY_ANIMAL_SKILLS['peixe_boi_pancada'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🦭 ${enemy.name} dá uma pancada na água!`);
-
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('splash_wave', 'fx-splash-wave', t.x, t.y, { duration: 500, scale: 1.2 });
-            spawnFxAt('shockwave', 'fx-shockwave', t.x, t.y, { duration: 500, scale: 0.9 });
-        }, i * 130);
-    });
-
-    await sleep(420);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-// =================================================================
-// 🐬 ATO 9 — BOTO ROSA (boss)
-// =================================================================
-STORY_ANIMAL_SKILLS['boto_coracoes'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐬 ${enemy.name} quebra corações na área!`);
-
-    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('impact', 'fx-impact', t.x, t.y, { duration: 500, scale: 1.1 });
-            spawnFxAt('element_pulse', 'fx-element-pulse', t.x, t.y, { duration: 600, scale: 0.9 });
-        }, i * 50);
-    });
-
-    await sleep(500);
-    damagePlayersAt(tiles, atk);
-    await sleep(280);
-};
-
-STORY_ANIMAL_SKILLS['boto_jatos'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐬 ${enemy.name} lança jatos em cruz!`);
-
-    const tiles = [];
-    for (let y = 0; y < 8; y++) tiles.push({ x: boss.x, y });
-    for (let x = 0; x < 8; x++) if (x !== boss.x) tiles.push({ x, y: boss.y });
-
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('splash_wave', 'fx-splash-wave', t.x, t.y, { duration: 500, scale: 0.7 });
-        }, i * 20);
-    });
-
-    await sleep(600);
-
-    const cruxSet = new Set(tiles.map(t => `${t.x},${t.y}`));
-    players.forEach(p => {
-        if (p.dead) return;
-        if (cruxSet.has(`${p.x},${p.y}`)) applyDmg(p, atk);
-    });
-
-    await sleep(280);
-};
-
-// =================================================================
-// 🐃 ATO 10 — BÚFALO SELVAGEM
-// =================================================================
-STORY_ANIMAL_SKILLS['bufalo_marrada'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐃 ${enemy.name} dá uma marrada selvagem!`);
-
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('antler_charge', 'fx-antler-charge', t.x, t.y, { duration: 500 });
-            spawnFxAt('hoof_stomp', 'fx-hoof-stomp', t.x, t.y, { duration: 500, scale: 0.9 });
-        }, i * 130);
-    });
-
-    await sleep(420);
-    damagePlayersAt(tiles, atk);
-
-    tiles.forEach(t => {
-        players.forEach(p => {
-            if (!p.dead && p.x === t.x && p.y === t.y) {
-                tryPushPlayer(p, dir.dx, dir.dy, 1);
-            }
-        });
-    });
-
-    await sleep(280);
-};
-
-STORY_ANIMAL_SKILLS['bufalo_pisoteada'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐃 ${enemy.name} pisoteia o chão!`);
-
-    const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
-    tiles.forEach((t, i) => {
-        const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
-        setTimeout(() => {
-            spawnFxAt('ground_crack', 'fx-ground-crack', t.x, t.y, { duration: 500 });
-            if (dist === 1) spawnFxAt('hoof_stomp', 'fx-hoof-stomp', t.x, t.y, { duration: 500 });
-        }, dist * 55);
-    });
-
-    await sleep(550);
-    const dmg = Math.max(1, atk - 1);
-    damagePlayersAt(tiles, dmg);
-    await sleep(280);
-};
-
-// =================================================================
-// 🐄 ATO 10 — VACA LOUCA
-// =================================================================
-STORY_ANIMAL_SKILLS['vaca_coice'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐄 ${enemy.name} dá um coice!`);
-
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('hoof_stomp', 'fx-hoof-stomp', t.x, t.y, { duration: 450, scale: 1.2 });
-        }, i * 130);
-    });
-
-    await sleep(420);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-STORY_ANIMAL_SKILLS['vaca_mugido'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐄 ${enemy.name} dá um mugido de fúria!`);
-
-    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('shockwave', 'fx-shockwave', t.x, t.y, { duration: 500, scale: 0.9 });
-        }, i * 45);
-    });
-
-    await sleep(500);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-// =================================================================
-// 🐐 ATO 10 — CABRA PRETA
-// =================================================================
-STORY_ANIMAL_SKILLS['cabra_cornada'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐐 ${enemy.name} dá uma cornada!`);
-
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 1);
-
-    spawnFxAt('antler_charge', 'fx-antler-charge', boss.x + dir.dx, boss.y + dir.dy, { duration: 500, scale: 1.2 });
-
-    await sleep(380);
-    damagePlayersAt(tiles, atk);
-    await sleep(220);
-};
-
-STORY_ANIMAL_SKILLS['cabra_bote'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐐 ${enemy.name} dá um bote agourento!`);
-
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('antler_charge', 'fx-antler-charge', t.x, t.y, { duration: 450 });
-        }, i * 130);
-    });
-
-    await sleep(420);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-// =================================================================
-// 🐂 ATO 10 — ZEBU (mini-boss)
-// =================================================================
-STORY_ANIMAL_SKILLS['zebu_marrada'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐂 ${enemy.name} dá uma marrada bruta!`);
-
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('antler_charge', 'fx-antler-charge', t.x, t.y, { duration: 500, scale: 1.3 });
-        }, i * 130);
-    });
-
-    await sleep(420);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-STORY_ANIMAL_SKILLS['zebu_pisada'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐂 ${enemy.name} dá uma pisada pesada!`);
-
-    const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
-    tiles.forEach((t, i) => {
-        const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
-        setTimeout(() => {
-            spawnFxAt('ground_crack', 'fx-ground-crack', t.x, t.y, { duration: 500 });
-            if (dist === 1) spawnFxAt('hoof_stomp', 'fx-hoof-stomp', t.x, t.y, { duration: 500, scale: 1.1 });
-        }, dist * 55);
-    });
-
-    await sleep(550);
-    const dmg = Math.max(1, atk - 1);
-    damagePlayersAt(tiles, dmg);
-    await sleep(280);
-};
-
-// =================================================================
-// 🐂 ATO 10 — BOI DA CARA PRETA (boss)
-// =================================================================
-STORY_ANIMAL_SKILLS['boi_face'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐂 ${enemy.name} mostra a face assustadora!`);
-
-    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
-
-    // Face + embaralhar tiles
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('impact', 'fx-impact', t.x, t.y, { duration: 500, scale: 1.2 });
-        }, i * 40);
-    });
-
-    await sleep(500);
-    damagePlayersAt(tiles, atk);
-
-    // Embaralha tiles ao redor
-    tiles.forEach(t => {
-        const idx = t.y * 8 + t.x;
-        const newColor = COLORS[Math.floor(Math.random() * 4)];
-        grid[idx] = newColor;
-        const tile = document.querySelectorAll('#grid .tile')[idx];
-        if (tile) tile.className = `tile bg-${newColor}`;
-        spawnFxAt('tile_flip', 'fx-tile-flip', t.x, t.y, { duration: 600, delay: 50 });
-    });
-
-    addLog(`🌪️ Tiles ao redor foram embaralhados!`);
-    await sleep(300);
-};
-
-STORY_ANIMAL_SKILLS['boi_empurrao'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐂 ${enemy.name} empurra os heróis para as bordas!`);
-
-    players.forEach(p => {
-        if (p.dead) return;
-        let nx = p.x, ny = p.y;
-        if (p.x < 4) nx = Math.max(0, p.x - 1);
-        else nx = Math.min(7, p.x + 1);
-        if (p.y < 4) ny = Math.max(0, p.y - 1);
-        else ny = Math.min(7, p.y + 1);
-
-        const dirX = Math.sign(nx - p.x);
-        const dirY = Math.sign(ny - p.y);
-        tryPushPlayer(p, dirX, dirY, 1);
-
-        // Dano leve do empurrão
-        applyDmg(p, Math.max(1, atk - 3));
-    });
-
-    await sleep(500);
-};
-
-// =================================================================
-// 🐈 ATO 11 — GATO-DO-MATO
-// =================================================================
-STORY_ANIMAL_SKILLS['gato_mato_garras'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐈 ${enemy.name} ataca com garras noturnas!`);
-
-    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 450 });
-        }, i * 40);
-    });
-
-    await sleep(480);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-STORY_ANIMAL_SKILLS['gato_mato_salto'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐈 ${enemy.name} dá um salto silencioso!`);
-
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    const fromX = boss.x, fromY = boss.y;
-    const landX = Math.max(0, Math.min(7, boss.x + dir.dx * 2));
-    const landY = Math.max(0, Math.min(7, boss.y + dir.dy * 2));
-
-    spawnFxAt('pounce_arc', 'fx-pounce-arc', fromX, fromY, { duration: 600, scale: 1.1 });
-    boss.x = landX;
-    boss.y = landY;
-    if (typeof updateVisuals === 'function') updateVisuals();
-    await sleep(350);
-
-    spawnFxAt('claw_slash', 'fx-claw-slash', landX, landY, { duration: 500, scale: 1.3 });
-
-    const tiles = buildAreaTiles(landX, landY, 1, true);
-    await sleep(250);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-// =================================================================
-// 🦋 ATO 11 — MARIPOSA GIGANTE
-// =================================================================
-STORY_ANIMAL_SKILLS['mariposa_po'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🦋 ${enemy.name} espalha pó lunar!`);
-
-    const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
-    tiles.forEach((t, i) => {
-        const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
-        setTimeout(() => {
-            spawnFxAt('fog_cloud', 'fx-fog-cloud', t.x, t.y, { duration: 700, scale: 0.9 });
-            spawnFxAt('element_pulse', 'fx-element-pulse', t.x, t.y, { duration: 700, scale: 0.7 });
-        }, dist * 55);
-    });
-
-    await sleep(600);
-    const dmg = Math.max(1, atk - 1);
-    damagePlayersAt(tiles, dmg);
-    await sleep(280);
-};
-
-STORY_ANIMAL_SKILLS['mariposa_voo'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🦋 ${enemy.name} faz voo rasante!`);
-
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 3);
-
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('wing_gust', 'fx-wing-gust', t.x, t.y, { duration: 450, scale: 0.8 });
-        }, i * 100);
-    });
-
-    await sleep(420);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-// =================================================================
-// 🦝 ATO 11 — QUATI
-// =================================================================
-STORY_ANIMAL_SKILLS['quati_garras'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🦝 ${enemy.name} ataca com garras afiadas!`);
-
-    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 450, scale: 0.9 });
-        }, i * 40);
-    });
-
-    await sleep(480);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-STORY_ANIMAL_SKILLS['quati_bote'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🦝 ${enemy.name} dá um bote rápido!`);
-
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('fang_bite', 'fx-fang-bite', t.x, t.y, { duration: 450, scale: 0.9 });
-        }, i * 130);
-    });
-
-    await sleep(400);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-// =================================================================
-// 🐆 ATO 11 — SUÇUARANA (mini-boss)
-// =================================================================
-STORY_ANIMAL_SKILLS['sucuarana_garra'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐆 ${enemy.name} dá uma garra fatal!`);
-
-    const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
-    tiles.forEach((t, i) => {
-        const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
-        setTimeout(() => {
-            spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 500, scale: 1.1 });
-        }, dist * 55);
-    });
-
-    await sleep(550);
-    const dmg = Math.max(1, atk - 1);
-    damagePlayersAt(tiles, dmg);
-    await sleep(280);
-};
-
-STORY_ANIMAL_SKILLS['sucuarana_salto'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐆 ${enemy.name} dá um salto mortal!`);
-
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    const fromX = boss.x, fromY = boss.y;
-    const landX = Math.max(0, Math.min(7, boss.x + dir.dx * 2));
-    const landY = Math.max(0, Math.min(7, boss.y + dir.dy * 2));
-
-    spawnFxAt('pounce_arc', 'fx-pounce-arc', fromX, fromY, { duration: 700, scale: 1.4 });
-    boss.x = landX;
-    boss.y = landY;
-    if (typeof updateVisuals === 'function') updateVisuals();
-    await sleep(350);
-
-    spawnFxAt('shockwave', 'fx-shockwave', landX, landY, { duration: 600, scale: 1.4 });
-
-    const tiles = buildAreaTiles(landX, landY, 1, true);
-    const dmg = Math.max(1, atk - 1);
-    await sleep(280);
-    damagePlayersAt(tiles, dmg);
-    await sleep(280);
-};
-
-// =================================================================
-// 🌙 ATO 11 — JACI (boss)
-// =================================================================
-STORY_ANIMAL_SKILLS['jaci_lua'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🌙 ${enemy.name} invoca a lua e ataca tiles de AR!`);
-
-    spawnElementPulse(boss.x, boss.y, 'AR');
-
-    await sleep(400);
-
-    let count = 0;
-    grid.forEach((element, idx) => {
-        if (element === 'AR') {
-            const x = idx % 8;
-            const y = Math.floor(idx / 8);
-            setTimeout(() => {
-                spawnFxAt('element_pulse', 'fx-element-pulse', x, y, { duration: 700, scale: 1.2 });
-                spawnFxAt('spectral_veil', 'fx-spectral-veil', x, y, { duration: 700, scale: 0.8 });
-            }, count * 40);
-
-            players.forEach(p => {
-                if (!p.dead && p.x === x && p.y === y) {
-                    setTimeout(() => applyDmg(p, atk), count * 40 + 200);
-                }
-            });
-            count++;
-        }
-    });
-
-    addLog(`🌙 ${count} tiles de AR foram atingidos!`);
-    await sleep(700);
-};
-
-STORY_ANIMAL_SKILLS['jaci_tempestade'] = async (enemy, skill) => {
-    addLog(`🌙 ${enemy.name} invoca uma tempestade lunar em todo o tabuleiro!`);
-
-    const board = document.getElementById('board');
-    if (board) {
-        const storm = document.createElement('div');
-        storm.style.cssText = `position:absolute;inset:0;background:linear-gradient(0deg,rgba(142,68,173,0),rgba(142,68,173,0.5),rgba(142,68,173,0));animation:stormAnim 1.5s ease-out;z-index:55;pointer-events:none;`;
-        board.appendChild(storm);
-        setTimeout(() => storm.remove(), 1600);
-    }
-
-    await sleep(600);
-
-    players.forEach(p => {
-        if (!p.dead) applyDmg(p, 1);
-    });
-
-    // Cura 1 HP
-    boss.hp = Math.min(boss.maxHp, boss.hp + 1);
-    spawnHealOrb(boss.x, boss.y);
-    if (typeof showHealEffect === 'function') showHealEffect(boss.x, boss.y, 1);
-    if (typeof updateVisuals === 'function') updateVisuals();
-    addLog(`💊 ${enemy.name} recuperou 1 HP!`);
-
-    await sleep(400);
-};
-
-// =================================================================
-// 🦅 ATO 12 — GAVIÃO
-// =================================================================
-STORY_ANIMAL_SKILLS['gaviao_voo'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🦅 ${enemy.name} faz voo rasante!`);
-
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 3);
-
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('wing_gust', 'fx-wing-gust', t.x, t.y, { duration: 450 });
-            spawnFxAt('peck_beak', 'fx-peck-beak', t.x, t.y, { duration: 400 });
-        }, i * 100);
-    });
-
-    await sleep(420);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-STORY_ANIMAL_SKILLS['gaviao_garras'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🦅 ${enemy.name} ataca com garras cortantes!`);
-
-    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 450, scale: 0.9 });
-        }, i * 40);
-    });
-
-    await sleep(480);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-// =================================================================
-// 🦅 ATO 12 — FALCÃO
-// =================================================================
-STORY_ANIMAL_SKILLS['falcao_mergulho'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🦅 ${enemy.name} faz mergulho mortal!`);
-
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-
-    const tx = nearest.x;
-    const ty = nearest.y;
-    const fromX = boss.x, fromY = boss.y;
-
-    spawnTravelingFx('wing_gust', 'fx-wing-gust', fromX, fromY, tx, ty, { duration: 350 });
-    spawnFxAt('impact', 'fx-impact', tx, ty, { duration: 500, delay: 350 });
-
-    await sleep(420);
-    players.forEach(p => {
-        if (!p.dead && p.x === tx && p.y === ty) applyDmg(p, atk);
-    });
-
-    boss.x = tx;
-    boss.y = ty;
-    if (typeof updateVisuals === 'function') updateVisuals();
-
-    await sleep(280);
-};
-
-STORY_ANIMAL_SKILLS['falcao_garras'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🦅 ${enemy.name} ataca com garras do vento!`);
-
-    const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
-    tiles.forEach((t, i) => {
-        const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
-        setTimeout(() => {
-            spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 500, scale: 0.9 });
-        }, dist * 55);
-    });
-
-    await sleep(550);
-    const dmg = Math.max(1, atk - 1);
-    damagePlayersAt(tiles, dmg);
-    await sleep(280);
-};
-
-// =================================================================
-// 🦉 ATO 12 — URUTAU
-// =================================================================
-STORY_ANIMAL_SKILLS['urutau_canto'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🦉 ${enemy.name} entoa um canto sombrio!`);
-
-    const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
-    tiles.forEach((t, i) => {
-        const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
-        setTimeout(() => {
-            spawnFxAt('spectral_veil', 'fx-spectral-veil', t.x, t.y, { duration: 700, scale: 0.8 });
-        }, dist * 55);
-    });
-
-    await sleep(600);
-    const dmg = Math.max(1, atk - 1);
-    damagePlayersAt(tiles, dmg);
-    await sleep(280);
-};
-
-STORY_ANIMAL_SKILLS['urutau_voo'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🦉 ${enemy.name} faz voo fantasma!`);
-
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-
-    // Teleporta 3 tiles
-    for (let i = 0; i < 3; i++) {
-        const nx = boss.x + dir.dx;
-        const ny = boss.y + dir.dy;
-        if (nx < 0 || nx >= 8 || ny < 0 || ny >= 8) break;
-        if (typeof isOccupied === 'function' && isOccupied(nx, ny, -1)) break;
-        spawnFxAt('spectral_veil', 'fx-spectral-veil', nx, ny, { duration: 500, scale: 0.7 });
-        boss.x = nx;
-        boss.y = ny;
-        if (typeof updateVisuals === 'function') updateVisuals();
-        await sleep(130);
-    }
-
-    await sleep(200);
-    spawnFxAt('impact', 'fx-impact', boss.x, boss.y, { duration: 500, scale: 1.2 });
-
-    players.forEach(p => {
-        if (!p.dead && Math.abs(p.x - boss.x) <= 1 && Math.abs(p.y - boss.y) <= 1) {
-            applyDmg(p, atk);
-        }
-    });
-
-    await sleep(280);
-};
-
-// =================================================================
-// 🦅 ATO 12 — ÁGUIA-CINZENTA (mini-boss)
-// =================================================================
-STORY_ANIMAL_SKILLS['aguia_garras'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🦅 ${enemy.name} ataca com garras reais!`);
-
-    const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
-    tiles.forEach((t, i) => {
-        const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
-        setTimeout(() => {
-            spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 500, scale: 1.1 });
-        }, dist * 55);
-    });
-
-    await sleep(550);
-    const dmg = Math.max(1, atk - 1);
-    damagePlayersAt(tiles, dmg);
-    await sleep(280);
-};
-
-STORY_ANIMAL_SKILLS['aguia_mergulho'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🦅 ${enemy.name} faz mergulho solar!`);
-
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-
-    const tx = nearest.x;
-    const ty = nearest.y;
-    const fromX = boss.x, fromY = boss.y;
-
-    spawnTravelingFx('wing_gust', 'fx-wing-gust', fromX, fromY, tx, ty, { duration: 400 });
-    spawnFxAt('element_pulse', 'fx-element-pulse', tx, ty, { duration: 700, delay: 400, scale: 1.3 });
-
-    await sleep(500);
-    // Atinge o alvo + 4 adjacentes
-    const hitTiles = [{ x: tx, y: ty }].concat(buildCrossTiles(tx, ty, 1, false));
-    // 5 tiles → mantém atk
-    damagePlayersAt(hitTiles, atk);
-
-    boss.x = tx;
-    boss.y = ty;
-    if (typeof updateVisuals === 'function') updateVisuals();
-
-    await sleep(280);
-};
-
-// =================================================================
-// ☀️ ATO 12 — GUARACI (boss)
-// =================================================================
-STORY_ANIMAL_SKILLS['guaraci_sol'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`☀️ ${enemy.name} invoca o sol e ataca tiles de FOGO!`);
-
-    spawnElementPulse(boss.x, boss.y, 'FOGO');
-    await sleep(400);
-
-    let count = 0;
-    grid.forEach((element, idx) => {
-        if (element === 'FOGO') {
-            const x = idx % 8;
-            const y = Math.floor(idx / 8);
-            setTimeout(() => {
-                spawnFxAt('element_pulse', 'fx-element-pulse', x, y, { duration: 700, scale: 1.2 });
-                spawnFxAt('flame_short', 'fx-flame-short', x, y, { duration: 600 });
-            }, count * 40);
-
-            players.forEach(p => {
-                if (!p.dead && p.x === x && p.y === y) {
-                    setTimeout(() => applyDmg(p, atk), count * 40 + 200);
-                }
-            });
-            count++;
-        }
-    });
-
-    addLog(`☀️ ${count} tiles de FOGO foram atingidos!`);
-    await sleep(700);
-};
-
-STORY_ANIMAL_SKILLS['guaraci_onda'] = async (enemy, skill) => {
-    addLog(`☀️ ${enemy.name} invoca uma onda de calor!`);
-
-    const board = document.getElementById('board');
-    if (board) {
-        const wave = document.createElement('div');
-        wave.style.cssText = `position:absolute;inset:0;background:linear-gradient(90deg,rgba(230,126,34,0),rgba(230,126,34,0.7),rgba(230,126,34,0));animation:heatWaveAnim 1.5s ease-out;z-index:55;pointer-events:none;`;
-        board.appendChild(wave);
-        setTimeout(() => wave.remove(), 1600);
-    }
-
-    await sleep(600);
-
-    players.forEach(p => {
-        if (!p.dead) applyDmg(p, 1);
-    });
-
-    boss.hp = Math.min(boss.maxHp, boss.hp + 1);
-    spawnHealOrb(boss.x, boss.y);
-    if (typeof showHealEffect === 'function') showHealEffect(boss.x, boss.y, 1);
-    if (typeof updateVisuals === 'function') updateVisuals();
-    addLog(`💊 ${enemy.name} recuperou 1 HP!`);
-
-    await sleep(400);
-};
-
-// =================================================================
-// 👹 ATO 13 — ANHANGÁ (final boss)
-// =================================================================
-STORY_ANIMAL_SKILLS['anhanga_fogo'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`👹 ${enemy.name}: "Sintam meu fogo intercalado!"`);
-
-    // Colunas alternadas
-    const cols = [];
-    for (let col = boss.x; col < 8; col += 2) cols.push(col);
-    for (let col = boss.x; col >= 0; col -= 2) cols.push(col);
-    const unique = [...new Set(cols)];
-
-    unique.forEach(col => {
-        if (typeof triggerFireColumn === 'function') {
-            triggerFireColumn(col);
-        } else {
-            for (let y = 0; y < 8; y++) {
-                spawnFxAt('flame_short', 'fx-flame-short', col, y, { duration: 500, delay: y * 30 });
+    for (let dx = -2; dx <= 2; dx++) {
+        for (let dy = -2; dy <= 2; dy++) {
+            if (dx === 0 && dy === 0) continue;
+            const tileX = boss.x + dx;
+            const tileY = boss.y + dy;
+            if (tileX >= 0 && tileX < 8 && tileY >= 0 && tileY < 8) {
+                triggerFlare(tileX, tileY);
+                players.forEach(p => {
+                    if (!p.dead && p.x === tileX && p.y === tileY) applyDmg(p, 2);
+                });
             }
         }
-    });
-
-    await sleep(600);
-
+    }
     players.forEach(p => {
-        if (!p.dead && unique.includes(p.x)) applyDmg(p, atk);
+        if (!p.dead) {
+            let newX = p.x, newY = p.y;
+            if (p.x < boss.x && !isOccupied(p.x + 1, p.y, p.id)) newX = p.x + 1;
+            else if (p.x > boss.x && !isOccupied(p.x - 1, p.y, p.id)) newX = p.x - 1;
+            if (p.y < boss.y && !isOccupied(newX, p.y + 1, p.id)) newY = p.y + 1;
+            else if (p.y > boss.y && !isOccupied(newX, p.y - 1, p.id)) newY = p.y - 1;
+            p.x = newX; p.y = newY;
+        }
     });
-
-    await sleep(300);
-};
-
-STORY_ANIMAL_SKILLS['anhanga_devora'] = async (enemy, skill) => {
-    addLog(`👹 ${enemy.name}: "Eu me alimento da natureza!"`);
-
-    spawnFxAt('spectral_veil', 'fx-spectral-veil', boss.x, boss.y, { duration: 900, scale: 1.5 });
-    spawnFxAt('tentacle_glow', 'fx-tentacle-glow', boss.x, boss.y, { duration: 800, scale: 1.4 });
-    spawnHealOrb(boss.x, boss.y);
-    playSfx('cucask2');
-
-    await sleep(600);
-    boss.hp = Math.min(boss.maxHp, boss.hp + 3);
-    if (typeof showHealEffect === 'function') showHealEffect(boss.x, boss.y, 3);
-    if (typeof updateVisuals === 'function') updateVisuals();
-    addLog(`💊 ${enemy.name} recuperou 3 HP!`);
-
+    updateVisuals();
+    addLog(`🐺 Heróis foram puxados para perto!`);
     await sleep(400);
 };
 
@@ -6320,7 +4304,6 @@ async function applyStorySkill(enemy, skill){
     const handler = STORY_ANIMAL_SKILLS[handlerName];
     if (!handler) {
         console.warn('[story] handler não encontrado:', handlerName);
-        // Fallback simples: dano no tile do herói mais próximo
         const alive = players.filter(p => !p.dead);
         if (alive.length > 0) applyDmg(alive[0], enemy.atk);
         return;
@@ -6333,7 +4316,1527 @@ async function applyStorySkill(enemy, skill){
 }
 
 // =================================================================
-// 📖 ESTADO RUNTIME DA FASE
+// 🎯 CLASS_DB ESTENDIDO (modo história)
+// -----------------------------------------------------------------
+// Não toca no entidades.js. Quando _storyMode = true, o CLASS_DB
+// é substituído por essa versão, que inclui os 10 heróis novos.
+// =================================================================
+function buildStoryClassDB() {
+    const db = {};
+    Object.values(STORY_HERO_CLASSES).forEach(hero => {
+        db[hero.className] = {
+            hp: hero.hp,
+            atk: hero.atk,
+            min: hero.range || 0,
+            role: hero.role,
+            element: hero.element,
+            spriteKey: hero.spriteKey,
+            paKey: hero.paKey,
+        };
+    });
+    return db;
+}
+
+function installStoryClassDB() {
+    try {
+        const storyDB = buildStoryClassDB();
+        // Salva o original (só na primeira vez)
+        if (!window._origClassDB) {
+            window._origClassDB = Object.assign({}, CLASS_DB);
+        }
+        // Substitui pelo estendido
+        Object.keys(CLASS_DB).forEach(k => delete CLASS_DB[k]);
+        Object.assign(CLASS_DB, storyDB);
+
+        // Adiciona sprites dos heróis novos ao SPRITES global (se existirem)
+        if (typeof SPRITES !== 'undefined') {
+            Object.values(STORY_HERO_CLASSES).forEach(hero => {
+                if (hero.className && hero.spriteKey) {
+                    const url = SPRITES_STORY[hero.spriteKey];
+                    if (url && url.trim() !== '') {
+                        SPRITES[hero.className] = url;
+                    } else {
+                        // Sem sprite → deixa undefined, os tokens usam fallback
+                        // (o jogo base usa <img src>, então vamos usar um placeholder transparente)
+                        SPRITES[hero.className] = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+                    }
+                }
+            });
+        }
+    } catch(e) {
+        console.warn('[story] Falha ao instalar CLASS_DB estendido:', e);
+    }
+}
+
+function restoreBaseClassDB() {
+    try {
+        if (window._origClassDB) {
+            Object.keys(CLASS_DB).forEach(k => delete CLASS_DB[k]);
+            Object.assign(CLASS_DB, window._origClassDB);
+        }
+    } catch(e) {}
+}
+
+// =================================================================
+// 🎯 POWER ANCESTRAL DOS HERÓIS NOVOS
+// -----------------------------------------------------------------
+// Cada herói tem um PA único. O executeAction original do entidades.js
+// trata apenas os 3 base. Aqui, fazemos um override condicional.
+// =================================================================
+const STORY_HERO_PA = {
+    // ---- Guerreiros ----
+    'kanarott_cruz_empurra': {
+        desc: 'Cruz centrada no herói (5×5) + empurra 2 tiles',
+        execute: async (active, target) => {
+            const atk = active.totalAtk || 3;
+            addLog(`⚔️ ${active.name}: PODER ANCESTRAL — Cruz de Kanarott!`);
+            const cx = active.x;
+            const cy = active.y;
+            const tiles = buildCrossTiles(cx, cy, 2, true);
+            tiles.forEach((t, i) => {
+                setTimeout(() => {
+                    spawnFxAt('impact', 'fx-impact', t.x, t.y, { duration: 500, scale: 1.2 });
+                }, i * 25);
+            });
+            await sleep(400);
+            // Dano nos inimigos (só boss no modo história)
+            if (typeof boss !== 'undefined' && !boss.dead) {
+                if (tiles.some(t => t.x === boss.x && t.y === boss.y)) {
+                    applyDmg(boss, atk);
+                    // Empurra boss 2 tiles pra fora
+                    for (let k = 0; k < 2; k++) {
+                        const dx = Math.sign(boss.x - cx) || 0;
+                        const dy = Math.sign(boss.y - cy) || 0;
+                        const nx = boss.x + dx;
+                        const ny = boss.y + dy;
+                        if (nx < 0 || nx >= 8 || ny < 0 || ny >= 8) break;
+                        if (isOccupied(nx, ny, -1)) break;
+                        boss.x = nx; boss.y = ny;
+                    }
+                    updateVisuals();
+                }
+            }
+            await sleep(300);
+        }
+    },
+    'teperesik_area2x2': {
+        desc: 'Área 3×3 ao redor do herói (8 tiles)',
+        execute: async (active, target) => {
+            const atk = active.totalAtk || 2;
+            addLog(`⚔️ ${active.name}: PODER ANCESTRAL — Guarda de Teperesik!`);
+            const tiles = buildAreaTiles(active.x, active.y, 1, false);
+            tiles.forEach((t, i) => {
+                setTimeout(() => {
+                    spawnFxAt('shockwave', 'fx-shockwave', t.x, t.y, { duration: 600, scale: 1.2 });
+                    spawnFxAt('ground_crack', 'fx-ground-crack', t.x, t.y, { duration: 500 });
+                }, i * 40);
+            });
+            await sleep(500);
+            if (typeof boss !== 'undefined' && !boss.dead) {
+                if (tiles.some(t => t.x === boss.x && t.y === boss.y)) applyDmg(boss, atk);
+            }
+            await sleep(300);
+        }
+    },
+    'eru_linha_horizontal': {
+        desc: 'Linha horizontal inteira (8 tiles)',
+        execute: async (active, target) => {
+            const atk = active.totalAtk || 5;
+            addLog(`⚔️ ${active.name}: PODER ANCESTRAL — Corte de Eru!`);
+            const tiles = [];
+            for (let x = 0; x < 8; x++) tiles.push({ x, y: active.y });
+            tiles.forEach((t, i) => {
+                setTimeout(() => {
+                    spawnFxAt('heavy_slash', 'fx-heavy-slash', t.x, t.y, { duration: 500, scale: 1.1 });
+                }, i * 40);
+            });
+            await sleep(500);
+            if (typeof boss !== 'undefined' && !boss.dead) {
+                if (tiles.some(t => t.x === boss.x && t.y === boss.y)) applyDmg(boss, atk);
+            }
+            await sleep(300);
+        }
+    },
+
+    // ---- Magos ----
+    'andure_area2x2_cura': {
+        desc: 'Área 3×3 + cura 3 HP em si mesmo e aliados',
+        execute: async (active, target) => {
+            const atk = active.totalAtk || 1;
+            addLog(`💧 ${active.name}: PODER ANCESTRAL — Benção de Anduré!`);
+            const tiles = buildAreaTiles(active.x, active.y, 1, true);
+            tiles.forEach((t, i) => {
+                setTimeout(() => {
+                    spawnFxAt('splash_wave', 'fx-splash-wave', t.x, t.y, { duration: 600, scale: 1.1 });
+                    spawnFxAt('heal_orb', 'fx-heal-orb', t.x, t.y, { duration: 800 });
+                }, i * 40);
+            });
+            await sleep(500);
+            // Cura
+            players.forEach(p => {
+                if (!p.dead && tiles.some(t => t.x === p.x && t.y === p.y)) {
+                    p.hp = Math.min(p.maxHp, p.hp + 3);
+                    if (typeof showHealEffect === 'function') showHealEffect(p.x, p.y, 3);
+                }
+            });
+            updateHeroCard();
+            // Dano
+            if (typeof boss !== 'undefined' && !boss.dead) {
+                if (tiles.some(t => t.x === boss.x && t.y === boss.y)) applyDmg(boss, atk);
+            }
+            await sleep(300);
+        }
+    },
+    'maedamata_area3x3_cura': {
+        desc: 'Área 5×5 + cura 4 HP em si mesmo e aliados',
+        execute: async (active, target) => {
+            const atk = active.totalAtk || 1;
+            addLog(`🌳 ${active.name}: PODER ANCESTRAL — Abraço da Mãe da Mata!`);
+            const tiles = buildAreaTiles(active.x, active.y, 2, true);
+            tiles.forEach((t, i) => {
+                setTimeout(() => {
+                    spawnFxAt('element_pulse', 'fx-element-pulse', t.x, t.y, { duration: 700, scale: 1.3, extraClass: 'elem-TERRA' });
+                    spawnFxAt('heal_orb', 'fx-heal-orb', t.x, t.y, { duration: 800 });
+                }, i * 25);
+            });
+            await sleep(600);
+            players.forEach(p => {
+                if (!p.dead && tiles.some(t => t.x === p.x && t.y === p.y)) {
+                    p.hp = Math.min(p.maxHp, p.hp + 4);
+                    if (typeof showHealEffect === 'function') showHealEffect(p.x, p.y, 4);
+                }
+            });
+            updateHeroCard();
+            if (typeof boss !== 'undefined' && !boss.dead) {
+                if (tiles.some(t => t.x === boss.x && t.y === boss.y)) applyDmg(boss, atk);
+            }
+            await sleep(300);
+        }
+    },
+    'paje_coluna_fogo': {
+        desc: 'Coluna vertical inteira + 2× dano se alvo em FOGO',
+        execute: async (active, target) => {
+            const atk = active.totalAtk || 3;
+            addLog(`🔥 ${active.name}: PODER ANCESTRAL — Fúria do Pajé!`);
+            const tiles = [];
+            for (let y = 0; y < 8; y++) tiles.push({ x: active.x, y });
+            if (typeof triggerFireColumn === 'function') {
+                triggerFireColumn(active.x);
+            } else {
+                tiles.forEach((t, i) => {
+                    setTimeout(() => {
+                        spawnFxAt('flame_short', 'fx-flame-short', t.x, t.y, { duration: 600, delay: i * 30 });
+                    }, i * 30);
+                });
+            }
+            await sleep(600);
+            if (typeof boss !== 'undefined' && !boss.dead) {
+                if (boss.x === active.x) {
+                    let dmg = atk;
+                    const bossTileIdx = boss.y * 8 + boss.x;
+                    if (grid[bossTileIdx] === 'FOGO') {
+                        dmg *= 2;
+                        addLog(`🔥 Alvo em FOGO! Dano dobrado!`);
+                    }
+                    applyDmg(boss, dmg);
+                }
+            }
+            await sleep(300);
+        }
+    },
+
+    // ---- Arqueiros ----
+    'jurua_area_alvo_3x3': {
+        desc: 'Área 3×3 centrada no alvo',
+        execute: async (active, target) => {
+            const atk = active.totalAtk || 3;
+            addLog(`🏹 ${active.name}: PODER ANCESTRAL — Flecha Certeira!`);
+            const tx = (typeof boss !== 'undefined' && !boss.dead) ? boss.x : active.x;
+            const ty = (typeof boss !== 'undefined' && !boss.dead) ? boss.y : active.y;
+            const tiles = buildAreaTiles(tx, ty, 1, true);
+            // FX
+            if (typeof spawnArrowProjectile === 'function') spawnArrowProjectile(active, { x: tx, y: ty });
+            tiles.forEach((t, i) => {
+                setTimeout(() => {
+                    spawnFxAt('impact', 'fx-impact', t.x, t.y, { duration: 500, scale: 1.1 });
+                }, i * 35);
+            });
+            await sleep(500);
+            if (typeof boss !== 'undefined' && !boss.dead) {
+                if (tiles.some(t => t.x === boss.x && t.y === boss.y)) applyDmg(boss, atk);
+            }
+            await sleep(300);
+        }
+    },
+    'araci_linha_horizontal': {
+        desc: 'Linha horizontal inteira a partir do herói',
+        execute: async (active, target) => {
+            const atk = active.totalAtk || 2;
+            addLog(`🦜 ${active.name}: PODER ANCESTRAL — Flechas do Vento!`);
+            const tiles = [];
+            for (let x = 0; x < 8; x++) tiles.push({ x, y: active.y });
+            tiles.forEach((t, i) => {
+                setTimeout(() => {
+                    spawnFxAt('wing_gust', 'fx-wing-gust', t.x, t.y, { duration: 500 });
+                }, i * 40);
+            });
+            await sleep(500);
+            if (typeof boss !== 'undefined' && !boss.dead) {
+                if (tiles.some(t => t.x === boss.x && t.y === boss.y)) applyDmg(boss, atk);
+            }
+            await sleep(300);
+        }
+    },
+    'bicho_cruz_completa': {
+        desc: 'Cruz completa (linha + coluna do alvo) — 15 tiles',
+        execute: async (active, target) => {
+            const atk = active.totalAtk || 2;
+            addLog(`🐿️ ${active.name}: PODER ANCESTRAL — Cruz do Folharal!`);
+            const tx = (typeof boss !== 'undefined' && !boss.dead) ? boss.x : active.x;
+            const ty = (typeof boss !== 'undefined' && !boss.dead) ? boss.y : active.y;
+            const tiles = [];
+            for (let x = 0; x < 8; x++) tiles.push({ x, y: ty });
+            for (let y = 0; y < 8; y++) if (y !== ty) tiles.push({ x: tx, y });
+            tiles.forEach((t, i) => {
+                setTimeout(() => {
+                    spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 450, scale: 0.9 });
+                }, i * 25);
+            });
+            await sleep(500);
+            if (typeof boss !== 'undefined' && !boss.dead) {
+                if (tiles.some(t => t.x === boss.x && t.y === boss.y)) applyDmg(boss, atk);
+            }
+            await sleep(300);
+        }
+    },
+    'tapyra_coluna_alvo': {
+        desc: 'Coluna vertical inteira a partir do alvo',
+        execute: async (active, target) => {
+            const atk = active.totalAtk || 3;
+            addLog(`🐆 ${active.name}: PODER ANCESTRAL — Flecha Colunar!`);
+            const tx = (typeof boss !== 'undefined' && !boss.dead) ? boss.x : active.x;
+            const tiles = [];
+            for (let y = 0; y < 8; y++) tiles.push({ x: tx, y });
+            tiles.forEach((t, i) => {
+                setTimeout(() => {
+                    spawnFxAt('heavy_slash', 'fx-heavy-slash', t.x, t.y, { duration: 450, scale: 1.0 });
+                }, i * 35);
+            });
+            await sleep(500);
+            if (typeof boss !== 'undefined' && !boss.dead) {
+                if (tiles.some(t => t.x === boss.x && t.y === boss.y)) applyDmg(boss, atk);
+            }
+            await sleep(300);
+        }
+    },
+};
+
+// =================================================================
+// 🏁 FIM DA PARTE 4/5
+// =================================================================
+// =================================================================
+// historia.js — V7.0 — Bloco 5/5
+// Handlers Atos 8-13 + overrides + vitória com estrelas + OCA + init
+// =================================================================
+
+// =================================================================
+// 🦇 ATO 8 — MORCEGO
+// =================================================================
+STORY_ANIMAL_SKILLS['morcego_voo'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🦇 ${enemy.name} faz voo sombrio!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
+    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
+    tiles.forEach((t, i) => {
+        setTimeout(() => {
+            spawnFxAt('wing_gust', 'fx-wing-gust', t.x, t.y, { duration: 450 });
+            spawnFxAt('swarm_cloud', 'fx-swarm-cloud', t.x, t.y, { duration: 500, scale: 0.8 });
+        }, i * 130);
+    });
+    await sleep(420);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+STORY_ANIMAL_SKILLS['morcego_eco'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🦇 ${enemy.name} emite um eco estridente!`);
+    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
+    tiles.forEach((t, i) => {
+        setTimeout(() => {
+            spawnFxAt('shockwave', 'fx-shockwave', t.x, t.y, { duration: 500, scale: 0.9 });
+            spawnFxAt('spectral_veil', 'fx-spectral-veil', t.x, t.y, { duration: 500, scale: 0.5 });
+        }, i * 40);
+    });
+    await sleep(500);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+// =================================================================
+// 🦉 ATO 8 — CORUJA
+// =================================================================
+STORY_ANIMAL_SKILLS['coruja_garras'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🦉 ${enemy.name} ataca com garras noturnas!`);
+    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
+    tiles.forEach((t, i) => {
+        setTimeout(() => {
+            spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 450 });
+            spawnFxAt('fog_cloud', 'fx-fog-cloud', t.x, t.y, { duration: 600, scale: 0.7 });
+        }, i * 45);
+    });
+    await sleep(500);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+STORY_ANIMAL_SKILLS['coruja_voo'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🦉 ${enemy.name} faz voo silencioso!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
+    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 3);
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('fog_cloud', 'fx-fog-cloud', t.x, t.y, { duration: 500, scale: 0.7 }); }, i * 100); });
+    await sleep(420);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+// =================================================================
+// 🐸 ATO 8 — SAPO-CURURU
+// =================================================================
+STORY_ANIMAL_SKILLS['sapo_veneno'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🐸 ${enemy.name} espirra veneno em cruz!`);
+    const tiles = buildCrossTiles(boss.x, boss.y, 2, false);
+    spawnFxAt('sting_venom', 'fx-sting-venom', boss.x, boss.y, { duration: 700, scale: 1.5 });
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('sting-venom', 'fx-sting-venom', t.x, t.y, { duration: 700, scale: 0.8 }); }, i * 50); });
+    await sleep(600);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+STORY_ANIMAL_SKILLS['sapo_lingua'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🐸 ${enemy.name} lança a língua pegajosa!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
+    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('fin_slash', 'fx-fin-slash', t.x, t.y, { duration: 450, scale: 0.9 }); }, i * 130); });
+    await sleep(420);
+    damagePlayersAt(tiles, atk);
+    tiles.forEach(t => {
+        players.forEach(p => {
+            if (!p.dead && p.x === t.x && p.y === t.y) tryPullPlayer(p, boss.x, boss.y, 1);
+        });
+    });
+    await sleep(250);
+};
+
+// =================================================================
+// 🐦 ATO 8 — SERIEMA (mini-boss)
+// =================================================================
+STORY_ANIMAL_SKILLS['seriema_bicada'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🐦 ${enemy.name} dá uma bicada feroz!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
+    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('peck_beak', 'fx-peck-beak', t.x, t.y, { duration: 450, scale: 1.3 }); }, i * 130); });
+    await sleep(420);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+STORY_ANIMAL_SKILLS['seriema_grito'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🐦 ${enemy.name} dá um grito de guerra!`);
+    const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
+    tiles.forEach((t, i) => {
+        const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
+        setTimeout(() => { spawnFxAt('shockwave', 'fx-shockwave', t.x, t.y, { duration: 500, scale: 0.9 }); }, dist * 55);
+    });
+    await sleep(550);
+    const dmg = Math.max(1, atk - 1);
+    damagePlayersAt(tiles, dmg);
+    await sleep(280);
+};
+
+// =================================================================
+// 🧙‍♀️ ATO 8 — CUCA (boss)
+// =================================================================
+STORY_ANIMAL_SKILLS['cuca_pocao'] = async (enemy, skill) => {
+    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 4;
+    playSfx('cucask1');
+    addLog(`🧙 Cuca lança poção em um quadrante!`);
+    const quadrantX = Math.random() < 0.5 ? 0 : 4;
+    const quadrantY = Math.random() < 0.5 ? 0 : 4;
+    for (let x = quadrantX; x < quadrantX + 4; x++) {
+        for (let y = quadrantY; y < quadrantY + 4; y++) {
+            triggerPoisonGas(x, y);
+        }
+    }
+    setTimeout(() => {
+        for (let x = quadrantX; x < quadrantX + 4; x++) {
+            for (let y = quadrantY; y < quadrantY + 4; y++) {
+                if (x >= 0 && x < 8 && y >= 0 && y < 8) {
+                    players.forEach(p => {
+                        if (!p.dead && p.x === x && p.y === y) applyDmg(p, bossAtk);
+                    });
+                }
+            }
+        }
+    }, 300);
+    await sleep(600);
+};
+
+STORY_ANIMAL_SKILLS['cuca_cura'] = async (enemy, skill) => {
+    playSfx('cucask2');
+    addLog(`🧙 Cuca bebe uma poção curativa!`);
+    triggerPotion(boss.x, boss.y);
+    await sleep(400);
+    boss.hp = Math.min(boss.maxHp, boss.hp + 2);
+    showHealEffect(boss.x, boss.y, 2);
+    updateVisuals();
+    addLog(`💊 Cuca recuperou 2 HP!`);
+    await sleep(400);
+};
+
+// =================================================================
+// 🐟 ATO 9 — TUCUNARÉ
+// =================================================================
+STORY_ANIMAL_SKILLS['tucunare_bote'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🐟 ${enemy.name} dá o bote aquático!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
+    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
+    tiles.forEach((t, i) => {
+        setTimeout(() => {
+            spawnFxAt('splash_wave', 'fx-splash-wave', t.x, t.y, { duration: 500 });
+            spawnFxAt('fang_bite', 'fx-fang-bite', t.x, t.y, { duration: 450 });
+        }, i * 130);
+    });
+    await sleep(420);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+STORY_ANIMAL_SKILLS['tucunare_cardume'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🐟 ${enemy.name} chama o cardume!`);
+    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('swarm_cloud', 'fx-swarm-cloud', t.x, t.y, { duration: 500 }); }, i * 45); });
+    await sleep(500);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+// =================================================================
+// 🐟 ATO 9 — PIRAÍBA
+// =================================================================
+STORY_ANIMAL_SKILLS['piraiba_bocarra'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🐟 ${enemy.name} dá a bocarra!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
+    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('jaw_snap', 'fx-jaw-snap', t.x, t.y, { duration: 500, scale: 1.3 }); }, i * 130); });
+    await sleep(420);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+STORY_ANIMAL_SKILLS['piraiba_caudada'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🐟 ${enemy.name} dá uma caudada!`);
+    spawnFxAt('tail_whip', 'fx-tail-whip', boss.x, boss.y, { duration: 700, scale: 1.6 });
+    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('splash_wave', 'fx-splash-wave', t.x, t.y, { duration: 500, scale: 0.8 }); }, i * 40); });
+    await sleep(500);
+    damagePlayersAt(tiles, atk);
+    players.forEach(p => {
+        if (p.dead) return;
+        if (tiles.some(t => t.x === p.x && t.y === p.y)) {
+            const dx = Math.sign(p.x - boss.x);
+            const dy = Math.sign(p.y - boss.y);
+            tryPushPlayer(p, dx || 0, dy || 0, 2);
+        }
+    });
+    await sleep(300);
+};
+
+// =================================================================
+// 🐟 ATO 9 — DOURADA
+// =================================================================
+STORY_ANIMAL_SKILLS['dourada_escamas'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🐟 ${enemy.name} ergue as escamas douradas!`);
+    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
+    tiles.forEach((t, i) => {
+        setTimeout(() => {
+            spawnFxAt('fin_slash', 'fx-fin-slash', t.x, t.y, { duration: 450 });
+            spawnFxAt('element_pulse', 'fx-element-pulse', t.x, t.y, { duration: 500, scale: 0.8 });
+        }, i * 45);
+    });
+    await sleep(500);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+STORY_ANIMAL_SKILLS['dourada_nado'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🐟 ${enemy.name} nada rapidamente!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
+    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 3);
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('splash_wave', 'fx-splash-wave', t.x, t.y, { duration: 400, scale: 0.7 }); }, i * 100); });
+    await sleep(420);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+// =================================================================
+// 🦭 ATO 9 — PEIXE-BOI (mini-boss)
+// =================================================================
+STORY_ANIMAL_SKILLS['peixe_boi_corpulencia'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🦭 ${enemy.name} usa a corpulência!`);
+    const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
+    tiles.forEach((t, i) => {
+        const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
+        setTimeout(() => { spawnFxAt('splash_wave', 'fx-splash-wave', t.x, t.y, { duration: 500, scale: 0.9 }); }, dist * 55);
+    });
+    await sleep(550);
+    const dmg = Math.max(1, atk - 1);
+    damagePlayersAt(tiles, dmg);
+    await sleep(280);
+};
+
+STORY_ANIMAL_SKILLS['peixe_boi_pancada'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🦭 ${enemy.name} dá uma pancada na água!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
+    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
+    tiles.forEach((t, i) => {
+        setTimeout(() => {
+            spawnFxAt('splash_wave', 'fx-splash-wave', t.x, t.y, { duration: 500, scale: 1.2 });
+            spawnFxAt('shockwave', 'fx-shockwave', t.x, t.y, { duration: 500, scale: 0.9 });
+        }, i * 130);
+    });
+    await sleep(420);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+// =================================================================
+// 🐬 ATO 9 — BOTO ROSA (boss)
+// =================================================================
+STORY_ANIMAL_SKILLS['boto_coracoes'] = async (enemy, skill) => {
+    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 5;
+    playSfx('boto_skill1');
+    addLog(`🐬 Boto Rosa quebra corações na área!`);
+    for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+            if (dx === 0 && dy === 0) continue;
+            const tileX = boss.x + dx;
+            const tileY = boss.y + dy;
+            if (tileX >= 0 && tileX < 8 && tileY >= 0 && tileY < 8) {
+                triggerBrokenHeart(tileX, tileY);
+                players.forEach(p => {
+                    if (!p.dead && p.x === tileX && p.y === tileY) applyDmg(p, bossAtk);
+                });
+            }
+        }
+    }
+    await sleep(600);
+};
+
+STORY_ANIMAL_SKILLS['boto_jatos'] = async (enemy, skill) => {
+    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 5;
+    playSfx('boto_skill2');
+    addLog(`🐬 Boto Rosa lança jatos d'água em cruz!`);
+    for (let y = 0; y < 8; y++) triggerWaterJet(boss.x, y);
+    for (let x = 0; x < 8; x++) triggerWaterJet(x, boss.y);
+    await sleep(600);
+    players.forEach(p => {
+        if (!p.dead && (p.x === boss.x || p.y === boss.y)) applyDmg(p, bossAtk);
+    });
+};
+
+// =================================================================
+// 🐃 ATO 10 — BÚFALO SELVAGEM
+// =================================================================
+STORY_ANIMAL_SKILLS['bufalo_marrada'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🐃 ${enemy.name} dá uma marrada selvagem!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
+    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
+    tiles.forEach((t, i) => {
+        setTimeout(() => {
+            spawnFxAt('antler_charge', 'fx-antler-charge', t.x, t.y, { duration: 500 });
+            spawnFxAt('hoof_stomp', 'fx-hoof-stomp', t.x, t.y, { duration: 500, scale: 0.9 });
+        }, i * 130);
+    });
+    await sleep(420);
+    damagePlayersAt(tiles, atk);
+    tiles.forEach(t => {
+        players.forEach(p => {
+            if (!p.dead && p.x === t.x && p.y === t.y) tryPushPlayer(p, dir.dx, dir.dy, 1);
+        });
+    });
+    await sleep(280);
+};
+
+STORY_ANIMAL_SKILLS['bufalo_pisoteada'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🐃 ${enemy.name} pisoteia o chão!`);
+    const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
+    tiles.forEach((t, i) => {
+        const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
+        setTimeout(() => {
+            spawnFxAt('ground_crack', 'fx-ground-crack', t.x, t.y, { duration: 500 });
+            if (dist === 1) spawnFxAt('hoof_stomp', 'fx-hoof-stomp', t.x, t.y, { duration: 500 });
+        }, dist * 55);
+    });
+    await sleep(550);
+    const dmg = Math.max(1, atk - 1);
+    damagePlayersAt(tiles, dmg);
+    await sleep(280);
+};
+
+// =================================================================
+// 🐄 ATO 10 — VACA LOUCA
+// =================================================================
+STORY_ANIMAL_SKILLS['vaca_coice'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🐄 ${enemy.name} dá um coice!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
+    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('hoof_stomp', 'fx-hoof-stomp', t.x, t.y, { duration: 450, scale: 1.2 }); }, i * 130); });
+    await sleep(420);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+STORY_ANIMAL_SKILLS['vaca_mugido'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🐄 ${enemy.name} dá um mugido de fúria!`);
+    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('shockwave', 'fx-shockwave', t.x, t.y, { duration: 500, scale: 0.9 }); }, i * 45); });
+    await sleep(500);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+// =================================================================
+// 🐐 ATO 10 — CABRA PRETA
+// =================================================================
+STORY_ANIMAL_SKILLS['cabra_cornada'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🐐 ${enemy.name} dá uma cornada!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
+    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 1);
+    spawnFxAt('antler_charge', 'fx-antler-charge', boss.x + dir.dx, boss.y + dir.dy, { duration: 500, scale: 1.2 });
+    await sleep(380);
+    damagePlayersAt(tiles, atk);
+    await sleep(220);
+};
+
+STORY_ANIMAL_SKILLS['cabra_bote'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🐐 ${enemy.name} dá um bote agourento!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
+    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('antler_charge', 'fx-antler-charge', t.x, t.y, { duration: 450 }); }, i * 130); });
+    await sleep(420);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+// =================================================================
+// 🐂 ATO 10 — ZEBU (mini-boss)
+// =================================================================
+STORY_ANIMAL_SKILLS['zebu_marrada'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🐂 ${enemy.name} dá uma marrada bruta!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
+    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('antler_charge', 'fx-antler-charge', t.x, t.y, { duration: 500, scale: 1.3 }); }, i * 130); });
+    await sleep(420);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+STORY_ANIMAL_SKILLS['zebu_pisada'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🐂 ${enemy.name} dá uma pisada pesada!`);
+    const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
+    tiles.forEach((t, i) => {
+        const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
+        setTimeout(() => {
+            spawnFxAt('ground_crack', 'fx-ground-crack', t.x, t.y, { duration: 500 });
+            if (dist === 1) spawnFxAt('hoof_stomp', 'fx-hoof-stomp', t.x, t.y, { duration: 500, scale: 1.1 });
+        }, dist * 55);
+    });
+    await sleep(550);
+    const dmg = Math.max(1, atk - 1);
+    damagePlayersAt(tiles, dmg);
+    await sleep(280);
+};
+
+// =================================================================
+// 🐂 ATO 10 — BOI DA CARA PRETA (boss)
+// =================================================================
+STORY_ANIMAL_SKILLS['boi_face'] = async (enemy, skill) => {
+    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 5;
+    playSfx('boi_skill1');
+    addLog(`🐂 Boi da Cara Preta mostra sua face assustadora!`);
+    for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+            if (dx === 0 && dy === 0) continue;
+            const tileX = boss.x + dx;
+            const tileY = boss.y + dy;
+            if (tileX >= 0 && tileX < 8 && tileY >= 0 && tileY < 8) {
+                triggerScaryFace(tileX, tileY);
+                players.forEach(p => {
+                    if (!p.dead && p.x === tileX && p.y === tileY) applyDmg(p, bossAtk);
+                });
+            }
+        }
+    }
+    const affectedIndices = [];
+    for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+            const tileX = boss.x + dx;
+            const tileY = boss.y + dy;
+            if (tileX >= 0 && tileX < 8 && tileY >= 0 && tileY < 8) {
+                affectedIndices.push(tileY * 8 + tileX);
+            }
+        }
+    }
+    affectedIndices.forEach(idx => {
+        const newColor = COLORS[Math.floor(Math.random() * 4)];
+        grid[idx] = newColor;
+        const tile = document.querySelectorAll('#grid .tile')[idx];
+        if (tile) tile.className = `tile bg-${newColor}`;
+    });
+    addLog(`🌪️ Tiles ao redor foram embaralhados!`);
+    await sleep(600);
+};
+
+STORY_ANIMAL_SKILLS['boi_empurrao'] = async (enemy, skill) => {
+    playSfx('boi_skill2');
+    addLog(`🐂 Boi da Cara Preta empurra os heróis para as bordas!`);
+    players.forEach(p => {
+        if (!p.dead) {
+            let nx = p.x, ny = p.y;
+            if (p.x < 4) nx = Math.max(0, p.x - 1);
+            else nx = Math.min(7, p.x + 1);
+            if (p.y < 4) ny = Math.max(0, p.y - 1);
+            else ny = Math.min(7, p.y + 1);
+            let finalX = p.x, finalY = p.y;
+            let stepX = p.x < nx ? 1 : -1;
+            for (let x = p.x; x !== nx; x += stepX) {
+                if (!isOccupied(x + stepX, p.y, p.id)) finalX = x + stepX;
+                else break;
+            }
+            let stepY = p.y < ny ? 1 : -1;
+            for (let y = p.y; y !== ny; y += stepY) {
+                if (!isOccupied(finalX, y + stepY, p.id)) finalY = y + stepY;
+                else break;
+            }
+            p.x = finalX;
+            p.y = finalY;
+        }
+    });
+    updateVisuals();
+    addLog(`🌪️ Heróis foram empurrados para as bordas!`);
+    await sleep(400);
+    players.forEach(p => { if (!p.dead) applyDmg(p, 1); });
+};
+
+// =================================================================
+// 🐈 ATO 11 — GATO-DO-MATO
+// =================================================================
+STORY_ANIMAL_SKILLS['gato_mato_garras'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🐈 ${enemy.name} ataca com garras noturnas!`);
+    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 450 }); }, i * 40); });
+    await sleep(480);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+STORY_ANIMAL_SKILLS['gato_mato_salto'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🐈 ${enemy.name} dá um salto silencioso!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
+    const fromX = boss.x, fromY = boss.y;
+    const landX = Math.max(0, Math.min(7, boss.x + dir.dx * 2));
+    const landY = Math.max(0, Math.min(7, boss.y + dir.dy * 2));
+    spawnFxAt('pounce_arc', 'fx-pounce-arc', fromX, fromY, { duration: 600, scale: 1.1 });
+    boss.x = landX; boss.y = landY;
+    if (typeof updateVisuals === 'function') updateVisuals();
+    await sleep(350);
+    spawnFxAt('claw_slash', 'fx-claw-slash', landX, landY, { duration: 500, scale: 1.3 });
+    const tiles = buildAreaTiles(landX, landY, 1, true);
+    await sleep(250);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+// =================================================================
+// 🦋 ATO 11 — MARIPOSA GIGANTE
+// =================================================================
+STORY_ANIMAL_SKILLS['mariposa_po'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🦋 ${enemy.name} espalha pó lunar!`);
+    const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
+    tiles.forEach((t, i) => {
+        const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
+        setTimeout(() => {
+            spawnFxAt('fog_cloud', 'fx-fog-cloud', t.x, t.y, { duration: 700, scale: 0.9 });
+            spawnFxAt('element_pulse', 'fx-element-pulse', t.x, t.y, { duration: 700, scale: 0.7 });
+        }, dist * 55);
+    });
+    await sleep(600);
+    const dmg = Math.max(1, atk - 1);
+    damagePlayersAt(tiles, dmg);
+    await sleep(280);
+};
+
+STORY_ANIMAL_SKILLS['mariposa_voo'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🦋 ${enemy.name} faz voo rasante!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
+    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 3);
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('wing_gust', 'fx-wing-gust', t.x, t.y, { duration: 450, scale: 0.8 }); }, i * 100); });
+    await sleep(420);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+// =================================================================
+// 🦝 ATO 11 — QUATI
+// =================================================================
+STORY_ANIMAL_SKILLS['quati_garras'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🦝 ${enemy.name} ataca com garras afiadas!`);
+    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 450, scale: 0.9 }); }, i * 40); });
+    await sleep(480);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+STORY_ANIMAL_SKILLS['quati_bote'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🦝 ${enemy.name} dá um bote rápido!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
+    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('fang_bite', 'fx-fang-bite', t.x, t.y, { duration: 450, scale: 0.9 }); }, i * 130); });
+    await sleep(400);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+// =================================================================
+// 🐆 ATO 11 — SUÇUARANA (mini-boss)
+// =================================================================
+STORY_ANIMAL_SKILLS['sucuarana_garra'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🐆 ${enemy.name} dá uma garra fatal!`);
+    const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
+    tiles.forEach((t, i) => {
+        const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
+        setTimeout(() => { spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 500, scale: 1.1 }); }, dist * 55);
+    });
+    await sleep(550);
+    const dmg = Math.max(1, atk - 1);
+    damagePlayersAt(tiles, dmg);
+    await sleep(280);
+};
+
+STORY_ANIMAL_SKILLS['sucuarana_salto'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🐆 ${enemy.name} dá um salto mortal!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
+    const fromX = boss.x, fromY = boss.y;
+    const landX = Math.max(0, Math.min(7, boss.x + dir.dx * 2));
+    const landY = Math.max(0, Math.min(7, boss.y + dir.dy * 2));
+    spawnFxAt('pounce_arc', 'fx-pounce-arc', fromX, fromY, { duration: 700, scale: 1.4 });
+    boss.x = landX; boss.y = landY;
+    if (typeof updateVisuals === 'function') updateVisuals();
+    await sleep(350);
+    spawnFxAt('shockwave', 'fx-shockwave', landX, landY, { duration: 600, scale: 1.4 });
+    const tiles = buildAreaTiles(landX, landY, 1, true);
+    const dmg = Math.max(1, atk - 1);
+    await sleep(280);
+    damagePlayersAt(tiles, dmg);
+    await sleep(280);
+};
+
+// =================================================================
+// 🌙 ATO 11 — JACI (boss)
+// =================================================================
+STORY_ANIMAL_SKILLS['jaci_lua'] = async (enemy, skill) => {
+    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 5;
+    playSfx('jaci_skill1');
+    addLog(`🌙 Jaci invoca a lua e ataca todos os tiles de AR!`);
+    triggerMoon(boss.x, boss.y);
+    await sleep(400);
+    let arTilesAttacked = 0;
+    grid.forEach((element, idx) => {
+        if (element === 'AR') {
+            const x = idx % 8;
+            const y = Math.floor(idx / 8);
+            triggerMoonRay(x, y);
+            arTilesAttacked++;
+            players.forEach(p => {
+                if (!p.dead && p.x === x && p.y === y) setTimeout(() => applyDmg(p, bossAtk), 200);
+            });
+        }
+    });
+    addLog(`🌪️ ${arTilesAttacked} tiles de AR foram atingidos!`);
+    await sleep(600);
+};
+
+STORY_ANIMAL_SKILLS['jaci_tempestade'] = async (enemy, skill) => {
+    playSfx('jaci_skill2');
+    addLog(`🌙 Jaci invoca uma tempestade em todo o tabuleiro!`);
+    triggerStorm();
+    await sleep(500);
+    players.forEach(p => { if (!p.dead) applyDmg(p, 1); });
+    boss.hp = Math.min(boss.maxHp, boss.hp + 1);
+    showHealEffect(boss.x, boss.y, 1);
+    updateVisuals();
+    addLog(`💊 Jaci recuperou 1 HP!`);
+    await sleep(400);
+};
+
+// =================================================================
+// 🦅 ATO 12 — GAVIÃO
+// =================================================================
+STORY_ANIMAL_SKILLS['gaviao_voo'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🦅 ${enemy.name} faz voo rasante!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
+    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 3);
+    tiles.forEach((t, i) => {
+        setTimeout(() => {
+            spawnFxAt('wing_gust', 'fx-wing-gust', t.x, t.y, { duration: 450 });
+            spawnFxAt('peck_beak', 'fx-peck-beak', t.x, t.y, { duration: 400 });
+        }, i * 100);
+    });
+    await sleep(420);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+STORY_ANIMAL_SKILLS['gaviao_garras'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🦅 ${enemy.name} ataca com garras cortantes!`);
+    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 450, scale: 0.9 }); }, i * 40); });
+    await sleep(480);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+// =================================================================
+// 🦅 ATO 12 — FALCÃO
+// =================================================================
+STORY_ANIMAL_SKILLS['falcao_mergulho'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🦅 ${enemy.name} faz mergulho mortal!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const tx = nearest.x;
+    const ty = nearest.y;
+    const fromX = boss.x, fromY = boss.y;
+    spawnTravelingFx('wing_gust', 'fx-wing-gust', fromX, fromY, tx, ty, { duration: 350 });
+    spawnFxAt('impact', 'fx-impact', tx, ty, { duration: 500, delay: 350 });
+    await sleep(420);
+    players.forEach(p => {
+        if (!p.dead && p.x === tx && p.y === ty) applyDmg(p, atk);
+    });
+    boss.x = tx; boss.y = ty;
+    if (typeof updateVisuals === 'function') updateVisuals();
+    await sleep(280);
+};
+
+STORY_ANIMAL_SKILLS['falcao_garras'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🦅 ${enemy.name} ataca com garras do vento!`);
+    const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
+    tiles.forEach((t, i) => {
+        const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
+        setTimeout(() => { spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 500, scale: 0.9 }); }, dist * 55);
+    });
+    await sleep(550);
+    const dmg = Math.max(1, atk - 1);
+    damagePlayersAt(tiles, dmg);
+    await sleep(280);
+};
+
+// =================================================================
+// 🦉 ATO 12 — URUTAU
+// =================================================================
+STORY_ANIMAL_SKILLS['urutau_canto'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🦉 ${enemy.name} entoa um canto sombrio!`);
+    const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
+    tiles.forEach((t, i) => {
+        const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
+        setTimeout(() => { spawnFxAt('spectral_veil', 'fx-spectral-veil', t.x, t.y, { duration: 700, scale: 0.8 }); }, dist * 55);
+    });
+    await sleep(600);
+    const dmg = Math.max(1, atk - 1);
+    damagePlayersAt(tiles, dmg);
+    await sleep(280);
+};
+
+STORY_ANIMAL_SKILLS['urutau_voo'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🦉 ${enemy.name} faz voo fantasma!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
+    for (let i = 0; i < 3; i++) {
+        const nx = boss.x + dir.dx;
+        const ny = boss.y + dir.dy;
+        if (nx < 0 || nx >= 8 || ny < 0 || ny >= 8) break;
+        if (typeof isOccupied === 'function' && isOccupied(nx, ny, -1)) break;
+        spawnFxAt('spectral_veil', 'fx-spectral-veil', nx, ny, { duration: 500, scale: 0.7 });
+        boss.x = nx; boss.y = ny;
+        if (typeof updateVisuals === 'function') updateVisuals();
+        await sleep(130);
+    }
+    await sleep(200);
+    spawnFxAt('impact', 'fx-impact', boss.x, boss.y, { duration: 500, scale: 1.2 });
+    players.forEach(p => {
+        if (!p.dead && Math.abs(p.x - boss.x) <= 1 && Math.abs(p.y - boss.y) <= 1) applyDmg(p, atk);
+    });
+    await sleep(280);
+};
+
+// =================================================================
+// 🦅 ATO 12 — ÁGUIA-CINZENTA (mini-boss)
+// =================================================================
+STORY_ANIMAL_SKILLS['aguia_garras'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🦅 ${enemy.name} ataca com garras reais!`);
+    const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
+    tiles.forEach((t, i) => {
+        const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
+        setTimeout(() => { spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 500, scale: 1.1 }); }, dist * 55);
+    });
+    await sleep(550);
+    const dmg = Math.max(1, atk - 1);
+    damagePlayersAt(tiles, dmg);
+    await sleep(280);
+};
+
+STORY_ANIMAL_SKILLS['aguia_mergulho'] = async (enemy, skill) => {
+    const atk = enemy.atk;
+    addLog(`🦅 ${enemy.name} faz mergulho solar!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const tx = nearest.x;
+    const ty = nearest.y;
+    const fromX = boss.x, fromY = boss.y;
+    spawnTravelingFx('wing_gust', 'fx-wing-gust', fromX, fromY, tx, ty, { duration: 400 });
+    spawnFxAt('element_pulse', 'fx-element-pulse', tx, ty, { duration: 700, delay: 400, scale: 1.3 });
+    await sleep(500);
+    const hitTiles = [{ x: tx, y: ty }].concat(buildCrossTiles(tx, ty, 1, false));
+    damagePlayersAt(hitTiles, atk);
+    boss.x = tx; boss.y = ty;
+    if (typeof updateVisuals === 'function') updateVisuals();
+    await sleep(280);
+};
+
+// =================================================================
+// ☀️ ATO 12 — GUARACI (boss)
+// =================================================================
+STORY_ANIMAL_SKILLS['guaraci_sol'] = async (enemy, skill) => {
+    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 5;
+    playSfx('guaraci_skill1');
+    addLog(`☀️ Guaraci invoca o sol e ataca todos os tiles de FOGO!`);
+    triggerSun(boss.x, boss.y);
+    await sleep(400);
+    let fireTilesAttacked = 0;
+    grid.forEach((element, idx) => {
+        if (element === 'FOGO') {
+            const x = idx % 8;
+            const y = Math.floor(idx / 8);
+            triggerSunRay(x, y);
+            fireTilesAttacked++;
+            players.forEach(p => {
+                if (!p.dead && p.x === x && p.y === y) setTimeout(() => applyDmg(p, bossAtk), 200);
+            });
+        }
+    });
+    addLog(`🔥 ${fireTilesAttacked} tiles de FOGO foram atingidos!`);
+    await sleep(600);
+};
+
+STORY_ANIMAL_SKILLS['guaraci_onda'] = async (enemy, skill) => {
+    playSfx('guaraci_skill2');
+    addLog(`☀️ Guaraci invoca uma onda de calor!`);
+    triggerHeatWave();
+    await sleep(500);
+    players.forEach(p => { if (!p.dead) applyDmg(p, 1); });
+    boss.hp = Math.min(boss.maxHp, boss.hp + 1);
+    showHealEffect(boss.x, boss.y, 1);
+    updateVisuals();
+    addLog(`💊 Guaraci recuperou 1 HP!`);
+    await sleep(400);
+};
+
+// =================================================================
+// 👹 ATO 13 — ANHANGÁ (final boss)
+// =================================================================
+STORY_ANIMAL_SKILLS['anhanga_fogo'] = async (enemy, skill) => {
+    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 6;
+    playSfx('anhanga_skill1');
+    addLog(`👹 ANHANGÁ: 'Sintam meu fogo intercalado!'`);
+    const columnsToAttack = [];
+    for (let col = boss.x; col < 8; col += 2) columnsToAttack.push(col);
+    for (let col = boss.x; col >= 0; col -= 2) columnsToAttack.push(col);
+    const uniqueColumns = [...new Set(columnsToAttack)];
+    uniqueColumns.forEach(col => {
+        if (col >= 0 && col <= 7) triggerFireColumn(col);
+    });
+    await sleep(600);
+    players.forEach(p => {
+        if (!p.dead && uniqueColumns.includes(p.x)) applyDmg(p, bossAtk);
+    });
+};
+
+STORY_ANIMAL_SKILLS['anhanga_devora'] = async (enemy, skill) => {
+    playSfx('anhanga_skill2');
+    addLog(`👹 ANHANGÁ: 'Eu me alimento da natureza!'`);
+    const board = document.getElementById('board');
+    const s = getStep();
+    const suckEffect = document.createElement('div');
+    suckEffect.style.position = 'absolute';
+    suckEffect.style.left = (boss.x * s + 8) + 'px';
+    suckEffect.style.top = (boss.y * s + 8) + 'px';
+    suckEffect.style.width = '20px';
+    suckEffect.style.height = '20px';
+    suckEffect.style.background = 'radial-gradient(circle, #8e44ad, #9b59b6, transparent)';
+    suckEffect.style.borderRadius = '50%';
+    suckEffect.style.boxShadow = '0 0 20px #8e44ad';
+    suckEffect.style.animation = 'pulseSkill 0.8s infinite alternate';
+    suckEffect.style.zIndex = '55';
+    board.appendChild(suckEffect);
+    triggerPotion(boss.x, boss.y);
+    await sleep(400);
+    boss.hp = Math.min(boss.maxHp, boss.hp + 3);
+    showHealEffect(boss.x, boss.y, 3);
+    updateVisuals();
+    addLog(`💊 Anhangá recuperou 3 HP!`);
+    setTimeout(() => { if (suckEffect.parentNode) suckEffect.parentNode.removeChild(suckEffect); }, 1000);
+};
+
+// =================================================================
+// 🔧 PATCH applyStorySkill — suporta skill.dmg + chama som por arquétipo
+// =================================================================
+const _origApplyStorySkill = applyStorySkill;
+async function applyStorySkillPatched(enemy, skill) {
+    if (!enemy || !skill) return;
+    const handlerName = skill.handler;
+
+    // Toca som da skill (só animais comuns — bosses tocam dentro do handler)
+    const isBossSkill = (typeof bossIsStoryBoss === 'function') && bossIsStoryBoss(enemy.id);
+    if (!isBossSkill && handlerName) {
+        try { playSkillSound(handlerName); } catch(e) {}
+    }
+
+    // Se skill tem dmg customizado, clona enemy com atk = skill.dmg
+    let effectiveEnemy = enemy;
+    if (typeof skill.dmg === 'number' && skill.dmg > 0) {
+        effectiveEnemy = Object.assign({}, enemy, { atk: skill.dmg });
+    }
+
+    return _origApplyStorySkill.call(this, effectiveEnemy, skill);
+}
+// Sobrescreve globalmente
+window.applyStorySkill = applyStorySkillPatched;
+
+// =================================================================
+// 🔊 SISTEMA DE SOM POR ARQUÉTIPO
+// =================================================================
+const STORY_SKILL_SOUNDS = {
+    porco_espinho_espinhos: '', porco_espinho_bote: '', jacare_bocada: '', jacare_giro: '',
+    cervo_investida: '', cervo_chifrada: '', onca_garra_dupla: '', onca_salto: '',
+    tamandua_garras: '', tamandua_bicada: '', anta_pisada: '', anta_atropelamento: '',
+    queixada_mordida: '', queixada_estouro: '', sucuri_bocarra: '', sucuri_caudada: '',
+    piranha_cardume: '', piranha_frenesi: '', lontra_garras: '', lontra_nado: '',
+    ariranha_matilha: '', ariranha_bote: '', pirarucu_bocarra: '', pirarucu_caudada: '',
+    cascavel_chocalho: '', cascavel_bote: '', coral_aneis: '', coral_peconha: '',
+    jararaca_bote: '', jararaca_enrolar: '', tartaruga_casco: '', tartaruga_pancada: '',
+    bode_cornada: '', bode_marrada: '', carneiro_trombada: '', carneiro_pisada: '',
+    cavalo_coice: '', cavalo_relincho: '', touro_cornada: '', touro_pisoteada: '',
+    urubu_voo: '', urubu_bicada: '', carcaara_garras: '', carcaara_mergulho: '',
+    tatu_casco: '', tatu_cavar: '', lobo_guara_uivo: '', lobo_guara_bote: '',
+    cachorro_mordida: '', cachorro_rosnado: '', raposa_astucia: '', raposa_bote: '',
+    guaxinim_garras: '', guaxinim_surpresa: '', jaguatirica_garras: '', jaguatirica_salto: '',
+    morcego_voo: '', morcego_eco: '', coruja_garras: '', coruja_voo: '',
+    sapo_veneno: '', sapo_lingua: '', seriema_bicada: '', seriema_grito: '',
+    tucunare_bote: '', tucunare_cardume: '', piraiba_bocarra: '', piraiba_caudada: '',
+    dourada_escamas: '', dourada_nado: '', peixe_boi_corpulencia: '', peixe_boi_pancada: '',
+    bufalo_marrada: '', bufalo_pisoteada: '', vaca_coice: '', vaca_mugido: '',
+    cabra_cornada: '', cabra_bote: '', zebu_marrada: '', zebu_pisada: '',
+    gato_mato_garras: '', gato_mato_salto: '', mariposa_po: '', mariposa_voo: '',
+    quati_garras: '', quati_bote: '', sucuarana_garra: '', sucuarana_salto: '',
+    gaviao_voo: '', gaviao_garras: '', falcao_mergulho: '', falcao_garras: '',
+    urutau_canto: '', urutau_voo: '', aguia_garras: '', aguia_mergulho: '',
+};
+
+const STORY_ARCHETYPE_SOUNDS = {
+    som_mordida: 'minoa1', som_mordida_rapida: 'atkg', som_garra: 'garras',
+    som_garra_ave: 'atkg', som_bicada: 'atkg', som_investida: 'minoa2',
+    som_pisada: 'minoa2', som_cornada: 'atkg', som_caudada: 'minoa1',
+    som_enrolar: 'minoa1', som_coice: 'atkg', som_relincho: 'skill1',
+    som_mugido: 'minoa2', som_uivo: 'garras', som_rugido: 'minoa2',
+    som_voo: 'saci1', som_ventania: 'saci', som_splash: 'iara2',
+    som_nado: 'iara1', som_bocarra: 'iara2', som_terra: 'minoa2',
+    som_cavar: 'minoa2', som_poeira: 'minoa2', som_magia: 'skill1',
+    som_cura: 'cucask2', som_veneno: 'garras', som_tempestade: 'skill1',
+    som_luar: 'skill1', som_solar: 'skill1', som_espectral: 'skill1',
+};
+
+const STORY_SKILL_FALLBACK_MAP = {
+    porco_espinho_espinhos:'som_garra', porco_espinho_bote:'som_investida',
+    jacare_bocada:'som_mordida', jacare_giro:'som_caudada',
+    cervo_investida:'som_investida', cervo_chifrada:'som_cornada',
+    onca_garra_dupla:'som_garra', onca_salto:'som_rugido',
+    tamandua_garras:'som_garra', tamandua_bicada:'som_bicada',
+    anta_pisada:'som_pisada', anta_atropelamento:'som_investida',
+    queixada_mordida:'som_mordida', queixada_estouro:'som_pisada',
+    sucuri_bocarra:'som_bocarra', sucuri_caudada:'som_caudada',
+    piranha_cardume:'som_mordida_rapida', piranha_frenesi:'som_mordida_rapida',
+    lontra_garras:'som_garra', lontra_nado:'som_nado',
+    ariranha_matilha:'som_mordida', ariranha_bote:'som_bocarra',
+    pirarucu_bocarra:'som_bocarra', pirarucu_caudada:'som_caudada',
+    cascavel_chocalho:'som_veneno', cascavel_bote:'som_mordida_rapida',
+    coral_aneis:'som_enrolar', coral_peconha:'som_veneno',
+    jararaca_bote:'som_mordida_rapida', jararaca_enrolar:'som_enrolar',
+    tartaruga_casco:'som_pisada', tartaruga_pancada:'som_pisada',
+    bode_cornada:'som_cornada', bode_marrada:'som_cornada',
+    carneiro_trombada:'som_investida', carneiro_pisada:'som_pisada',
+    cavalo_coice:'som_coice', cavalo_relincho:'som_relincho',
+    touro_cornada:'som_cornada', touro_pisoteada:'som_pisada',
+    urubu_voo:'som_voo', urubu_bicada:'som_bicada',
+    carcaara_garras:'som_garra_ave', carcaara_mergulho:'som_voo',
+    tatu_casco:'som_terra', tatu_cavar:'som_cavar',
+    lobo_guara_uivo:'som_uivo', lobo_guara_bote:'som_mordida',
+    cachorro_mordida:'som_mordida', cachorro_rosnado:'som_rugido',
+    raposa_astucia:'som_mordida_rapida', raposa_bote:'som_mordida',
+    guaxinim_garras:'som_garra', guaxinim_surpresa:'som_mordida_rapida',
+    jaguatirica_garras:'som_garra', jaguatirica_salto:'som_rugido',
+    morcego_voo:'som_voo', morcego_eco:'som_espectral',
+    coruja_garras:'som_garra_ave', coruja_voo:'som_voo',
+    sapo_veneno:'som_veneno', sapo_lingua:'som_mordida_rapida',
+    seriema_bicada:'som_bicada', seriema_grito:'som_rugido',
+    tucunare_bote:'som_bocarra', tucunare_cardume:'som_mordida_rapida',
+    piraiba_bocarra:'som_bocarra', piraiba_caudada:'som_caudada',
+    dourada_escamas:'som_splash', dourada_nado:'som_nado',
+    peixe_boi_corpulencia:'som_splash', peixe_boi_pancada:'som_splash',
+    bufalo_marrada:'som_investida', bufalo_pisoteada:'som_pisada',
+    vaca_coice:'som_coice', vaca_mugido:'som_mugido',
+    cabra_cornada:'som_cornada', cabra_bote:'som_investida',
+    zebu_marrada:'som_investida', zebu_pisada:'som_pisada',
+    gato_mato_garras:'som_garra', gato_mato_salto:'som_rugido',
+    mariposa_po:'som_ventania', mariposa_voo:'som_voo',
+    quati_garras:'som_garra', quati_bote:'som_mordida_rapida',
+    sucuarana_garra:'som_garra', sucuarana_salto:'som_rugido',
+    gaviao_voo:'som_voo', gaviao_garras:'som_garra_ave',
+    falcao_mergulho:'som_voo', falcao_garras:'som_garra_ave',
+    urutau_canto:'som_espectral', urutau_voo:'som_voo',
+    aguia_garras:'som_garra_ave', aguia_mergulho:'som_voo',
+};
+
+function playSkillSound(handlerName) {
+    const dedicated = STORY_SKILL_SOUNDS[handlerName];
+    if (dedicated && dedicated.trim() !== '') {
+        if (typeof playSfx === 'function') playSfx(dedicated);
+        return;
+    }
+    const archetype = STORY_SKILL_FALLBACK_MAP[handlerName];
+    if (archetype && STORY_ARCHETYPE_SOUNDS[archetype]) {
+        if (typeof playSfx === 'function') playSfx(STORY_ARCHETYPE_SOUNDS[archetype]);
+        return;
+    }
+    if (typeof playSfx === 'function') playSfx('skill1');
+}
+
+function bossIsStoryBoss(enemyId) {
+    return ['saci','mapinguari','iara','boitata','mula','corpo_seco','lobisomem','cuca','boto','boi','jaci','guaraci','anhanga'].includes(enemyId);
+}
+
+// =================================================================
+// 📖 ESTADO RUNTIME
 // =================================================================
 let storyCurrentPhase = null;
 let storyCurrentEnemyIndex = 0;
@@ -6368,31 +5871,19 @@ async function handleStoryBossDefeat(){
     STORY_PROGRESS.enemiesDefeated++;
     saveStoryProgress();
 
-    // Purificação visual
     if (typeof showPurificacao === 'function') {
-        try {
-            await showPurificacao(boss.type, boss.x, boss.y, false);
-        } catch(e) {
-            console.warn('[story] showPurificacao falhou:', e);
-        }
+        try { await showPurificacao(boss.type, boss.x, boss.y, false); } catch(e) {}
     }
 
-    // Mensagem de purificação
     await showPurificationMessage(enemyId);
 
-    // Se for boss, mostra diálogo final
     const isBoss = STORY_FINAL_DIALOGS[enemyId] !== undefined;
-    if (isBoss) {
-        await showBossFinalDialog(enemyId);
-    }
+    if (isBoss) await showBossFinalDialog(enemyId);
 
     window._storyPurificationShowing = false;
     await advanceStoryEnemy();
 }
 
-// =================================================================
-// 📖 OVERLAY DE TEXTO DE PURIFICAÇÃO
-// =================================================================
 function showPurificationMessage(enemyId){
     const msg = STORY_PURIFICATION[enemyId];
     if (!msg) return Promise.resolve();
@@ -6439,9 +5930,6 @@ function showPurificationMessage(enemyId){
     });
 }
 
-// =================================================================
-// 🎯 AVANÇA PARA O PRÓXIMO INIMIGO
-// =================================================================
 async function advanceStoryEnemy(){
     if (!storyBattleActive) return;
 
@@ -6466,8 +5954,7 @@ async function advanceStoryEnemy(){
         boss.hp = nextE.hp;
         boss.maxHp = nextE.hp;
         boss.dead = false;
-        boss.x = 4;
-        boss.y = 0;
+        boss.x = 4; boss.y = 0;
 
         const oldTok = document.getElementById('tokenBoss');
         if (oldTok) oldTok.remove();
@@ -6507,9 +5994,7 @@ async function advanceStoryEnemy(){
         updateHeroCard();
         addLog(`⚔️ ${nextE.name} entra em cena!`);
 
-        if (typeof playBossTheme === 'function') {
-            try { playBossTheme(); } catch(e) {}
-        }
+        if (typeof playBossTheme === 'function') { try { playBossTheme(); } catch(e) {} }
 
         await sleep(400);
         await showBossIntroDialog(nextId);
@@ -6534,9 +6019,6 @@ async function advanceStoryEnemy(){
     }
 }
 
-// =================================================================
-// 🎨 APLICA O INIMIGO NO BOSS (sprite + nome + hp)
-// =================================================================
 function applyStoryEnemyToBoss(enemyId){
     const enemy = STORY_ENEMIES[enemyId];
     if (!enemy) return;
@@ -6581,9 +6063,6 @@ function applyStoryEnemyToBoss(enemyId){
     }
 }
 
-// =================================================================
-// 💀 DERROTA NA FASE
-// =================================================================
 function handleStoryDefeat(){
     if (!storyBattleActive) return;
     if (window._endGameShowing) return;
@@ -6594,9 +6073,6 @@ function handleStoryDefeat(){
     setTimeout(() => { arcadeBossTransition = false; finishStoryPhase(false); }, 800);
 }
 
-// =================================================================
-// 🏁 FIM DA FASE
-// =================================================================
 function finishStoryPhase(victory){
     if (!storyBattleActive) return;
 
@@ -6605,9 +6081,17 @@ function finishStoryPhase(victory){
     window._storyPurificationShowing = false;
 
     restoreBaseGameFunctions();
+    restoreBaseClassDB();
 
     const phase = storyCurrentPhase;
     const drops = [...storyPendingDrops];
+    const finalScore = (typeof calculateFinalScore === 'function') ? calculateFinalScore() : 0;
+    const rankSnapshot = {
+        turns: RANKING.turns,
+        ultimates: RANKING.ultimates,
+        amulets: RANKING.amulets,
+        shapes: Object.assign({}, RANKING.shapes)
+    };
 
     storyCurrentPhase = null;
     storyCurrentEnemyIndex = 0;
@@ -6624,21 +6108,17 @@ function finishStoryPhase(victory){
 
     if (typeof stopAllAudio === 'function') stopAllAudio();
 
-    if (victory) handleStoryPhaseVictory(phase, drops);
+    if (victory) handleStoryPhaseVictory(phase, drops, finalScore, rankSnapshot);
     else handleStoryPhaseDefeat(phase, drops);
 }
 
-// =================================================================
-// ✅ VITÓRIA DA FASE
-// =================================================================
-function handleStoryPhaseVictory(phase, drops){
+function handleStoryPhaseVictory(phase, drops, finalScore, rankSnapshot){
     const cid = parseInt(String(phase.id).split('-')[0]) || 1;
     const nextId = getNextPhaseId(phase.id, cid);
 
     players.forEach(p => { if (!p.dead) p.hp = p.maxHp; });
     completePhase(cid, phase.id, nextId);
 
-    // Desbloqueia próximo capítulo se for boss
     if (phase.isBoss) {
         const nextCid = cid + 1;
         if (STORY_CHAPTERS[nextCid]) {
@@ -6654,6 +6134,16 @@ function handleStoryPhaseVictory(phase, drops){
         }
     }
 
+    // ⭐ ESTRELAS
+    const maxScore = calcularMaxScorePossivel(cid, phase);
+    const stars = calcularEstrelas(finalScore, maxScore);
+    const effectiveStars = saveStarsForPhase(phase.id, stars);
+    const totalStars = getTotalStars();
+    saveStoryProgress();
+
+    // Verifica desbloqueio de heróis
+    const unlockedHeroes = checkHeroUnlocks();
+
     const xp = (phase.reward && phase.reward.xp) || 0;
     const gr = (phase.reward && phase.reward.gold) || 0;
     const isReplay = STORY_PROGRESS.phasesEverCompleted.filter(id => id === phase.id).length > 1;
@@ -6668,21 +6158,23 @@ function handleStoryPhaseVictory(phase, drops){
     }
     saveStoryProgress();
 
-    showStoryVictoryScreen(phase, drops, { xp, gold: finalGold });
+    showStoryVictoryScreen(phase, drops, { xp, gold: finalGold }, {
+        stars: effectiveStars,
+        starsJustEarned: stars,
+        score: finalScore,
+        maxScore: maxScore,
+        totalStars: totalStars,
+        unlockedHeroes: unlockedHeroes,
+        rankSnapshot: rankSnapshot
+    });
 }
 
-// =================================================================
-// 💀 DERROTA DA FASE
-// =================================================================
 function handleStoryPhaseDefeat(phase, drops){
     players.forEach(p => { if (p.dead) p.dead = false; p.hp = p.maxHp; });
     saveStoryProgress();
     showStoryDefeatScreen(phase, drops);
 }
 
-// =================================================================
-// 🗺️ PRÓXIMA FASE
-// =================================================================
 function getNextPhaseId(pid, cid){
     const ch = STORY_CHAPTERS[cid];
     if (!ch) return null;
@@ -6703,13 +6195,14 @@ function getNextPhaseId(pid, cid){
 }
 
 // =================================================================
-// 🎯 OVERRIDES CONDICIONAIS (só em _storyMode)
+// 🎯 OVERRIDES CONDICIONAIS
 // =================================================================
 let _origApplyDmg = null;
 let _origManageTurns = null;
 let _origHandleBossDefeat = null;
 let _origBossAI = null;
 let _origSaveAndRefresh = null;
+let _origExecuteAction = null;
 let _overridesInstalled = false;
 
 function installStoryOverrides(){
@@ -6720,16 +6213,13 @@ function installStoryOverrides(){
     if (typeof window.handleBossDefeat === 'function') _origHandleBossDefeat = window.handleBossDefeat;
     if (typeof window.bossAI === 'function') _origBossAI = window.bossAI;
     if (typeof window.saveAndRefresh === 'function') _origSaveAndRefresh = window.saveAndRefresh;
+    if (typeof window.executeAction === 'function') _origExecuteAction = window.executeAction;
 
-    // ---- applyDmg ----
     window.applyDmg = function(t, amt){
-        if (!window._storyMode || !_origApplyDmg) {
-            return _origApplyDmg.apply(this, arguments);
-        }
+        if (!window._storyMode || !_origApplyDmg) return _origApplyDmg.apply(this, arguments);
         if (t.dead) return;
         t.hp -= amt;
         showDmgEffect(t.x, t.y, amt);
-
         if (t.hp <= 0) {
             t.hp = 0;
             t.dead = true;
@@ -6749,11 +6239,8 @@ function installStoryOverrides(){
         updateAllSpriteDirections();
     };
 
-    // ---- manageTurns ----
     window.manageTurns = function(){
-        if (!window._storyMode || !_origManageTurns) {
-            return _origManageTurns.apply(this, arguments);
-        }
+        if (!window._storyMode || !_origManageTurns) return _origManageTurns.apply(this, arguments);
         if (!gameActive || arcadeBossTransition) return;
         if (window._endGameShowing) return;
 
@@ -6791,21 +6278,22 @@ function installStoryOverrides(){
         updateBossCard();
     };
 
-    // ---- saveAndRefresh ----
     if (_origSaveAndRefresh) {
         window.saveAndRefresh = function(){
-            if (!window._storyMode || !_origSaveAndRefresh) {
-                return _origSaveAndRefresh.apply(this, arguments);
-            }
+            if (!window._storyMode || !_origSaveAndRefresh) return _origSaveAndRefresh.apply(this, arguments);
             _origSaveAndRefresh.apply(this, arguments);
             players.forEach(p => {
-                p.element = getHeroStoryElement(p.class);
+                const heroData = STORY_HERO_CLASSES[p.class];
+                if (heroData && heroData.element) {
+                    p.element = heroData.element;
+                } else {
+                    p.element = getHeroStoryElement(p.class);
+                }
             });
             if (typeof updateHeroCard === 'function') updateHeroCard();
         };
     }
 
-    // ---- handleBossDefeat ----
     if (_origHandleBossDefeat) {
         window.handleBossDefeat = function(){
             if (window._storyMode) return handleStoryBossDefeat();
@@ -6813,13 +6301,80 @@ function installStoryOverrides(){
         };
     }
 
-    // ---- bossAI ----
     if (_origBossAI) {
         window.bossAI = function(){
             if (window._storyMode) return storyEnemyAI();
             return _origBossAI.apply(this, arguments);
         };
     }
+
+    // PA dos heróis novos — override do executeAction
+    if (_origExecuteAction) {
+        window.executeAction = async function() {
+            if (!window._storyMode) return _origExecuteAction.apply(this, arguments);
+            if (!gameActive || path.length === 0 || arcadeBossTransition || isExecutingAction) return;
+            if (bossAIIsRunning) return;
+
+            const active = players[currentPlayerIdx];
+            if (!active) return;
+            const heroData = STORY_HERO_CLASSES[active.class];
+            if (!heroData || !heroData.paKey || heroData.paKey.startsWith('base_')) {
+                // Herói base → usa o executeAction original
+                return _origExecuteAction.apply(this, arguments);
+            }
+
+            isExecutingAction = true;
+            const usedPath = [...path];
+            const threshold = parseInt(document.getElementById('bravely_tiles').value) || 9;
+            const isBravely = usedPath.length >= threshold;
+            const target = (mode === "BOSS" || mode === "ARCADE") ? boss : players.find(p => p.id !== active.id && !p.dead);
+
+            // Move o herói pelo caminho
+            for (const idx of usedPath) {
+                active.x = idx % 8;
+                active.y = Math.floor(idx / 8);
+                checkAmulet(active, active.x, active.y);
+                updateVisuals();
+                updateHeroCard();
+                if (isOccupied(active.x, active.y, active.id)) break;
+                await sleep(100);
+            }
+
+            // Se fez Bravely (9+ tiles), ativa o PA único
+            if (isBravely && heroData.paKey) {
+                const paFn = STORY_HERO_PA[heroData.paKey];
+                if (paFn && typeof paFn.execute === 'function') {
+                    try {
+                        active.totalAtk = (CLASS_DB[active.class]?.atk || 0) + (active.bonusAtk || 0);
+                        await paFn.execute(active, target);
+                    } catch(e) { console.warn('[story] PA falhou:', e); }
+                }
+            } else if (usedPath.length > 0 && !target.dead) {
+                // Sem Bravely: ataque normal (delega pro original que já cuida)
+                // Simplificação: aplica dano básico baseado na distância
+                const info = CLASS_DB[active.class];
+                const dist = Math.abs(active.x - target.x) + Math.abs(active.y - target.y);
+                if (info && dist >= info.min) {
+                    const dmg = info.atk + (active.bonusAtk || 0);
+                    if (typeof applyDmg === 'function') applyDmg(target, dmg);
+                }
+            }
+
+            usedPath.forEach(idx => {
+                const gridEl = document.getElementById('grid');
+                if (gridEl.childNodes[idx]) gridEl.replaceChild(createTile(idx), gridEl.childNodes[idx]);
+            });
+
+            path = []; renderPath();
+            RANKING.turns++;
+            isExecutingAction = false;
+
+            if (gameActive && !boss.dead) manageTurns();
+            updateAllSpriteDirections();
+            updateHeroCard();
+        };
+    }
+
     _overridesInstalled = true;
 }
 
@@ -6830,11 +6385,12 @@ function restoreBaseGameFunctions(){
     if (_origHandleBossDefeat) window.handleBossDefeat = _origHandleBossDefeat;
     if (_origBossAI) window.bossAI = _origBossAI;
     if (_origSaveAndRefresh) window.saveAndRefresh = _origSaveAndRefresh;
+    if (_origExecuteAction) window.executeAction = _origExecuteAction;
     _overridesInstalled = false;
 }
 
 // =================================================================
-// 🎯 IA DO INIMIGO (espelha bossAI)
+// 🎯 IA DO INIMIGO
 // =================================================================
 async function storyEnemyAI(){
     if (bossAIIsRunning || arcadeBossTransition) return;
@@ -6842,7 +6398,6 @@ async function storyEnemyAI(){
     if (window._endGameShowing) return;
 
     bossAIIsRunning = true;
-
     const alive = players.filter(p => !p.dead);
     if (alive.length === 0) { bossAIIsRunning = false; return; }
 
@@ -6850,11 +6405,7 @@ async function storyEnemyAI(){
 
     const enemyId = storyEnemiesRemaining[0] || String(boss.type).toLowerCase();
     const enemy = STORY_ENEMIES[enemyId];
-    if (!enemy) {
-        console.error('[storyEnemyAI] Inimigo desconhecido:', enemyId);
-        bossAIIsRunning = false;
-        return;
-    }
+    if (!enemy) { bossAIIsRunning = false; return; }
 
     addLog(`👹 ${enemy.name} ataca!`);
 
@@ -6867,8 +6418,7 @@ async function storyEnemyAI(){
         ].filter(m => m.x >= 0 && m.x < 8 && m.y >= 0 && m.y < 8 && !isOccupied(m.x, m.y, -1));
         if (moves.length > 0) {
             const mv = moves[Math.floor(Math.random() * moves.length)];
-            boss.x = mv.x;
-            boss.y = mv.y;
+            boss.x = mv.x; boss.y = mv.y;
             updateVisuals();
             await sleep(200);
         }
@@ -6876,11 +6426,8 @@ async function storyEnemyAI(){
     updateAllSpriteDirections();
 
     if (!boss.dead) {
-        // Escolhe skill aleatória entre skill1/skill2
         const skill = Math.random() < 0.5 ? enemy.skill1 : enemy.skill2;
-        if (skill) {
-            await applyStorySkill(enemy, skill);
-        }
+        if (skill) await applyStorySkill(enemy, skill);
     }
 
     await sleep(600);
@@ -6912,7 +6459,6 @@ async function storyEnemyAI(){
 // =================================================================
 function showBossIntroDialog(enemyId){
     const cid = STORY_PROGRESS.currentChapter || 1;
-
     let introPool, bossName, themeClass;
     if (cid === 1) { introPool = STORY_ENEMY_INTROS; bossName = 'SACI'; themeClass = ''; }
     else if (cid === 2) { introPool = STORY_ENEMY_INTROS_A2; bossName = 'MAPINGUARI'; themeClass = 'a2'; }
@@ -6948,7 +6494,6 @@ function showBossIntroDialog(enemyId){
         }
         const hasSprite = sprite && sprite.trim() !== '';
         const enemyName = (STORY_ENEMIES[enemyId]?.name) || enemyId;
-
         const spriteHTML = hasSprite
             ? `<img src="${sprite}" class="story-saci-dialog-img" alt="${enemyName}">`
             : `<span style="font-size:4rem;line-height:1;">${EMOJI_STORY[enemyId]||'?'}</span>`;
@@ -6967,7 +6512,6 @@ function showBossIntroDialog(enemyId){
                     CONTINUAR ${uiIcon('arrow')}
                 </button>
             </div>`;
-
         document.body.appendChild(ov);
 
         let closed = false;
@@ -6977,7 +6521,6 @@ function showBossIntroDialog(enemyId){
             if (ov.parentNode) ov.parentNode.removeChild(ov);
             resolve();
         };
-
         document.getElementById('storySaciDialogContinue').addEventListener('click', close);
         ov.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === 'Escape') close(); });
     });
@@ -7024,7 +6567,6 @@ function showBossFinalDialog(bossType){
                     CONTINUAR ${uiIcon('arrow')}
                 </button>
             </div>`;
-
         document.body.appendChild(ov);
 
         let closed = false;
@@ -7034,14 +6576,13 @@ function showBossFinalDialog(bossType){
             if (ov.parentNode) ov.parentNode.removeChild(ov);
             resolve();
         };
-
         document.getElementById('storySaciFinalContinue').addEventListener('click', close);
         ov.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === 'Escape') close(); });
     });
 }
 
 // =================================================================
-// 🚀 INICIAR UMA FASE
+// 🚀 INICIAR FASE
 // =================================================================
 function startStoryPhase(cid, pid){
     const ch = STORY_CHAPTERS[cid];
@@ -7073,9 +6614,6 @@ function startStoryPhase(cid, pid){
     initStoryBattle();
 }
 
-// =================================================================
-// ⚔️ INICIALIZA A BATALHA
-// =================================================================
 async function initStoryBattle(){
     if (storyEnemiesRemaining.length === 0) return;
     const enemyId = storyEnemiesRemaining[0];
@@ -7094,8 +6632,7 @@ async function initStoryBattle(){
     boss.hp = enemy.hp;
     boss.maxHp = enemy.hp;
     boss.dead = false;
-    boss.x = 4;
-    boss.y = 0;
+    boss.x = 4; boss.y = 0;
 
     ['titleScreen','storyScreen','modeScreen','challengeScreen','playersScreen','configScreen','tutorialScreen']
         .forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
@@ -7105,6 +6642,7 @@ async function initStoryBattle(){
     currentScreen = 'game';
 
     installStoryOverrides();
+    installStoryClassDB();
 
     if (typeof unlockAudio === 'function') {
         try { unlockAudio(); } catch(e) {}
@@ -7134,7 +6672,9 @@ async function initStoryBattle(){
 function applyStoryElementsToPlayers(){
     const saveEl = getSaveElement();
     players.forEach(p => {
-        p.element = getHeroStoryElement(p.class);
+        const heroData = STORY_HERO_CLASSES[p.class];
+        if (heroData && heroData.element) p.element = heroData.element;
+        else p.element = getHeroStoryElement(p.class);
     });
     if (typeof updateHeroCard === 'function') updateHeroCard();
 }
@@ -7146,20 +6686,34 @@ function applyStoryHeroesToConfigs(){
     for (let i = 0; i < max; i++) {
         playerConfigs[i].active = true;
         playerConfigs[i].class = sel[i];
-        playerConfigs[i].name = STORY_CURRENT_SAVE_NAME || sel[i];
+        const heroData = STORY_HERO_CLASSES[sel[i]];
+        playerConfigs[i].name = heroData ? heroData.displayName : (STORY_CURRENT_SAVE_NAME || sel[i]);
     }
     playerCount = max;
 }
 
 // =================================================================
-// 🎉 TELA DE VITÓRIA DA FASE
+// 🎉 TELA DE VITÓRIA (com estrelas animadas)
 // =================================================================
-function showStoryVictoryScreen(phase, drops, rewards){
+function showStoryVictoryScreen(phase, drops, rewards, meta){
     const old = document.getElementById('storyVictoryOverlay');
     if (old) old.remove();
     const ov = document.createElement('div');
     ov.id = 'storyVictoryOverlay';
     ov.className = 'story-result-overlay';
+
+    const stars = meta.stars;
+    const starsJustEarned = meta.starsJustEarned;
+    const totalStars = meta.totalStars;
+    const maxStars = getMaxTotalStars();
+
+    // HTML das estrelas grandes
+    let starsHTML = '<div class="story-stars-big">';
+    for (let i = 1; i <= 3; i++) {
+        const on = i <= stars;
+        starsHTML += `<span class="story-star ${on ? 'big-on' : 'big-off'}" data-star="${i}">★</span>`;
+    }
+    starsHTML += '</div>';
 
     const groups = {};
     drops.forEach(d => { groups[d.id] = (groups[d.id] || 0) + d.qty; });
@@ -7208,12 +6762,28 @@ function showStoryVictoryScreen(phase, drops, rewards){
             </div>`;
     }
 
+    // Aviso de herói desbloqueado
+    let heroUnlockHTML = '';
+    if (meta.unlockedHeroes && meta.unlockedHeroes.length > 0) {
+        heroUnlockHTML = meta.unlockedHeroes.map(h => `
+            <div style="text-align:center;padding:12px;background:rgba(107,163,92,.15);border:1px solid rgba(107,163,92,.4);border-radius:6px;margin-top:8px;">
+                <div style="font-family:'Cinzel',serif;color:#8ac070;font-size:.9rem;letter-spacing:2px;">🏅 HERÓI DESBLOQUEADO</div>
+                <div style="font-family:'EB Garamond',serif;color:#f0e2c0;font-size:1.1rem;margin-top:4px;font-weight:700;">${h.displayName}</div>
+            </div>
+        `).join('');
+    }
+
     ov.innerHTML = `
         <div class="story-result-panel victory">
             <div class="story-result-scroll-top"><h1 class="story-result-title">${title}</h1></div>
             <div class="story-result-body">
+                ${starsHTML}
+                <div style="text-align:center;font-family:'Cinzel',serif;font-size:.85rem;color:#8a7a52;letter-spacing:1.5px;">
+                    ⭐ ${totalStars} / ${maxStars} ESTRELAS TOTAIS
+                </div>
                 <div class="story-result-subtitle">${sub}</div>
                 ${extraHTML}
+                ${heroUnlockHTML}
                 <div class="story-result-section-title">${uiIcon('gift')} RECOMPENSAS</div>
                 ${dropsHTML}
                 <div class="story-result-xp">+${rewards.xp} XP | +${rewards.gold} ${uiIcon('gold')}</div>
@@ -7224,12 +6794,19 @@ function showStoryVictoryScreen(phase, drops, rewards){
             </div>
         </div>`;
     document.body.appendChild(ov);
+
+    // Animação das estrelas (1 → 300ms → 2 → 300ms → 3)
+    setTimeout(() => {
+        for (let i = 1; i <= 3; i++) {
+            const el = ov.querySelector(`.story-star[data-star="${i}"]`);
+            if (!el) continue;
+            setTimeout(() => { el.classList.add('show'); }, i * 300);
+        }
+    }, 200);
+
     if (typeof playSfx === 'function') playSfx('win');
 }
 
-// =================================================================
-// 💀 TELA DE DERROTA DA FASE
-// =================================================================
 function showStoryDefeatScreen(phase, drops){
     const old = document.getElementById('storyVictoryOverlay');
     if (old) old.remove();
@@ -7265,6 +6842,7 @@ function returnFromStoryVictory(){
     window._endGameShowing = false;
     window._storyPurificationShowing = false;
     restoreBaseGameFunctions();
+    restoreBaseClassDB();
     const gs = document.getElementById('gameScreen');
     if (gs) { gs.classList.remove('active'); gs.style.display = 'none'; }
 
@@ -7306,7 +6884,7 @@ function showStorySaveNameModal(options = {}){
                 ${saves.map(s => `
                     <div class="story-save-item" onclick="loadStorySaveFromModal('${s.name.replace(/'/g,"\\'")}')">
                         <div class="story-save-item-name">${s.name}</div>
-                        <div class="story-save-item-stats">${uiIcon('gold')} ${s.gold} · ${uiIcon('xp')} ${s.xp} XP · ${uiIcon('check')} ${s.completed} fases</div>
+                        <div class="story-save-item-stats">${uiIcon('gold')} ${s.gold} · ${uiIcon('xp')} ${s.xp} XP · ⭐ ${s.stars||0}</div>
                     </div>
                 `).join('')}
             </div>
@@ -7315,7 +6893,7 @@ function showStorySaveNameModal(options = {}){
     modal.innerHTML = `
         <div class="story-save-panel">
             <div class="story-save-header">${title}</div>
-            <div class="story-save-hint">O nome define o elemento dos seus heróis.</div>
+            <div class="story-save-hint">O nome define o elemento dos heróis base.</div>
             <div class="story-save-input-wrap">
                 <input type="text" id="storySaveNameInput" class="story-save-input"
                        placeholder="Digite seu nome..." maxlength="20" autocomplete="off"
@@ -7351,7 +6929,7 @@ function updateStorySaveElementPreview(){
     if (!name) { prev.innerHTML = '<span class="story-save-element-empty">Digite um nome...</span>'; return; }
     const el = getElementFromName(name);
     prev.innerHTML = `
-        <div class="story-save-element-label">ELEMENTO DO TIME:</div>
+        <div class="story-save-element-label">ELEMENTO DOS HERÓIS BASE:</div>
         <div class="story-save-element-value elem-${el}">${elemIcon(el)} ${el}</div>
     `;
 }
@@ -7452,6 +7030,8 @@ function renderAldeiaScreen(){
 
     const gold = STORY_PROGRESS.gold || 0;
     const xp = STORY_PROGRESS.totalXP || 0;
+    const stars = getTotalStars();
+    const maxStars = getMaxTotalStars();
     const saveName = STORY_CURRENT_SAVE_NAME;
     const saveEl = getSaveElement();
 
@@ -7477,6 +7057,7 @@ function renderAldeiaScreen(){
                 <div class="story-ald-header-stats">
                     <div class="story-ald-stat"><span class="story-ald-stat-icon">${uiIcon('gold')}</span><span class="story-ald-stat-value">${gold}</span></div>
                     <div class="story-ald-stat"><span class="story-ald-stat-icon">${uiIcon('xp')}</span><span class="story-ald-stat-value">${xp} XP</span></div>
+                    <div class="story-stars-counter"><span class="story-stars-icon">⭐</span>${stars} / ${maxStars}</div>
                 </div>
             </div>
             <div class="story-ald-save-info">
@@ -7497,7 +7078,7 @@ function renderAldeiaScreen(){
                 ${renderAldeiaBtn('tesouraria','TESOURARIA','Em breve',true)}
             </div>
             <div class="story-ald-progress">
-                <div class="story-ald-progress-label">Progresso geral: ${totalCompleted}/${totalPhases}</div>
+                <div class="story-ald-progress-label">Progresso geral: ${totalCompleted}/${totalPhases} fases · ⭐ ${stars}/${maxStars}</div>
                 <div class="story-ald-progress-bar"><div class="story-ald-progress-fill" style="width:${pct}%"></div></div>
             </div>
             <div class="story-ald-footer">
@@ -7543,12 +7124,21 @@ function enterAldeiaLocation(key){
 function renderAtosScreen(){
     const screen = document.getElementById('storyScreen');
     if (!screen) return;
+
+    const totalStars = getTotalStars();
+    const maxStars = getMaxTotalStars();
+
     let html = '';
     Object.values(STORY_CHAPTERS).forEach(ch => {
         const un = STORY_PROGRESS.unlockedChapters.includes(ch.id);
         const comp = ch.phases.filter(p => isPhaseCompleted(p.id)).length;
         const tot = ch.phases.length;
         const pct = Math.round((comp / tot) * 100);
+        // Soma as estrelas do capítulo
+        let chapStars = 0;
+        ch.phases.forEach(p => { chapStars += getStarsForPhase(p.id); });
+        const chapMax = tot * 3;
+
         if (un) {
             html += `<div class="story-chapter-card unlocked" onclick="selectStoryChapter(${ch.id})">
                 <div class="story-chapter-cover">${storySpriteLarge(ch.capa)}</div>
@@ -7557,7 +7147,7 @@ function renderAtosScreen(){
                     <p class="story-chapter-desc">${ch.description}</p>
                     <div class="story-chapter-progress">
                         <div class="story-chapter-progress-bar"><div class="story-chapter-progress-fill" style="width:${pct}%"></div></div>
-                        <div class="story-chapter-progress-text">${comp}/${tot} fases</div>
+                        <div class="story-chapter-progress-text">${comp}/${tot} fases · ⭐ ${chapStars}/${chapMax}</div>
                     </div>
                 </div>
             </div>`;
@@ -7573,7 +7163,12 @@ function renderAtosScreen(){
     });
     screen.innerHTML = `
         <div class="story-container">
-            <div class="story-header"><h1 class="story-title">🗺️ ATOS</h1></div>
+            <div class="story-header">
+                <h1 class="story-title">🗺️ ATOS</h1>
+                <div style="text-align:center;margin-top:10px;">
+                    <span class="story-stars-counter"><span class="story-stars-icon">⭐</span>${totalStars} / ${maxStars}</span>
+                </div>
+            </div>
             <div class="story-chapters-grid">${html}</div>
             <div class="story-footer"><button class="story-back-btn" onclick="renderAldeiaScreen()">← VOLTAR À ALDEIA</button></div>
         </div>`;
@@ -7594,10 +7189,19 @@ function renderChapterPhases(ch){
         const comp = isPhaseCompleted(ph.id);
         const boss = ph.isBoss;
         const finalBoss = ph.isFinalBoss;
+        const stars = getStarsForPhase(ph.id);
         let statusIcon;
         if (comp) statusIcon = uiIcon('check');
         else if (un) statusIcon = `<span class="story-phase-available">${uiIcon('arrow')}</span>`;
         else statusIcon = uiIcon('lock');
+
+        // Estrelinhas do card
+        let starsHTML = '<span class="story-phase-stars">';
+        for (let i = 1; i <= 3; i++) {
+            starsHTML += `<span class="story-star ${i <= stars ? 'on' : 'off'}">★</span>`;
+        }
+        starsHTML += '</span>';
+
         const enemiesHTML = ph.enemies.map(eid => {
             const e = STORY_ENEMIES[eid];
             if (!e) return '';
@@ -7614,6 +7218,7 @@ function renderChapterPhases(ch){
             <div class="story-phase-bg">${ph.bg?storySpriteLarge(ph.bg):''}</div>
             <div class="story-phase-header">
                 <span class="story-phase-num">${ph.id}</span>
+                ${starsHTML}
                 <span class="story-phase-status">${statusIcon}</span>
             </div>
             <div class="story-phase-body">
@@ -7632,42 +7237,104 @@ function renderChapterPhases(ch){
 }
 
 // =================================================================
-// 🏠 OCA / 🧙 LOJA / PLACEHOLDER
+// 🏠 OCA (com heróis bloqueados)
 // =================================================================
 function renderOcaScreen(){
     const screen = document.getElementById('storyScreen');
     if (!screen) return;
     const saveEl = getSaveElement();
-    const html = STORY_PROGRESS.unlockedHeroes.map(hc => {
-        const sp = (typeof SPRITES !== 'undefined' && SPRITES[hc]) || '';
-        const sel = STORY_PROGRESS.selectedHeroes.includes(hc);
-        const el = getHeroStoryElement(hc);
-        const lv = STORY_PROGRESS.heroLevels[hc] || 1;
-        const xp = STORY_PROGRESS.heroXP[hc] || 0;
-        return `<div class="story-hero-card ${sel?'selected':''}" onclick="toggleHeroSelection('${hc}')">
-            <img src="${sp}" class="story-hero-sprite" alt="${hc}">
-            <div class="story-hero-name">${hc}</div>
-            <div class="story-hero-element elem-${el}">${elemIcon(el)} ${el}</div>
-            <div class="story-hero-level">Nível ${lv}</div>
-            <div class="story-hero-xp">${xp} XP</div>
-            ${sel?`<div class="story-hero-check">${uiIcon('check')}</div>`:''}
+
+    // Junta heróis base + novos
+    const unlockedList = STORY_PROGRESS.unlockedHeroesStory || ['Tupa','Sume','Caipora'];
+    const allHeroes = Object.values(STORY_HERO_CLASSES);
+
+    const html = allHeroes.map(hero => {
+        const isUnlocked = hero.starsNeeded === 0 || unlockedList.includes(hero.className);
+        const isSelected = STORY_PROGRESS.selectedHeroes.includes(hero.className);
+
+        // Sprite: base usa SPRITES do entidades.js; novos usam SPRITES_STORY
+        let spriteSrc = '';
+        if (hero.spriteKey) {
+            const url = SPRITES_STORY[hero.spriteKey];
+            spriteSrc = url && url.trim() !== '' ? url : '';
+        } else if (typeof SPRITES !== 'undefined' && SPRITES[hero.className]) {
+            spriteSrc = SPRITES[hero.className];
+        }
+
+        // Fallback: emoji (só pros novos sem sprite)
+        const emoji = hero.spriteKey ? (EMOJI_STORY[hero.spriteKey] || '?') : '';
+
+        // Elemento
+        const el = hero.element || saveEl;
+        const elDisplay = hero.element ? hero.element : `${saveEl} (dinâmico)`;
+
+        // Bloco bloqueado
+        if (!isUnlocked) {
+            const spriteBlock = spriteSrc
+                ? `<img src="${spriteSrc}" class="story-hero-sprite" alt="${hero.displayName}">`
+                : `<div class="story-hero-sprite" style="display:flex;align-items:center;justify-content:center;font-size:3.5rem;">${emoji}</div>`;
+            return `<div class="story-hero-card locked">
+                ${spriteBlock}
+                <div class="story-hero-name">?????</div>
+                <div class="story-hero-element" style="color:#5a4a30;">${hero.role}</div>
+                <div class="story-hero-lock-info">
+                    Desbloqueie com<br><b>${hero.starsNeeded} ⭐</b>
+                </div>
+                <div class="story-hero-lock-icon">🔒</div>
+            </div>`;
+        }
+
+        // Bloco desbloqueado
+        const spriteBlock = spriteSrc
+            ? `<img src="${spriteSrc}" class="story-hero-sprite" alt="${hero.displayName}">`
+            : `<div class="story-hero-sprite" style="display:flex;align-items:center;justify-content:center;font-size:3.5rem;">${emoji}</div>`;
+
+        const lv = STORY_PROGRESS.heroLevels[hero.className] || 1;
+        const xp = STORY_PROGRESS.heroXP[hero.className] || 0;
+
+        return `<div class="story-hero-card ${isSelected ? 'selected' : ''}" onclick="toggleHeroSelection('${hero.className}')">
+            ${spriteBlock}
+            <div class="story-hero-name">${hero.displayName}</div>
+            <div class="story-hero-element elem-${el}">${elemIcon(el)} ${elDisplay}</div>
+            <div class="story-hero-level">${hero.role} · HP ${hero.hp} · ATK ${hero.atk}</div>
+            <div class="story-hero-xp">Nível ${lv} · ${xp} XP</div>
+            ${isSelected ? `<div class="story-hero-check">${uiIcon('check')}</div>` : ''}
         </div>`;
     }).join('');
+
+    const totalStars = getTotalStars();
+    const maxStars = getMaxTotalStars();
+
     screen.innerHTML = `
         <div class="story-container">
-            <div class="story-header"><h1 class="story-title">🏠 OCA</h1>
-            <p class="story-subtitle">Elemento do time: <b class="elem-${saveEl}">${saveEl}</b></p></div>
+            <div class="story-header">
+                <h1 class="story-title">🏠 OCA</h1>
+                <p class="story-subtitle">Escolha 1 herói por fase</p>
+                <div style="text-align:center;margin-top:10px;">
+                    <span class="story-stars-counter"><span class="story-stars-icon">⭐</span>${totalStars} / ${maxStars}</span>
+                </div>
+            </div>
             <div class="story-heroes-grid">${html}</div>
             <div class="story-footer"><button class="story-back-btn" onclick="renderAldeiaScreen()">← VOLTAR À ALDEIA</button></div>
         </div>`;
 }
 
-function toggleHeroSelection(hc){
-    STORY_PROGRESS.selectedHeroes = [hc];
+function toggleHeroSelection(heroClass){
+    // Só permite selecionar heróis desbloqueados
+    const unlockedList = STORY_PROGRESS.unlockedHeroesStory || ['Tupa','Sume','Caipora'];
+    const heroData = STORY_HERO_CLASSES[heroClass];
+    if (!heroData) return;
+    const isUnlocked = heroData.starsNeeded === 0 || unlockedList.includes(heroClass);
+    if (!isUnlocked) return;
+
+    STORY_PROGRESS.selectedHeroes = [heroClass];
     saveStoryProgress();
     renderOcaScreen();
 }
 
+// =================================================================
+// 🧙 LOJA
+// =================================================================
 function renderLojaScreen(){
     const screen = document.getElementById('storyScreen');
     if (!screen) return;
@@ -7734,6 +7401,9 @@ window.retryStoryPhase = retryStoryPhase;
 window.renderAldeiaScreen = renderAldeiaScreen;
 window.uiIcon = uiIcon;
 window.elemIcon = elemIcon;
+window.playSkillSound = playSkillSound;
+window.showToast = showToast;
+window.getTotalStars = getTotalStars;
 
 // =================================================================
 // 🚀 AUTO-INIT
@@ -7748,7 +7418,7 @@ window.elemIcon = elemIcon;
             } else {
                 console.log('📖 Nenhum save. O modal aparecerá ao entrar.');
             }
-            console.log('📖 historia.js V6.0 pronto.');
+            console.log('📖 historia.js V7.0 pronto.');
         } catch(e) {
             console.error('❌ Erro no auto-init:', e);
         }
@@ -7767,11 +7437,27 @@ window.testStoryMode = function(){
     console.log('📖 Save:', STORY_CURRENT_SAVE_NAME);
     console.log('📖 Progresso:', STORY_PROGRESS);
     console.log('📖 Saves:', listStorySaves());
-    console.log('📖 Elemento:', getSaveElement());
+    console.log('📖 Elemento base:', getSaveElement());
     console.log('📖 Capítulos:', Object.keys(STORY_CHAPTERS).length);
     console.log('📖 Inimigos:', Object.keys(STORY_ENEMIES).length);
     console.log('📖 Handlers:', Object.keys(STORY_ANIMAL_SKILLS).length);
+    console.log('📖 Heróis:', Object.keys(STORY_HERO_CLASSES).length);
+    console.log('📖 Estrelas totais:', getTotalStars(), '/', getMaxTotalStars());
     showStoryScreen();
+};
+
+window.testStarSystem = function(){
+    console.log('⭐ Total de estrelas:', getTotalStars(), '/', getMaxTotalStars());
+    console.log('⭐ Estrelas por fase:', STORY_PROGRESS.starsByPhase);
+    console.log('⭐ Heróis desbloqueados:', STORY_PROGRESS.unlockedHeroesStory);
+    console.log('⭐ Próximo herói a desbloquear:');
+    const totalStars = getTotalStars();
+    for (const entry of STORY_HERO_UNLOCKS) {
+        if (totalStars < entry.starsNeeded) {
+            console.log(`   ${entry.displayName} — faltam ${entry.starsNeeded - totalStars} estrelas`);
+            break;
+        }
+    }
 };
 
 window.resetStoryMode = function(){
@@ -7804,14 +7490,26 @@ window.unlockAllStoryChapters = function(){
     renderAldeiaScreen();
 };
 
-window.resetProgressToAct1 = function(){
-    if (!confirm('Resetar progresso para o Ato 1? (mantém ouro, XP e materiais)')) return;
-    STORY_PROGRESS.unlockedChapters = [1];
-    STORY_PROGRESS.unlockedPhases = {1:['1-1']};
-    STORY_PROGRESS.completedPhases = [];
-    STORY_PROGRESS.currentChapter = 1;
+window.giveStars = function(count){
+    count = parseInt(count) || 10;
+    // Distribui estrelas em fases já concluídas
+    const completed = STORY_PROGRESS.completedPhases;
+    if (completed.length === 0) {
+        alert('Complete pelo menos 1 fase antes de dar estrelas.');
+        return;
+    }
+    let given = 0;
+    for (const pid of completed) {
+        if (given >= count) break;
+        const cur = getStarsForPhase(pid);
+        if (cur < 3) {
+            STORY_PROGRESS.starsByPhase[pid] = Math.min(3, cur + (count - given));
+            given += (STORY_PROGRESS.starsByPhase[pid] - cur);
+        }
+    }
     saveStoryProgress();
-    console.log('✅ Progresso resetado para o Ato 1');
+    checkHeroUnlocks();
+    console.log(`✅ ${given} estrelas adicionadas. Total: ${getTotalStars()}`);
     renderAldeiaScreen();
 };
 
@@ -7819,11 +7517,14 @@ window.testUiIcons = function(){
     const keys = [
         'ui_gold','ui_xp','ui_swap','ui_home','ui_play','ui_gift','ui_crown',
         'ui_sparkle','ui_skull','ui_lock','ui_check','ui_arrow','ui_warn','ui_medal',
+        'ui_star','ui_star_empty',
         'elem_fogo','elem_agua','elem_terra','elem_ar',
         'aldeia_bg','aldeia_atos','aldeia_oca','aldeia_loja','aldeia_ritual',
         'aldeia_bestiario','aldeia_tesouraria',
         'capa_ato1','capa_ato2','capa_ato3','capa_ato4','capa_ato5','capa_ato6',
-        'capa_ato7','capa_ato8','capa_ato9','capa_ato10','capa_ato11','capa_ato12','capa_ato13'
+        'capa_ato7','capa_ato8','capa_ato9','capa_ato10','capa_ato11','capa_ato12','capa_ato13',
+        'heroi_Kanarott','heroi_Jurua','heroi_BichoFolharal','heroi_Eru','heroi_Teperesik',
+        'heroi_Andure','heroi_PajeAnhanguera','heroi_MaeDaMata','heroi_Araci','heroi_Tapyrayawara'
     ];
     const preenchidos = [];
     const vazios = [];
@@ -7842,1091 +7543,92 @@ window.testUiIcons = function(){
 };
 
 // =================================================================
-// FIM — historia.js V6.0
+// FIM — historia.js V7.0
 // =================================================================
 // =================================================================
-// historia.js — V6.1 — Bloco 6/6 (FINAL)
-// Sistema de som + bosses fiéis ao entidades.js + ajustes finais
-// =================================================================
-//
-// 📌 REGRAS DESTE BLOCO:
-//   • Bosses do modo história = cópia FIEL do bossAI() do entidades.js
-//     (mesma IA, mesmo som, mesmo comportamento)
-//   • Animais comuns = skills personalizadas + som por arquétipo
-//   • Sistema de som com fallback (igual ao fxSprite)
-//   • Espectros (Ato 13) espelham o boss original
-// =================================================================
-
-// =================================================================
-// 🔊 SLOTS DE SOM POR SKILL (preencha com chave do sfx ou URL)
+// historia.js — V7.2 — Sistema de estrelas ajustado
 // -----------------------------------------------------------------
-// Vazio = usa fallback por arquétipo (STORY_ARCHETYPE_SOUNDS)
-// Preenchido = toca essa chave/nome
+// • 1 estrela mínima garantida ao fechar a fase
+// • Limiares mais generosos (60% / 35% / 15%)
+// • MaxScore mais realista (1 ultimate, 2 muiraquitãs, 1 forma)
+// • Turnos têm peso no multiplicador
+// • Animação: só conquistadas aparecem com delay; vazias já visíveis
 // =================================================================
-const STORY_SKILL_SOUNDS = {
-    // ---- ATO 1 ----
-    porco_espinho_espinhos: '',
-    porco_espinho_bote:     '',
-    jacare_bocada:          '',
-    jacare_giro:            '',
-    cervo_investida:        '',
-    cervo_chifrada:         '',
-    onca_garra_dupla:       '',
-    onca_salto:             '',
-    // saci (boss) — não usa este sistema
 
-    // ---- ATO 2 ----
-    tamandua_garras:        '',
-    tamandua_bicada:        '',
-    anta_pisada:            '',
-    anta_atropelamento:     '',
-    queixada_mordida:       '',
-    queixada_estouro:       '',
-    sucuri_bocarra:         '',
-    sucuri_caudada:         '',
-    // mapinguari (boss)
+(function applyStarSystemV72() {
 
-    // ---- ATO 3 ----
-    piranha_cardume:        '',
-    piranha_frenesi:        '',
-    lontra_garras:          '',
-    lontra_nado:            '',
-    ariranha_matilha:       '',
-    ariranha_bote:          '',
-    pirarucu_bocarra:       '',
-    pirarucu_caudada:       '',
-    // iara (boss)
-
-    // ---- ATO 4 ----
-    cascavel_chocalho:      '',
-    cascavel_bote:          '',
-    coral_aneis:            '',
-    coral_peconha:          '',
-    jararaca_bote:          '',
-    jararaca_enrolar:       '',
-    tartaruga_casco:        '',
-    tartaruga_pancada:      '',
-    // boitata (boss)
-
-    // ---- ATO 5 ----
-    bode_cornada:           '',
-    bode_marrada:           '',
-    carneiro_trombada:      '',
-    carneiro_pisada:        '',
-    cavalo_coice:           '',
-    cavalo_relincho:        '',
-    touro_cornada:          '',
-    touro_pisoteada:        '',
-    // mula (boss)
-
-    // ---- ATO 6 ----
-    urubu_voo:              '',
-    urubu_bicada:           '',
-    carcaara_garras:        '',
-    carcaara_mergulho:      '',
-    tatu_casco:             '',
-    tatu_cavar:             '',
-    lobo_guara_uivo:        '',
-    lobo_guara_bote:        '',
-    // corpo_seco (boss)
-
-    // ---- ATO 7 ----
-    cachorro_mordida:       '',
-    cachorro_rosnado:       '',
-    raposa_astucia:         '',
-    raposa_bote:            '',
-    guaxinim_garras:        '',
-    guaxinim_surpresa:      '',
-    jaguatirica_garras:     '',
-    jaguatirica_salto:      '',
-    // lobisomem (boss)
-
-    // ---- ATO 8 ----
-    morcego_voo:            '',
-    morcego_eco:            '',
-    coruja_garras:          '',
-    coruja_voo:             '',
-    sapo_veneno:            '',
-    sapo_lingua:            '',
-    seriema_bicada:         '',
-    seriema_grito:          '',
-    // cuca (boss)
-
-    // ---- ATO 9 ----
-    tucunare_bote:          '',
-    tucunare_cardume:       '',
-    piraiba_bocarra:        '',
-    piraiba_caudada:        '',
-    dourada_escamas:        '',
-    dourada_nado:           '',
-    peixe_boi_corpulencia:  '',
-    peixe_boi_pancada:      '',
-    // boto (boss)
-
-    // ---- ATO 10 ----
-    bufalo_marrada:         '',
-    bufalo_pisoteada:       '',
-    vaca_coice:             '',
-    vaca_mugido:            '',
-    cabra_cornada:          '',
-    cabra_bote:             '',
-    zebu_marrada:           '',
-    zebu_pisada:            '',
-    // boi (boss)
-
-    // ---- ATO 11 ----
-    gato_mato_garras:       '',
-    gato_mato_salto:        '',
-    mariposa_po:            '',
-    mariposa_voo:           '',
-    quati_garras:           '',
-    quati_bote:             '',
-    sucuarana_garra:        '',
-    sucuarana_salto:        '',
-    // jaci (boss)
-
-    // ---- ATO 12 ----
-    gaviao_voo:             '',
-    gaviao_garras:          '',
-    falcao_mergulho:        '',
-    falcao_garras:          '',
-    urutau_canto:           '',
-    urutau_voo:             '',
-    aguia_garras:           '',
-    aguia_mergulho:         '',
-    // guaraci (boss)
-
-    // ---- ATO 13 — Anhangá ----
-    // anhanga_fogo, anhanga_devora (boss — não usa este sistema)
-};
-
-// =================================================================
-// 🔊 SONS POR ARQUÉTIPO (reaproveitáveis em vários animais)
-// -----------------------------------------------------------------
-// Valores = chave do objeto `sfx` do entidades.js
-// Se a chave não existir lá, playSfx retorna silencioso (não quebra)
-// =================================================================
-const STORY_ARCHETYPE_SOUNDS = {
-    // ---- Físicos ----
-    som_mordida:        'minoa1',      // mordida pesada (jacaré, canídeos)
-    som_mordida_rapida: 'atkg',        // mordida rápida (piranha, peixes)
-    som_garra:          'garras',      // garras (felinos)
-    som_garra_ave:      'atkg',        // garras de ave (bicada seca)
-    som_bicada:         'atkg',        // bicada (aves)
-    som_investida:      'minoa2',      // investida pesada
-    som_pisada:         'minoa2',      // pisada pesada
-    som_cornada:        'atkg',        // chifrada
-    som_caudada:        'minoa1',      // caudada
-    som_enrolar:        'minoa1',      // enrolar
-    som_coice:          'atkg',        // coice
-    som_relincho:       'skill1',      // relincho
-    som_mugido:         'minoa2',      // mugido (boi, vaca)
-    som_uivo:           'garras',      // uivo (lobo)
-    som_rugido:         'minoa2',      // rugido (onça)
-
-    // ---- Vento / Voo ----
-    som_voo:            'saci1',       // asas batendo (aves, morcego)
-    som_ventania:       'saci',        // rajada de vento (saci, mariposa)
-
-    // ---- Água ----
-    som_splash:         'iara2',       // splash de água
-    som_nado:           'iara1',       // nado rápido
-    som_bocarra:        'iara2',       // peixe abrindo bocarra
-
-    // ---- Natural ----
-    som_terra:          'minoa2',      // terra/rocha
-    som_cavar:          'minoa2',      // cavar
-    som_poeira:         'minoa2',      // poeira
-
-    // ---- Mágico / Especial ----
-    som_magia:          'skill1',      // magia genérica
-    som_cura:           'cucask2',     // cura (poção)
-    som_veneno:         'garras',      // veneno (peçonha)
-    som_tempestade:     'skill1',      // tempestade
-    som_luar:           'skill1',      // lunar
-    som_solar:          'skill1',      // solar
-    som_espectral:      'skill1',      // ataque espectral
-};
-
-// =================================================================
-// 🎯 MAPA: handler → arquétipo
-// =================================================================
-const STORY_SKILL_FALLBACK_MAP = {
-    // ---- ATO 1 ----
-    porco_espinho_espinhos:  'som_garra',           // espinhos disparando
-    porco_espinho_bote:      'som_investida',       // rolando
-    jacare_bocada:           'som_mordida',
-    jacare_giro:             'som_caudada',
-    cervo_investida:         'som_investida',
-    cervo_chifrada:          'som_cornada',
-    onca_garra_dupla:        'som_garra',
-    onca_salto:              'som_rugido',
-
-    // ---- ATO 2 ----
-    tamandua_garras:         'som_garra',
-    tamandua_bicada:         'som_bicada',
-    anta_pisada:             'som_pisada',
-    anta_atropelamento:      'som_investida',
-    queixada_mordida:        'som_mordida',
-    queixada_estouro:        'som_pisada',
-    sucuri_bocarra:          'som_bocarra',
-    sucuri_caudada:          'som_caudada',
-
-    // ---- ATO 3 ----
-    piranha_cardume:         'som_mordida_rapida',
-    piranha_frenesi:         'som_mordida_rapida',
-    lontra_garras:           'som_garra',
-    lontra_nado:             'som_nado',
-    ariranha_matilha:        'som_mordida',
-    ariranha_bote:           'som_bocarra',
-    pirarucu_bocarra:        'som_bocarra',
-    pirarucu_caudada:        'som_caudada',
-
-    // ---- ATO 4 ----
-    cascavel_chocalho:       'som_veneno',
-    cascavel_bote:           'som_mordida_rapida',
-    coral_aneis:             'som_enrolar',
-    coral_peconha:           'som_veneno',
-    jararaca_bote:           'som_mordida_rapida',
-    jararaca_enrolar:        'som_enrolar',
-    tartaruga_casco:         'som_pisada',
-    tartaruga_pancada:       'som_pisada',
-
-    // ---- ATO 5 ----
-    bode_cornada:            'som_cornada',
-    bode_marrada:            'som_cornada',
-    carneiro_trombada:       'som_investida',
-    carneiro_pisada:         'som_pisada',
-    cavalo_coice:            'som_coice',
-    cavalo_relincho:         'som_relincho',
-    touro_cornada:           'som_cornada',
-    touro_pisoteada:         'som_pisada',
-
-    // ---- ATO 6 ----
-    urubu_voo:               'som_voo',
-    urubu_bicada:            'som_bicada',
-    carcaara_garras:         'som_garra_ave',
-    carcaara_mergulho:       'som_voo',
-    tatu_casco:              'som_terra',
-    tatu_cavar:              'som_cavar',
-    lobo_guara_uivo:         'som_uivo',
-    lobo_guara_bote:         'som_mordida',
-
-    // ---- ATO 7 ----
-    cachorro_mordida:        'som_mordida',
-    cachorro_rosnado:        'som_rugido',
-    raposa_astucia:          'som_mordida_rapida',
-    raposa_bote:             'som_mordida',
-    guaxinim_garras:         'som_garra',
-    guaxinim_surpresa:       'som_mordida_rapida',
-    jaguatirica_garras:      'som_garra',
-    jaguatirica_salto:       'som_rugido',
-
-    // ---- ATO 8 ----
-    morcego_voo:             'som_voo',
-    morcego_eco:             'som_espectral',
-    coruja_garras:           'som_garra_ave',
-    coruja_voo:              'som_voo',
-    sapo_veneno:             'som_veneno',
-    sapo_lingua:             'som_mordida_rapida',
-    seriema_bicada:          'som_bicada',
-    seriema_grito:           'som_rugido',
-
-    // ---- ATO 9 ----
-    tucunare_bote:           'som_bocarra',
-    tucunare_cardume:        'som_mordida_rapida',
-    piraiba_bocarra:         'som_bocarra',
-    piraiba_caudada:         'som_caudada',
-    dourada_escamas:         'som_splash',
-    dourada_nado:            'som_nado',
-    peixe_boi_corpulencia:   'som_splash',
-    peixe_boi_pancada:       'som_splash',
-
-    // ---- ATO 10 ----
-    bufalo_marrada:          'som_investida',
-    bufalo_pisoteada:        'som_pisada',
-    vaca_coice:              'som_coice',
-    vaca_mugido:             'som_mugido',
-    cabra_cornada:           'som_cornada',
-    cabra_bote:              'som_investida',
-    zebu_marrada:            'som_investida',
-    zebu_pisada:             'som_pisada',
-
-    // ---- ATO 11 ----
-    gato_mato_garras:        'som_garra',
-    gato_mato_salto:         'som_rugido',
-    mariposa_po:             'som_ventania',
-    mariposa_voo:            'som_voo',
-    quati_garras:            'som_garra',
-    quati_bote:              'som_mordida_rapida',
-    sucuarana_garra:         'som_garra',
-    sucuarana_salto:         'som_rugido',
-
-    // ---- ATO 12 ----
-    gaviao_voo:              'som_voo',
-    gaviao_garras:           'som_garra_ave',
-    falcao_mergulho:         'som_voo',
-    falcao_garras:           'som_garra_ave',
-    urutau_canto:            'som_espectral',
-    urutau_voo:              'som_voo',
-    aguia_garras:            'som_garra_ave',
-    aguia_mergulho:          'som_voo',
-};
-
-// =================================================================
-// 🔊 FUNÇÃO UNIFICADA DE SOM
-// =================================================================
-function playSkillSound(handlerName) {
-    // 1. Slot dedicado (do STORY_SKILL_SOUNDS)
-    const dedicated = STORY_SKILL_SOUNDS[handlerName];
-    if (dedicated && dedicated.trim() !== '') {
-        if (typeof playSfx === 'function') playSfx(dedicated);
-        return;
+    // ---- 1. Atualiza a config global de limiares ----
+    if (typeof STORY_STARS_CONFIG !== 'undefined') {
+        STORY_STARS_CONFIG.THRESHOLD_3_STARS = 0.60;
+        STORY_STARS_CONFIG.THRESHOLD_2_STARS = 0.35;
+        STORY_STARS_CONFIG.THRESHOLD_1_STAR  = 0.15;
+        STORY_STARS_CONFIG.REF_MAX_ULTIMATES = 1;
+        STORY_STARS_CONFIG.REF_MAX_AMULETS   = 2;
     }
 
-    // 2. Arquétipo
-    const archetype = STORY_SKILL_FALLBACK_MAP[handlerName];
-    if (archetype && STORY_ARCHETYPE_SOUNDS[archetype]) {
-        if (typeof playSfx === 'function') playSfx(STORY_ARCHETYPE_SOUNDS[archetype]);
-        return;
-    }
+    // ---- 2. Substitui calcularMaxScorePossivel ----
+    window.calcularMaxScorePossivel = function(cid, phase) {
+        if (!phase || !phase.enemies || phase.enemies.length === 0) return 100;
+        const lastEnemyId = phase.enemies[phase.enemies.length - 1];
+        const lastEnemy = STORY_ENEMIES[lastEnemyId];
+        const bossHp = lastEnemy ? lastEnemy.hp : 30;
 
-    // 3. Fallback final
-    if (typeof playSfx === 'function') playSfx('skill1');
-}
+        // base igual ao entidades.js (SEM clamp, pode ser negativo)
+        const baseRaw = 1000 + ((bossHp - 30) * 50);
+        // mas garante mínimo de 100 pra não zerar
+        const base = Math.max(100, baseRaw);
 
-// =================================================================
-// 🎯 HANDLERS DOS BOSSES — FIÉIS AO entidades.js
-// -----------------------------------------------------------------
-// Reaproveitamento literal da IA original. Não alterar comportamento.
-// Vou reescrever os handlers dos bosses pra copiar o bossAI.
-// =================================================================
+        // multiplicador de turnos (melhor caso)
+        const baseMult = base * 1.5;
 
-// ---- SACI (Ato 1) ----
-STORY_ANIMAL_SKILLS['saci_vortices'] = async (enemy, skill) => {
-    // ⚠️ CÓPIA FIEL do entidades.js (bossAI — Saci — skill 1)
-    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 4;
-    playSfx('saci1');
-    addLog(`💨 Saci cria vórtices de vento!`);
-    grid.forEach((element, idx) => {
-        if (element === 'AR') {
-            triggerVortex(idx % 8, Math.floor(idx / 8), 0, true);
-            players.forEach(p => {
-                if (!p.dead && p.x === idx % 8 && p.y === Math.floor(idx / 8)) applyDmg(p, bossAtk);
-            });
-        }
-    });
-    await sleep(700);
-};
+        // bônus realistas do que dá pra fazer numa fase
+        const ultimatesBonus = 1 * 150;   // 1 ultimate
+        const amuletsBonus   = 2 * 100;   // 2 muiraquitãs
+        const shapesBonus    = 100;        // 1 forma (média)
 
-STORY_ANIMAL_SKILLS['saci_diagonais'] = async (enemy, skill) => {
-    // ⚠️ CÓPIA FIEL do entidades.js (bossAI — Saci — skill 2)
-    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 4;
-    playSfx('saci');
-    addLog(`💨 Saci lança vórtices diagonais!`);
-    const diagonals = [
-        { dx: 1, dy: 1 }, { dx: 1, dy: -1 },
-        { dx: -1, dy: 1 }, { dx: -1, dy: -1 }
-    ];
-    diagonals.forEach(dir => {
-        for (let step = 1; step < 8; step++) {
-            let nx = boss.x + dir.dx * step, ny = boss.y + dir.dy * step;
-            if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) {
-                triggerVortex(nx, ny, step * 100, true);
-                players.forEach(p => {
-                    if (!p.dead && p.x === nx && p.y === ny) setTimeout(() => applyDmg(p, bossAtk), step * 100);
-                });
-            }
-        }
-    });
-    await sleep(700);
-};
-
-// ---- MAPINGUARI (Ato 2) ----
-STORY_ANIMAL_SKILLS['mapinguari_mordida'] = async (enemy, skill) => {
-    // ⚠️ CÓPIA FIEL do entidades.js (bossAI — Mapinguari — skill 1)
-    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 4;
-    playSfx('minoa1');
-    addLog(`🦥 Mapinguari dá uma mordida poderosa!`);
-    triggerBite(boss.x, boss.y);
-    await sleep(600);
-    players.forEach(p => {
-        if (!p.dead && Math.abs(p.x - boss.x) <= 2 && Math.abs(p.y - boss.y) <= 2) applyDmg(p, bossAtk);
-    });
-};
-
-STORY_ANIMAL_SKILLS['mapinguari_pedras'] = async (enemy, skill) => {
-    // ⚠️ CÓPIA FIEL do entidades.js (bossAI — Mapinguari — skill 2)
-    playSfx('minoa2');
-    addLog(`🦥 Mapinguari lança pedras!`);
-    triggerRocks(boss.x, boss.y);
-    await sleep(600);
-    const rows = [boss.y - 1, boss.y, boss.y + 1];
-    players.forEach(p => { if (!p.dead && rows.includes(p.y)) applyDmg(p, 2); });
-};
-
-// ---- IARA (Ato 3) ----
-STORY_ANIMAL_SKILLS['iara_tsunami'] = async (enemy, skill) => {
-    // ⚠️ CÓPIA FIEL do entidades.js (bossAI — Iara — skill 1)
-    playSfx('iara1');
-    addLog(`🌊 Iara invoca um tsunami!`);
-    triggerTsunami();
-    await sleep(500);
-    players.forEach(p => {
-        if (!p.dead) {
-            applyDmg(p, 1);
-            let dx = p.x < 4 ? -1 : 1, dy = p.y < 4 ? -1 : 1, nx = p.x, ny = p.y;
-            if (Math.abs(p.x - 3.5) > Math.abs(p.y - 3.5)) {
-                if (p.x + dx >= 0 && p.x + dx < 8) nx += dx;
-            } else {
-                if (p.y + dy >= 0 && p.y + dy < 8) ny += dy;
-            }
-            if (!isOccupied(nx, ny, p.id)) { p.x = nx; p.y = ny; }
-        }
-    });
-    updateVisuals();
-};
-
-STORY_ANIMAL_SKILLS['iara_jatos'] = async (enemy, skill) => {
-    // ⚠️ CÓPIA FIEL do entidades.js (bossAI — Iara — skill 2)
-    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 4;
-    playSfx('iara2');
-    addLog(`💧 Iara lança jatos d'água!`);
-    triggerWaterJet(boss.x, boss.y);
-    await sleep(600);
-    players.forEach(p => {
-        if (!p.dead && (p.x === boss.x || p.y === boss.y)) applyDmg(p, bossAtk);
-    });
-};
-
-// ---- BOITATÁ (Ato 4) ----
-STORY_ANIMAL_SKILLS['boitata_colunas'] = async (enemy, skill) => {
-    // ⚠️ CÓPIA FIEL do entidades.js
-    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 4;
-    playSfx('skill1');
-    addLog(`🔥 Boitatá lança colunas de fogo!`);
-    const columns = [boss.x - 1, boss.x, boss.x + 1];
-    columns.forEach(col => { if (col >= 0 && col <= 7) triggerFireColumn(col); });
-    await sleep(600);
-    players.forEach(p => { if (!p.dead && columns.includes(p.x)) applyDmg(p, bossAtk); });
-};
-
-STORY_ANIMAL_SKILLS['boitata_explosoes'] = async (enemy, skill) => {
-    // ⚠️ CÓPIA FIEL do entidades.js
-    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 4;
-    playSfx('skill1');
-    addLog(`🔥 Boitatá invoca explosões de fogo!`);
-    let count = 0, attempts = 0;
-    while (count < 5 && attempts < 50) {
-        let idx = Math.floor(Math.random() * 64);
-        if (grid[idx] === 'FOGO') {
-            triggerFlare(idx % 8, Math.floor(idx / 8));
-            players.forEach(p => {
-                if (!p.dead && p.x === idx % 8 && p.y === Math.floor(idx / 8)) applyDmg(p, bossAtk);
-            });
-            count++;
-        }
-        attempts++;
-    }
-    await sleep(500);
-};
-
-// ---- MULA SEM CABEÇA (Ato 5) ----
-STORY_ANIMAL_SKILLS['mula_relincho'] = async (enemy, skill) => {
-    // ⚠️ CÓPIA FIEL do entidades.js
-    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 4;
-    playSfx('skill1');
-    addLog(`🐴 Mula sem Cabeça relincha fogo em 3 colunas!`);
-    const columns = [boss.x - 1, boss.x, boss.x + 1].filter(col => col >= 0 && col <= 7);
-    columns.forEach(col => triggerFireColumn(col));
-    await sleep(600);
-    players.forEach(p => { if (!p.dead && columns.includes(p.x)) applyDmg(p, bossAtk); });
-};
-
-STORY_ANIMAL_SKILLS['mula_bolas'] = async (enemy, skill) => {
-    // ⚠️ CÓPIA FIEL do entidades.js
-    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 4;
-    playSfx('skill1');
-    addLog(`🐴 Mula sem Cabeça lança bolas de fogo!`);
-    const directions = [
-        { dx: 2, dy: 0 }, { dx: -2, dy: 0 },
-        { dx: 0, dy: 2 }, { dx: 0, dy: -2 }
-    ];
-    directions.forEach(dir => {
-        let targetX = boss.x + dir.dx;
-        let targetY = boss.y + dir.dy;
-        if (targetX >= 0 && targetX < 8 && targetY >= 0 && targetY < 8) {
-            triggerFireball(boss.x, boss.y, targetX, targetY);
-            players.forEach(p => {
-                if (!p.dead && p.x === targetX && p.y === targetY) setTimeout(() => applyDmg(p, bossAtk), 400);
-            });
-        }
-    });
-    await sleep(700);
-};
-
-// ---- CORPO SECO (Ato 6) ----
-STORY_ANIMAL_SKILLS['corpo_seco_vapor'] = async (enemy, skill) => {
-    // ⚠️ CÓPIA FIEL do entidades.js
-    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 4;
-    playSfx('garras');
-    addLog(`💀 Corpo Seco sopra vapor podre!`);
-    const directions = [
-        { dx: 0, dy: -1 }, { dx: 0, dy: -2 },
-        { dx: 0, dy: 1 }, { dx: 0, dy: 2 },
-        { dx: -1, dy: 0 }, { dx: -2, dy: 0 },
-        { dx: 1, dy: 0 }, { dx: 2, dy: 0 }
-    ];
-    directions.forEach(dir => {
-        let tileX = boss.x + dir.dx;
-        let tileY = boss.y + dir.dy;
-        if (tileX >= 0 && tileX < 8 && tileY >= 0 && tileY < 8) {
-            triggerPoisonGas(tileX, tileY);
-            players.forEach(p => {
-                if (!p.dead && p.x === tileX && p.y === tileY) applyDmg(p, bossAtk);
-            });
-        }
-    });
-    await sleep(600);
-};
-
-STORY_ANIMAL_SKILLS['corpo_seco_garras'] = async (enemy, skill) => {
-    // ⚠️ CÓPIA FIEL do entidades.js
-    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 4;
-    playSfx('garras');
-    addLog(`💀 Corpo Seco ataca com garras!`);
-    const attackDirections = ['left', 'right', 'up', 'down'];
-    const direction = attackDirections[Math.floor(Math.random() * 4)];
-    let targetTiles = [];
-    switch (direction) {
-        case 'left':
-            for (let dx = -2; dx <= 0; dx++) for (let dy = -2; dy <= 2; dy++) targetTiles.push({ x: boss.x + dx, y: boss.y + dy });
-            break;
-        case 'right':
-            for (let dx = 0; dx <= 2; dx++) for (let dy = -2; dy <= 2; dy++) targetTiles.push({ x: boss.x + dx, y: boss.y + dy });
-            break;
-        case 'up':
-            for (let dx = -2; dx <= 2; dx++) for (let dy = -2; dy <= 0; dy++) targetTiles.push({ x: boss.x + dx, y: boss.y + dy });
-            break;
-        case 'down':
-            for (let dx = -2; dx <= 2; dx++) for (let dy = 0; dy <= 2; dy++) targetTiles.push({ x: boss.x + dx, y: boss.y + dy });
-            break;
-    }
-    targetTiles.forEach(tile => {
-        if (tile.x >= 0 && tile.x < 8 && tile.y >= 0 && tile.y < 8) {
-            triggerClawSpin(tile.x, tile.y);
-            players.forEach(p => {
-                if (!p.dead && p.x === tile.x && p.y === tile.y) applyDmg(p, bossAtk + 1);
-            });
-        }
-    });
-    await sleep(600);
-};
-
-// ---- LOBISOMEM (Ato 7) ----
-STORY_ANIMAL_SKILLS['lobisomem_garras'] = async (enemy, skill) => {
-    // ⚠️ CÓPIA FIEL do entidades.js
-    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 4;
-    playSfx('garras');
-    addLog(`🐺 Lobisomem ataca com garras!`);
-    triggerClawSpin(boss.x, boss.y);
-    setTimeout(() => {
-        players.forEach(p => {
-            if (!p.dead && Math.abs(p.x - boss.x) <= 1 && Math.abs(p.y - boss.y) <= 1) applyDmg(p, bossAtk);
-        });
-    }, 300);
-    await sleep(600);
-};
-
-STORY_ANIMAL_SKILLS['lobisomem_tremor'] = async (enemy, skill) => {
-    // ⚠️ CÓPIA FIEL do entidades.js
-    playSfx('minoa2');
-    addLog(`🐺 Lobisomem treme a terra!`);
-    triggerEarthquake();
-    await sleep(400);
-    for (let dx = -2; dx <= 2; dx++) {
-        for (let dy = -2; dy <= 2; dy++) {
-            if (dx === 0 && dy === 0) continue;
-            const tileX = boss.x + dx;
-            const tileY = boss.y + dy;
-            if (tileX >= 0 && tileX < 8 && tileY >= 0 && tileY < 8) {
-                triggerFlare(tileX, tileY);
-                players.forEach(p => {
-                    if (!p.dead && p.x === tileX && p.y === tileY) applyDmg(p, 2);
-                });
-            }
-        }
-    }
-    players.forEach(p => {
-        if (!p.dead) {
-            let newX = p.x, newY = p.y;
-            if (p.x < boss.x && !isOccupied(p.x + 1, p.y, p.id)) newX = p.x + 1;
-            else if (p.x > boss.x && !isOccupied(p.x - 1, p.y, p.id)) newX = p.x - 1;
-            if (p.y < boss.y && !isOccupied(newX, p.y + 1, p.id)) newY = p.y + 1;
-            else if (p.y > boss.y && !isOccupied(newX, p.y - 1, p.id)) newY = p.y - 1;
-            p.x = newX;
-            p.y = newY;
-        }
-    });
-    updateVisuals();
-    addLog(`🐺 Heróis foram puxados para perto!`);
-    await sleep(400);
-};
-
-// ---- CUCA (Ato 8) ----
-STORY_ANIMAL_SKILLS['cuca_pocao'] = async (enemy, skill) => {
-    // ⚠️ CÓPIA FIEL do entidades.js
-    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 4;
-    playSfx('cucask1');
-    addLog(`🧙 Cuca lança poção em um quadrante!`);
-    const quadrantX = Math.random() < 0.5 ? 0 : 4;
-    const quadrantY = Math.random() < 0.5 ? 0 : 4;
-    for (let x = quadrantX; x < quadrantX + 4; x++) {
-        for (let y = quadrantY; y < quadrantY + 4; y++) {
-            triggerPoisonGas(x, y);
-        }
-    }
-    setTimeout(() => {
-        for (let x = quadrantX; x < quadrantX + 4; x++) {
-            for (let y = quadrantY; y < quadrantY + 4; y++) {
-                if (x >= 0 && x < 8 && y >= 0 && y < 8) {
-                    players.forEach(p => {
-                        if (!p.dead && p.x === x && p.y === y) applyDmg(p, bossAtk);
-                    });
-                }
-            }
-        }
-    }, 300);
-    await sleep(600);
-};
-
-STORY_ANIMAL_SKILLS['cuca_cura'] = async (enemy, skill) => {
-    // ⚠️ CÓPIA FIEL do entidades.js
-    playSfx('cucask2');
-    addLog(`🧙 Cuca bebe uma poção curativa!`);
-    triggerPotion(boss.x, boss.y);
-    await sleep(400);
-    boss.hp = Math.min(boss.maxHp, boss.hp + 2);
-    showHealEffect(boss.x, boss.y, 2);
-    updateVisuals();
-    addLog(`💊 Cuca recuperou 2 HP!`);
-    await sleep(400);
-};
-
-// ---- BOTO ROSA (Ato 9) ----
-STORY_ANIMAL_SKILLS['boto_coracoes'] = async (enemy, skill) => {
-    // ⚠️ CÓPIA FIEL do entidades.js
-    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 5;
-    playSfx('boto_skill1');
-    addLog(`🐬 Boto Rosa quebra corações na área!`);
-    for (let dx = -1; dx <= 1; dx++) {
-        for (let dy = -1; dy <= 1; dy++) {
-            if (dx === 0 && dy === 0) continue;
-            const tileX = boss.x + dx;
-            const tileY = boss.y + dy;
-            if (tileX >= 0 && tileX < 8 && tileY >= 0 && tileY < 8) {
-                triggerBrokenHeart(tileX, tileY);
-                players.forEach(p => {
-                    if (!p.dead && p.x === tileX && p.y === tileY) applyDmg(p, bossAtk);
-                });
-            }
-        }
-    }
-    await sleep(600);
-};
-
-STORY_ANIMAL_SKILLS['boto_jatos'] = async (enemy, skill) => {
-    // ⚠️ CÓPIA FIEL do entidades.js
-    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 5;
-    playSfx('boto_skill2');
-    addLog(`🐬 Boto Rosa lança jatos d'água em cruz!`);
-    for (let y = 0; y < 8; y++) triggerWaterJet(boss.x, y);
-    for (let x = 0; x < 8; x++) triggerWaterJet(x, boss.y);
-    await sleep(600);
-    players.forEach(p => {
-        if (!p.dead && (p.x === boss.x || p.y === boss.y)) applyDmg(p, bossAtk);
-    });
-};
-
-// ---- BOI DA CARA PRETA (Ato 10) ----
-STORY_ANIMAL_SKILLS['boi_face'] = async (enemy, skill) => {
-    // ⚠️ CÓPIA FIEL do entidades.js
-    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 5;
-    playSfx('boi_skill1');
-    addLog(`🐂 Boi da Cara Preta mostra sua face assustadora!`);
-    for (let dx = -1; dx <= 1; dx++) {
-        for (let dy = -1; dy <= 1; dy++) {
-            if (dx === 0 && dy === 0) continue;
-            const tileX = boss.x + dx;
-            const tileY = boss.y + dy;
-            if (tileX >= 0 && tileX < 8 && tileY >= 0 && tileY < 8) {
-                triggerScaryFace(tileX, tileY);
-                players.forEach(p => {
-                    if (!p.dead && p.x === tileX && p.y === tileY) applyDmg(p, bossAtk);
-                });
-            }
-        }
-    }
-    const affectedIndices = [];
-    for (let dx = -1; dx <= 1; dx++) {
-        for (let dy = -1; dy <= 1; dy++) {
-            const tileX = boss.x + dx;
-            const tileY = boss.y + dy;
-            if (tileX >= 0 && tileX < 8 && tileY >= 0 && tileY < 8) {
-                affectedIndices.push(tileY * 8 + tileX);
-            }
-        }
-    }
-    affectedIndices.forEach(idx => {
-        const newColor = COLORS[Math.floor(Math.random() * 4)];
-        grid[idx] = newColor;
-        const tile = document.querySelectorAll('#grid .tile')[idx];
-        if (tile) tile.className = `tile bg-${newColor}`;
-    });
-    addLog(`🌪️ Tiles ao redor foram embaralhados!`);
-    await sleep(600);
-};
-
-STORY_ANIMAL_SKILLS['boi_empurrao'] = async (enemy, skill) => {
-    // ⚠️ CÓPIA FIEL do entidades.js
-    playSfx('boi_skill2');
-    addLog(`🐂 Boi da Cara Preta empurra os heróis para as bordas!`);
-    players.forEach(p => {
-        if (!p.dead) {
-            let nx = p.x, ny = p.y;
-            if (p.x < 4) nx = Math.max(0, p.x - 1);
-            else nx = Math.min(7, p.x + 1);
-            if (p.y < 4) ny = Math.max(0, p.y - 1);
-            else ny = Math.min(7, p.y + 1);
-            let finalX = p.x, finalY = p.y;
-            let stepX = p.x < nx ? 1 : -1;
-            for (let x = p.x; x !== nx; x += stepX) {
-                if (!isOccupied(x + stepX, p.y, p.id)) finalX = x + stepX;
-                else break;
-            }
-            let stepY = p.y < ny ? 1 : -1;
-            for (let y = p.y; y !== ny; y += stepY) {
-                if (!isOccupied(finalX, y + stepY, p.id)) finalY = y + stepY;
-                else break;
-            }
-            p.x = finalX;
-            p.y = finalY;
-        }
-    });
-    updateVisuals();
-    addLog(`🌪️ Heróis foram empurrados para as bordas!`);
-    await sleep(400);
-    players.forEach(p => { if (!p.dead) applyDmg(p, 1); });
-};
-
-// ---- JACI (Ato 11) ----
-STORY_ANIMAL_SKILLS['jaci_lua'] = async (enemy, skill) => {
-    // ⚠️ CÓPIA FIEL do entidades.js
-    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 5;
-    playSfx('jaci_skill1');
-    addLog(`🌙 Jaci invoca a lua e ataca todos os tiles de AR!`);
-    triggerMoon(boss.x, boss.y);
-    await sleep(400);
-    let arTilesAttacked = 0;
-    grid.forEach((element, idx) => {
-        if (element === 'AR') {
-            const x = idx % 8;
-            const y = Math.floor(idx / 8);
-            triggerMoonRay(x, y);
-            arTilesAttacked++;
-            players.forEach(p => {
-                if (!p.dead && p.x === x && p.y === y) setTimeout(() => applyDmg(p, bossAtk), 200);
-            });
-        }
-    });
-    addLog(`🌪️ ${arTilesAttacked} tiles de AR foram atingidos!`);
-    await sleep(600);
-};
-
-STORY_ANIMAL_SKILLS['jaci_tempestade'] = async (enemy, skill) => {
-    // ⚠️ CÓPIA FIEL do entidades.js
-    playSfx('jaci_skill2');
-    addLog(`🌙 Jaci invoca uma tempestade em todo o tabuleiro!`);
-    triggerStorm();
-    await sleep(500);
-    players.forEach(p => { if (!p.dead) applyDmg(p, 1); });
-    boss.hp = Math.min(boss.maxHp, boss.hp + 1);
-    showHealEffect(boss.x, boss.y, 1);
-    updateVisuals();
-    addLog(`💊 Jaci recuperou 1 HP!`);
-    await sleep(400);
-};
-
-// ---- GUARACI (Ato 12) ----
-STORY_ANIMAL_SKILLS['guaraci_sol'] = async (enemy, skill) => {
-    // ⚠️ CÓPIA FIEL do entidades.js
-    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 5;
-    playSfx('guaraci_skill1');
-    addLog(`☀️ Guaraci invoca o sol e ataca todos os tiles de FOGO!`);
-    triggerSun(boss.x, boss.y);
-    await sleep(400);
-    let fireTilesAttacked = 0;
-    grid.forEach((element, idx) => {
-        if (element === 'FOGO') {
-            const x = idx % 8;
-            const y = Math.floor(idx / 8);
-            triggerSunRay(x, y);
-            fireTilesAttacked++;
-            players.forEach(p => {
-                if (!p.dead && p.x === x && p.y === y) setTimeout(() => applyDmg(p, bossAtk), 200);
-            });
-        }
-    });
-    addLog(`🔥 ${fireTilesAttacked} tiles de FOGO foram atingidos!`);
-    await sleep(600);
-};
-
-STORY_ANIMAL_SKILLS['guaraci_onda'] = async (enemy, skill) => {
-    // ⚠️ CÓPIA FIEL do entidades.js
-    playSfx('guaraci_skill2');
-    addLog(`☀️ Guaraci invoca uma onda de calor!`);
-    triggerHeatWave();
-    await sleep(500);
-    players.forEach(p => { if (!p.dead) applyDmg(p, 1); });
-    boss.hp = Math.min(boss.maxHp, boss.hp + 1);
-    showHealEffect(boss.x, boss.y, 1);
-    updateVisuals();
-    addLog(`💊 Guaraci recuperou 1 HP!`);
-    await sleep(400);
-};
-
-// ---- ANHANGÁ (Ato 13 — final) ----
-STORY_ANIMAL_SKILLS['anhanga_fogo'] = async (enemy, skill) => {
-    // ⚠️ CÓPIA FIEL do entidades.js
-    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 6;
-    playSfx('anhanga_skill1');
-    addLog(`👹 ANHANGÁ: 'Sintam meu fogo intercalado!'`);
-    const columnsToAttack = [];
-    for (let col = boss.x; col < 8; col += 2) columnsToAttack.push(col);
-    for (let col = boss.x; col >= 0; col -= 2) columnsToAttack.push(col);
-    const uniqueColumns = [...new Set(columnsToAttack)];
-    uniqueColumns.forEach(col => {
-        if (col >= 0 && col <= 7) triggerFireColumn(col);
-    });
-    await sleep(600);
-    players.forEach(p => {
-        if (!p.dead && uniqueColumns.includes(p.x)) applyDmg(p, bossAtk);
-    });
-};
-
-STORY_ANIMAL_SKILLS['anhanga_devora'] = async (enemy, skill) => {
-    // ⚠️ CÓPIA FIEL do entidades.js
-    playSfx('anhanga_skill2');
-    addLog(`👹 ANHANGÁ: 'Eu me alimento da natureza!'`);
-    const board = document.getElementById('board');
-    const s = getStep();
-    const suckEffect = document.createElement('div');
-    suckEffect.style.position = 'absolute';
-    suckEffect.style.left = (boss.x * s + 8) + 'px';
-    suckEffect.style.top = (boss.y * s + 8) + 'px';
-    suckEffect.style.width = '20px';
-    suckEffect.style.height = '20px';
-    suckEffect.style.background = 'radial-gradient(circle, #8e44ad, #9b59b6, transparent)';
-    suckEffect.style.borderRadius = '50%';
-    suckEffect.style.boxShadow = '0 0 20px #8e44ad';
-    suckEffect.style.animation = 'pulseSkill 0.8s infinite alternate';
-    suckEffect.style.zIndex = '55';
-    board.appendChild(suckEffect);
-    triggerPotion(boss.x, boss.y);
-    await sleep(400);
-    boss.hp = Math.min(boss.maxHp, boss.hp + 3);
-    showHealEffect(boss.x, boss.y, 3);
-    updateVisuals();
-    addLog(`💊 Anhangá recuperou 3 HP!`);
-    setTimeout(() => { if (suckEffect.parentNode) suckEffect.parentNode.removeChild(suckEffect); }, 1000);
-};
-
-// =================================================================
-// 🎯 PATCH: substituir os playSfx avulsos dos animais por playSkillSound
-// -----------------------------------------------------------------
-// Não preciso reescrever os 86 handlers — só sobrescrevo o applyStorySkill
-// pra chamar playSkillSound automaticamente no início da skill.
-// =================================================================
-const _origApplyStorySkill = applyStorySkill;
-window.applyStorySkill = async function(enemy, skill) {
-    if (!enemy || !skill) return;
-    const handlerName = skill.handler;
-
-    // Chama o som automaticamente ANTES do handler rodar
-    // (bosses usam som próprio dentro do handler — não passa por aqui)
-    const isBossSkill = bossIsStoryBoss(enemy.id) && handlerName && !STORY_SKILL_SOUNDS[handlerName]?.trim?.() &&
-                        (handlerName.startsWith('saci_') || handlerName.startsWith('mapinguari_') ||
-                         handlerName.startsWith('iara_') || handlerName.startsWith('boitata_') ||
-                         handlerName.startsWith('mula_') || handlerName.startsWith('corpo_seco_') ||
-                         handlerName.startsWith('lobisomem_') || handlerName.startsWith('cuca_') ||
-                         handlerName.startsWith('boto_') || handlerName.startsWith('boi_') ||
-                         handlerName.startsWith('jaci_') || handlerName.startsWith('guaraci_') ||
-                         handlerName.startsWith('anhanga_'));
-
-    if (!isBossSkill) {
-        // Animais comuns → toca som por arquétipo
-        playSkillSound(handlerName);
-    }
-
-    return _origApplyStorySkill.call(this, enemy, skill);
-};
-
-function bossIsStoryBoss(enemyId) {
-    return [
-        'saci', 'mapinguari', 'iara', 'boitata', 'mula', 'corpo_seco',
-        'lobisomem', 'cuca', 'boto', 'boi', 'jaci', 'guaraci', 'anhanga'
-    ].includes(enemyId);
-}
-
-// =================================================================
-// 🌐 EXPÕE O SISTEMA DE SOM NO WINDOW (debug)
-// =================================================================
-window.STORY_SKILL_SOUNDS = STORY_SKILL_SOUNDS;
-window.STORY_ARCHETYPE_SOUNDS = STORY_ARCHETYPE_SOUNDS;
-window.STORY_SKILL_FALLBACK_MAP = STORY_SKILL_FALLBACK_MAP;
-window.playSkillSound = playSkillSound;
-
-// =================================================================
-// 🧪 TESTES DE SOM (console)
-// =================================================================
-window.testStorySounds = function() {
-    console.log('🔊 Sons por arquétipo disponíveis:');
-    Object.keys(STORY_ARCHETYPE_SOUNDS).forEach(key => {
-        const sfxKey = STORY_ARCHETYPE_SOUNDS[key];
-        const exists = typeof sfx !== 'undefined' && sfx[sfxKey];
-        console.log(`   ${exists ? '✅' : '⚠️ '} ${key} → sfx.${sfxKey} ${exists ? '' : '(não existe no entidades.js — toca silencioso)'}`);
-    });
-    console.log('\n🔊 Slots dedicados preenchidos:', 
-        Object.entries(STORY_SKILL_SOUNDS).filter(([k,v]) => v && v.trim() !== '').length,
-        'de', Object.keys(STORY_SKILL_SOUNDS).length);
-};
-
-window.testPlaySkillSound = function(handlerName) {
-    console.log(`🔊 Tocando som para: ${handlerName}`);
-    console.log(`   Slot dedicado: "${STORY_SKILL_SOUNDS[handlerName] || ''}"`);
-    console.log(`   Arquétipo: ${STORY_SKILL_FALLBACK_MAP[handlerName] || 'nenhum'}`);
-    const archetype = STORY_SKILL_FALLBACK_MAP[handlerName];
-    const sfxKey = archetype ? STORY_ARCHETYPE_SOUNDS[archetype] : 'skill1';
-    console.log(`   Chave usada: sfx.${sfxKey}`);
-    playSkillSound(handlerName);
-};
-
-// =================================================================
-// ✅ FIM DO ARQUIVO — historia.js V6.1
-// =================================================================
-// =================================================================
-// historia.js — V6.1 — Bloco 6.1 (CORREÇÃO DE FX)
-// Ajusta z-index e posicionamento dos efeitos para ficarem ACIMA dos tiles
-// =================================================================
-
-(function fixStoryFxZIndex() {
-    // 1. Injeta CSS de correção
-    if (!document.getElementById('storyFxFixStyle')) {
-        const style = document.createElement('style');
-        style.id = 'storyFxFixStyle';
-        style.textContent = `
-            /* Garante que todo FX fique acima dos tiles */
-            #board, #tutorialBoard {
-                isolation: isolate;
-            }
-            #board .story-fx,
-            #tutorialBoard .story-fx {
-                z-index: 200 !important;
-            }
-            #board .story-fx * ,
-            #tutorialBoard .story-fx * {
-                pointer-events: none;
-            }
-            /* Empurra a arrow e demais indicadores pra cima */
-            .tutorial-arrow {
-                z-index: 210 !important;
-            }
-            /* Aumenta z-index dos tokens também pra não ficarem sob FXs */
-            #board .token {
-                z-index: 150 !important;
-            }
-        `;
-        document.head.appendChild(style);
-    }
-
-    // 2. Redireciona os FX para serem filhos do GRID (mesmo contexto dos tiles)
-    // Em vez de #board → .grid
-    function getFxContainer() {
-        const grid = document.getElementById('grid');
-        if (grid) return grid;
-        return document.getElementById('board');
-    }
-
-    // 3. Sobrescreve fxPos pra funcionar com o grid
-    const _origFxPos = window.fxPos;
-    window.fxPos = function(x, y) {
-        const s = (typeof getStep === 'function') ? getStep() : 59;
-        // Pega padding do board (o wrapper), não do grid
-        const board = document.getElementById('board');
-        let pad = 8;
-        if (board) {
-            const cs = getComputedStyle(board);
-            const p = parseFloat(cs.padding || '8');
-            if (!isNaN(p)) pad = p;
-        }
-        return { left: (x * s + pad), top: (y * s + pad), step: s, pad };
+        return Math.floor(baseMult + ultimatesBonus + amuletsBonus + shapesBonus);
     };
 
-    // 4. Sobrescreve spawnFxAt pra usar o grid como container
-    const _origSpawnFxAt = window.spawnFxAt;
-    window.spawnFxAt = function(fxKey, cssClass, x, y, opts = {}) {
-        // Força o container a ser o grid, mesmo se opts.appendTo for passado
-        const container = getFxContainer();
+    // ---- 3. Substitui calcularEstrelas (garante 1 mínimo) ----
+    window.calcularEstrelas = function(score, maxScore) {
+        if (!maxScore || maxScore <= 0) return 1;   // fallback: 1 estrela
+        const ratio = score / maxScore;
+        if (ratio >= 0.60) return 3;
+        if (ratio >= 0.35) return 2;
+        return 1;   // ⚠️ mínimo 1 (nunca 0 se fechou a fase)
+    };
 
-        const { left, top, step } = fxPos(x, y);
-        const el = fxElement(fxKey, `<div class="${cssClass}"></div>`);
-        if (!el) return null;
+    // ---- 4. Substitui showStoryVictoryScreen pra corrigir animação ----
+    const _origShowVictory = window.showStoryVictoryScreen;
 
-        el.style.left = left + 'px';
-        el.style.top  = top + 'px';
+    window.showStoryVictoryScreen = function(phase, drops, rewards, meta) {
+        _origShowVictory.call(this, phase, drops, rewards, meta);
 
-        if (!el.style.width)  el.style.width  = step + 'px';
-        if (!el.style.height) el.style.height = step + 'px';
+        const ov = document.getElementById('storyVictoryOverlay');
+        if (!ov) return;
 
-        el.style.zIndex = '200';
+        const stars = meta.stars || 0;
+        const starEls = ov.querySelectorAll('.story-stars-big .story-star');
 
-        if (opts.scale)  el.style.transform = `scale(${opts.scale})`;
-        if (opts.extraClass) el.classList.add(...String(opts.extraClass).split(' '));
-        if (opts.delay)  el.style.animationDelay = opts.delay + 'ms';
+        // Reset: esconde todas
+        starEls.forEach(el => el.classList.remove('show'));
 
-        const duration = opts.duration || 800;
+        // Vazias aparecem imediatamente; conquistadas aparecem em sequência
         setTimeout(() => {
-            if (el.parentNode) el.parentNode.removeChild(el);
-        }, duration);
+            starEls.forEach((el, i) => {
+                const starNum = i + 1;
+                if (starNum <= stars) {
+                    // Conquistada — aparece em sequência (300ms cada)
+                    setTimeout(() => el.classList.add('show'), starNum * 300);
+                } else {
+                    // Vazia — aparece imediatamente
+                    el.classList.add('show');
+                }
+            });
+        }, 200);
 
-        container.appendChild(el);
-        return el;
+        console.log(`⭐ Estrelas: ${stars}/3 — Score: ${meta.score}/${meta.maxScore} (${Math.round(meta.score/meta.maxScore*100)}%)`);
     };
 
-    console.log('✅ FX z-index corrigido — efeitos agora ficam acima dos tiles.');
-})();
-// =================================================================
-// historia.js — V6.2 — Bloco 6.2
-// Suporte a dmg customizado por skill (skill.dmg sobrescreve enemy.atk)
-// =================================================================
-
-(function patchDmgSupport() {
-    // Guarda a função original
-    const _origApplyStorySkill = window.applyStorySkill;
-
-    // Patch no applyStorySkill: se a skill tem dmg, injeta um mini-override
-    window.applyStorySkill = async function(enemy, skill) {
-        if (!enemy || !skill) return;
-
-        // Se a skill tem "dmg" próprio, cria um clone do enemy com atk = skill.dmg
-        // Assim os handlers que leem enemy.atk pegam o valor customizado
-        let effectiveEnemy = enemy;
-        if (typeof skill.dmg === 'number' && skill.dmg > 0) {
-            effectiveEnemy = Object.assign({}, enemy, { atk: skill.dmg });
-        }
-
-        return _origApplyStorySkill.call(this, effectiveEnemy, skill);
-    };
-
-    console.log('✅ Suporte a skill.dmg ativado.');
+    console.log('✅ Sistema de estrelas V7.2 aplicado (limiares generosos + mínimo 1).');
 })();
