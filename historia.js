@@ -1,29 +1,20 @@
 // =================================================================
 // ENTIDADES: Confronto de Lendas — MODO HISTÓRIA
-// historia.js — V7.0
+// historia.js — V8.1 (arquivo completo, sem patches empilhados)
 // =================================================================
 //
 // ⚠️ NÃO TOCA EM entidades.js
 // Sobrescreve applyDmg/manageTurns/saveAndRefresh SÓ quando _storyMode === true.
 //
-// V7.0 — MUDANÇAS PRINCIPAIS:
-//   • Sistema de estrelas por fase (⭐⭐⭐)
-//   • 10 heróis desbloqueáveis por estrelas totais
-//   • Heróis novos com PA único (override do executeAction em _storyMode)
-//   • OCA mostra heróis bloqueados em silhueta
-//   • Sprites dos heróis novos em tabela editável (emoji por padrão)
-//   • CLASS_DB estendido no modo história (sem tocar no entidades.js)
-//
-// V6.x — CORREÇÕES ACUMULADAS:
-//   • Skills únicas para cada animal dos 13 atos
-//   • Sistema STORY_FX_SPRITES com fallback CSS → sprite
-//   • 27 efeitos visuais CSS + 12 helpers de FX
-//   • Bosses fiéis ao entidades.js (mesma IA, som, comportamento)
-//   • Sistema de som por arquétipo com fallback
-//   • skill.dmg sobrescreve enemy.atk
-//   • B1..B7 (playBossTheme, unlockAudio, aldeia_bg, save, re-render, uiIcon)
-//   • Desbloqueio de capítulo correto
-//   • OCA — só permite 1 herói por vez
+// O QUE MUDOU NA V8.1 (em relação à V7.0 + patches V7.2/V7.6/V8.0):
+//   • triggerBravelyChain para heróis novos: ÚNICA fonte de verdade
+//   • executeAction para heróis novos: ÚNICA fonte de verdade
+//     - Guerreiro ataca SÓ tile adjacente a cada passo
+//     - Mago/Arqueiro ataca à distância
+//     - Bravely SEMPRE chama showBravelyAnimation + triggerBravelyChain
+//   • installStoryOverrides NÃO sobrescreve mais executeAction
+//   • Sistema de estrelas: limiares generosos (60%/35%/15%) + mínimo 1
+//   • Todos os patches V7.x/V8.0 antigos foram REMOVIDOS e integrados
 // =================================================================
 
 // =================================================================
@@ -119,7 +110,6 @@
         .story-phase-enemy img{width:32px;height:32px;object-fit:contain;filter:drop-shadow(0 0 3px rgba(0,0,0,.6))}
         .story-phase-arrow{color:#8a7a52;font-size:.85rem;margin:0 2px}
         .story-enemy-mini{font-size:1.3rem}
-        /* ===== ESTRELAS ===== */
         .story-star{display:inline-block;font-size:1em;line-height:1;filter:drop-shadow(0 0 3px rgba(0,0,0,.6))}
         .story-star.on{color:#e8b923;text-shadow:0 0 6px rgba(232,185,35,.7)}
         .story-star.off{color:#4a3a20;opacity:.6}
@@ -131,7 +121,6 @@
         .story-stars-big .story-star.big-on{color:#e8b923;text-shadow:0 0 15px rgba(232,185,35,.9),0 0 30px rgba(232,185,35,.5)}
         .story-stars-big .story-star.big-off{color:#3a2d18;opacity:.5}
         .story-stars-big .story-star.big-off.show{opacity:.5}
-        /* ===== HERÓIS BLOQUEADOS ===== */
         .story-heroes-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:20px;margin-bottom:30px}
         .story-hero-card{background:linear-gradient(180deg,rgba(201,162,39,.05),transparent 40%),linear-gradient(180deg,rgba(42,31,16,.9),rgba(26,18,8,.9));border:2px solid #3d2d18;border-radius:8px;padding:20px 15px;text-align:center;cursor:pointer;transition:all .3s;position:relative}
         .story-hero-card:hover:not(.locked){transform:translateY(-4px);border-color:#6a5024}
@@ -240,7 +229,6 @@
         .story-result-btn.primary:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,.6),0 0 25px rgba(232,185,35,.4)}
         .story-result-btn.secondary{background:linear-gradient(180deg,rgba(201,162,39,.08),transparent 40%),linear-gradient(135deg,#3d2d18,#2a1f10);color:#c8b787;border-color:#6a5024}
         .story-result-btn.secondary:hover{background:linear-gradient(180deg,rgba(201,162,39,.2),transparent 45%),linear-gradient(135deg,#5a4220,#3a2a14);color:#f0e2c0;border-color:#c9a227}
-        /* ===== TOAST ===== */
         .story-toast{position:fixed;top:20px;right:20px;background:linear-gradient(135deg,#2c3e50,#34495e);color:white;padding:15px 20px;border-radius:8px;border-left:4px solid #f1c40f;box-shadow:0 5px 15px rgba(0,0,0,.5);z-index:10010;max-width:320px;transform:translateX(120%);transition:transform .35s cubic-bezier(.34,1.56,.64,1);animation:storyToastIn .35s cubic-bezier(.34,1.56,.64,1) forwards}
         @keyframes storyToastIn{from{transform:translateX(120%)}to{transform:translateX(0)}}
         .story-toast .toast-title{font-family:'Cinzel',serif;font-weight:700;font-size:.8rem;letter-spacing:2px;color:#f1c40f;margin-bottom:4px}
@@ -257,7 +245,6 @@
             .story-stars-big{font-size:2.4rem;gap:10px}
             .story-toast{right:10px;left:10px;max-width:none}
         }
-        /* ===== DIÁLOGO DO BOSS ===== */
         .story-saci-dialog-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(10,6,2,.92);z-index:10003;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto;animation:storyFadeIn .4s ease}
         @keyframes storyFadeIn{from{opacity:0}to{opacity:1}}
         .story-saci-dialog{background:radial-gradient(circle at top,rgba(142,68,173,.18),transparent 55%),linear-gradient(180deg,#2a1f10 0%,#1a1208 100%);border:3px solid #8e44ad;border-radius:10px;padding:30px 25px;max-width:620px;width:100%;box-shadow:0 0 60px rgba(142,68,173,.4);animation:storyPanelIn .5s cubic-bezier(.25,.8,.3,1)}
@@ -384,12 +371,8 @@
     `;
     document.head.appendChild(style);
 })();
-
 // =================================================================
 // 🎨 SPRITES / EMOJIS
-// -----------------------------------------------------------------
-// Preserva 100% dos links já configurados.
-// Novos slots (heróis, inimigos sem sprite) começam vazios e caem em emoji.
 // =================================================================
 const SPRITES_STORY = {
     // --- Ato 1 — Inimigos ---
@@ -397,57 +380,57 @@ const SPRITES_STORY = {
     'jacare':'https://i.imgur.com/oTZzXX2.gif',
     'cervo':'https://i.imgur.com/iH2bRRx.gif',
     'onca_parda':'https://i.imgur.com/jN7AuyW.gif',
-    // --- Ato 2 — Inimigos ---
+    // --- Ato 2 ---
     'tamandua':'https://i.imgur.com/8Breoi9.gif',
     'anta':'https://i.imgur.com/0avAEnD.gif',
     'queixada':'https://i.imgur.com/0fsGkKs.gif',
     'sucuri':'https://i.imgur.com/0dt6Jk2.gif',
-    // --- Ato 3 — Iara (rio) ---
+    // --- Ato 3 ---
     'piranha':'https://i.imgur.com/KKOPhc5.gif',
     'lontra':'https://i.imgur.com/wOHYX2a.gif',
     'ariranha':'https://i.imgur.com/7obkFIq.gif',
     'pirarucu':'https://i.imgur.com/4dHWgkT.gif',
-    // --- Ato 4 — Boitatá (caverna) ---
+    // --- Ato 4 ---
     'cascavel':'https://i.imgur.com/4QjmPV2.gif',
     'coral':'https://i.imgur.com/8kstFde.gif',
     'jararaca':'https://i.imgur.com/5Ll9B9h.gif',
     'tartaruga':'https://i.imgur.com/wr0u1rt.gif',
-    // --- Ato 5 — Mula (campos) ---
+    // --- Ato 5 ---
     'bode':'https://i.imgur.com/vknDxdA.gif',
     'carneiro':'https://i.imgur.com/UlmnSrt.gif',
     'cavalo_selvagem':'https://i.imgur.com/Y8LuBY1.gif',
     'touro_bravo':'https://i.imgur.com/YAGfZmd.gif',
-    // --- Ato 6 — Corpo Seco (sertão) ---
+    // --- Ato 6 ---
     'urubu':'https://i.imgur.com/h4N8ZzS.gif',
     'carcara':'https://i.imgur.com/1A2lqg8.gif',
     'tatu':'https://i.imgur.com/5unG9x9.gif',
     'lobo_guara':'https://i.imgur.com/f7KgIRB.gif',
-    // --- Ato 7 — Lobisomem (mata fria) ---
+    // --- Ato 7 ---
     'cachorro_mato':'https://i.imgur.com/easvBrN.gif',
     'raposa':'',
     'guaxinim':'',
     'jaguatirica':'',
-    // --- Ato 8 — Cuca (pântano) ---
+    // --- Ato 8 ---
     'morcego':'',
     'coruja':'',
     'sapo_cururu':'',
     'seriema':'',
-    // --- Ato 9 — Boto (água doce) ---
+    // --- Ato 9 ---
     'tucunare':'',
     'piraiba':'',
     'dourada':'',
     'peixe_boi':'',
-    // --- Ato 10 — Boi (pasto) ---
+    // --- Ato 10 ---
     'bufalo':'',
     'vaca_louca':'',
     'cabra_preta':'',
     'zebu':'',
-    // --- Ato 11 — Jaci (montanha) ---
+    // --- Ato 11 ---
     'gato_mato':'',
     'mariposa_gigante':'',
     'quati':'',
     'sucuarana':'',
-    // --- Ato 12 — Guaraci (planalto) ---
+    // --- Ato 12 ---
     'gaviao':'',
     'falcao':'',
     'urutau':'',
@@ -466,8 +449,7 @@ const SPRITES_STORY = {
     'espectro_jaci':'',
     'espectro_guaraci':'',
 
-    // --- HERÓIS NOVOS (desbloqueáveis) ---
-    // Deixe vazio para usar emoji. Quando tiver sprite, coloque o link.
+    // --- HERÓIS NOVOS ---
     'heroi_Kanarott':'https://i.imgur.com/6Y2qBQh.gif',
     'heroi_Jurua':'https://i.imgur.com/R8Tf3nI.gif',
     'heroi_BichoFolharal':'https://i.imgur.com/NCbRRFK.gif',
@@ -529,67 +511,39 @@ const SPRITES_STORY = {
     'ui_arrow':'https://i.imgur.com/mXodqS6.png',
     'ui_warn':'',
     'ui_medal':'https://i.imgur.com/ViAr1EO.png',
-    'ui_star':'',              // ← estrela (deixe vazio = emoji ⭐)
-    'ui_star_empty':'',        // ← estrela vazia (deixe vazio = emoji ☆)
+    'ui_star':'',
+    'ui_star_empty':'',
     'elem_fogo':'https://i.imgur.com/JouEZbM.png',
     'elem_agua':'https://i.imgur.com/tMRUv48.png',
     'elem_terra':'https://i.imgur.com/ZVPQ9iH.png',
     'elem_ar':'https://i.imgur.com/HLqTdbd.png',
-    // Aliases
     'icon_story':'https://i.imgur.com/aL5KByZ.png','icon_locked':'https://i.imgur.com/wGgq9l7.png','icon_unlocked':'',
     'icon_skull':'https://i.imgur.com/GPSPBly.png','icon_drop':'https://i.imgur.com/a5t2pWl.png','icon_gold':'https://i.imgur.com/LIfKWB8.png'
 };
 
 // =================================================================
-// 🔤 EMOJIS (fallback quando não há sprite no slot acima)
-// -----------------------------------------------------------------
-// Toda chave usada no código direto (ex: heroi_Kanarott) deve ter
-// um emoji aqui para não quebrar quando o sprite estiver vazio.
+// 🔤 EMOJIS (fallback)
 // =================================================================
 const EMOJI_STORY = {
-    // --- Ato 1 ---
     'porco_espinho':'🦔','jacare':'🐊','cervo':'🦌','onca_parda':'🐆','saci':'👺',
-    // --- Ato 2 ---
     'tamandua':'🐜','anta':'🦛','queixada':'🐗','sucuri':'🐍','mapinguari':'🦥',
-    // --- Ato 3 ---
     'piranha':'🐟','lontra':'🦦','ariranha':'🦦','pirarucu':'🐠','iara':'🧜‍♀️',
-    // --- Ato 4 ---
     'cascavel':'🐍','coral':'🐍','jararaca':'🐍','tartaruga':'🐢','boitata':'🔥',
-    // --- Ato 5 ---
     'bode':'🐐','carneiro':'🐏','cavalo_selvagem':'🐎','touro_bravo':'🐂','mula':'🐴',
-    // --- Ato 6 ---
     'urubu':'🦅','carcara':'🦅','tatu':'🦔','lobo_guara':'🐺','corpo_seco':'💀',
-    // --- Ato 7 ---
     'cachorro_mato':'🐕','raposa':'🦊','guaxinim':'🦝','jaguatirica':'🐆','lobisomem':'🐺',
-    // --- Ato 8 ---
     'morcego':'🦇','coruja':'🦉','sapo_cururu':'🐸','seriema':'🐦','cuca':'🧙‍♀️',
-    // --- Ato 9 ---
     'tucunare':'🐟','piraiba':'🐟','dourada':'🐟','peixe_boi':'🦭','boto':'🐬',
-    // --- Ato 10 ---
     'bufalo':'🐃','vaca_louca':'🐄','cabra_preta':'🐐','zebu':'🐂','boi':'🐂',
-    // --- Ato 11 ---
     'gato_mato':'🐈','mariposa_gigante':'🦋','quati':'🦝','sucuarana':'🐆','jaci':'🌙',
-    // --- Ato 12 ---
     'gaviao':'🦅','falcao':'🦅','urutau':'🦉','aguia_cinzenta':'🦅','guaraci':'☀️',
-    // --- Ato 13 — Espectros ---
     'espectro_saci':'👺','espectro_mapinguari':'🦥','espectro_iara':'🧜‍♀️','espectro_boitata':'🔥',
     'espectro_mula':'🐴','espectro_corposeco':'💀','espectro_lobisomem':'🐺','espectro_cuca':'🧙‍♀️',
     'espectro_boto':'🐬','espectro_boi':'🐂','espectro_jaci':'🌙','espectro_guaraci':'☀️',
     'anhanga':'👹',
-
-    // --- HERÓIS NOVOS (fallback emoji) ---
-    'heroi_Kanarott':'🦅',
-    'heroi_Jurua':'🐆',
-    'heroi_BichoFolharal':'🐿️',
-    'heroi_Eru':'🦌',
-    'heroi_Teperesik':'🐢',
-    'heroi_Andure':'🐬',
-    'heroi_PajeAnhanguera':'🦉',
-    'heroi_MaeDaMata':'🌳',
-    'heroi_Araci':'🦜',
-    'heroi_Tapyrayawara':'🐆',
-
-    // --- Cenários ---
+    'heroi_Kanarott':'🦅','heroi_Jurua':'🐆','heroi_BichoFolharal':'🐿️','heroi_Eru':'🦌',
+    'heroi_Teperesik':'🐢','heroi_Andure':'🐬','heroi_PajeAnhanguera':'🦉','heroi_MaeDaMata':'🌳',
+    'heroi_Araci':'🦜','heroi_Tapyrayawara':'🐆',
     'bg_1_1':'🌲','bg_1_2':'🏞️','bg_1_3':'🌳','bg_1_4':'🌲','bg_1_boss':'🌪️',
     'bg_2_1':'🌿','bg_2_2':'🌳','bg_2_3':'🌲','bg_2_4':'🪨','bg_2_boss':'🌋',
     'bg_3_1':'💧','bg_3_2':'🌊','bg_3_3':'🏞️','bg_3_4':'🌊','bg_3_boss':'🌊',
@@ -603,31 +557,21 @@ const EMOJI_STORY = {
     'bg_11_1':'🏔️','bg_11_2':'🌙','bg_11_3':'⭐','bg_11_4':'🌑','bg_11_boss':'🌙',
     'bg_12_1':'☀️','bg_12_2':'🔥','bg_12_3':'🌵','bg_12_4':'🏜️','bg_12_boss':'☀️',
     'bg_13_1':'🌪️','bg_13_2':'🌋','bg_13_3':'🌙','bg_13_4':'👹',
-
-    // --- Capas ---
     'capa_ato1':'📖','capa_ato2':'📕','capa_ato3':'📘','capa_ato4':'📙','capa_ato5':'📗',
     'capa_ato6':'📓','capa_ato7':'📔','capa_ato8':'📒','capa_ato9':'📓','capa_ato10':'📕',
     'capa_ato11':'📘','capa_ato12':'📙','capa_ato13':'📕',
-
-    // --- Aldeia ---
     'aldeia_bg':'🏘️','aldeia_atos':'🗺️','aldeia_oca':'🏠','aldeia_loja':'🧙',
     'aldeia_ritual':'⚗️','aldeia_bestiario':'📖','aldeia_tesouraria':'🏆',
-
-    // --- Armas ---
     'arma_cajado':'🪄','arma_arco':'🏹','arma_manopla':'🪓',
-
-    // --- Ícones UI ---
     'ui_gold':'💰','ui_xp':'⭐','ui_swap':'🔄','ui_home':'🏘️','ui_play':'▶',
     'ui_gift':'🎁','ui_crown':'👑','ui_sparkle':'✨','ui_skull':'💀','ui_lock':'🔒',
     'ui_check':'✅','ui_arrow':'▶','ui_warn':'⚠️','ui_medal':'🏅',
     'ui_star':'⭐','ui_star_empty':'☆',
     'elem_fogo':'🔥','elem_agua':'💧','elem_terra':'⛰️','elem_ar':'🌪️',
-    // Aliases
     'icon_story':'📖','icon_locked':'🔒','icon_unlocked':'✅',
     'icon_skull':'💀','icon_drop':'💎','icon_gold':'💰'
 };
 
-// Mapeamento pro jogo base (reusa sprite/tema/lógica)
 const STORY_TO_BASE_BOSS = {
     'saci': 'SACI','mapinguari': 'MAPINGUARI','iara': 'IARA','boitata': 'BOITATA',
     'mula': 'MULA','corpo_seco': 'CORPOSECO','lobisomem': 'LOBISOMEM','cuca': 'CUCA',
@@ -649,12 +593,6 @@ const STORY_TO_BASE_BOSS = {
     'espectro_lobisomem': 'LOBISOMEM','espectro_cuca': 'CUCA','espectro_boto': 'BOTO',
     'espectro_boi': 'BOI','espectro_jaci': 'JACI','espectro_guaraci': 'GUARACI'
 };
-
-const SPECTRAL_IDS = [
-    'espectro_saci','espectro_mapinguari','espectro_iara','espectro_boitata',
-    'espectro_mula','espectro_corposeco','espectro_lobisomem','espectro_cuca',
-    'espectro_boto','espectro_boi','espectro_jaci','espectro_guaraci'
-];
 
 // =================================================================
 // 🎯 SISTEMA UNIVERSAL DE ÍCONES
@@ -706,8 +644,8 @@ function createEmptyStoryProgress(){
         selectedHeroes:['Tupa'],
         heroLevels:{Tupa:1,Sume:1,Caipora:1}, heroXP:{Tupa:0,Sume:0,Caipora:0},
         craftedWeapons:[], phasesEverCompleted:[],
-        starsByPhase:{},              // ⭐ NOVO — estrelas por fase
-        unlockedHeroesStory:['Tupa','Sume','Caipora'],  // ⭐ NOVO — heróis desbloqueados no modo história
+        starsByPhase:{},
+        unlockedHeroesStory:['Tupa','Sume','Caipora'],
     };
 }
 
@@ -731,7 +669,6 @@ function loadStoryProgressByName(saveName){
         const loaded = JSON.parse(raw);
         STORY_PROGRESS = Object.assign(createEmptyStoryProgress(), loaded);
 
-        // Garante defaults mínimos
         if(!Array.isArray(STORY_PROGRESS.unlockedChapters) || STORY_PROGRESS.unlockedChapters.length === 0){
             STORY_PROGRESS.unlockedChapters = [1];
         }
@@ -791,17 +728,9 @@ function getLastUsedSaveName(){
 // 🎨 ELEMENTO por nome do save
 // =================================================================
 const HERO_FIXED_ELEMENTS = {
-    // Heróis novos (fixo). Heróis base ficam dinâmicos (não listados aqui).
-    'Kanarott': 'TERRA',
-    'Teperesik': 'TERRA',
-    'Eru': 'FOGO',
-    'Anduré': 'AGUA',
-    'Mãe da Mata': 'TERRA',
-    'Pajé Anhanguera': 'FOGO',
-    'Juruá': 'TERRA',
-    'Araci': 'AR',
-    'Bicho Folharal': 'AR',
-    "Tapyra'yawara": 'TERRA',
+    'Kanarott': 'TERRA','Teperesik': 'TERRA','Eru': 'FOGO','Anduré': 'AGUA',
+    'Mãe da Mata': 'TERRA','Pajé Anhanguera': 'FOGO','Juruá': 'TERRA',
+    'Araci': 'AR','Bicho Folharal': 'AR',"Tapyra'yawara": 'TERRA',
 };
 
 function getElementFromName(name){
@@ -823,12 +752,6 @@ function getHeroStoryElement(heroClass){
 // 🎁 HELPERS DE INVENTÁRIO / PROGRESSO
 // =================================================================
 function addMaterial(id,q=1){ STORY_PROGRESS.inventory[id] = (STORY_PROGRESS.inventory[id]||0)+q; }
-function removeMaterial(id,q=1){
-    if(!STORY_PROGRESS.inventory[id] || STORY_PROGRESS.inventory[id]<q) return false;
-    STORY_PROGRESS.inventory[id]-=q;
-    if(STORY_PROGRESS.inventory[id]<=0) delete STORY_PROGRESS.inventory[id];
-    return true;
-}
 function addGold(a){ STORY_PROGRESS.gold = Math.max(0,(STORY_PROGRESS.gold||0)+a); }
 function spendGold(a){
     if((STORY_PROGRESS.gold||0)<a) return false;
@@ -850,6 +773,133 @@ function completePhase(cid,pid,nextPid){
 function getStoryEnemyName(id){ return STORY_ENEMIES[id]?.name || id; }
 
 // =================================================================
+// 🎯 SISTEMA DE ESTRELAS — CONFIGURAÇÃO (V8.1 — limiares generosos)
+// =================================================================
+const STORY_STARS_CONFIG = {
+    MAX_STARS_PER_PHASE: 3,
+    THRESHOLD_3_STARS: 0.60,
+    THRESHOLD_2_STARS: 0.35,
+    THRESHOLD_1_STAR:  0.15,
+    REF_ULTIMATE_BONUS: 150,
+    REF_AMULET_BONUS: 100,
+    REF_SHAPE_LINHA: 50,
+    REF_SHAPE_L: 75,
+    REF_SHAPE_ZIGZAG: 100,
+    REF_SHAPE_QUADRADO: 80,
+    REF_MAX_TURNS_MULT: 1.5,
+    REF_MAX_ULTIMATES: 1,
+    REF_MAX_AMULETS: 2,
+};
+
+function calcularMaxScorePossivel(cid, phase) {
+    if (!phase || !phase.enemies || phase.enemies.length === 0) return 100;
+    const lastEnemyId = phase.enemies[phase.enemies.length - 1];
+    const lastEnemy = STORY_ENEMIES[lastEnemyId];
+    const bossHp = lastEnemy ? lastEnemy.hp : 30;
+    const baseRaw = 1000 + ((bossHp - 30) * 50);
+    const base = Math.max(100, baseRaw);
+    const baseMult = base * 1.5;
+    const ultimatesBonus = 1 * 150;
+    const amuletsBonus   = 2 * 100;
+    const shapesBonus    = 100;
+    return Math.floor(baseMult + ultimatesBonus + amuletsBonus + shapesBonus);
+}
+
+function calcularEstrelas(score, maxScore) {
+    if (!maxScore || maxScore <= 0) return 1;
+    const ratio = score / maxScore;
+    if (ratio >= 0.60) return 3;
+    if (ratio >= 0.35) return 2;
+    return 1;
+}
+
+function getStarsForPhase(phaseId) {
+    return STORY_PROGRESS.starsByPhase[phaseId] || 0;
+}
+
+function saveStarsForPhase(phaseId, stars) {
+    const current = getStarsForPhase(phaseId);
+    const effective = Math.max(current, stars);
+    STORY_PROGRESS.starsByPhase[phaseId] = effective;
+    return effective;
+}
+
+function getTotalStars() {
+    return Object.values(STORY_PROGRESS.starsByPhase || {}).reduce((a,b)=>a+b, 0);
+}
+
+function getMaxTotalStars() {
+    let totalPhases = 0;
+    Object.values(STORY_CHAPTERS).forEach(ch => { totalPhases += ch.phases.length; });
+    return totalPhases * STORY_STARS_CONFIG.MAX_STARS_PER_PHASE;
+}
+
+// =================================================================
+// 🏅 DESBLOQUEIO DE HERÓIS POR ESTRELAS
+// =================================================================
+const STORY_HERO_UNLOCKS = [
+    { className: 'Kanarott',        displayName: 'Kanarott',        starsNeeded: 10  },
+    { className: 'Juruá',           displayName: 'Juruá',           starsNeeded: 20  },
+    { className: 'Bicho Folharal',  displayName: 'Bicho Folharal',  starsNeeded: 30  },
+    { className: 'Eru',             displayName: 'Eru',             starsNeeded: 45  },
+    { className: 'Teperesik',       displayName: 'Teperesik',       starsNeeded: 60  },
+    { className: 'Anduré',          displayName: 'Anduré',          starsNeeded: 75  },
+    { className: 'Pajé Anhanguera', displayName: 'Pajé Anhanguera', starsNeeded: 90  },
+    { className: 'Mãe da Mata',     displayName: 'Mãe da Mata',     starsNeeded: 110 },
+    { className: 'Araci',           displayName: 'Araci',           starsNeeded: 130 },
+    { className: "Tapyra'yawara",   displayName: "Tapyra'yawara",   starsNeeded: 150 },
+];
+
+function checkHeroUnlocks() {
+    if (!Array.isArray(STORY_PROGRESS.unlockedHeroesStory)) {
+        STORY_PROGRESS.unlockedHeroesStory = ['Tupa','Sume','Caipora'];
+    }
+    const totalStars = getTotalStars();
+    const unlocked = [];
+    STORY_HERO_UNLOCKS.forEach(entry => {
+        if (totalStars >= entry.starsNeeded && !STORY_PROGRESS.unlockedHeroesStory.includes(entry.className)) {
+            STORY_PROGRESS.unlockedHeroesStory.push(entry.className);
+            unlocked.push(entry);
+        }
+    });
+    if (unlocked.length > 0) {
+        saveStoryProgress();
+        unlocked.forEach(entry => {
+            showToast('🏅 HERÓI DESBLOQUEADO!', entry.displayName, '🏅');
+            try {
+                if (typeof playSfx === 'function') playSfx('win');
+            } catch(e) {}
+        });
+    }
+    return unlocked;
+}
+
+function showToast(title, body, icon='⭐', durationMs = 4000) {
+    try {
+        const toast = document.createElement('div');
+        toast.className = 'story-toast';
+        toast.innerHTML = `
+            <div class="toast-wrap">
+                <div class="toast-icon">${icon}</div>
+                <div>
+                    <div class="toast-title">${title}</div>
+                    <div class="toast-body">${body}</div>
+                </div>
+            </div>`;
+        document.body.appendChild(toast);
+        setTimeout(() => {
+            toast.style.transition = 'transform .35s ease-in, opacity .35s ease-in';
+            toast.style.transform = 'translateX(120%)';
+            toast.style.opacity = '0';
+            setTimeout(() => {
+                if (toast.parentNode) toast.parentNode.removeChild(toast);
+            }, 400);
+        }, durationMs);
+    } catch(e) {
+        console.warn('showToast falhou:', e);
+    }
+}
+// =================================================================
 // 🗺️ CAPÍTULOS (13 atos)
 // =================================================================
 const STORY_CHAPTERS = {
@@ -860,84 +910,84 @@ const STORY_CHAPTERS = {
         {id:'1-4',name:'Coração da Mata',bg:'bg_1_4',enemies:['porco_espinho','jacare','cervo','onca_parda'],description:'A onça-parda também caiu.',reward:{xp:50,gold:60}},
         {id:'1-BOSS',name:'Redemoinho',bg:'bg_1_boss',isBoss:true,enemies:['porco_espinho','jacare','cervo','onca_parda','saci'],description:'Enfrente o Saci.',reward:{xp:100,gold:100,chapterComplete:true}}
     ]},
-    2:{id:2,name:'Ato 2 — Mata Fechada',description:'O Mapinguari, o gigante protetor das árvores, foi consumido pela frustração. Agora ele devora o que jurou proteger. Atravesse a mata fechada e liberte o Pilar da Floresta.',capa:'capa_ato2',phases:[
+    2:{id:2,name:'Ato 2 — Mata Fechada',description:'O Mapinguari, o gigante protetor das árvores, foi consumido pela frustração. Agora ele devora o que jurou proteger.',capa:'capa_ato2',phases:[
         {id:'2-1',name:'Trilha das Raízes',bg:'bg_2_1',enemies:['tamandua'],description:'A mata fechada começa aqui.',reward:{xp:20,gold:25}},
         {id:'2-2',name:'Clareira Selvagem',bg:'bg_2_2',enemies:['tamandua','anta'],description:'Dois guardiões bloqueiam o caminho.',reward:{xp:30,gold:40}},
         {id:'2-3',name:'Vale dos Ossos',bg:'bg_2_3',enemies:['tamandua','anta','queixada'],description:'Três servos do Devorador.',reward:{xp:45,gold:55}},
         {id:'2-4',name:'Águas Turvas',bg:'bg_2_4',enemies:['tamandua','anta','queixada','sucuri'],description:'A Sucuri Gigante protege a passagem.',reward:{xp:65,gold:80}},
         {id:'2-BOSS',name:'Toca do Devorador',bg:'bg_2_boss',isBoss:true,enemies:['tamandua','anta','queixada','sucuri','mapinguari'],description:'Enfrente o Mapinguari.',reward:{xp:150,gold:150,chapterComplete:true}}
     ]},
-    3:{id:3,name:'Ato 3 — Águas Profundas',description:'A Iara, sedutora dos rios, foi envenenada pela raiva. Suas águas agora afogam sem piedade. Mergulhe no leito do rio e liberte o Canto da Perdição.',capa:'capa_ato3',phases:[
+    3:{id:3,name:'Ato 3 — Águas Profundas',description:'A Iara, sedutora dos rios, foi envenenada pela raiva. Suas águas agora afogam sem piedade.',capa:'capa_ato3',phases:[
         {id:'3-1',name:'Margem Sombria',bg:'bg_3_1',enemies:['piranha'],description:'O rio começa a ficar turvo.',reward:{xp:25,gold:30}},
         {id:'3-2',name:'Remanso Profundo',bg:'bg_3_2',enemies:['piranha','lontra'],description:'Dois guardiões das águas.',reward:{xp:40,gold:50}},
         {id:'3-3',name:'Cachoeira Sagrada',bg:'bg_3_3',enemies:['piranha','lontra','ariranha'],description:'Três servos do Canto.',reward:{xp:60,gold:70}},
         {id:'3-4',name:'Foz do Rio',bg:'bg_3_4',enemies:['piranha','lontra','ariranha','pirarucu'],description:'O Pirarucu bloqueia a foz.',reward:{xp:80,gold:100}},
         {id:'3-BOSS',name:'Palácio Submerso',bg:'bg_3_boss',isBoss:true,enemies:['piranha','lontra','ariranha','pirarucu','iara'],description:'Enfrente a Iara.',reward:{xp:200,gold:200,chapterComplete:true}}
     ]},
-    4:{id:4,name:'Ato 4 — Chamas da Noite',description:'O Boitatá, a serpente de fogo, aceitou o poder de Anhangá. Agora ele consome tudo em seu caminho. Atravesse as cavernas incandescentes e liberte a Serpente de Fogo.',capa:'capa_ato4',phases:[
+    4:{id:4,name:'Ato 4 — Chamas da Noite',description:'O Boitatá, a serpente de fogo, aceitou o poder de Anhangá. Agora ele consome tudo em seu caminho.',capa:'capa_ato4',phases:[
         {id:'4-1',name:'Entrada da Caverna',bg:'bg_4_1',enemies:['cascavel'],description:'A escuridão sibila.',reward:{xp:30,gold:35}},
         {id:'4-2',name:'Galeria das Serpentes',bg:'bg_4_2',enemies:['cascavel','coral'],description:'Duas serpentes guardam a passagem.',reward:{xp:45,gold:55}},
         {id:'4-3',name:'Câmara Ardente',bg:'bg_4_3',enemies:['cascavel','coral','jararaca'],description:'Três servos do fogo.',reward:{xp:65,gold:80}},
         {id:'4-4',name:'Lago de Lava',bg:'bg_4_4',enemies:['cascavel','coral','jararaca','tartaruga'],description:'A Tartaruga Ancestral protege o lago.',reward:{xp:90,gold:110}},
         {id:'4-BOSS',name:'Coração de Fogo',bg:'bg_4_boss',isBoss:true,enemies:['cascavel','coral','jararaca','tartaruga','boitata'],description:'Enfrente o Boitatá.',reward:{xp:250,gold:250,chapterComplete:true}}
     ]},
-    5:{id:5,name:'Ato 5 — A Maldição do Fogo',description:'A Mula sem Cabeça, amaldiçoada por seus pecados, foi consumida pela fúria. Agora relincha fogo e dor. Atravesse os campos em chamas e liberte o Relincho da Noite.',capa:'capa_ato5',phases:[
+    5:{id:5,name:'Ato 5 — A Maldição do Fogo',description:'A Mula sem Cabeça, amaldiçoada por seus pecados, foi consumida pela fúria.',capa:'capa_ato5',phases:[
         {id:'5-1',name:'Pastagem Abandonada',bg:'bg_5_1',enemies:['bode'],description:'O primeiro servo da maldição.',reward:{xp:35,gold:40}},
         {id:'5-2',name:'Cerca Quebrada',bg:'bg_5_2',enemies:['bode','carneiro'],description:'Dois guardiões do campo.',reward:{xp:50,gold:60}},
         {id:'5-3',name:'Estábulo em Cinzas',bg:'bg_5_3',enemies:['bode','carneiro','cavalo_selvagem'],description:'Três servos da Mula.',reward:{xp:70,gold:90}},
         {id:'5-4',name:'Curral Amaldiçoado',bg:'bg_5_4',enemies:['bode','carneiro','cavalo_selvagem','touro_bravo'],description:'O Touro Bravo guarda o curral.',reward:{xp:100,gold:120}},
         {id:'5-BOSS',name:'Relincho Final',bg:'bg_5_boss',isBoss:true,enemies:['bode','carneiro','cavalo_selvagem','touro_bravo','mula'],description:'Enfrente a Mula sem Cabeça.',reward:{xp:300,gold:300,chapterComplete:true}}
     ]},
-    6:{id:6,name:'Ato 6 — Ossos do Sertão',description:'O Corpo Seco, esqueleto faminto, foi tentado por Anhangá. Sua fome é infinita. Atravesse o sertão árido e liberte o Devorador de Almas.',capa:'capa_ato6',phases:[
+    6:{id:6,name:'Ato 6 — Ossos do Sertão',description:'O Corpo Seco, esqueleto faminto, foi tentado por Anhangá. Sua fome é infinita.',capa:'capa_ato6',phases:[
         {id:'6-1',name:'Terra Rachada',bg:'bg_6_1',enemies:['urubu'],description:'O céu já não é azul aqui.',reward:{xp:40,gold:45}},
-        {id:'6-2',name:'Cemitério Esquecido',bg:'bg_6_2',enemies:['urubu','carcara'],description:'Aves da morte guardam o caminho.',reward:{xp:55,gold:70}},
-        {id:'6-3',name:'Cavernas Secas',bg:'bg_6_3',enemies:['urubu','carcara','tatu'],description:'Três servos da fome.',reward:{xp:75,gold:95}},
-        {id:'6-4',name:'Vale dos Ossos',bg:'bg_6_4',enemies:['urubu','carcara','tatu','lobo_guara'],description:'O Lobo-Guará uiva para a morte.',reward:{xp:110,gold:130}},
-        {id:'6-BOSS',name:'Covil do Faminto',bg:'bg_6_boss',isBoss:true,enemies:['urubu','carcara','tatu','lobo_guara','corpo_seco'],description:'Enfrente o Corpo Seco.',reward:{xp:350,gold:350,chapterComplete:true}}
+        {id:'6-2',name:'Cemitério Esquecido',bg:'bg_6_2',enemies:['urubu','carcaara'],description:'Aves da morte guardam o caminho.',reward:{xp:55,gold:70}},
+        {id:'6-3',name:'Cavernas Secas',bg:'bg_6_3',enemies:['urubu','carcaara','tatu'],description:'Três servos da fome.',reward:{xp:75,gold:95}},
+        {id:'6-4',name:'Vale dos Ossos',bg:'bg_6_4',enemies:['urubu','carcaara','tatu','lobo_guara'],description:'O Lobo-Guará uiva para a morte.',reward:{xp:110,gold:130}},
+        {id:'6-BOSS',name:'Covil do Faminto',bg:'bg_6_boss',isBoss:true,enemies:['urubu','carcaara','tatu','lobo_guara','corpo_seco'],description:'Enfrente o Corpo Seco.',reward:{xp:350,gold:350,chapterComplete:true}}
     ]},
-    7:{id:7,name:'Ato 7 — A Maldição da Lua',description:'O Lobisomem, amaldiçoado a se transformar, ouviu Anhangá. A lua agora desperta apenas ódio. Atravesse a mata fria e liberte a Maldição da Lua.',capa:'capa_ato7',phases:[
+    7:{id:7,name:'Ato 7 — A Maldição da Lua',description:'O Lobisomem, amaldiçoado a se transformar, ouviu Anhangá. A lua agora desperta apenas ódio.',capa:'capa_ato7',phases:[
         {id:'7-1',name:'Mata Fria',bg:'bg_7_1',enemies:['cachorro_mato'],description:'O primeiro uivo ao longe.',reward:{xp:50,gold:55}},
         {id:'7-2',name:'Trilha do Uivo',bg:'bg_7_2',enemies:['cachorro_mato','raposa'],description:'Dois caçadores noturnos.',reward:{xp:65,gold:80}},
         {id:'7-3',name:'Bosque Enluarado',bg:'bg_7_3',enemies:['cachorro_mato','raposa','guaxinim'],description:'Três servos da lua.',reward:{xp:85,gold:105}},
         {id:'7-4',name:'Clareira do Ritual',bg:'bg_7_4',enemies:['cachorro_mato','raposa','guaxinim','jaguatirica'],description:'A Jaguatirica ronda o ritual.',reward:{xp:120,gold:150}},
         {id:'7-BOSS',name:'Lua Cheia',bg:'bg_7_boss',isBoss:true,enemies:['cachorro_mato','raposa','guaxinim','jaguatirica','lobisomem'],description:'Enfrente o Lobisomem.',reward:{xp:400,gold:400,chapterComplete:true}}
     ]},
-    8:{id:8,name:'Ato 8 — Poções e Sombras',description:'A Cuca, a velha bruxa, foi corrompida por Anhangá. Suas poções agora são veneno puro. Atravesse o pântano enfeitiçado e liberte a Bruxa da Floresta.',capa:'capa_ato8',phases:[
+    8:{id:8,name:'Ato 8 — Poções e Sombras',description:'A Cuca, a velha bruxa, foi corrompida por Anhangá. Suas poções agora são veneno puro.',capa:'capa_ato8',phases:[
         {id:'8-1',name:'Pântano Sombrio',bg:'bg_8_1',enemies:['morcego'],description:'A névoa esconde perigo.',reward:{xp:60,gold:65}},
         {id:'8-2',name:'Caverna dos Ecos',bg:'bg_8_2',enemies:['morcego','coruja'],description:'Olhos na escuridão.',reward:{xp:75,gold:90}},
         {id:'8-3',name:'Covil da Bruxa',bg:'bg_8_3',enemies:['morcego','coruja','sapo_cururu'],description:'Três servos da Cuca.',reward:{xp:95,gold:120}},
         {id:'8-4',name:'Caldeirão Fervente',bg:'bg_8_4',enemies:['morcego','coruja','sapo_cururu','seriema'],description:'A Seriema guarda o caldeirão.',reward:{xp:130,gold:160}},
         {id:'8-BOSS',name:'Ritual das Sombras',bg:'bg_8_boss',isBoss:true,enemies:['morcego','coruja','sapo_cururu','seriema','cuca'],description:'Enfrente a Cuca.',reward:{xp:450,gold:450,chapterComplete:true}}
     ]},
-    9:{id:9,name:'Ato 9 — Canto das Águas',description:'O Boto Rosa, sedutor das águas doces, foi corrompido pela luxúria de Anhangá. Seus encantos são mortalmente perigosos. Atravesse o rio fundo e liberte o Sedutor das Águas.',capa:'capa_ato9',phases:[
+    9:{id:9,name:'Ato 9 — Canto das Águas',description:'O Boto Rosa, sedutor das águas doces, foi corrompido pela luxúria de Anhangá.',capa:'capa_ato9',phases:[
         {id:'9-1',name:'Rio Calmo',bg:'bg_9_1',enemies:['tucunare'],description:'Mas o canto já se ouve.',reward:{xp:70,gold:75}},
         {id:'9-2',name:'Corredeira',bg:'bg_9_2',enemies:['tucunare','piraiba'],description:'Dois peixes guardam a correnteza.',reward:{xp:85,gold:100}},
         {id:'9-3',name:'Poço Fundo',bg:'bg_9_3',enemies:['tucunare','piraiba','dourada'],description:'Três servos das águas.',reward:{xp:105,gold:130}},
         {id:'9-4',name:'Remanso do Boto',bg:'bg_9_4',enemies:['tucunare','piraiba','dourada','peixe_boi'],description:'O Peixe-Boi protege o remanso.',reward:{xp:140,gold:170}},
         {id:'9-BOSS',name:'Canto Final',bg:'bg_9_boss',isBoss:true,enemies:['tucunare','piraiba','dourada','peixe_boi','boto'],description:'Enfrente o Boto Rosa.',reward:{xp:500,gold:500,chapterComplete:true}}
     ]},
-    10:{id:10,name:'Ato 10 — Terror do Pasto',description:'O Boi da Cara Preta, guardião das trevas, foi consumido pelo medo. Seu verdadeiro terror se revela. Atravesse o pasto noturno e liberte o Terrível das Sombras.',capa:'capa_ato10',phases:[
+    10:{id:10,name:'Ato 10 — Terror do Pasto',description:'O Boi da Cara Preta, guardião das trevas, foi consumido pelo medo.',capa:'capa_ato10',phases:[
         {id:'10-1',name:'Pasto Vazio',bg:'bg_10_1',enemies:['bufalo'],description:'O primeiro rugido.',reward:{xp:80,gold:85}},
         {id:'10-2',name:'Curral Abandonado',bg:'bg_10_2',enemies:['bufalo','vaca_louca'],description:'Dois guardiões do pasto.',reward:{xp:95,gold:110}},
         {id:'10-3',name:'Campo das Sombras',bg:'bg_10_3',enemies:['bufalo','vaca_louca','cabra_preta'],description:'Três servos do terror.',reward:{xp:115,gold:140}},
         {id:'10-4',name:'Curral da Morte',bg:'bg_10_4',enemies:['bufalo','vaca_louca','cabra_preta','zebu'],description:'O Zebu guarda o curral.',reward:{xp:150,gold:180}},
         {id:'10-BOSS',name:'Cara Preta',bg:'bg_10_boss',isBoss:true,enemies:['bufalo','vaca_louca','cabra_preta','zebu','boi'],description:'Enfrente o Boi da Cara Preta.',reward:{xp:550,gold:550,chapterComplete:true}}
     ]},
-    11:{id:11,name:'Ato 11 — Luz Fria da Lua',description:'Jaci, deusa da lua, foi envenenada pela melancolia. Seus raios queimam em vez de iluminar. Suba a montanha noturna e liberte a Deusa da Lua.',capa:'capa_ato11',phases:[
+    11:{id:11,name:'Ato 11 — Luz Fria da Lua',description:'Jaci, deusa da lua, foi envenenada pela melancolia. Seus raios queimam em vez de iluminar.',capa:'capa_ato11',phases:[
         {id:'11-1',name:'Encosta da Montanha',bg:'bg_11_1',enemies:['gato_mato'],description:'A noite é mais fria aqui.',reward:{xp:90,gold:95}},
         {id:'11-2',name:'Floresta de Névoa',bg:'bg_11_2',enemies:['gato_mato','mariposa_gigante'],description:'Sombras em movimento.',reward:{xp:105,gold:120}},
         {id:'11-3',name:'Penhasco Prateado',bg:'bg_11_3',enemies:['gato_mato','mariposa_gigante','quati'],description:'Três servos da lua.',reward:{xp:125,gold:150}},
         {id:'11-4',name:'Pico Enluarado',bg:'bg_11_4',enemies:['gato_mato','mariposa_gigante','quati','sucuarana'],description:'A Suçuarana ronda o pico.',reward:{xp:160,gold:190}},
         {id:'11-BOSS',name:'Trono Lunar',bg:'bg_11_boss',isBoss:true,enemies:['gato_mato','mariposa_gigante','quati','sucuarana','jaci'],description:'Enfrente Jaci.',reward:{xp:600,gold:600,chapterComplete:true}}
     ]},
-    12:{id:12,name:'Ato 12 — O Sol Devorador',description:'Guaraci, deus do sol, foi consumido pela arrogância. Seu sol queima sem piedade. Atravesse o planalto incandescente e liberte o Sol Devorador.',capa:'capa_ato12',phases:[
+    12:{id:12,name:'Ato 12 — O Sol Devorador',description:'Guaraci, deus do sol, foi consumido pela arrogância. Seu sol queima sem piedade.',capa:'capa_ato12',phases:[
         {id:'12-1',name:'Planalto Ardente',bg:'bg_12_1',enemies:['gaviao'],description:'O calor é insuportável.',reward:{xp:100,gold:105}},
         {id:'12-2',name:'Ravina Seca',bg:'bg_12_2',enemies:['gaviao','falcao'],description:'Dois senhores do céu.',reward:{xp:115,gold:130}},
         {id:'12-3',name:'Vale do Urutau',bg:'bg_12_3',enemies:['gaviao','falcao','urutau'],description:'Três servos do sol.',reward:{xp:135,gold:160}},
         {id:'12-4',name:'Ninho da Águia',bg:'bg_12_4',enemies:['gaviao','falcao','urutau','aguia_cinzenta'],description:'A Águia-Cinzenta protege o ninho.',reward:{xp:170,gold:200}},
         {id:'12-BOSS',name:'Trono Solar',bg:'bg_12_boss',isBoss:true,enemies:['gaviao','falcao','urutau','aguia_cinzenta','guaraci'],description:'Enfrente Guaraci.',reward:{xp:700,gold:700,chapterComplete:true}}
     ]},
-    13:{id:13,name:'Ato 13 — O Senhor do Abismo',description:'Anhangá reuniu os poderes que consumiu. Ele manifesta os doze guardiões como servos, e agora aguarda no abismo. Atravesse os portões do pesadelo e liberte o Senhor do Abismo.',capa:'capa_ato13',phases:[
+    13:{id:13,name:'Ato 13 — O Senhor do Abismo',description:'Anhangá reuniu os poderes que consumiu. Ele manifesta os doze guardiões como servos, e agora aguarda no abismo.',capa:'capa_ato13',phases:[
         {id:'13-1',name:'Portão dos Corrompidos',bg:'bg_13_1',isBoss:true,enemies:['saci','mapinguari','iara','boitata'],description:'Os quatro primeiros guardiões te aguardam.',reward:{xp:200,gold:200}},
         {id:'13-2',name:'Portão dos Caídos',bg:'bg_13_2',isBoss:true,enemies:['mula','corpo_seco','lobisomem','cuca'],description:'Os quatro guardiões do meio.',reward:{xp:250,gold:250}},
         {id:'13-3',name:'Portão do Crepúsculo',bg:'bg_13_3',isBoss:true,enemies:['boto','boi','jaci','guaraci'],description:'Os quatro guardiões finais.',reward:{xp:300,gold:300}},
@@ -946,7 +996,7 @@ const STORY_CHAPTERS = {
 };
 
 // =================================================================
-// 🎁 MATERIAIS / LOJA
+// 🎁 MATERIAIS
 // =================================================================
 const STORY_MATERIALS = {
     espinho:{id:'espinho',name:'Espinho',emoji:'🌵'},espinho_raro:{id:'espinho_raro',name:'Espinho Raro',emoji:'🌵'},
@@ -1099,1065 +1149,577 @@ const STORY_SHOP_ITEMS = [
 ];
 
 // =================================================================
-// 🏁 FIM DA PARTE 1/5
-// =================================================================
-// =================================================================
-// historia.js — V7.0 — Bloco 2/5
-// Tabelas dos heróis + diálogos + STORY_ENEMIES
-// =================================================================
-
-// =================================================================
-// 🎯 SISTEMA DE ESTRELAS — CONFIGURAÇÃO
-// =================================================================
-const STORY_STARS_CONFIG = {
-    MAX_STARS_PER_PHASE: 3,
-    TOTAL_PHASES: 64,           // 13 atos × ~5 fases = 64 (ajustável)
-    // Limiares em % do score máximo teórico
-    THRESHOLD_3_STARS: 0.90,    // ≥90% → 3 estrelas
-    THRESHOLD_2_STARS: 0.60,    // ≥60% → 2 estrelas
-    THRESHOLD_1_STAR:  0.30,    // ≥30% → 1 estrela
-    // Valores de referência pra "score máximo teórico"
-    REF_ULTIMATE_BONUS: 150,    // bônus por Poder Ancestral
-    REF_AMULET_BONUS: 100,      // bônus por muiraquitã
-    REF_SHAPE_LINHA: 50,
-    REF_SHAPE_L: 75,
-    REF_SHAPE_ZIGZAG: 100,
-    REF_SHAPE_QUADRADO: 80,
-    REF_MAX_TURNS_MULT: 1.5,    // melhor multiplicador de turnos
-    REF_MAX_ULTIMATES: 2,       // assume no máximo 2 PAs por fase
-    REF_MAX_AMULETS: 5,         // assume no máximo 5 muiraquitãs por fase
-};
-
-// =================================================================
 // 🦸 TABELA DE HERÓIS DO MODO HISTÓRIA
-// -----------------------------------------------------------------
-// Cada herói tem:
-//   displayName  → nome exibido (com acento)
-//   spriteKey    → chave em SPRITES_STORY (heroi_X)
-//   className    → chave técnica (usada em playerConfigs)
-//   role         → 'Guerreiro' | 'Mago' | 'Arqueiro'
-//   hp, atk      → atributos base
-//   range        → alcance mínimo pra atacar a distância (0 = corpo-a-corpo)
-//   element      → 'FOGO' | 'AGUA' | 'TERRA' | 'AR' | null (dinâmico)
-//   paKey        → chave do Poder Ancestral (STORY_HERO_PA)
-//   starsNeeded  → estrelas totais necessárias (0 = já desbloqueado)
 // =================================================================
 const STORY_HERO_CLASSES = {
-    // ---- BASE (sempre desbloqueados, elemento dinâmico) ----
     'Tupa': {
-        displayName: 'Tupã',
-        spriteKey: null,       // usa SPRITES.Tupa do entidades.js
-        className: 'Tupa',
-        role: 'Guerreiro',
-        hp: 16, atk: 3, range: 0,
-        element: null,
-        paKey: 'base_coluna',  // usa PA original do entidades.js
-        starsNeeded: 0,
+        displayName: 'Tupã', spriteKey: null, className: 'Tupa',
+        role: 'Guerreiro', hp: 16, atk: 3, range: 0,
+        element: null, paKey: 'base_coluna', starsNeeded: 0,
     },
     'Sume': {
-        displayName: 'Sumé',
-        spriteKey: null,
-        className: 'Sume',
-        role: 'Mago',
-        hp: 8, atk: 2, range: 4,
-        element: null,
-        paKey: 'base_linha_cura',
-        starsNeeded: 0,
+        displayName: 'Sumé', spriteKey: null, className: 'Sume',
+        role: 'Mago', hp: 8, atk: 2, range: 4,
+        element: null, paKey: 'base_linha_cura', starsNeeded: 0,
     },
     'Caipora': {
-        displayName: 'Caipora',
-        spriteKey: null,
-        className: 'Caipora',
-        role: 'Arqueiro',
-        hp: 10, atk: 2, range: 3,
-        element: null,
-        paKey: 'base_area_alvo',
-        starsNeeded: 0,
+        displayName: 'Caipora', spriteKey: null, className: 'Caipora',
+        role: 'Arqueiro', hp: 10, atk: 2, range: 3,
+        element: null, paKey: 'base_area_alvo', starsNeeded: 0,
     },
-
-    // ---- GUERREIROS (elemento fixo, desbloqueáveis) ----
     'Kanarott': {
-        displayName: 'Kanarott',
-        spriteKey: 'heroi_Kanarott',
-        className: 'Kanarott',
-        role: 'Guerreiro',
-        hp: 14, atk: 4, range: 0,
-        element: 'TERRA',
-        paKey: 'kanarott_cruz_empurra',
-        starsNeeded: 10,
+        displayName: 'Kanarott', spriteKey: 'heroi_Kanarott', className: 'Kanarott',
+        role: 'Guerreiro', hp: 14, atk: 4, range: 0,
+        element: 'TERRA', paKey: 'kanarott_cruz_empurra', starsNeeded: 10,
     },
     'Teperesik': {
-        displayName: 'Teperesik',
-        spriteKey: 'heroi_Teperesik',
-        className: 'Teperesik',
-        role: 'Guerreiro',
-        hp: 20, atk: 2, range: 0,
-        element: 'TERRA',
-        paKey: 'teperesik_area2x2',
-        starsNeeded: 60,
+        displayName: 'Teperesik', spriteKey: 'heroi_Teperesik', className: 'Teperesik',
+        role: 'Guerreiro', hp: 20, atk: 2, range: 0,
+        element: 'TERRA', paKey: 'teperesik_area2x2', starsNeeded: 60,
     },
     'Eru': {
-        displayName: 'Eru',
-        spriteKey: 'heroi_Eru',
-        className: 'Eru',
-        role: 'Guerreiro',
-        hp: 12, atk: 5, range: 0,
-        element: 'FOGO',
-        paKey: 'eru_linha_horizontal',
-        starsNeeded: 45,
+        displayName: 'Eru', spriteKey: 'heroi_Eru', className: 'Eru',
+        role: 'Guerreiro', hp: 12, atk: 5, range: 0,
+        element: 'FOGO', paKey: 'eru_linha_horizontal', starsNeeded: 45,
     },
-
-    // ---- MAGOS (alcance 4, elemento fixo) ----
     'Anduré': {
-        displayName: 'Anduré',
-        spriteKey: 'heroi_Andure',
-        className: 'Anduré',
-        role: 'Mago',
-        hp: 10, atk: 1, range: 4,
-        element: 'AGUA',
-        paKey: 'andure_area2x2_cura',
-        starsNeeded: 75,
+        displayName: 'Anduré', spriteKey: 'heroi_Andure', className: 'Anduré',
+        role: 'Mago', hp: 10, atk: 1, range: 4,
+        element: 'AGUA', paKey: 'andure_area2x2_cura', starsNeeded: 75,
     },
     'Mãe da Mata': {
-        displayName: 'Mãe da Mata',
-        spriteKey: 'heroi_MaeDaMata',
-        className: 'Mãe da Mata',
-        role: 'Mago',
-        hp: 11, atk: 1, range: 4,
-        element: 'TERRA',
-        paKey: 'maedamata_area3x3_cura',
-        starsNeeded: 110,
+        displayName: 'Mãe da Mata', spriteKey: 'heroi_MaeDaMata', className: 'Mãe da Mata',
+        role: 'Mago', hp: 11, atk: 1, range: 4,
+        element: 'TERRA', paKey: 'maedamata_area3x3_cura', starsNeeded: 110,
     },
     'Pajé Anhanguera': {
-        displayName: 'Pajé Anhanguera',
-        spriteKey: 'heroi_PajeAnhanguera',
-        className: 'Pajé Anhanguera',
-        role: 'Mago',
-        hp: 9, atk: 3, range: 4,
-        element: 'FOGO',
-        paKey: 'paje_coluna_fogo',
-        starsNeeded: 90,
+        displayName: 'Pajé Anhanguera', spriteKey: 'heroi_PajeAnhanguera', className: 'Pajé Anhanguera',
+        role: 'Mago', hp: 9, atk: 3, range: 4,
+        element: 'FOGO', paKey: 'paje_coluna_fogo', starsNeeded: 90,
     },
-
-    // ---- ARQUEIROS (alcance 3, elemento fixo) ----
     'Juruá': {
-        displayName: 'Juruá',
-        spriteKey: 'heroi_Jurua',
-        className: 'Juruá',
-        role: 'Arqueiro',
-        hp: 11, atk: 3, range: 3,
-        element: 'TERRA',
-        paKey: 'jurua_area_alvo_3x3',
-        starsNeeded: 20,
+        displayName: 'Juruá', spriteKey: 'heroi_Jurua', className: 'Juruá',
+        role: 'Arqueiro', hp: 11, atk: 3, range: 3,
+        element: 'TERRA', paKey: 'jurua_area_alvo_3x3', starsNeeded: 20,
     },
     'Araci': {
-        displayName: 'Araci',
-        spriteKey: 'heroi_Araci',
-        className: 'Araci',
-        role: 'Arqueiro',
-        hp: 9, atk: 2, range: 3,
-        element: 'AR',
-        paKey: 'araci_linha_horizontal',
-        starsNeeded: 130,
+        displayName: 'Araci', spriteKey: 'heroi_Araci', className: 'Araci',
+        role: 'Arqueiro', hp: 9, atk: 2, range: 3,
+        element: 'AR', paKey: 'araci_linha_horizontal', starsNeeded: 130,
     },
     'Bicho Folharal': {
-        displayName: 'Bicho Folharal',
-        spriteKey: 'heroi_BichoFolharal',
-        className: 'Bicho Folharal',
-        role: 'Arqueiro',
-        hp: 10, atk: 2, range: 3,
-        element: 'AR',
-        paKey: 'bicho_cruz_completa',
-        starsNeeded: 30,
+        displayName: 'Bicho Folharal', spriteKey: 'heroi_BichoFolharal', className: 'Bicho Folharal',
+        role: 'Arqueiro', hp: 10, atk: 2, range: 3,
+        element: 'AR', paKey: 'bicho_cruz_completa', starsNeeded: 30,
     },
     "Tapyra'yawara": {
-        displayName: "Tapyra'yawara",
-        spriteKey: 'heroi_Tapyrayawara',
-        className: "Tapyra'yawara",
-        role: 'Arqueiro',
-        hp: 12, atk: 3, range: 3,
-        element: 'TERRA',
-        paKey: 'tapyra_coluna_alvo',
-        starsNeeded: 150,
+        displayName: "Tapyra'yawara", spriteKey: 'heroi_Tapyrayawara', className: "Tapyra'yawara",
+        role: 'Arqueiro', hp: 12, atk: 3, range: 3,
+        element: 'TERRA', paKey: 'tapyra_coluna_alvo', starsNeeded: 150,
     },
 };
 
 // =================================================================
-// 🎯 DESBLOQUEIO DE HERÓIS POR ESTRELAS
-// -----------------------------------------------------------------
-// Lista ordenada do menor pro maior (pra facilitar loop de check)
-// =================================================================
-const STORY_HERO_UNLOCKS = [
-    { className: 'Kanarott',        displayName: 'Kanarott',        starsNeeded: 10  },
-    { className: 'Juruá',           displayName: 'Juruá',           starsNeeded: 20  },
-    { className: 'Bicho Folharal',  displayName: 'Bicho Folharal',  starsNeeded: 30  },
-    { className: 'Eru',             displayName: 'Eru',             starsNeeded: 45  },
-    { className: 'Teperesik',       displayName: 'Teperesik',       starsNeeded: 60  },
-    { className: 'Anduré',          displayName: 'Anduré',          starsNeeded: 75  },
-    { className: 'Pajé Anhanguera', displayName: 'Pajé Anhanguera', starsNeeded: 90  },
-    { className: 'Mãe da Mata',     displayName: 'Mãe da Mata',     starsNeeded: 110 },
-    { className: 'Araci',           displayName: 'Araci',           starsNeeded: 130 },
-    { className: "Tapyra'yawara",   displayName: "Tapyra'yawara",   starsNeeded: 150 },
-];
-
-// =================================================================
-// 💬 DIÁLOGOS DE ABERTURA — ATO 1 (Saci)
+// 💬 DIÁLOGOS — ATO 1 (Saci)
 // =================================================================
 const STORY_ENEMY_INTROS = {
-    porco_espinho: {
-        title: 'O Primeiro Servo',
-        text: 'Ah, você chegou. Sente o cheiro de terra revirada? Soprei raiva nos espinhos deste pequeno… ele agora fere por MIM. Todo animal desta mata tem um sussurro meu por dentro. Este é o primeiro. Encare-o, se conseguir.'
-    },
-    jacare: {
-        title: 'O Guardião do Vau',
-        text: 'O rio era manso — eu o tornei faminto. Sussurrei ao jacaré que o mundo temia suas mandíbulas, e ele acreditou. Agora ele morde primeiro, pergunta depois. Meu bote é o teu fim, herói.'
-    },
-    cervo: {
-        title: 'O Corredor Cego',
-        text: 'Este cervo corria livre, sem malícia. Enchi sua cabeça de sombras — agora cada chifre busca carne, não folhas. Ele serve ao vendaval que eu sou. Você o derrota? Ou corre como ele costumava correr?'
-    },
-    onca_parda: {
-        title: 'A Caçadora da Mata',
-        text: 'A caçadora mais temida da floresta agora caça por MIM. Meu sussurro a tornou mais faminta do que qualquer fome verdadeira. Ela é o meu presente para você — a prova de que nem os mais fortes escapam do meu sopro.'
-    },
-    saci: {
-        title: 'O Senhor do Redemoinho',
-        text: 'Você libertou meus servos um por um… admirável. Mas eles eram só casca. Eu sou o vendaval por trás de cada sussurro, o redemoinho que gira dentro de cada bicho desta mata. E você… você não passa de uma folha. Encare-me.'
-    }
+    porco_espinho: {title:'O Primeiro Servo',text:'Ah, você chegou. Sente o cheiro de terra revirada? Soprei raiva nos espinhos deste pequeno… ele agora fere por MIM. Todo animal desta mata tem um sussurro meu por dentro. Este é o primeiro. Encare-o, se conseguir.'},
+    jacare: {title:'O Guardião do Vau',text:'O rio era manso — eu o tornei faminto. Sussurrei ao jacaré que o mundo temia suas mandíbulas, e ele acreditou. Agora ele morde primeiro, pergunta depois. Meu bote é o teu fim, herói.'},
+    cervo: {title:'O Corredor Cego',text:'Este cervo corria livre, sem malícia. Enchi sua cabeça de sombras — agora cada chifre busca carne, não folhas. Ele serve ao vendaval que eu sou. Você o derrota? Ou corre como ele costumava correr?'},
+    onca_parda: {title:'A Caçadora da Mata',text:'A caçadora mais temida da floresta agora caça por MIM. Meu sussurro a tornou mais faminta do que qualquer fome verdadeira. Ela é o meu presente para você — a prova de que nem os mais fortes escapam do meu sopro.'},
+    saci: {title:'O Senhor do Redemoinho',text:'Você libertou meus servos um por um… admirável. Mas eles eram só casca. Eu sou o vendaval por trás de cada sussurro, o redemoinho que gira dentro de cada bicho desta mata. E você… você não passa de uma folha. Encare-me.'}
 };
 
 // =================================================================
-// 💬 DIÁLOGOS DE ABERTURA — ATO 2 (Mapinguari)
+// 💬 DIÁLOGOS — ATO 2 (Mapinguari)
 // =================================================================
 const STORY_ENEMY_INTROS_A2 = {
-    tamandua: {
-        title: 'O Farejador das Raízes',
-        text: 'Sinto teu cheiro, herói. Vem de longe. Eu já fui protetor desta mata — agora eu devoro o que ela cria. Sussurrei ao tamanduá que as formigas eram suas inimigas… e ele agora as caça com fúria cega. Passa por ele, se puder. A mata fechada começa aqui.'
-    },
-    anta: {
-        title: 'A Muralha da Mata',
-        text: 'A anta era a muralha viva que abria clareiras para a floresta respirar. Corrompi sua força — agora ela atropela em vez de abrir caminho. Sente o peso dela no chão? Esse peso é meu. Ela obedece. Ela devora.'
-    },
-    queixada: {
-        title: 'A Manada Faminta',
-        text: 'Sabe por que o queixada anda em bando? Porque sozinho ele é fraco. Sussurrei a ele que só a fúria coletiva o salvaria. Agora ele morde até o que não pode engolir. Cada presa que ele dilacera é oferenda pra mim. Você é a próxima.'
-    },
-    sucuri: {
-        title: 'A Devoradora das Águas',
-        text: 'A sucuri sempre foi a boca da mata — engolia o que precisava, respeitava o rio. Mas eu ensinei a ela que engolir era poder. Agora ela prende, quebra e digere tudo o que respira. Ela é a minha sombra sobre a água. Só assim você chegará até MIM.'
-    },
-    mapinguari: {
-        title: 'O Devorador Despertado',
-        text: 'Então chegou… o que libertou os fracos da mata dos redemoinhos agora ousa me enfrentar. Eu era o protetor. O pilar. A árvore mais velha. Anhangá me sussurrou: "Você é fraco, a floresta morre e você não pode impedir". E ele tinha razão. Então eu devorei a mim mesmo. Vem, herói — vou devorar-te também.'
-    }
+    tamandua:{title:'O Farejador das Raízes',text:'Sinto teu cheiro, herói. Vem de longe. Eu já fui protetor desta mata — agora eu devoro o que ela cria. Sussurrei ao tamanduá que as formigas eram suas inimigas… e ele agora as caça com fúria cega. Passa por ele, se puder. A mata fechada começa aqui.'},
+    anta:{title:'A Muralha da Mata',text:'A anta era a muralha viva que abria clareiras para a floresta respirar. Corrompi sua força — agora ela atropela em vez de abrir caminho. Sente o peso dela no chão? Esse peso é meu. Ela obedece. Ela devora.'},
+    queixada:{title:'A Manada Faminta',text:'Sabe por que o queixada anda em bando? Porque sozinho ele é fraco. Sussurrei a ele que só a fúria coletiva o salvaria. Agora ele morde até o que não pode engolir. Cada presa que ele dilacera é oferenda pra mim. Você é a próxima.'},
+    sucuri:{title:'A Devoradora das Águas',text:'A sucuri sempre foi a boca da mata — engolia o que precisava, respeitava o rio. Mas eu ensinei a ela que engolir era poder. Agora ela prende, quebra e digere tudo o que respira. Ela é a minha sombra sobre a água. Só assim você chegará até MIM.'},
+    mapinguari:{title:'O Devorador Despertado',text:'Então chegou… o que libertou os fracos da mata dos redemoinhos agora ousa me enfrentar. Eu era o protetor. O pilar. A árvore mais velha. Anhangá me sussurrou: "Você é fraco, a floresta morre e você não pode impedir". E ele tinha razão. Então eu devorei a mim mesmo. Vem, herói — vou devorar-te também.'}
 };
 
 // =================================================================
-// 💬 DIÁLOGOS DE ABERTURA — ATO 3 (Iara)
+// 💬 DIÁLOGOS — ATO 3 (Iara)
 // =================================================================
 const STORY_ENEMY_INTROS_A3 = {
-    piranha: {
-        title: 'A Primeira Mandíbula',
-        text: 'Meus rios eram cristalinos. Agora, cada gota esconde uma boca. Sussurrei à piranha que a carne dos curiosos era doce — e ela acreditou. Toda criança que se aproxima da margem hoje encontra seus dentes. Você já está na água, herói.'
-    },
-    lontra: {
-        title: 'A Brincalhona Afogada',
-        text: 'A lontra era a alegria do rio — brincava, mergulhava, ria. Enchi sua cabeça de sombras. Agora ela arrasta incautos para o fundo, como se fosse brincadeira. Ela sorri enquanto afoga. Você vai sorrir também.'
-    },
-    ariranha: {
-        title: 'A Matilha do Fundo',
-        text: 'As ariranhas sempre caçaram em bando — mas caçavam pra viver. Sussurrei a elas que a matilha é a única lei. Agora matam por prazer. Seus olhos vermelhos veem você antes mesmo de você chegar. Elas não param até o rio secar.'
-    },
-    pirarucu: {
-        title: 'O Gigante das Águas',
-        text: 'O pirarucu era o senhor calmo das águas fundas. Mas eu lhe ensinei que o silêncio é fraqueza. Agora ele devora tudo — peixes, canoas, gente. Ele é meu trono submerso. Só passando por sua bocarra você chegará a MIM.'
-    },
-    iara: {
-        title: 'O Canto da Perdição',
-        text: 'Meus rios… tão sujos… tão poluídos… Os humanos riem de mim enquanto destroem meu lar. Anhangá me deu força para afogar todos eles. Venham, dancem em minhas águas! Eu canto o canto que afoga. E você, herói… vai cantar comigo?'
-    }
+    piranha:{title:'A Primeira Mandíbula',text:'Meus rios eram cristalinos. Agora, cada gota esconde uma boca. Sussurrei à piranha que a carne dos curiosos era doce — e ela acreditou. Toda criança que se aproxima da margem hoje encontra seus dentes. Você já está na água, herói.'},
+    lontra:{title:'A Brincalhona Afogada',text:'A lontra era a alegria do rio — brincava, mergulhava, ria. Enchi sua cabeça de sombras. Agora ela arrasta incautos para o fundo, como se fosse brincadeira. Ela sorri enquanto afoga. Você vai sorrir também.'},
+    ariranha:{title:'A Matilha do Fundo',text:'As ariranhas sempre caçaram em bando — mas caçavam pra viver. Sussurrei a elas que a matilha é a única lei. Agora matam por prazer. Seus olhos vermelhos veem você antes mesmo de você chegar. Elas não param até o rio secar.'},
+    pirarucu:{title:'O Gigante das Águas',text:'O pirarucu era o senhor calmo das águas fundas. Mas eu lhe ensinei que o silêncio é fraqueza. Agora ele devora tudo — peixes, canoas, gente. Ele é meu trono submerso. Só passando por sua bocarra você chegará a MIM.'},
+    iara:{title:'O Canto da Perdição',text:'Meus rios… tão sujos… tão poluídos… Os humanos riem de mim enquanto destroem meu lar. Anhangá me deu força para afogar todos eles. Venham, dancem em minhas águas! Eu canto o canto que afoga. E você, herói… vai cantar comigo?'}
 };
 
 // =================================================================
-// 💬 DIÁLOGOS DE ABERTURA — ATO 4 (Boitatá)
+// 💬 DIÁLOGOS — ATO 4 (Boitatá)
 // =================================================================
 const STORY_ENEMY_INTROS_A4 = {
-    cascavel: {
-        title: 'O Chocalho do Inferno',
-        text: 'A cascavel avisava antes de morder — era justa. Enchi sua cabeça com raiva surda. Agora ela ataca sem aviso. O chocalho dela é o som do fim se aproximando. Ouça, herói. É o teu réquiem.'
-    },
-    coral: {
-        title: 'A Mentira Colorida',
-        text: 'A coral sempre mentiu com beleza — cores vivas, veneno mortal. Sussurrei a ela que a mentira era sua natureza. Agora ela se enrola nos sonhos dos tolos e mata dormindo. Você dorme, herói? Aqui, todos dormem.'
-    },
-    jararaca: {
-        title: 'A Traiçoeira do Mato',
-        text: 'A jararaca era traiçoeira por instinto. Dei a ela propósito. Agora ela não morde por defesa — morde por vontade. Cada passo seu no mato é uma aposta. Você aposta bem, herói?'
-    },
-    tartaruga: {
-        title: 'A Fortaleza Antiga',
-        text: 'A tartaruga já viu impérios nascerem e caírem. Ela carrega séculos no casco. Enchi sua mente com fúria ancestral. Agora ela esmaga com o peso da eternidade. Nenhuma arma te salvará de sua paciência.'
-    },
-    boitata: {
-        title: 'A Serpente de Fogo',
-        text: 'Meu fogo era fraco… apenas luzes na escuridão. Anhangá me deu o verdadeiro poder do inferno! Agora vou consumir tudo que encontrar em meu caminho! Seu corpo vai virar cinza, herói — e o vento vai espalhar você pela mata.'
-    }
+    cascavel:{title:'O Chocalho do Inferno',text:'A cascavel avisava antes de morder — era justa. Enchi sua cabeça com raiva surda. Agora ela ataca sem aviso. O chocalho dela é o som do fim se aproximando. Ouça, herói. É o teu réquiem.'},
+    coral:{title:'A Mentira Colorida',text:'A coral sempre mentiu com beleza — cores vivas, veneno mortal. Sussurrei a ela que a mentira era sua natureza. Agora ela se enrola nos sonhos dos tolos e mata dormindo. Você dorme, herói? Aqui, todos dormem.'},
+    jararaca:{title:'A Traiçoeira do Mato',text:'A jararaca era traiçoeira por instinto. Dei a ela propósito. Agora ela não morde por defesa — morde por vontade. Cada passo seu no mato é uma aposta. Você aposta bem, herói?'},
+    tartaruga:{title:'A Fortaleza Antiga',text:'A tartaruga já viu impérios nascerem e caírem. Ela carrega séculos no casco. Enchi sua mente com fúria ancestral. Agora ela esmaga com o peso da eternidade. Nenhuma arma te salvará de sua paciência.'},
+    boitata:{title:'A Serpente de Fogo',text:'Meu fogo era fraco… apenas luzes na escuridão. Anhangá me deu o verdadeiro poder do inferno! Agora vou consumir tudo que encontrar em meu caminho! Seu corpo vai virar cinza, herói — e o vento vai espalhar você pela mata.'}
 };
 
 // =================================================================
-// 💬 DIÁLOGOS DE ABERTURA — ATO 5 (Mula sem Cabeça)
+// 💬 DIÁLOGOS — ATO 5 (Mula)
 // =================================================================
 const STORY_ENEMY_INTROS_A5 = {
-    bode: {
-        title: 'O Corno Amaldiçoado',
-        text: 'O bode era o bode expiatório dos homens — levava a culpa de tudo. Sussurrei a ele que era hora de cobrar. Agora cada cornada é um julgamento. Você vai pagar pelos pecados dos outros, herói.'
-    },
-    carneiro: {
-        title: 'A Lã Ensanguentada',
-        text: 'O carneiro era manso, seguia o rebanho. Enchi sua cabeça com fúria cega. Agora ele tromba até quebrar — e o rebanho o segue. Ele é o pastor do inferno. Você é a ovelha desgarrada.'
-    },
-    cavalo_selvagem: {
-        title: 'O Corcel Sem Dono',
-        text: 'O cavalo selvagem nunca aceitou sela. Apreciei isso. Mas eu o ensinei a odiar quem tenta montá-lo. Agora ele pisa em tudo que se aproxima. Sente o galope, herói? É a tua sentença.'
-    },
-    touro_bravo: {
-        title: 'O Furioso do Curral',
-        text: 'O touro era a força bruta da fazenda. Sussurrei a ele que era hora de virar caçador. Agora ele persegue sem trégua. Seu chifre atravessa armaduras. Você tem coragem, herói? Ou vai correr?'
-    },
-    mula: {
-        title: 'O Relincho da Noite',
-        text: 'Relincho de dor… este é meu destino? Anhangá me mostrou que minha maldição pode ser minha força. Agora levarei fogo e dor a todos! Cada relincho meu é uma sentença. Sente, herói — a maldição se aproxima.'
-    }
+    bode:{title:'O Corno Amaldiçoado',text:'O bode era o bode expiatório dos homens — levava a culpa de tudo. Sussurrei a ele que era hora de cobrar. Agora cada cornada é um julgamento. Você vai pagar pelos pecados dos outros, herói.'},
+    carneiro:{title:'A Lã Ensanguentada',text:'O carneiro era manso, seguia o rebanho. Enchi sua cabeça com fúria cega. Agora ele tromba até quebrar — e o rebanho o segue. Ele é o pastor do inferno. Você é a ovelha desgarrada.'},
+    cavalo_selvagem:{title:'O Corcel Sem Dono',text:'O cavalo selvagem nunca aceitou sela. Apreciei isso. Mas eu o ensinei a odiar quem tenta montá-lo. Agora ele pisa em tudo que se aproxima. Sente o galope, herói? É a tua sentença.'},
+    touro_bravo:{title:'O Furioso do Curral',text:'O touro era a força bruta da fazenda. Sussurrei a ele que era hora de virar caçador. Agora ele persegue sem trégua. Seu chifre atravessa armaduras. Você tem coragem, herói? Ou vai correr?'},
+    mula:{title:'O Relincho da Noite',text:'Relincho de dor… este é meu destino? Anhangá me mostrou que minha maldição pode ser minha força. Agora levarei fogo e dor a todos! Cada relincho meu é uma sentença. Sente, herói — a maldição se aproxima.'}
 };
 
 // =================================================================
-// 💬 DIÁLOGOS DE ABERTURA — ATO 6 (Corpo Seco)
+// 💬 DIÁLOGOS — ATO 6 (Corpo Seco)
 // =================================================================
 const STORY_ENEMY_INTROS_A6 = {
-    urubu: {
-        title: 'A Sombra do Céu',
-        text: 'O urubu sempre esperou a morte dos outros. Enchi sua paciência com fome ativa. Agora ele não espera — ele provoca. Sente o bater de asas? Ele já te marcou. Você é o próximo banquete.'
-    },
-    carcaara: {
-        title: 'A Lâmina Voadora',
-        text: 'O carcará é o predador dos predadores. Sussurrei a ele que os vivos são mais saborosos que os mortos. Agora ele caça em pleno dia. Sua sombra passa rápido — e a morte vem com ela.'
-    },
-    tatu: {
-        title: 'A Armadura Cavadora',
-        text: 'O tatu sempre se escondeu sob a terra. Ensinei a ele que o solo é seu trono. Agora ele cava armadilhas que engolem exércitos. Cada passo seu é um passo sobre o abismo. Cuidado, herói.'
-    },
-    lobo_guara: {
-        title: 'O Uivo da Solidão',
-        text: 'O lobo-guará uiva sozinho por natureza. Transformei sua solidão em raiva. Agora ele uiva chamando a morte — e ela vem. Você ouve o uivo, herói? Corre. Ele já te viu.'
-    },
-    corpo_seco: {
-        title: 'O Devorador de Almas',
-        text: 'Fome… tanta fome… Anhangá me prometeu que se eu devorasse tudo, minha fome seria saciada. Vou devorar suas almas! Cada osso seu vai ser meu troféu. Cada gota de sangue, meu vinho. Vem, herói — alimenta-me.'
-    }
+    urubu:{title:'A Sombra do Céu',text:'O urubu sempre esperou a morte dos outros. Enchi sua paciência com fome ativa. Agora ele não espera — ele provoca. Sente o bater de asas? Ele já te marcou. Você é o próximo banquete.'},
+    carcaara:{title:'A Lâmina Voadora',text:'O carcará é o predador dos predadores. Sussurrei a ele que os vivos são mais saborosos que os mortos. Agora ele caça em pleno dia. Sua sombra passa rápido — e a morte vem com ela.'},
+    tatu:{title:'A Armadura Cavadora',text:'O tatu sempre se escondeu sob a terra. Ensinei a ele que o solo é seu trono. Agora ele cava armadilhas que engolem exércitos. Cada passo seu é um passo sobre o abismo. Cuidado, herói.'},
+    lobo_guara:{title:'O Uivo da Solidão',text:'O lobo-guará uiva sozinho por natureza. Transformei sua solidão em raiva. Agora ele uiva chamando a morte — e ela vem. Você ouve o uivo, herói? Corre. Ele já te viu.'},
+    corpo_seco:{title:'O Devorador de Almas',text:'Fome… tanta fome… Anhangá me prometeu que se eu devorasse tudo, minha fome seria saciada. Vou devorar suas almas! Cada osso seu vai ser meu troféu. Cada gota de sangue, meu vinho. Vem, herói — alimenta-me.'}
 };
 
 // =================================================================
-// 💬 DIÁLOGOS DE ABERTURA — ATO 7 (Lobisomem)
+// 💬 DIÁLOGOS — ATO 7 (Lobisomem)
 // =================================================================
 const STORY_ENEMY_INTROS_A7 = {
-    cachorro_mato: {
-        title: 'O Primeiro Uivo',
-        text: 'O cachorro-do-mato era apenas um caçador comum. Sussurrei a ele que a lua o observava. Agora ele uiva para ela toda noite, pedindo poder. E ela responde. Você ouve o primeiro uivo, herói? É o começo da matilha.'
-    },
-    raposa: {
-        title: 'A Astuta Sedenta',
-        text: 'A raposa sempre foi esperta demais. Enchi sua astúcia com sede de sangue. Agora ela engana antes de matar — te faz rir antes do golpe. Você ri, herói? Aqui, os espertos choram.'
-    },
-    guaxinim: {
-        title: 'O Ladrão da Noite',
-        text: 'O guaxinim roubava comida dos acampamentos. Sussurrei a ele que roubar vidas era mais valioso. Agora ele invade sonhos antes de invadir corpos. Você dorme tranquilo, herói? Aqui, não.'
-    },
-    jaguatirica: {
-        title: 'A Caçadora Silenciosa',
-        text: 'A jaguatirica é a rainha dos saltos — mata antes do alvo piscar. Enchi seu silêncio com fome. Agora ela salta mais longe, mais alta, mais mortal. Sente o vento? Não é vento. É ela pulando.'
-    },
-    lobisomem: {
-        title: 'A Maldição da Lua',
-        text: 'A lua me amaldiçoa… mas Anhangá me mostrou que esta forma bestial é minha verdadeira natureza. Deixem a fera dentro de mim se libertar! Cada uivo meu quebra a noite. Você está pronto, herói? A lua está cheia.'
-    }
+    cachorro_mato:{title:'O Primeiro Uivo',text:'O cachorro-do-mato era apenas um caçador comum. Sussurrei a ele que a lua o observava. Agora ele uiva para ela toda noite, pedindo poder. E ela responde. Você ouve o primeiro uivo, herói? É o começo da matilha.'},
+    raposa:{title:'A Astuta Sedenta',text:'A raposa sempre foi esperta demais. Enchi sua astúcia com sede de sangue. Agora ela engana antes de matar — te faz rir antes do golpe. Você ri, herói? Aqui, os espertos choram.'},
+    guaxinim:{title:'O Ladrão da Noite',text:'O guaxinim roubava comida dos acampamentos. Sussurrei a ele que roubar vidas era mais valioso. Agora ele invade sonhos antes de invadir corpos. Você dorme tranquilo, herói? Aqui, não.'},
+    jaguatirica:{title:'A Caçadora Silenciosa',text:'A jaguatirica é a rainha dos saltos — mata antes do alvo piscar. Enchi seu silêncio com fome. Agora ela salta mais longe, mais alta, mais mortal. Sente o vento? Não é vento. É ela pulando.'},
+    lobisomem:{title:'A Maldição da Lua',text:'A lua me amaldiçoa… mas Anhangá me mostrou que esta forma bestial é minha verdadeira natureza. Deixem a fera dentro de mim se libertar! Cada uivo meu quebra a noite. Você está pronto, herói? A lua está cheia.'}
 };
 
 // =================================================================
-// 💬 DIÁLOGOS DE ABERTURA — ATO 8 (Cuca)
+// 💬 DIÁLOGOS — ATO 8 (Cuca)
 // =================================================================
 const STORY_ENEMY_INTROS_A8 = {
-    morcego: {
-        title: 'O Filho da Noite',
-        text: 'O morcego sempre viveu nas sombras. Sussurrei a ele que a escuridão era um lar, não um esconderijo. Agora ele voa livre, drenando sonhos antes de sangue. Você sonha, herói? Aqui, até os sonhos sangram.'
-    },
-    coruja: {
-        title: 'O Olho da Bruxa',
-        text: 'A coruja sempre soube tudo — a sabedoria silenciosa da noite. Envenenei seu conhecimento com vaidade. Agora ela observa só para julgar. E a bruxa vê através dela. Ela já te julgou, herói.'
-    },
-    sapo_cururu: {
-        title: 'A Poção Viva',
-        text: 'O sapo-cururu é veneno ambulante. Sussurrei a ele que o veneno é sua coroa. Agora tudo que toca seu lodo, morre. Cuidado com o chão que pisa, herói. O pântano está vivo.'
-    },
-    seriema: {
-        title: 'A Guardiã do Caldeirão',
-        text: 'A seriema vigia os campos há séculos. Corrompi seu instinto guardião. Agora ela protege o caldeirão como se fosse um filho. Ninguém passa. Nem você.'
-    },
-    cuca: {
-        title: 'A Bruxa da Floresta',
-        text: 'Meus conhecimentos eram fracos… poções de cura? Para quê? Anhangá me ensinou que apenas a destruição traz poder real. Prove minhas novas poções! Cada frasco meu carrega a essência do abismo.'
-    }
+    morcego:{title:'O Filho da Noite',text:'O morcego sempre viveu nas sombras. Sussurrei a ele que a escuridão era um lar, não um esconderijo. Agora ele voa livre, drenando sonhos antes de sangue. Você sonha, herói? Aqui, até os sonhos sangram.'},
+    coruja:{title:'O Olho da Bruxa',text:'A coruja sempre soube tudo — a sabedoria silenciosa da noite. Envenenei seu conhecimento com vaidade. Agora ela observa só para julgar. E a bruxa vê através dela. Ela já te julgou, herói.'},
+    sapo_cururu:{title:'A Poção Viva',text:'O sapo-cururu é veneno ambulante. Sussurrei a ele que o veneno é sua coroa. Agora tudo que toca seu lodo, morre. Cuidado com o chão que pisa, herói. O pântano está vivo.'},
+    seriema:{title:'A Guardiã do Caldeirão',text:'A seriema vigia os campos há séculos. Corrompi seu instinto guardião. Agora ela protege o caldeirão como se fosse um filho. Ninguém passa. Nem você.'},
+    cuca:{title:'A Bruxa da Floresta',text:'Meus conhecimentos eram fracos… poções de cura? Para quê? Anhangá me ensinou que apenas a destruição traz poder real. Prove minhas novas poções! Cada frasco meu carrega a essência do abismo.'}
 };
 
 // =================================================================
-// 💬 DIÁLOGOS DE ABERTURA — ATO 9 (Boto Rosa)
+// 💬 DIÁLOGOS — ATO 9 (Boto)
 // =================================================================
 const STORY_ENEMY_INTROS_A9 = {
-    tucunare: {
-        title: 'O Rei do Rio',
-        text: 'O tucunaré reina nas águas claras. Sussurrei a ele que seu trono é frágil. Agora ele morde antes que outro peixe respire. Cada mordida é defesa de território. Você é invasor, herói. Ele odeia invasores.'
-    },
-    piraiba: {
-        title: 'O Fantasma das Profundezas',
-        text: 'A piraíba é o maior peixe de couro do rio — o fantasma das profundezas. Envenenei sua solidão com fúria. Agora ela emerge do nada e engole barcos. Sente o rio se agitando, herói? Ela está perto.'
-    },
-    dourada: {
-        title: 'O Tesouro Maldito',
-        text: 'A dourada brilha como ouro nas águas. Sussurrei a ela que o brilho era poder. Agora ela cega quem a olha, e ataca no reflexo. Você olha o rio, herói? Não olhe demais. Ela já te cegou.'
-    },
-    peixe_boi: {
-        title: 'A Muralha Viva',
-        text: 'O peixe-boi é o gigante manso dos rios. Corrompi sua calma. Agora ele esmaga com o peso de um mundo. Sua paciência virou concreto. Você tem força, herói? Vai precisar.'
-    },
-    boto: {
-        title: 'O Sedutor das Águas',
-        text: 'As águas eram meu refúgio… minha beleza, minha arma. Anhangá mostrou que posso ser mais que um sedutor. Posso ser um destruidor! Sintam o poder das águas corrompidas! Venham, heróis — dancem no meu encanto final.'
-    }
+    tucunare:{title:'O Rei do Rio',text:'O tucunaré reina nas águas claras. Sussurrei a ele que seu trono é frágil. Agora ele morde antes que outro peixe respire. Cada mordida é defesa de território. Você é invasor, herói. Ele odeia invasores.'},
+    piraiba:{title:'O Fantasma das Profundezas',text:'A piraíba é o maior peixe de couro do rio — o fantasma das profundezas. Envenenei sua solidão com fúria. Agora ela emerge do nada e engole barcos. Sente o rio se agitando, herói? Ela está perto.'},
+    dourada:{title:'O Tesouro Maldito',text:'A dourada brilha como ouro nas águas. Sussurrei a ela que o brilho era poder. Agora ela cega quem a olha, e ataca no reflexo. Você olha o rio, herói? Não olhe demais. Ela já te cegou.'},
+    peixe_boi:{title:'A Muralha Viva',text:'O peixe-boi é o gigante manso dos rios. Corrompi sua calma. Agora ele esmaga com o peso de um mundo. Sua paciência virou concreto. Você tem força, herói? Vai precisar.'},
+    boto:{title:'O Sedutor das Águas',text:'As águas eram meu refúgio… minha beleza, minha arma. Anhangá mostrou que posso ser mais que um sedutor. Posso ser um destruidor! Sintam o poder das águas corrompidas! Venham, heróis — dancem no meu encanto final.'}
 };
 
 // =================================================================
-// 💬 DIÁLOGOS DE ABERTURA — ATO 10 (Boi da Cara Preta)
+// 💬 DIÁLOGOS — ATO 10 (Boi)
 // =================================================================
 const STORY_ENEMY_INTROS_A10 = {
-    bufalo: {
-        title: 'O Titã Negro',
-        text: 'O búfalo é a montanha viva dos campos. Sussurrei a ele que o pasto é pequeno demais. Agora ele esmaga cercas, casas, homens. Sente o chão tremer? Não é terremoto, herói. É ele.'
-    },
-    vaca_louca: {
-        title: 'A Lamentação',
-        text: 'A vaca louca é a tristeza feita carne. Transformei seu lamento em fúria. Agora cada mugido é um grito de guerra. Você ouve o grito, herói? Ele vem por você.'
-    },
-    cabra_preta: {
-        title: 'A Portadora do Azar',
-        text: 'A cabra preta sempre foi vista como mau agouro. Sussurrei a ela que o agouro é poder. Agora cada passo dela envenena a terra. Você anda sobre a morte, herói.'
-    },
-    zebu: {
-        title: 'O Touro de Mil Guerras',
-        text: 'O zebu carrega força de impérios. Envenenei sua paciência com arrogância. Agora ele marra sem parar. Cada chifre é uma sentença. Você é rápido, herói? Aqui, os lentos viram couro.'
-    },
-    boi: {
-        title: 'O Terrível das Sombras',
-        text: 'Minha face escura sempre assustou… mas era apenas casca. Anhangá me revelou meu verdadeiro poder: o terror puro! Sintam o medo que habita nas sombras! Cada mugido meu é a última coisa que muitos ouvem.'
-    }
+    bufalo:{title:'O Titã Negro',text:'O búfalo é a montanha viva dos campos. Sussurrei a ele que o pasto é pequeno demais. Agora ele esmaga cercas, casas, homens. Sente o chão tremer? Não é terremoto, herói. É ele.'},
+    vaca_louca:{title:'A Lamentação',text:'A vaca louca é a tristeza feita carne. Transformei seu lamento em fúria. Agora cada mugido é um grito de guerra. Você ouve o grito, herói? Ele vem por você.'},
+    cabra_preta:{title:'A Portadora do Azar',text:'A cabra preta sempre foi vista como mau agouro. Sussurrei a ela que o agouro é poder. Agora cada passo dela envenena a terra. Você anda sobre a morte, herói.'},
+    zebu:{title:'O Touro de Mil Guerras',text:'O zebu carrega força de impérios. Envenenei sua paciência com arrogância. Agora ele marra sem parar. Cada chifre é uma sentença. Você é rápido, herói? Aqui, os lentos viram couro.'},
+    boi:{title:'O Terrível das Sombras',text:'Minha face escura sempre assustou… mas era apenas casca. Anhangá me revelou meu verdadeiro poder: o terror puro! Sintam o medo que habita nas sombras! Cada mugido meu é a última coisa que muitos ouvem.'}
 };
 
 // =================================================================
-// 💬 DIÁLOGOS DE ABERTURA — ATO 11 (Jaci)
+// 💬 DIÁLOGOS — ATO 11 (Jaci)
 // =================================================================
 const STORY_ENEMY_INTROS_A11 = {
-    gato_mato: {
-        title: 'O Filho da Mata Fria',
-        text: 'O gato-do-mato é silêncio puro. Envenenei seu silêncio com malícia. Agora ele caça entre as sombras — sempre entre as sombras. Sente seu olhar, herói? Ele está a um salto de distância.'
-    },
-    mariposa_gigante: {
-        title: 'A Asa Lunar',
-        text: 'A mariposa gigante sempre buscou a lua. Sussurrei a ela que a lua também a buscava. Agora ela voa em noites sem fim, espalhando pó lunar que enlouquece. Você respira o pó, herói? Já é tarde.'
-    },
-    quati: {
-        title: 'O Bando Vermelho',
-        text: 'O quati vive em bando, esperto e barulhento. Transformei seu bando em matilha. Agora eles atacam em círculo, fechando o cerco. Você está no centro, herói. Sempre esteve.'
-    },
-    sucuarana: {
-        title: 'A Senhora das Alturas',
-        text: 'A suçuarana — a puma — é a rainha silenciosa das montanhas. Corrompi seu silêncio com arrogância divina. Agora ela caminha como se fosse um deus. Cada passo dela marca território. Você invade o dela.'
-    },
-    jaci: {
-        title: 'A Deusa da Lua Corrompida',
-        text: 'Minha luz deveria guiar… acalmar… iluminar. Mas Anhangá mostrou que minha luz pode queimar em vez de iluminar. Sintam o frio ardente da lua corrompida! Cada raio meu carrega a solidão de mil sóis apagados.'
-    }
+    gato_mato:{title:'O Filho da Mata Fria',text:'O gato-do-mato é silêncio puro. Envenenei seu silêncio com malícia. Agora ele caça entre as sombras — sempre entre as sombras. Sente seu olhar, herói? Ele está a um salto de distância.'},
+    mariposa_gigante:{title:'A Asa Lunar',text:'A mariposa gigante sempre buscou a lua. Sussurrei a ela que a lua também a buscava. Agora ela voa em noites sem fim, espalhando pó lunar que enlouquece. Você respira o pó, herói? Já é tarde.'},
+    quati:{title:'O Bando Vermelho',text:'O quati vive em bando, esperto e barulhento. Transformei seu bando em matilha. Agora eles atacam em círculo, fechando o cerco. Você está no centro, herói. Sempre esteve.'},
+    sucuarana:{title:'A Senhora das Alturas',text:'A suçuarana — a puma — é a rainha silenciosa das montanhas. Corrompi seu silêncio com arrogância divina. Agora ela caminha como se fosse um deus. Cada passo dela marca território. Você invade o dela.'},
+    jaci:{title:'A Deusa da Lua Corrompida',text:'Minha luz deveria guiar… acalmar… iluminar. Mas Anhangá mostrou que minha luz pode queimar em vez de iluminar. Sintam o frio ardente da lua corrompida! Cada raio meu carrega a solidão de mil sóis apagados.'}
 };
 
 // =================================================================
-// 💬 DIÁLOGOS DE ABERTURA — ATO 12 (Guaraci)
+// 💬 DIÁLOGOS — ATO 12 (Guaraci)
 // =================================================================
 const STORY_ENEMY_INTROS_A12 = {
-    gaviao: {
-        title: 'O Caçador do Céu',
-        text: 'O gavião reina nos ares. Envenenei sua visão de longo alcance com presunção. Agora ele caça pela glória, não pela fome. Cada voo dele é um desafio ao sol. Você olha pra cima, herói? Boa sorte.'
-    },
-    falcao: {
-        title: 'O Mergulhador Mortal',
-        text: 'O falcão é o caçador mais rápido do céu. Sussurrei a ele que a velocidade é um deus. Agora ele mergulha com fé cega — sem pensar, apenas matando. Sente o vento rasgando? Ele já caiu sobre você.'
-    },
-    urutau: {
-        title: 'A Ave Fantasma',
-        text: 'O urutau é o mestre do disfarce — parece um tronco, canta como um lamento. Transformei seu disfarce em ilusão real. Agora ele existe e não existe ao mesmo tempo. Você vê, herói? Ele já te confundiu.'
-    },
-    aguia_cinzenta: {
-        title: 'A Águia do Trono',
-        text: 'A águia-cinzenta é o símbolo dos reis. Corrompi sua soberania com vaidade eterna. Agora ela considera cada um de vocês seu súdito. Você não se ajoelha, herói? Então ela virá buscar seu tributo.'
-    },
-    guaraci: {
-        title: 'O Sol Devorador',
-        text: 'Meu sol aquecia… nutria… dava vida. Anhangá me ensinou que meu verdadeiro poder é queimar, não aquecer. Sintam o inferno solar que agora trago! Cada raio meu destrói em vez de criar. Abençoados são aqueles que não veem meu amanhecer.'
-    }
+    gaviao:{title:'O Caçador do Céu',text:'O gavião reina nos ares. Envenenei sua visão de longo alcance com presunção. Agora ele caça pela glória, não pela fome. Cada voo dele é um desafio ao sol. Você olha pra cima, herói? Boa sorte.'},
+    falcao:{title:'O Mergulhador Mortal',text:'O falcão é o caçador mais rápido do céu. Sussurrei a ele que a velocidade é um deus. Agora ele mergulha com fé cega — sem pensar, apenas matando. Sente o vento rasgando? Ele já caiu sobre você.'},
+    urutau:{title:'A Ave Fantasma',text:'O urutau é o mestre do disfarce — parece um tronco, canta como um lamento. Transformei seu disfarce em ilusão real. Agora ele existe e não existe ao mesmo tempo. Você vê, herói? Ele já te confundiu.'},
+    aguia_cinzenta:{title:'A Águia do Trono',text:'A águia-cinzenta é o símbolo dos reis. Corrompi sua soberania com vaidade eterna. Agora ela considera cada um de vocês seu súdito. Você não se ajoelha, herói? Então ela virá buscar seu tributo.'},
+    guaraci:{title:'O Sol Devorador',text:'Meu sol aquecia… nutria… dava vida. Anhangá me ensinou que meu verdadeiro poder é queimar, não aquecer. Sintam o inferno solar que agora trago! Cada raio meu destrói em vez de criar. Abençoados são aqueles que não veem meu amanhecer.'}
 };
 
 // =================================================================
-// 💬 DIÁLOGOS DE ABERTURA — ATO 13 (Anhangá)
+// 💬 DIÁLOGOS — ATO 13 (Anhangá + Espectros)
 // =================================================================
 const STORY_ENEMY_INTROS_A13 = {
-    saci: {
-        title: 'O Espectro do Redemoinho',
-        text: 'Você o libertou uma vez. Eu o reconsumi. A casca que gira agora é apenas eco do que ele foi. Cada servo que você purificou, eu reassimilei. Você não enfrenta doze bosses, herói. Enfrenta a soma de tudo que já venceu.'
-    },
-    mapinguari: {
-        title: 'O Espectro do Devorador',
-        text: 'O Pilar da Mata voltou a ser devorador. Sua força purificada me alimenta agora. Você não pode vencer o que já venceu — porque agora é maior.'
-    },
-    iara: {
-        title: 'O Espectro do Canto',
-        text: 'A sedutora canta novamente. Mas agora ela canta para MIM. Cada nota afoga mais fundo. A água que a purificou agora é minha.'
-    },
-    boitata: {
-        title: 'O Espectro do Fogo',
-        text: 'A Serpente de Fogo queimou para você uma vez. Agora ela queima para MIM. Sua luz não ilumina mais — apenas destrói.'
-    },
-    mula: {
-        title: 'O Espectro do Relincho',
-        text: 'A maldição dela agora é minha. Cada relincho é um chamado do abismo. Você não purificou nada — apenas me deu uma arma a mais.'
-    },
-    corpo_seco: {
-        title: 'O Espectro da Fome',
-        text: 'A fome do Corpo Seco era pequena. Eu a tornei infinita. Ele devora almas que você ainda nem conhece.'
-    },
-    lobisomem: {
-        title: 'O Espectro da Lua',
-        text: 'A maldição que você quebrou, eu refiz. A lua agora é minha aliada. A fera está solta de novo — e dessa vez, para sempre.'
-    },
-    cuca: {
-        title: 'O Espectro das Poções',
-        text: 'As poções dela eram fracas. Eu as tornei veneno puro. Cada frasco carrega a essência do abismo.'
-    },
-    boto: {
-        title: 'O Espectro do Encanto',
-        text: 'O encanto dele agora é meu. Cada sorriso esconde uma lâmina. Você cai no feitiço, herói? Todos caem.'
-    },
-    boi: {
-        title: 'O Espectro do Terror',
-        text: 'O terror dele era apenas casca. Eu o tornei real. A cara preta agora é a face do abismo.'
-    },
-    jaci: {
-        title: 'O Espectro da Lua Fria',
-        text: 'A lua dela agora é minha. Seu brilho é a última coisa que muitos veem. Você olha pra lua, herói? É a minha lua.'
-    },
-    guaraci: {
-        title: 'O Espectro do Sol Negro',
-        text: 'O sol dele agora é meu. Amanhecer? Não existe mais. Só a noite eterna que eu trago.'
-    },
-    anhanga: {
-        title: 'O Senhor do Abismo',
-        text: 'Por séculos observei a destruição que vocês, mortais, causam. Florestas queimadas, rios poluídos, ar contaminado… A natureza grita por vingança! Eu apenas dei voz ao seu ódio. Aqueles que corrompi eram apenas ferramentas. E agora, com o poder das doze entidades que você "purificou", eu me tornei completo. Venha, herói. Enfrente a soma de todos os seus erros.'
-    }
+    saci:{title:'O Espectro do Redemoinho',text:'Você o libertou uma vez. Eu o reconsumi. A casca que gira agora é apenas eco do que ele foi. Cada servo que você purificou, eu reassimilei. Você não enfrenta doze bosses, herói. Enfrenta a soma de tudo que já venceu.'},
+    mapinguari:{title:'O Espectro do Devorador',text:'O Pilar da Mata voltou a ser devorador. Sua força purificada me alimenta agora. Você não pode vencer o que já venceu — porque agora é maior.'},
+    iara:{title:'O Espectro do Canto',text:'A sedutora canta novamente. Mas agora ela canta para MIM. Cada nota afoga mais fundo. A água que a purificou agora é minha.'},
+    boitata:{title:'O Espectro do Fogo',text:'A Serpente de Fogo queimou para você uma vez. Agora ela queima para MIM. Sua luz não ilumina mais — apenas destrói.'},
+    mula:{title:'O Espectro do Relincho',text:'A maldição dela agora é minha. Cada relincho é um chamado do abismo. Você não purificou nada — apenas me deu uma arma a mais.'},
+    corpo_seco:{title:'O Espectro da Fome',text:'A fome do Corpo Seco era pequena. Eu a tornei infinita. Ele devora almas que você ainda nem conhece.'},
+    lobisomem:{title:'O Espectro da Lua',text:'A maldição que você quebrou, eu refiz. A lua agora é minha aliada. A fera está solta de novo — e dessa vez, para sempre.'},
+    cuca:{title:'O Espectro das Poções',text:'As poções dela eram fracas. Eu as tornei veneno puro. Cada frasco carrega a essência do abismo.'},
+    boto:{title:'O Espectro do Encanto',text:'O encanto dele agora é meu. Cada sorriso esconde uma lâmina. Você cai no feitiço, herói? Todos caem.'},
+    boi:{title:'O Espectro do Terror',text:'O terror dele era apenas casca. Eu o tornei real. A cara preta agora é a face do abismo.'},
+    jaci:{title:'O Espectro da Lua Fria',text:'A lua dela agora é minha. Seu brilho é a última coisa que muitos veem. Você olha pra lua, herói? É a minha lua.'},
+    guaraci:{title:'O Espectro do Sol Negro',text:'O sol dele agora é meu. Amanhecer? Não existe mais. Só a noite eterna que eu trago.'},
+    anhanga:{title:'O Senhor do Abismo',text:'Por séculos observei a destruição que vocês, mortais, causam. Florestas queimadas, rios poluídos, ar contaminado… A natureza grita por vingança! Eu apenas dei voz ao seu ódio. Aqueles que corrompi eram apenas ferramentas. E agora, com o poder das doze entidades que você "purificou", eu me tornei completo. Venha, herói. Enfrente a soma de todos os seus erros.'}
 };
 
 // =================================================================
-// 💬 DIÁLOGOS FINAIS (após derrotar cada boss)
+// 💬 DIÁLOGOS FINAIS
 // =================================================================
-const STORY_SACI_FINAL_DIALOG = {
-    title: 'A Libertação do Redemoinho',
-    text: 'O vendaval cessa… e algo mais profundo se quebra. Não era só a mim que prendiam — era ELE. O Sussurrador. Anhangá. Enquanto eu girava, ele ria por dentro de mim. Manipulava cada servo, cada bicho, cada sussurro que eu pensava ser meu. Obrigado… por me devolver o silêncio. Agora eu sei quem sou. Agora a mata pode respirar de novo.'
-};
-
-const STORY_MAPINGUARI_FINAL_DIALOG = {
-    title: 'A Libertação do Devorador',
-    text: 'Minha fome… para. Minha boca… se fecha. Tudo que engoli, tudo que destruí — Anhangá ria por trás de cada mordida. Ele me disse que a floresta morria por minha fraqueza, e eu acreditei. Eu, o pilar da mata, virei ruína por dentro. Você me devolveu a fome que importa: a de proteger. Obrigado, herói. A mata fechada vai voltar a respirar.'
-};
-
-const STORY_IARA_FINAL_DIALOG = {
-    title: 'A Libertação das Águas',
-    text: 'Minhas águas… voltam a ser claras. Sinto o peso da raiva sumir do meu peito, e as canções que eu cantava pra afogar tornam-se canções de acalanto. Anhangá me envenenou com a dor que era minha — mas a dor não era minha, era dele. Você me devolveu o rio. Obrigada, herói. As águas vão lembrar de você.'
-};
-
-const STORY_BOITATA_FINAL_DIALOG = {
-    title: 'A Libertação do Fogo',
-    text: 'Meu fogo… se acalma. Não mais inferno, não mais consumo. Eu era luz — luz que protegia a mata na noite escura. Anhangá me disse que luz fraca não serve. Mentiu. Você me mostrou que minha luz é suficiente. Obrigado, herói. Volto a ser a serpente que brilha no escuro.'
-};
-
-const STORY_MULA_FINAL_DIALOG = {
-    title: 'A Libertação da Maldição',
-    text: 'Meu relincho… silencia. A dor de mil anos se desfaz em cinzas mansas. Anhangá me disse que era meu castigo por meus pecados, mas era o castigo dele que eu carregava. Você me tirou o fogo dos olhos e devolveu a mim o que eu era antes da maldição. Obrigada, herói. A noite já não é tão escura.'
-};
-
-const STORY_CORPO_SECO_FINAL_DIALOG = {
-    title: 'A Libertação da Fome',
-    text: 'Minha fome… para. Sinto o silêncio da saciedade que nunca tive. Anhangá me prometeu que devorar tudo saciaria meu vazio — mas o vazio era dele, não meu. Você me libertou da fome eterna. Agora posso finalmente descansar. Obrigado, herói. A terra vai me acolher em paz.'
-};
-
-const STORY_LOBISOMEM_FINAL_DIALOG = {
-    title: 'A Libertação da Lua',
-    text: 'A lua… não me amaldiçoa mais. Sinto meu corpo voltar a ser humano, e a fera dentro de mim dorme em paz. Anhangá me prometeu que a fera era minha verdadeira natureza — mentiu. A fera era a dor dele, projetada em mim. Você me devolveu a humanidade. Obrigado, herói. A lua agora é apenas lua.'
-};
-
-const STORY_CUCA_FINAL_DIALOG = {
-    title: 'A Libertação das Poções',
-    text: 'Meu caldeirão… esfria. As poções voltam a ser o que eram: cura, não veneno. Anhangá me ensinou que destruir era poder. Mentiu. Você me devolveu a sabedoria. Obrigada, herói. A bruxa volta a ser guardiã — não destruidora.'
-};
-
-const STORY_BOTO_FINAL_DIALOG = {
-    title: 'A Libertação do Encanto',
-    text: 'Meu canto… volta a ser melodia, não armadilha. Anhangá me disse que o encanto era fraqueza. Mentiu. Você me mostrou que encantar sem destruir é a verdadeira força. Obrigado, herói. As águas doces voltarão a ser lar.'
-};
-
-const STORY_BOI_FINAL_DIALOG = {
-    title: 'A Libertação do Terror',
-    text: 'Minha cara preta… volta a ser apenas um rosto. Não mais o rosto do medo. Anhangá me mostrou o terror como poder — mas era a minha dor que ele mostrava. Você me devolveu o rosto. Obrigado, herói. O pasto vai dormir em paz.'
-};
-
-const STORY_JACI_FINAL_DIALOG = {
-    title: 'A Libertação da Lua Fria',
-    text: 'Minha luz… recupera o calor. Não sou mais a lua que queima — volto a ser a lua que acolhe. Anhangá me envenenou com a solidão dele. Você me devolveu o silêncio da noite. Obrigada, herói. As estrelas vão brilhar de novo.'
-};
-
-const STORY_GUARACI_FINAL_DIALOG = {
-    title: 'A Libertação do Sol',
-    text: 'Meu fogo… aquece de novo em vez de queimar. Sinto o calor voltar a ser bênção, não maldição. Anhangá me ensinou que a arrogância era poder. Mentiu. Você me devolveu a humildade do sol. Obrigado, herói. O amanhecer vai ser doce outra vez.'
-};
-
-const STORY_ANHANGA_FINAL_DIALOG = {
-    title: 'O Fim do Abismo',
-    text: 'O véu de escuridão… se rasga. Não era eu que girava o redemoinho — era o vazio dentro de mim. As doze entidades que você libertou, você libertou de MIM também. Eu as usei, mas elas nunca foram minhas. Você as resgatou duas vezes, herói. A primeira, das minhas garras. A segunda, de si mesmas. A mata, o rio, o céu, o sol — tudo respira de novo. E eu… eu volto ao silêncio de onde nunca deveria ter saído. Obrigado. O equilíbrio retorna.'
-};
-
 const STORY_FINAL_DIALOGS = {
-    saci: STORY_SACI_FINAL_DIALOG,
-    mapinguari: STORY_MAPINGUARI_FINAL_DIALOG,
-    iara: STORY_IARA_FINAL_DIALOG,
-    boitata: STORY_BOITATA_FINAL_DIALOG,
-    mula: STORY_MULA_FINAL_DIALOG,
-    corpo_seco: STORY_CORPO_SECO_FINAL_DIALOG,
-    lobisomem: STORY_LOBISOMEM_FINAL_DIALOG,
-    cuca: STORY_CUCA_FINAL_DIALOG,
-    boto: STORY_BOTO_FINAL_DIALOG,
-    boi: STORY_BOI_FINAL_DIALOG,
-    jaci: STORY_JACI_FINAL_DIALOG,
-    guaraci: STORY_GUARACI_FINAL_DIALOG,
-    anhanga: STORY_ANHANGA_FINAL_DIALOG
+    saci:{title:'A Libertação do Redemoinho',text:'O vendaval cessa… e algo mais profundo se quebra. Não era só a mim que prendiam — era ELE. O Sussurrador. Anhangá. Enquanto eu girava, ele ria por dentro de mim. Manipulava cada servo, cada bicho, cada sussurro que eu pensava ser meu. Obrigado… por me devolver o silêncio. Agora eu sei quem sou. Agora a mata pode respirar de novo.'},
+    mapinguari:{title:'A Libertação do Devorador',text:'Minha fome… para. Minha boca… se fecha. Tudo que engoli, tudo que destruí — Anhangá ria por trás de cada mordida. Ele me disse que a floresta morria por minha fraqueza, e eu acreditei. Eu, o pilar da mata, virei ruína por dentro. Você me devolveu a fome que importa: a de proteger. Obrigado, herói. A mata fechada vai voltar a respirar.'},
+    iara:{title:'A Libertação das Águas',text:'Minhas águas… voltam a ser claras. Sinto o peso da raiva sumir do meu peito, e as canções que eu cantava pra afogar tornam-se canções de acalanto. Anhangá me envenenou com a dor que era minha — mas a dor não era minha, era dele. Você me devolveu o rio. Obrigada, herói. As águas vão lembrar de você.'},
+    boitata:{title:'A Libertação do Fogo',text:'Meu fogo… se acalma. Não mais inferno, não mais consumo. Eu era luz — luz que protegia a mata na noite escura. Anhangá me disse que luz fraca não serve. Mentiu. Você me mostrou que minha luz é suficiente. Obrigado, herói. Volto a ser a serpente que brilha no escuro.'},
+    mula:{title:'A Libertação da Maldição',text:'Meu relincho… silencia. A dor de mil anos se desfaz em cinzas mansas. Anhangá me disse que era meu castigo por meus pecados, mas era o castigo dele que eu carregava. Você me tirou o fogo dos olhos e devolveu a mim o que eu era antes da maldição. Obrigada, herói. A noite já não é tão escura.'},
+    corpo_seco:{title:'A Libertação da Fome',text:'Minha fome… para. Sinto o silêncio da saciedade que nunca tive. Anhangá me prometeu que devorar tudo saciaria meu vazio — mas o vazio era dele, não meu. Você me libertou da fome eterna. Agora posso finalmente descansar. Obrigado, herói. A terra vai me acolher em paz.'},
+    lobisomem:{title:'A Libertação da Lua',text:'A lua… não me amaldiçoa mais. Sinto meu corpo voltar a ser humano, e a fera dentro de mim dorme em paz. Anhangá me prometeu que a fera era minha verdadeira natureza — mentiu. A fera era a dor dele, projetada em mim. Você me devolveu a humanidade. Obrigado, herói. A lua agora é apenas lua.'},
+    cuca:{title:'A Libertação das Poções',text:'Meu caldeirão… esfria. As poções voltam a ser o que eram: cura, não veneno. Anhangá me ensinou que destruir era poder. Mentiu. Você me devolveu a sabedoria. Obrigada, herói. A bruxa volta a ser guardiã — não destruidora.'},
+    boto:{title:'A Libertação do Encanto',text:'Meu canto… volta a ser melodia, não armadilha. Anhangá me disse que o encanto era fraqueza. Mentiu. Você me mostrou que encantar sem destruir é a verdadeira força. Obrigado, herói. As águas doces voltarão a ser lar.'},
+    boi:{title:'A Libertação do Terror',text:'Minha cara preta… volta a ser apenas um rosto. Não mais o rosto do medo. Anhangá me mostrou o terror como poder — mas era a minha dor que ele mostrava. Você me devolveu o rosto. Obrigado, herói. O pasto vai dormir em paz.'},
+    jaci:{title:'A Libertação da Lua Fria',text:'Minha luz… recupera o calor. Não sou mais a lua que queima — volto a ser a lua que acolhe. Anhangá me envenenou com a solidão dele. Você me devolveu o silêncio da noite. Obrigada, herói. As estrelas vão brilhar de novo.'},
+    guaraci:{title:'A Libertação do Sol',text:'Meu fogo… aquece de novo em vez de queimar. Sinto o calor voltar a ser bênção, não maldição. Anhangá me ensinou que a arrogância era poder. Mentiu. Você me devolveu a humildade do sol. Obrigado, herói. O amanhecer vai ser doce outra vez.'},
+    anhanga:{title:'O Fim do Abismo',text:'O véu de escuridão… se rasga. Não era eu que girava o redemoinho — era o vazio dentro de mim. As doze entidades que você libertou, você libertou de MIM também. Eu as usei, mas elas nunca foram minhas. Você as resgatou duas vezes, herói. A primeira, das minhas garras. A segunda, de si mesmas. A mata, o rio, o céu, o sol — tudo respira de novo. E eu… eu volto ao silêncio de onde nunca deveria ter saído. Obrigado. O equilíbrio retorna.'}
 };
 
 // =================================================================
 // 📖 MENSAGENS DE PURIFICAÇÃO
 // =================================================================
 const STORY_PURIFICATION = {
-    // Ato 1
-    porco_espinho: 'O redemoinho que prendia o porco-espinho se desfaz em fumaça dourada. Ele não está morto — apenas livre. Ele te encara uma última vez, como se agradecesse, antes de correr de volta para a mata.',
-    jacare: 'A água escura que envolvia o jacaré recua de volta para o rio. Ele pisca, tonto, e depois desliza manso pela correnteza — o mesmo jacaré de antes do sussurro. Ele está livre.',
-    cervo: 'A sombra que cobria a cabeça do cervo se despedaça em luz. Ele sacode os chifres, inala o ar limpo, e parte num salto leve entre as árvores. Você não o matou — devolveu-lhe a liberdade.',
-    onca_parda: 'A onça-parda cai de lado, e a raiva em seus olhos se apaga. Ela ergue a cabeça, olha para você — não como inimiga, mas como quem acorda de um pesadelo. Depois, some na mata. A caçadora voltou a ser dela mesma.',
-    saci: 'O redemoinho se desfaz lentamente. O Saci cai no chão, tonto. Quando se levanta, seus olhos estão claros pela primeira vez em muito tempo. "O que… o que eu fiz?", ele murmura. Não era ele. Nunca foi ele. Você não o matou — libertou-o do Anhangá.',
-
-    // Ato 2
-    tamandua: 'A sombra que cobria o tamanduá se despedaça em luz. Ele para de furar o chão com fúria e ergue o focinho — cheirando o ar puro pela primeira vez em muito tempo. Depois, caminha manso de volta pra mata fechada. Livre.',
-    anta: 'O peso sobrenatural que prendia a anta se dissolve. Ela balança a cabeça enorme, respira fundo, e segue em passo firme — não pra atropelar, mas pra abrir caminho como sempre fez. A muralha viva voltou a ser dela mesma.',
-    queixada: 'A fúria coletiva que envolvia o queixada se desfaz. Ele para de rilhar os dentes, sacode a juba, e desaparece no mato com um grunhido grave — não de raiva, mas de alívio. A manada respira de novo.',
-    sucuri: 'A correnteza escura que aprisionava a sucuri recua. Ela desliza lentamente de volta pra água, sem pressa, sem fome cega. Só uma cobra grande, respeitando o rio como sempre respeitou. Livre.',
-    mapinguari: 'O gigante cai de joelhos. A boca que devorava tudo se fecha, e por um instante o silêncio é absoluto — até que ele fala, com uma voz que não se ouvia há muito tempo. Não era ele. Nunca foi. Você devolveu ao Pilar da Mata o direito de proteger.',
-
-    // Ato 3
-    piranha: 'O cardume se acalma. As piranhas param de ferver a água e voltam a nadar em paz. A primeira mandíbula que Anhangá corrompeu volta a ser apenas peixe.',
-    lontra: 'A lontra para de arrastar para o fundo. Ela pisca, volta a rir, e mergulha brincando como sempre deveria ter feito. A alegria do rio voltou.',
-    ariranha: 'A matilha do fundo se desfaz. As ariranhas voltam a caçar apenas por fome, e não por prazer. O vermelho dos olhos se apaga. A água respira de novo.',
-    pirarucu: 'O gigante das águas fundas emerge devagar. Ele reconhece você como aliado, e se afasta manso, deixando o caminho livre. O trono submerso de Anhangá desmorona.',
-    iara: 'As águas se acalmam. Iara ergue-se da correnteza, o cabelo molhado, o olhar sereno. Ela olha para você — não com raiva, mas com gratidão silenciosa. O canto dela volta a ser acalanto. Obrigada, herói.',
-
-    // Ato 4
-    cascavel: 'O chocalho silencia. A cascavel se enrola devagar, e o aviso volta a ser justo — não mais surdo. A serpente se afasta para as pedras. Ela era justa antes, e volta a ser.',
-    coral: 'As cores da coral ficam vivas de novo, mas sem veneno — só beleza. Ela se enrola calma e dorme. A mentira colorida volta a ser apenas verdade disfarçada.',
-    jararaca: 'A jararaca pisca devagar. A traição de Anhangá sai dos olhos dela, e ela volta a ser apenas o bicho do mato. Traiçoeira por instinto, não por maldade.',
-    tartaruga: 'O casco antigo respira fundo. A tartaruga solta um suspiro de séculos, e o peso da fúria ancestral some. Ela te olha com gratidão de milênios, e caminha devagar para as sombras.',
-    boitata: 'O fogo volta a brilhar manso. A serpente de luz se enrola no ar, e a floresta respira. Ela volta a iluminar em vez de queimar. A luz da noite voltou.',
-
-    // Ato 5
-    bode: 'O bode sacode os chifres. O peso de carregar culpa some, e ele volta a pastar tranquilo. O bode expiatório virou apenas bode.',
-    carneiro: 'A lã para de brilhar vermelho. O carneiro tromba uma última vez no vazio, e depois se acalma. Ele segue o rebanho por escolha, não por maldição.',
-    cavalo_selvagem: 'O galope cessa. O cavalo baixa a cabeça, respira fundo, e volta a correr livre pelos campos — sem ódio, só velocidade. O corcel sem dono voltou a ser livre de verdade.',
-    touro_bravo: 'O touro baixa os chifres e, por um instante, parece refletir. Depois ele se afasta em passo firme, em direção à pastagem. O furioso do curral voltou a ser só touro.',
-    mula: 'O fogo do relincho se apaga em faíscas mansas. A Mula sem Cabeça desaparece, e no lugar dela, por um instante, você vê uma mulher livre — que te agradece em silêncio antes de partir. A maldição foi quebrada.',
-
-    // Ato 6
-    urubu: 'A sombra do céu pousa no chão, e o urubu volta a ser apenas pássaro. A paciência dele volta a ser paciência — não fome ativa. A morte espera de novo, sem pressa.',
-    carcaara: 'O carcará pousa manso. O dia volta a ser apenas dia, e não caçada. Ele olha o horizonte e voa para longe. A lâmina voadora guardou a lâmina.',
-    tatu: 'A terra se fecha sob o tatu. Ele emerge devagar, tonto, e volta a cavar apenas tocas — não armadilhas. A armadura cavadora voltou a ser só bicho.',
-    lobo_guara: 'O uivo silencia. O lobo-guará fica parado, olhando a lua por um instante. Depois ele uiva uma última vez — agora um uivo de paz — e desaparece no cerrado.',
-    corpo_seco: 'A fome cessa. Os ossos do Corpo Seco se desfazem devagar em pó dourado, e no lugar deles resta apenas o silêncio de uma alma que finalmente encontra descanso. A terra o acolhe.',
-
-    // Ato 7
-    cachorro_mato: 'O cachorro-do-mato para de uivar. Ele te olha, abana a cauda, e some entre as árvores. O primeiro uivo se desfaz na noite. A matilha respira.',
-    raposa: 'A raposa para de sorrir com malícia. Ela te encara, astuta mas calma, e some na mata com um salto elegante. A astúcia voltou a ser qualidade, não arma.',
-    guaxinim: 'A máscara escura sai dos olhos do guaxinim. Ele pisca, sacode a cabeça, e foge pra toca. Os sonhos voltam a ser só sonhos. Ninguém mais sangra dormindo.',
-    jaguatirica: 'A jaguatirica pousa no chão e fica imóvel por um instante. Depois ela ergue a cabeça, te olha sem fúria, e salta para longe — para a mata dela. A caçadora voltou a caçar por fome.',
-    lobisomem: 'A lua prateia o corpo dele enquanto ele se ergue numa forma humana esquecida. Cai de joelhos, exausto, e a maldição se desfaz como orvalho ao amanhecer. Ele ergue os olhos pra você — e agradece.',
-
-    // Ato 8
-    morcego: 'O morcego pousa manso. A escuridão volta a ser só escuridão. Os sonhos param de sangrar. O filho da noite voltou a ser apenas noite.',
-    coruja: 'A coruja pisca devagar, e a sabedoria volta a ser sabedoria. Sem vaidade, sem julgamento. Ela te observa por um instante e voa. A bruxa perdeu os olhos dela.',
-    sapo_cururu: 'O lodo do sapo-cururu perde o veneno. Ele pula pra longe, voltando a ser só bicho do pântano. O chão respira de novo. A poção viva voltou a ser só vida.',
-    seriema: 'A seriema para de proteger o caldeirão. Ela olha o céu, dá um grito de liberdade, e corre pra longe. A guardiã voltou a ser apenas ave.',
-    cuca: 'O caldeirão se parte em mil pedaços, e as poções que derrama se transformam em ervas curativas sobre o solo. A velha bruxa desmorona em folhas secas, liberta de sua própria corrupção. Ela te olha por um instante — grata — antes de desaparecer.',
-
-    // Ato 9
-    tucunare: 'O tucunaré para de morder. Ele nada calmo, redesenhando o próprio território com paciência. O rei do rio voltou a reinar em paz.',
-    piraiba: 'A piraíba emerge devagar e fica imóvel por um instante — como se te visse pela primeira vez como aliado. Depois ela mergulha, e o rio se acalma. O fantasma das profundezas voltou às sombras.',
-    dourada: 'O brilho dourado para de cegar. A dourada nada manso, apenas bela. O tesouro voltou a ser apenas peixe.',
-    peixe_boi: 'O peixe-boi solta um suspiro grave. Ele te olha com gratidão e se afasta lentamente, devolvendo o rio ao seu curso. A muralha viva voltou a ser bênção.',
-    boto: 'Ele se despede com um sorriso triste e mergulha no rio. Quando ressurge, não é mais um sedutor, mas um guardião silencioso das águas — a beleza que sempre deveria ter sido sua. As águas doces voltaram a ser lar.',
-
-    // Ato 10
-    bufalo: 'O titã negro baixa a cabeça. O chão para de tremer. Ele se afasta em passo firme, voltando a ser só búfalo — e não montanha viva.',
-    vaca_louca: 'O mugido vira apenas mugido. A vaca para no meio do pasto, olha o céu, e pasta mansamente. A lamentação virou silêncio.',
-    cabra_preta: 'O agouro se desfaz. A cabra preta balança a cabeça, e o chão volta a ser apenas terra. O azar voltou a ser superstição.',
-    zebu: 'O zebu finalmente para de marrar. Ele respira fundo, te encara com respeito, e se afasta lentamente. A paciência voltou a ser paciência.',
-    boi: 'A face escura se dilui em névoa, revelando olhos serenos que finalmente encontram paz. Ele retorna à terra, devolvido ao seu papel de protetor das noites. O terror foi só casca.',
-
-    // Ato 11
-    gato_mato: 'O gato-do-mato para de te espreitar. Ele pisca, sem pressa, e desaparece nas sombras — mas agora são apenas sombras. A mata fria respira.',
-    mariposa_gigante: 'A mariposa para de voar em círculos. Ela pousa numa pedra, e o pó lunar deixa de enlouquecer — volta a ser só pó. A lua voltou a ser apenas luz.',
-    quati: 'O bando para de fechar o cerco. Os quatis se dispersam, voltando a ser apenas bando. Você pode sair do centro. Você sempre pôde.',
-    sucuarana: 'A senhora das alturas para no meio do caminho. Ela te olha sem desafio, e retoma o passo em direção às montanhas — sem pressa, sem soberba. Ela voltou a ser a puma.',
-    jaci: 'Seu brilho frio recupera o calor perdido. Ela sobe lentamente ao céu, iluminando novamente o mundo com a luz que sempre deveria ter sido sua — acalanto, não queimadura. A noite voltou a ser doce.',
-
-    // Ato 12
-    gaviao: 'O gavião pousa numa pedra alta. A presunção sai dos olhos dele. Ele bate as asas e voa pro horizonte — caçando pela fome, não pela glória. O céu voltou a ser só céu.',
-    falcao: 'O falcão freia no meio do ar. Ele paira por um instante, te olha, e depois voa calmo. A velocidade voltou a ser ferramenta, não deus.',
-    urutau: 'A ilusão se desfaz. O urutau volta a existir de verdade — pássaro, não fantasma. Ele canta uma última vez, e agora o canto é só canto.',
-    aguia_cinzenta: 'A águia pousa no chão, num gesto de humildade. Ela dobra as asas e te cumprimenta com a cabeça. A soberania voltou a ser símbolo, não tirania.',
-    guaraci: 'As chamas que o consumiam se rendem ao amanhecer. Ele retorna ao horizonte como o sol gentil que sempre foi, purificado da arrogância que o cegou. O sol voltou a aquecer.',
-
-    // Ato 13
-    saci: 'A casca espectral se desfaz. O verdadeiro Saci, em paz, aparece por um instante antes de desaparecer. Ele te agradece com os olhos. O eco voltou ao silêncio.',
-    mapinguari: 'O espectro do Pilar se desfaz em folhas verdes que caem sobre você como bênção. A mata reconhece seu libertador.',
-    iara: 'O espectro mergulha e se dissolve em água limpa. As águas doces fluem de novo. A canção voltou a acalantar.',
-    boitata: 'O espectro se transforma em luz mansa. A serpente de fogo desaparece, deixando apenas o brilho da proteção antiga. A floresta respira.',
-    mula: 'O espectro relincha uma última vez — mas agora é de alívio. Ele se desfaz, e a mulher livre que você libertou antes aparece brevemente para agradecer.',
-    corpo_seco: 'O espectro se dissolve em pó claro. A alma que finalmente descansou retorna para acenar. A fome terminou de verdade.',
-    lobisomem: 'O espectro volta à forma humana que você libertou. Ele te encara com gratidão e desaparece na luz da lua. A maldição foi quebrada para sempre.',
-    cuca: 'O espectro se desfaz em folhas. A bruxa velha, em paz, te cumprimenta. O caldeirão nunca mais ferverá ódio.',
-    boto: 'O espectro do sedutor se despede com um sorriso gentil. Ele mergulha e some. As águas voltaram a ser só águas.',
-    boi: 'O espectro da cara preta se desfaz em névoa mansa. Os olhos serenos que você libertou aparecem por um instante e agradecem.',
-    jaci: 'O espectro da lua corrompida se dissolve em luz prateada pura. A deusa, em paz, sobe ao céu pela última vez. O céu voltou a ser dela.',
-    guaraci: 'O espectro do sol devorador se desfaz no amanhecer verdadeiro. Guaraci, em paz, volta ao horizonte. O dia voltou a ser doce.',
-    anhanga: 'O Senhor do Abismo se dissolve em névoa. As doze entidades, agora plenamente livres, brilham por um instante ao redor de você antes de voltarem aos seus postos. A mata, o rio, o céu, o sol — tudo respira. O equilíbrio retorna. Você venceu.'
+    porco_espinho:'O redemoinho que prendia o porco-espinho se desfaz em fumaça dourada. Ele não está morto — apenas livre. Ele te encara uma última vez, como se agradecesse, antes de correr de volta para a mata.',
+    jacare:'A água escura que envolvia o jacaré recua de volta para o rio. Ele pisca, tonto, e depois desliza manso pela correnteza — o mesmo jacaré de antes do sussurro. Ele está livre.',
+    cervo:'A sombra que cobria a cabeça do cervo se despedaça em luz. Ele sacode os chifres, inala o ar limpo, e parte num salto leve entre as árvores. Você não o matou — devolveu-lhe a liberdade.',
+    onca_parda:'A onça-parda cai de lado, e a raiva em seus olhos se apaga. Ela ergue a cabeça, olha para você — não como inimiga, mas como quem acorda de um pesadelo. Depois, some na mata. A caçadora voltou a ser dela mesma.',
+    saci:'O redemoinho se desfaz lentamente. O Saci cai no chão, tonto. Quando se levanta, seus olhos estão claros pela primeira vez em muito tempo. "O que… o que eu fiz?", ele murmura. Não era ele. Nunca foi ele. Você não o matou — libertou-o do Anhangá.',
+    tamandua:'A sombra que cobria o tamanduá se despedaça em luz. Ele para de furar o chão com fúria e ergue o focinho — cheirando o ar puro pela primeira vez em muito tempo. Depois, caminha manso de volta pra mata fechada. Livre.',
+    anta:'O peso sobrenatural que prendia a anta se dissolve. Ela balança a cabeça enorme, respira fundo, e segue em passo firme — não pra atropelar, mas pra abrir caminho como sempre fez. A muralha viva voltou a ser dela mesma.',
+    queixada:'A fúria coletiva que envolvia o queixada se desfaz. Ele para de rilhar os dentes, sacode a juba, e desaparece no mato com um grunhido grave — não de raiva, mas de alívio. A manada respira de novo.',
+    sucuri:'A correnteza escura que aprisionava a sucuri recua. Ela desliza lentamente de volta pra água, sem pressa, sem fome cega. Só uma cobra grande, respeitando o rio como sempre respeitou. Livre.',
+    mapinguari:'O gigante cai de joelhos. A boca que devorava tudo se fecha, e por um instante o silêncio é absoluto — até que ele fala, com uma voz que não se ouvia há muito tempo. Não era ele. Nunca foi. Você devolveu ao Pilar da Mata o direito de proteger.',
+    piranha:'O cardume se acalma. As piranhas param de ferver a água e voltam a nadar em paz. A primeira mandíbula que Anhangá corrompeu volta a ser apenas peixe.',
+    lontra:'A lontra para de arrastar para o fundo. Ela pisca, volta a rir, e mergulha brincando como sempre deveria ter feito. A alegria do rio voltou.',
+    ariranha:'A matilha do fundo se desfaz. As ariranhas voltam a caçar apenas por fome, e não por prazer. O vermelho dos olhos se apaga. A água respira de novo.',
+    pirarucu:'O gigante das águas fundas emerge devagar. Ele reconhece você como aliado, e se afasta manso, deixando o caminho livre. O trono submerso de Anhangá desmorona.',
+    iara:'As águas se acalmam. Iara ergue-se da correnteza, o cabelo molhado, o olhar sereno. Ela olha para você — não com raiva, mas com gratidão silenciosa. O canto dela volta a ser acalanto. Obrigada, herói.',
+    cascavel:'O chocalho silencia. A cascavel se enrola devagar, e o aviso volta a ser justo — não mais surdo. A serpente se afasta para as pedras. Ela era justa antes, e volta a ser.',
+    coral:'As cores da coral ficam vivas de novo, mas sem veneno — só beleza. Ela se enrola calma e dorme. A mentira colorida volta a ser apenas verdade disfarçada.',
+    jararaca:'A jararaca pisca devagar. A traição de Anhangá sai dos olhos dela, e ela volta a ser apenas o bicho do mato. Traiçoeira por instinto, não por maldade.',
+    tartaruga:'O casco antigo respira fundo. A tartaruga solta um suspiro de séculos, e o peso da fúria ancestral some. Ela te olha com gratidão de milênios, e caminha devagar para as sombras.',
+    boitata:'O fogo volta a brilhar manso. A serpente de luz se enrola no ar, e a floresta respira. Ela volta a iluminar em vez de queimar. A luz da noite voltou.',
+    bode:'O bode sacode os chifres. O peso de carregar culpa some, e ele volta a pastar tranquilo. O bode expiatório virou apenas bode.',
+    carneiro:'A lã para de brilhar vermelho. O carneiro tromba uma última vez no vazio, e depois se acalma. Ele segue o rebanho por escolha, não por maldição.',
+    cavalo_selvagem:'O galope cessa. O cavalo baixa a cabeça, respira fundo, e volta a correr livre pelos campos — sem ódio, só velocidade. O corcel sem dono voltou a ser livre de verdade.',
+    touro_bravo:'O touro baixa os chifres e, por um instante, parece refletir. Depois ele se afasta em passo firme, em direção à pastagem. O furioso do curral voltou a ser só touro.',
+    mula:'O fogo do relincho se apaga em faíscas mansas. A Mula sem Cabeça desaparece, e no lugar dela, por um instante, você vê uma mulher livre — que te agradece em silêncio antes de partir. A maldição foi quebrada.',
+    urubu:'A sombra do céu pousa no chão, e o urubu volta a ser apenas pássaro. A paciência dele volta a ser paciência — não fome ativa. A morte espera de novo, sem pressa.',
+    carcaara:'O carcará pousa manso. O dia volta a ser apenas dia, e não caçada. Ele olha o horizonte e voa para longe. A lâmina voadora guardou a lâmina.',
+    tatu:'A terra se fecha sob o tatu. Ele emerge devagar, tonto, e volta a cavar apenas tocas — não armadilhas. A armadura cavadora voltou a ser só bicho.',
+    lobo_guara:'O uivo silencia. O lobo-guará fica parado, olhando a lua por um instante. Depois ele uiva uma última vez — agora um uivo de paz — e desaparece no cerrado.',
+    corpo_seco:'A fome cessa. Os ossos do Corpo Seco se desfazem devagar em pó dourado, e no lugar deles resta apenas o silêncio de uma alma que finalmente encontra descanso. A terra o acolhe.',
+    cachorro_mato:'O cachorro-do-mato para de uivar. Ele te olha, abana a cauda, e some entre as árvores. O primeiro uivo se desfaz na noite. A matilha respira.',
+    raposa:'A raposa para de sorrir com malícia. Ela te encara, astuta mas calma, e some na mata com um salto elegante. A astúcia voltou a ser qualidade, não arma.',
+    guaxinim:'A máscara escura sai dos olhos do guaxinim. Ele pisca, sacode a cabeça, e foge pra toca. Os sonhos voltam a ser só sonhos. Ninguém mais sangra dormindo.',
+    jaguatirica:'A jaguatirica pousa no chão e fica imóvel por um instante. Depois ela ergue a cabeça, te olha sem fúria, e salta para longe — para a mata dela. A caçadora voltou a caçar por fome.',
+    lobisomem:'A lua prateia o corpo dele enquanto ele se ergue numa forma humana esquecida. Cai de joelhos, exausto, e a maldição se desfaz como orvalho ao amanhecer. Ele ergue os olhos pra você — e agradece.',
+    morcego:'O morcego pousa manso. A escuridão volta a ser só escuridão. Os sonhos param de sangrar. O filho da noite voltou a ser apenas noite.',
+    coruja:'A coruja pisca devagar, e a sabedoria volta a ser sabedoria. Sem vaidade, sem julgamento. Ela te observa por um instante e voa. A bruxa perdeu os olhos dela.',
+    sapo_cururu:'O lodo do sapo-cururu perde o veneno. Ele pula pra longe, voltando a ser só bicho do pântano. O chão respira de novo. A poção viva voltou a ser só vida.',
+    seriema:'A seriema para de proteger o caldeirão. Ela olha o céu, dá um grito de liberdade, e corre pra longe. A guardiã voltou a ser apenas ave.',
+    cuca:'O caldeirão se parte em mil pedaços, e as poções que derrama se transformam em ervas curativas sobre o solo. A velha bruxa desmorona em folhas secas, liberta de sua própria corrupção. Ela te olha por um instante — grata — antes de desaparecer.',
+    tucunare:'O tucunaré para de morder. Ele nada calmo, redesenhando o próprio território com paciência. O rei do rio voltou a reinar em paz.',
+    piraiba:'A piraíba emerge devagar e fica imóvel por um instante — como se te visse pela primeira vez como aliado. Depois ela mergulha, e o rio se acalma. O fantasma das profundezas voltou às sombras.',
+    dourada:'O brilho dourado para de cegar. A dourada nada manso, apenas bela. O tesouro voltou a ser apenas peixe.',
+    peixe_boi:'O peixe-boi solta um suspiro grave. Ele te olha com gratidão e se afasta lentamente, devolvendo o rio ao seu curso. A muralha viva voltou a ser bênção.',
+    boto:'Ele se despede com um sorriso triste e mergulha no rio. Quando ressurge, não é mais um sedutor, mas um guardião silencioso das águas — a beleza que sempre deveria ter sido sua. As águas doces voltaram a ser lar.',
+    bufalo:'O titã negro baixa a cabeça. O chão para de tremer. Ele se afasta em passo firme, voltando a ser só búfalo — e não montanha viva.',
+    vaca_louca:'O mugido vira apenas mugido. A vaca para no meio do pasto, olha o céu, e pasta mansamente. A lamentação virou silêncio.',
+    cabra_preta:'O agouro se desfaz. A cabra preta balança a cabeça, e o chão volta a ser apenas terra. O azar voltou a ser superstição.',
+    zebu:'O zebu finalmente para de marrar. Ele respira fundo, te encara com respeito, e se afasta lentamente. A paciência voltou a ser paciência.',
+    boi:'A face escura se dilui em névoa, revelando olhos serenos que finalmente encontram paz. Ele retorna à terra, devolvido ao seu papel de protetor das noites. O terror foi só casca.',
+    gato_mato:'O gato-do-mato para de te espreitar. Ele pisca, sem pressa, e desaparece nas sombras — mas agora são apenas sombras. A mata fria respira.',
+    mariposa_gigante:'A mariposa para de voar em círculos. Ela pousa numa pedra, e o pó lunar deixa de enlouquecer — volta a ser só pó. A lua voltou a ser apenas luz.',
+    quati:'O bando para de fechar o cerco. Os quatis se dispersam, voltando a ser apenas bando. Você pode sair do centro. Você sempre pôde.',
+    sucuarana:'A senhora das alturas para no meio do caminho. Ela te olha sem desafio, e retoma o passo em direção às montanhas — sem pressa, sem soberba. Ela voltou a ser a puma.',
+    jaci:'Seu brilho frio recupera o calor perdido. Ela sobe lentamente ao céu, iluminando novamente o mundo com a luz que sempre deveria ter sido sua — acalanto, não queimadura. A noite voltou a ser doce.',
+    gaviao:'O gavião pousa numa pedra alta. A presunção sai dos olhos dele. Ele bate as asas e voa pro horizonte — caçando pela fome, não pela glória. O céu voltou a ser só céu.',
+    falcao:'O falcão freia no meio do ar. Ele paira por um instante, te olha, e depois voa calmo. A velocidade voltou a ser ferramenta, não deus.',
+    urutau:'A ilusão se desfaz. O urutau volta a existir de verdade — pássaro, não fantasma. Ele canta uma última vez, e agora o canto é só canto.',
+    aguia_cinzenta:'A águia pousa no chão, num gesto de humildade. Ela dobra as asas e te cumprimenta com a cabeça. A soberania voltou a ser símbolo, não tirania.',
+    guaraci:'As chamas que o consumiam se rendem ao amanhecer. Ele retorna ao horizonte como o sol gentil que sempre foi, purificado da arrogância que o cegou. O sol voltou a aquecer.',
+    espectro_saci:'A casca espectral se desfaz. O verdadeiro Saci, em paz, aparece por um instante antes de desaparecer. Ele te agradece com os olhos. O eco voltou ao silêncio.',
+    espectro_mapinguari:'O espectro do Pilar se desfaz em folhas verdes que caem sobre você como bênção. A mata reconhece seu libertador.',
+    espectro_iara:'O espectro mergulha e se dissolve em água limpa. As águas doces fluem de novo. A canção voltou a acalantar.',
+    espectro_boitata:'O espectro se transforma em luz mansa. A serpente de fogo desaparece, deixando apenas o brilho da proteção antiga. A floresta respira.',
+    espectro_mula:'O espectro relincha uma última vez — mas agora é de alívio. Ele se desfaz, e a mulher livre que você libertou antes aparece brevemente para agradecer.',
+    espectro_corposeco:'O espectro se dissolve em pó claro. A alma que finalmente descansou retorna para acenar. A fome terminou de verdade.',
+    espectro_lobisomem:'O espectro volta à forma humana que você libertou. Ele te encara com gratidão e desaparece na luz da lua. A maldição foi quebrada para sempre.',
+    espectro_cuca:'O espectro se desfaz em folhas. A bruxa velha, em paz, te cumprimenta. O caldeirão nunca mais ferverá ódio.',
+    espectro_boto:'O espectro do sedutor se despede com um sorriso gentil. Ele mergulha e some. As águas voltaram a ser só águas.',
+    espectro_boi:'O espectro da cara preta se desfaz em névoa mansa. Os olhos serenos que você libertou aparecem por um instante e agradecem.',
+    espectro_jaci:'O espectro da lua corrompida se dissolve em luz prateada pura. A deusa, em paz, sobe ao céu pela última vez. O céu voltou a ser dela.',
+    espectro_guaraci:'O espectro do sol devorador se desfaz no amanhecer verdadeiro. Guaraci, em paz, volta ao horizonte. O dia voltou a ser doce.',
+    anhanga:'O Senhor do Abismo se dissolve em névoa. As doze entidades, agora plenamente livres, brilham por um instante ao redor de você antes de voltarem aos seus postos. A mata, o rio, o céu, o sol — tudo respira. O equilíbrio retorna. Você venceu.'
 };
 
 // =================================================================
-// 👹 STORY_ENEMIES — Animais + bosses com HANDLERS únicos
+// 👹 STORY_ENEMIES — Animais + bosses
 // =================================================================
 const STORY_ENEMIES = {
-    // ---- ATO 1 ----
-    porco_espinho: {id:'porco_espinho',name:'Porco-Espinho',hp:10,atk:2,
-        skill1:{name:'Espinhos Erguidos',handler:'porco_espinho_espinhos'},
-        skill2:{name:'Bote Rolante',handler:'porco_espinho_bote'}},
-    jacare: {id:'jacare',name:'Jacaré',hp:12,atk:2,
-        skill1:{name:'Bocada',handler:'jacare_bocada'},
-        skill2:{name:'Giro de Cauda',handler:'jacare_giro'}},
-    cervo: {id:'cervo',name:'Cervo',hp:12,atk:2,
-        skill1:{name:'Investida',handler:'cervo_investida'},
-        skill2:{name:'Chifrada',handler:'cervo_chifrada'}},
-    onca_parda: {id:'onca_parda',name:'Onça-Parda',hp:20,atk:3,
-        skill1:{name:'Garra Dupla',handler:'onca_garra_dupla'},
-        skill2:{name:'Salto Mortal',handler:'onca_salto'}},
-    saci: {id:'saci',name:'Saci',hp:30,atk:4,isBoss:true,
-        skill1:{name:'Vórtices de Vento',handler:'saci_vortices'},
-        skill2:{name:'Vórtices Diagonais',handler:'saci_diagonais'}},
-
-    // ---- ATO 2 ----
-    tamandua: {id:'tamandua',name:'Tamanduá-Bandeira',hp:14,atk:2,
-        skill1:{name:'Garras Longas',handler:'tamandua_garras'},
-        skill2:{name:'Bicada Perfurante',handler:'tamandua_bicada'}},
-    anta: {id:'anta',name:'Anta',hp:20,atk:3,
-        skill1:{name:'Pisada Pesada',handler:'anta_pisada'},
-        skill2:{name:'Atropelamento',handler:'anta_atropelamento'}},
-    queixada: {id:'queixada',name:'Queixada',hp:18,atk:3,
-        skill1:{name:'Mordida em Linha',handler:'queixada_mordida'},
-        skill2:{name:'Estouro de Manada',handler:'queixada_estouro'}},
-    sucuri: {id:'sucuri',name:'Sucuri Gigante',hp:28,atk:3,isMiniBoss:true,
-        skill1:{name:'Bocarra',handler:'sucuri_bocarra'},
-        skill2:{name:'Caudada',handler:'sucuri_caudada'}},
-    mapinguari: {id:'mapinguari',name:'Mapinguari',hp:40,atk:4,isBoss:true,
-        skill1:{name:'Mordida Poderosa',handler:'mapinguari_mordida'},
-        skill2:{name:'Pedras Rolantes',handler:'mapinguari_pedras'}},
-
-    // ---- ATO 3 ----
-    piranha: {id:'piranha',name:'Piranha',hp:12,atk:2,
-        skill1:{name:'Cardume',handler:'piranha_cardume'},
-        skill2:{name:'Frenesi',handler:'piranha_frenesi'}},
-    lontra: {id:'lontra',name:'Lontra',hp:16,atk:2,
-        skill1:{name:'Garras Aquáticas',handler:'lontra_garras'},
-        skill2:{name:'Nado Veloz',handler:'lontra_nado'}},
-    ariranha: {id:'ariranha',name:'Ariranha',hp:18,atk:3,
-        skill1:{name:'Matilha Aquática',handler:'ariranha_matilha'},
-        skill2:{name:'Bote do Rio',handler:'ariranha_bote'}},
-    pirarucu: {id:'pirarucu',name:'Pirarucu',hp:26,atk:3,isMiniBoss:true,
-        skill1:{name:'Bocarra',handler:'pirarucu_bocarra'},
-        skill2:{name:'Caudada',handler:'pirarucu_caudada'}},
-    iara: {id:'iara',name:'Iara',hp:40,atk:4,isBoss:true,
-        skill1:{name:'Tsunami',handler:'iara_tsunami'},
-        skill2:{name:'Jatos d\'Água',handler:'iara_jatos'}},
-
-    // ---- ATO 4 ----
-    cascavel: {id:'cascavel',name:'Cascavel',hp:14,atk:2,
-        skill1:{name:'Chocalho Ameaçador',handler:'cascavel_chocalho'},
-        skill2:{name:'Bote Peçonhento',handler:'cascavel_bote'}},
-    coral: {id:'coral',name:'Cobra-Coral',hp:14,atk:2,
-        skill1:{name:'Anéis Coloridos',handler:'coral_aneis'},
-        skill2:{name:'Peçonha',handler:'coral_peconha'}},
-    jararaca: {id:'jararaca',name:'Jararaca',hp:18,atk:3,
-        skill1:{name:'Bote Traiçoeiro',handler:'jararaca_bote'},
-        skill2:{name:'Enrolar',handler:'jararaca_enrolar'}},
-    tartaruga: {id:'tartaruga',name:'Tartaruga-da-Amazônia',hp:28,atk:3,isMiniBoss:true,
-        skill1:{name:'Casco Duro',handler:'tartaruga_casco'},
-        skill2:{name:'Pancada Pesada',handler:'tartaruga_pancada'}},
-    boitata: {id:'boitata',name:'Boitatá',hp:42,atk:4,isBoss:true,
-        skill1:{name:'Colunas de Fogo',handler:'boitata_colunas'},
-        skill2:{name:'Explosões de Fogo',handler:'boitata_explosoes'}},
-
-    // ---- ATO 5 ----
-    bode: {id:'bode',name:'Bode',hp:16,atk:2,
-        skill1:{name:'Cornada',handler:'bode_cornada'},
-        skill2:{name:'Marrada',handler:'bode_marrada'}},
-    carneiro: {id:'carneiro',name:'Carneiro Selvagem',hp:18,atk:2,
-        skill1:{name:'Trombada',handler:'carneiro_trombada'},
-        skill2:{name:'Pisada',handler:'carneiro_pisada'}},
-    cavalo_selvagem: {id:'cavalo_selvagem',name:'Cavalo Selvagem',hp:20,atk:3,
-        skill1:{name:'Coice',handler:'cavalo_coice'},
-        skill2:{name:'Relincho Furioso',handler:'cavalo_relincho'}},
-    touro_bravo: {id:'touro_bravo',name:'Touro Bravo',hp:30,atk:3,isMiniBoss:true,
-        skill1:{name:'Cornada Violenta',handler:'touro_cornada'},
-        skill2:{name:'Pisoteada',handler:'touro_pisoteada'}},
-    mula: {id:'mula',name:'Mula sem Cabeça',hp:42,atk:4,isBoss:true,
-        skill1:{name:'Relincho Flamejante',handler:'mula_relincho'},
-        skill2:{name:'Bolas de Fogo',handler:'mula_bolas'}},
-
-    // ---- ATO 6 ----
-    urubu: {id:'urubu',name:'Urubu',hp:14,atk:2,
-        skill1:{name:'Voo Rasante',handler:'urubu_voo'},
-        skill2:{name:'Bicada',handler:'urubu_bicada'}},
-    carcaara: {id:'carcaara',name:'Carcará',hp:16,atk:3,
-        skill1:{name:'Garras Afiadas',handler:'carcara_garras'},
-        skill2:{name:'Mergulho Mortal',handler:'carcara_mergulho'}},
-    tatu: {id:'tatu',name:'Tatu',hp:18,atk:2,
-        skill1:{name:'Casco Duro',handler:'tatu_casco'},
-        skill2:{name:'Cavar Armadilha',handler:'tatu_cavar'}},
-    lobo_guara: {id:'lobo_guara',name:'Lobo-Guará',hp:28,atk:3,isMiniBoss:true,
-        skill1:{name:'Uivo',handler:'lobo_guara_uivo'},
-        skill2:{name:'Bote Selvagem',handler:'lobo_guara_bote'}},
-    corpo_seco: {id:'corpo_seco',name:'Corpo Seco',hp:44,atk:4,isBoss:true,
-        skill1:{name:'Vapor Podre',handler:'corpo_seco_vapor'},
-        skill2:{name:'Garras Rotas',handler:'corpo_seco_garras'}},
-
-    // ---- ATO 7 ----
-    cachorro_mato: {id:'cachorro_mato',name:'Cachorro-do-Mato',hp:16,atk:2,
-        skill1:{name:'Mordida',handler:'cachorro_mordida'},
-        skill2:{name:'Rosnado Feroz',handler:'cachorro_rosnado'}},
-    raposa: {id:'raposa',name:'Raposa',hp:16,atk:2,
-        skill1:{name:'Astúcia',handler:'raposa_astucia'},
-        skill2:{name:'Bote Ágil',handler:'raposa_bote'}},
-    guaxinim: {id:'guaxinim',name:'Guaxinim',hp:18,atk:3,
-        skill1:{name:'Garras Noturnas',handler:'guaxinim_garras'},
-        skill2:{name:'Ataque Surpresa',handler:'guaxinim_surpresa'}},
-    jaguatirica: {id:'jaguatirica',name:'Jaguatirica',hp:30,atk:3,isMiniBoss:true,
-        skill1:{name:'Garras Selvagens',handler:'jaguatirica_garras'},
-        skill2:{name:'Salto Mortal',handler:'jaguatirica_salto'}},
-    lobisomem: {id:'lobisomem',name:'Lobisomem',hp:46,atk:4,isBoss:true,
-        skill1:{name:'Garras da Fera',handler:'lobisomem_garras'},
-        skill2:{name:'Tremor Lunar',handler:'lobisomem_tremor'}},
-
-    // ---- ATO 8 ----
-    morcego: {id:'morcego',name:'Morcego',hp:14,atk:2,
-        skill1:{name:'Voo Sombrio',handler:'morcego_voo'},
-        skill2:{name:'Eco',handler:'morcego_eco'}},
-    coruja: {id:'coruja',name:'Coruja',hp:16,atk:3,
-        skill1:{name:'Garras Noturnas',handler:'coruja_garras'},
-        skill2:{name:'Voo Silencioso',handler:'coruja_voo'}},
-    sapo_cururu: {id:'sapo_cururu',name:'Sapo-Cururu',hp:18,atk:2,
-        skill1:{name:'Veneno Espirrante',handler:'sapo_veneno'},
-        skill2:{name:'Língua Pegajosa',handler:'sapo_lingua'}},
-    seriema: {id:'seriema',name:'Seriema',hp:28,atk:3,isMiniBoss:true,
-        skill1:{name:'Bicada Feroz',handler:'seriema_bicada'},
-        skill2:{name:'Grito de Guerra',handler:'seriema_grito'}},
-    cuca: {id:'cuca',name:'Cuca',hp:46,atk:5,isBoss:true,
-        skill1:{name:'Poção Corrompida',handler:'cuca_pocao'},
-        skill2:{name:'Poção Curativa',handler:'cuca_cura'}},
-
-    // ---- ATO 9 ----
-    tucunare: {id:'tucunare',name:'Tucunaré',hp:16,atk:2,
-        skill1:{name:'Bote Aquático',handler:'tucunare_bote'},
-        skill2:{name:'Cardume Aquático',handler:'tucunare_cardume'}},
-    piraiba: {id:'piraiba',name:'Piraíba',hp:20,atk:3,
-        skill1:{name:'Bocarra',handler:'piraiba_bocarra'},
-        skill2:{name:'Caudada',handler:'piraiba_caudada'}},
-    dourada: {id:'dourada',name:'Dourada',hp:20,atk:3,
-        skill1:{name:'Escamas Douradas',handler:'dourada_escamas'},
-        skill2:{name:'Nado Rápido',handler:'dourada_nado'}},
-    peixe_boi: {id:'peixe_boi',name:'Peixe-Boi',hp:32,atk:3,isMiniBoss:true,
-        skill1:{name:'Corpulência',handler:'peixe_boi_corpulencia'},
-        skill2:{name:'Pancada na Água',handler:'peixe_boi_pancada'}},
-    boto: {id:'boto',name:'Boto Rosa',hp:48,atk:5,isBoss:true,
-        skill1:{name:'Corações Partidos',handler:'boto_coracoes'},
-        skill2:{name:'Jatos em Cruz',handler:'boto_jatos'}},
-
-    // ---- ATO 10 ----
-    bufalo: {id:'bufalo',name:'Búfalo Selvagem',hp:20,atk:3,
-        skill1:{name:'Marrada Selvagem',handler:'bufalo_marrada'},
-        skill2:{name:'Pisoteada',handler:'bufalo_pisoteada'}},
-    vaca_louca: {id:'vaca_louca',name:'Vaca Louca',hp:18,atk:3,
-        skill1:{name:'Coice',handler:'vaca_coice'},
-        skill2:{name:'Mugido de Fúria',handler:'vaca_mugido'}},
-    cabra_preta: {id:'cabra_preta',name:'Cabra Preta',hp:16,atk:2,
-        skill1:{name:'Cornada',handler:'cabra_cornada'},
-        skill2:{name:'Bote Agourento',handler:'cabra_bote'}},
-    zebu: {id:'zebu',name:'Zebu',hp:32,atk:4,isMiniBoss:true,
-        skill1:{name:'Marrada Bruta',handler:'zebu_marrada'},
-        skill2:{name:'Pisada Pesada',handler:'zebu_pisada'}},
-    boi: {id:'boi',name:'Boi da Cara Preta',hp:50,atk:5,isBoss:true,
-        skill1:{name:'Face Assustadora',handler:'boi_face'},
-        skill2:{name:'Empurrão para as Bordas',handler:'boi_empurrao'}},
-
-    // ---- ATO 11 ----
-    gato_mato: {id:'gato_mato',name:'Gato-do-Mato',hp:18,atk:3,
-        skill1:{name:'Garras Noturnas',handler:'gato_mato_garras'},
-        skill2:{name:'Salto Silencioso',handler:'gato_mato_salto'}},
-    mariposa_gigante: {id:'mariposa_gigante',name:'Mariposa Gigante',hp:16,atk:2,
-        skill1:{name:'Pó Lunar',handler:'mariposa_po'},
-        skill2:{name:'Voo Rasante',handler:'mariposa_voo'}},
-    quati: {id:'quati',name:'Quati',hp:18,atk:3,
-        skill1:{name:'Garras Afiadas',handler:'quati_garras'},
-        skill2:{name:'Bote Rápido',handler:'quati_bote'}},
-    sucuarana: {id:'sucuarana',name:'Suçuarana',hp:32,atk:4,isMiniBoss:true,
-        skill1:{name:'Garra Fatal',handler:'sucuarana_garra'},
-        skill2:{name:'Salto Mortal',handler:'sucuarana_salto'}},
-    jaci: {id:'jaci',name:'Jaci',hp:50,atk:5,isBoss:true,
-        skill1:{name:'Lua de Prata',handler:'jaci_lua'},
-        skill2:{name:'Tempestade Lunar',handler:'jaci_tempestade'}},
-
-    // ---- ATO 12 ----
-    gaviao: {id:'gaviao',name:'Gavião',hp:18,atk:3,
-        skill1:{name:'Voo Rasante',handler:'gaviao_voo'},
-        skill2:{name:'Garras Cortantes',handler:'gaviao_garras'}},
-    falcao: {id:'falcao',name:'Falcão',hp:20,atk:3,
-        skill1:{name:'Mergulho Mortal',handler:'falcao_mergulho'},
-        skill2:{name:'Garras do Vento',handler:'falcao_garras'}},
-    urutau: {id:'urutau',name:'Urutau',hp:18,atk:3,
-        skill1:{name:'Canto Sombrio',handler:'urutau_canto'},
-        skill2:{name:'Voo Fantasma',handler:'urutau_voo'}},
-    aguia_cinzenta: {id:'aguia_cinzenta',name:'Águia-Cinzenta',hp:34,atk:4,isMiniBoss:true,
-        skill1:{name:'Garras Reais',handler:'aguia_garras'},
-        skill2:{name:'Mergulho Solar',handler:'aguia_mergulho'}},
-    guaraci: {id:'guaraci',name:'Guaraci',hp:52,atk:5,isBoss:true,
-        skill1:{name:'Sol Devorador',handler:'guaraci_sol'},
-        skill2:{name:'Onda de Calor',handler:'guaraci_onda'}},
-
-    // ---- ATO 13 — Espectros ----
-    espectro_saci: {id:'espectro_saci',name:'Espectro do Saci',hp:10,atk:2,isSpectral:true,
-        skill1:{name:'Vórtices Etéreos',handler:'saci_vortices'},
-        skill2:{name:'Vórtices Diagonais',handler:'saci_diagonais'}},
-    espectro_mapinguari: {id:'espectro_mapinguari',name:'Espectro do Mapinguari',hp:10,atk:2,isSpectral:true,
-        skill1:{name:'Mordida Espectral',handler:'mapinguari_mordida'},
-        skill2:{name:'Pedras Etéreas',handler:'mapinguari_pedras'}},
-    espectro_iara: {id:'espectro_iara',name:'Espectro da Iara',hp:10,atk:2,isSpectral:true,
-        skill1:{name:'Tsunami Espectral',handler:'iara_tsunami'},
-        skill2:{name:'Jatos Fantasmais',handler:'iara_jatos'}},
-    espectro_boitata: {id:'espectro_boitata',name:'Espectro do Boitatá',hp:10,atk:2,isSpectral:true,
-        skill1:{name:'Colunas Etéreas',handler:'boitata_colunas'},
-        skill2:{name:'Explosões Fantasmais',handler:'boitata_explosoes'}},
-    espectro_mula: {id:'espectro_mula',name:'Espectro da Mula sem Cabeça',hp:10,atk:2,isSpectral:true,
-        skill1:{name:'Relincho Espectral',handler:'mula_relincho'},
-        skill2:{name:'Bolas Fantasmais',handler:'mula_bolas'}},
-    espectro_corposeco: {id:'espectro_corposeco',name:'Espectro do Corpo Seco',hp:10,atk:2,isSpectral:true,
-        skill1:{name:'Vapor Etéreo',handler:'corpo_seco_vapor'},
-        skill2:{name:'Garras Espectrais',handler:'corpo_seco_garras'}},
-    espectro_lobisomem: {id:'espectro_lobisomem',name:'Espectro do Lobisomem',hp:10,atk:2,isSpectral:true,
-        skill1:{name:'Garras Fantasmais',handler:'lobisomem_garras'},
-        skill2:{name:'Tremor Espectral',handler:'lobisomem_tremor'}},
-    espectro_cuca: {id:'espectro_cuca',name:'Espectro da Cuca',hp:10,atk:2,isSpectral:true,
-        skill1:{name:'Poção Etérea',handler:'cuca_pocao'},
-        skill2:{name:'Poção Fantasmal',handler:'cuca_cura'}},
-    espectro_boto: {id:'espectro_boto',name:'Espectro do Boto Rosa',hp:10,atk:2,isSpectral:true,
-        skill1:{name:'Corações Etéreos',handler:'boto_coracoes'},
-        skill2:{name:'Jatos Fantasmais',handler:'boto_jatos'}},
-    espectro_boi: {id:'espectro_boi',name:'Espectro do Boi da Cara Preta',hp:10,atk:2,isSpectral:true,
-        skill1:{name:'Face Etérea',handler:'boi_face'},
-        skill2:{name:'Empurrão Espectral',handler:'boi_empurrao'}},
-    espectro_jaci: {id:'espectro_jaci',name:'Espectro da Jaci',hp:10,atk:2,isSpectral:true,
-        skill1:{name:'Lua Etérea',handler:'jaci_lua'},
-        skill2:{name:'Tempestade Fantasmal',handler:'jaci_tempestade'}},
-    espectro_guaraci: {id:'espectro_guaraci',name:'Espectro do Guaraci',hp:10,atk:2,isSpectral:true,
-        skill1:{name:'Sol Etéreo',handler:'guaraci_sol'},
-        skill2:{name:'Onda Fantasmal',handler:'guaraci_onda'}},
-
-    // ---- ATO 13 — FINAL ----
-    anhanga: {id:'anhanga',name:'Anhangá',hp:60,atk:6,isBoss:true,isFinalBoss:true,
-        skill1:{name:'Fogo Intercalado',handler:'anhanga_fogo'},
-        skill2:{name:'Devorar Natureza',handler:'anhanga_devora'}}
+    porco_espinho: {id:'porco_espinho',name:'Porco-Espinho',hp:10,atk:2,skill1:{name:'Espinhos Erguidos',handler:'porco_espinho_espinhos'},skill2:{name:'Bote Rolante',handler:'porco_espinho_bote'}},
+    jacare: {id:'jacare',name:'Jacaré',hp:12,atk:2,skill1:{name:'Bocada',handler:'jacare_bocada'},skill2:{name:'Giro de Cauda',handler:'jacare_giro'}},
+    cervo: {id:'cervo',name:'Cervo',hp:12,atk:2,skill1:{name:'Investida',handler:'cervo_investida'},skill2:{name:'Chifrada',handler:'cervo_chifrada'}},
+    onca_parda: {id:'onca_parda',name:'Onça-Parda',hp:20,atk:3,skill1:{name:'Garra Dupla',handler:'onca_garra_dupla'},skill2:{name:'Salto Mortal',handler:'onca_salto'}},
+    saci: {id:'saci',name:'Saci',hp:30,atk:4,isBoss:true,skill1:{name:'Vórtices de Vento',handler:'saci_vortices'},skill2:{name:'Vórtices Diagonais',handler:'saci_diagonais'}},
+    tamandua: {id:'tamandua',name:'Tamanduá-Bandeira',hp:14,atk:2,skill1:{name:'Garras Longas',handler:'tamandua_garras'},skill2:{name:'Bicada Perfurante',handler:'tamandua_bicada'}},
+    anta: {id:'anta',name:'Anta',hp:20,atk:3,skill1:{name:'Pisada Pesada',handler:'anta_pisada'},skill2:{name:'Atropelamento',handler:'anta_atropelamento'}},
+    queixada: {id:'queixada',name:'Queixada',hp:18,atk:3,skill1:{name:'Mordida em Linha',handler:'queixada_mordida'},skill2:{name:'Estouro de Manada',handler:'queixada_estouro'}},
+    sucuri: {id:'sucuri',name:'Sucuri Gigante',hp:28,atk:3,isMiniBoss:true,skill1:{name:'Bocarra',handler:'sucuri_bocarra'},skill2:{name:'Caudada',handler:'sucuri_caudada'}},
+    mapinguari: {id:'mapinguari',name:'Mapinguari',hp:40,atk:4,isBoss:true,skill1:{name:'Mordida Poderosa',handler:'mapinguari_mordida'},skill2:{name:'Pedras Rolantes',handler:'mapinguari_pedras'}},
+    piranha: {id:'piranha',name:'Piranha',hp:12,atk:2,skill1:{name:'Cardume',handler:'piranha_cardume'},skill2:{name:'Frenesi',handler:'piranha_frenesi'}},
+    lontra: {id:'lontra',name:'Lontra',hp:16,atk:2,skill1:{name:'Garras Aquáticas',handler:'lontra_garras'},skill2:{name:'Nado Veloz',handler:'lontra_nado'}},
+    ariranha: {id:'ariranha',name:'Ariranha',hp:18,atk:3,skill1:{name:'Matilha Aquática',handler:'ariranha_matilha'},skill2:{name:'Bote do Rio',handler:'ariranha_bote'}},
+    pirarucu: {id:'pirarucu',name:'Pirarucu',hp:26,atk:3,isMiniBoss:true,skill1:{name:'Bocarra',handler:'pirarucu_bocarra'},skill2:{name:'Caudada',handler:'pirarucu_caudada'}},
+    iara: {id:'iara',name:'Iara',hp:40,atk:4,isBoss:true,skill1:{name:'Tsunami',handler:'iara_tsunami'},skill2:{name:'Jatos d\'Água',handler:'iara_jatos'}},
+    cascavel: {id:'cascavel',name:'Cascavel',hp:14,atk:2,skill1:{name:'Chocalho Ameaçador',handler:'cascavel_chocalho'},skill2:{name:'Bote Peçonhento',handler:'cascavel_bote'}},
+    coral: {id:'coral',name:'Cobra-Coral',hp:14,atk:2,skill1:{name:'Anéis Coloridos',handler:'coral_aneis'},skill2:{name:'Peçonha',handler:'coral_peconha'}},
+    jararaca: {id:'jararaca',name:'Jararaca',hp:18,atk:3,skill1:{name:'Bote Traiçoeiro',handler:'jararaca_bote'},skill2:{name:'Enrolar',handler:'jararaca_enrolar'}},
+    tartaruga: {id:'tartaruga',name:'Tartaruga-da-Amazônia',hp:28,atk:3,isMiniBoss:true,skill1:{name:'Casco Duro',handler:'tartaruga_casco'},skill2:{name:'Pancada Pesada',handler:'tartaruga_pancada'}},
+    boitata: {id:'boitata',name:'Boitatá',hp:42,atk:4,isBoss:true,skill1:{name:'Colunas de Fogo',handler:'boitata_colunas'},skill2:{name:'Explosões de Fogo',handler:'boitata_explosoes'}},
+    bode: {id:'bode',name:'Bode',hp:16,atk:2,skill1:{name:'Cornada',handler:'bode_cornada'},skill2:{name:'Marrada',handler:'bode_marrada'}},
+    carneiro: {id:'carneiro',name:'Carneiro Selvagem',hp:18,atk:2,skill1:{name:'Trombada',handler:'carneiro_trombada'},skill2:{name:'Pisada',handler:'carneiro_pisada'}},
+    cavalo_selvagem: {id:'cavalo_selvagem',name:'Cavalo Selvagem',hp:20,atk:3,skill1:{name:'Coice',handler:'cavalo_coice'},skill2:{name:'Relincho Furioso',handler:'cavalo_relincho'}},
+    touro_bravo: {id:'touro_bravo',name:'Touro Bravo',hp:30,atk:3,isMiniBoss:true,skill1:{name:'Cornada Violenta',handler:'touro_cornada'},skill2:{name:'Pisoteada',handler:'touro_pisoteada'}},
+    mula: {id:'mula',name:'Mula sem Cabeça',hp:42,atk:4,isBoss:true,skill1:{name:'Relincho Flamejante',handler:'mula_relincho'},skill2:{name:'Bolas de Fogo',handler:'mula_bolas'}},
+    urubu: {id:'urubu',name:'Urubu',hp:14,atk:2,skill1:{name:'Voo Rasante',handler:'urubu_voo'},skill2:{name:'Bicada',handler:'urubu_bicada'}},
+    carcaara: {id:'carcaara',name:'Carcará',hp:16,atk:3,skill1:{name:'Garras Afiadas',handler:'carcara_garras'},skill2:{name:'Mergulho Mortal',handler:'carcara_mergulho'}},
+    tatu: {id:'tatu',name:'Tatu',hp:18,atk:2,skill1:{name:'Casco Duro',handler:'tatu_casco'},skill2:{name:'Cavar Armadilha',handler:'tatu_cavar'}},
+    lobo_guara: {id:'lobo_guara',name:'Lobo-Guará',hp:28,atk:3,isMiniBoss:true,skill1:{name:'Uivo',handler:'lobo_guara_uivo'},skill2:{name:'Bote Selvagem',handler:'lobo_guara_bote'}},
+    corpo_seco: {id:'corpo_seco',name:'Corpo Seco',hp:44,atk:4,isBoss:true,skill1:{name:'Vapor Podre',handler:'corpo_seco_vapor'},skill2:{name:'Garras Rotas',handler:'corpo_seco_garras'}},
+    cachorro_mato: {id:'cachorro_mato',name:'Cachorro-do-Mato',hp:16,atk:2,skill1:{name:'Mordida',handler:'cachorro_mordida'},skill2:{name:'Rosnado Feroz',handler:'cachorro_rosnado'}},
+    raposa: {id:'raposa',name:'Raposa',hp:16,atk:2,skill1:{name:'Astúcia',handler:'raposa_astucia'},skill2:{name:'Bote Ágil',handler:'raposa_bote'}},
+    guaxinim: {id:'guaxinim',name:'Guaxinim',hp:18,atk:3,skill1:{name:'Garras Noturnas',handler:'guaxinim_garras'},skill2:{name:'Ataque Surpresa',handler:'guaxinim_surpresa'}},
+    jaguatirica: {id:'jaguatirica',name:'Jaguatirica',hp:30,atk:3,isMiniBoss:true,skill1:{name:'Garras Selvagens',handler:'jaguatirica_garras'},skill2:{name:'Salto Mortal',handler:'jaguatirica_salto'}},
+    lobisomem: {id:'lobisomem',name:'Lobisomem',hp:46,atk:4,isBoss:true,skill1:{name:'Garras da Fera',handler:'lobisomem_garras'},skill2:{name:'Tremor Lunar',handler:'lobisomem_tremor'}},
+    morcego: {id:'morcego',name:'Morcego',hp:14,atk:2,skill1:{name:'Voo Sombrio',handler:'morcego_voo'},skill2:{name:'Eco',handler:'morcego_eco'}},
+    coruja: {id:'coruja',name:'Coruja',hp:16,atk:3,skill1:{name:'Garras Noturnas',handler:'coruja_garras'},skill2:{name:'Voo Silencioso',handler:'coruja_voo'}},
+    sapo_cururu: {id:'sapo_cururu',name:'Sapo-Cururu',hp:18,atk:2,skill1:{name:'Veneno Espirrante',handler:'sapo_veneno'},skill2:{name:'Língua Pegajosa',handler:'sapo_lingua'}},
+    seriema: {id:'seriema',name:'Seriema',hp:28,atk:3,isMiniBoss:true,skill1:{name:'Bicada Feroz',handler:'seriema_bicada'},skill2:{name:'Grito de Guerra',handler:'seriema_grito'}},
+    cuca: {id:'cuca',name:'Cuca',hp:46,atk:5,isBoss:true,skill1:{name:'Poção Corrompida',handler:'cuca_pocao'},skill2:{name:'Poção Curativa',handler:'cuca_cura'}},
+    tucunare: {id:'tucunare',name:'Tucunaré',hp:16,atk:2,skill1:{name:'Bote Aquático',handler:'tucunare_bote'},skill2:{name:'Cardume Aquático',handler:'tucunare_cardume'}},
+    piraiba: {id:'piraiba',name:'Piraíba',hp:20,atk:3,skill1:{name:'Bocarra',handler:'piraiba_bocarra'},skill2:{name:'Caudada',handler:'piraiba_caudada'}},
+    dourada: {id:'dourada',name:'Dourada',hp:20,atk:3,skill1:{name:'Escamas Douradas',handler:'dourada_escamas'},skill2:{name:'Nado Rápido',handler:'dourada_nado'}},
+    peixe_boi: {id:'peixe_boi',name:'Peixe-Boi',hp:32,atk:3,isMiniBoss:true,skill1:{name:'Corpulência',handler:'peixe_boi_corpulencia'},skill2:{name:'Pancada na Água',handler:'peixe_boi_pancada'}},
+    boto: {id:'boto',name:'Boto Rosa',hp:48,atk:5,isBoss:true,skill1:{name:'Corações Partidos',handler:'boto_coracoes'},skill2:{name:'Jatos em Cruz',handler:'boto_jatos'}},
+    bufalo: {id:'bufalo',name:'Búfalo Selvagem',hp:20,atk:3,skill1:{name:'Marrada Selvagem',handler:'bufalo_marrada'},skill2:{name:'Pisoteada',handler:'bufalo_pisoteada'}},
+    vaca_louca: {id:'vaca_louca',name:'Vaca Louca',hp:18,atk:3,skill1:{name:'Coice',handler:'vaca_coice'},skill2:{name:'Mugido de Fúria',handler:'vaca_mugido'}},
+    cabra_preta: {id:'cabra_preta',name:'Cabra Preta',hp:16,atk:2,skill1:{name:'Cornada',handler:'cabra_cornada'},skill2:{name:'Bote Agourento',handler:'cabra_bote'}},
+    zebu: {id:'zebu',name:'Zebu',hp:32,atk:4,isMiniBoss:true,skill1:{name:'Marrada Bruta',handler:'zebu_marrada'},skill2:{name:'Pisada Pesada',handler:'zebu_pisada'}},
+    boi: {id:'boi',name:'Boi da Cara Preta',hp:50,atk:5,isBoss:true,skill1:{name:'Face Assustadora',handler:'boi_face'},skill2:{name:'Empurrão para as Bordas',handler:'boi_empurrao'}},
+    gato_mato: {id:'gato_mato',name:'Gato-do-Mato',hp:18,atk:3,skill1:{name:'Garras Noturnas',handler:'gato_mato_garras'},skill2:{name:'Salto Silencioso',handler:'gato_mato_salto'}},
+    mariposa_gigante: {id:'mariposa_gigante',name:'Mariposa Gigante',hp:16,atk:2,skill1:{name:'Pó Lunar',handler:'mariposa_po'},skill2:{name:'Voo Rasante',handler:'mariposa_voo'}},
+    quati: {id:'quati',name:'Quati',hp:18,atk:3,skill1:{name:'Garras Afiadas',handler:'quati_garras'},skill2:{name:'Bote Rápido',handler:'quati_bote'}},
+    sucuarana: {id:'sucuarana',name:'Suçuarana',hp:32,atk:4,isMiniBoss:true,skill1:{name:'Garra Fatal',handler:'sucuarana_garra'},skill2:{name:'Salto Mortal',handler:'sucuarana_salto'}},
+    jaci: {id:'jaci',name:'Jaci',hp:50,atk:5,isBoss:true,skill1:{name:'Lua de Prata',handler:'jaci_lua'},skill2:{name:'Tempestade Lunar',handler:'jaci_tempestade'}},
+    gaviao: {id:'gaviao',name:'Gavião',hp:18,atk:3,skill1:{name:'Voo Rasante',handler:'gaviao_voo'},skill2:{name:'Garras Cortantes',handler:'gaviao_garras'}},
+    falcao: {id:'falcao',name:'Falcão',hp:20,atk:3,skill1:{name:'Mergulho Mortal',handler:'falcao_mergulho'},skill2:{name:'Garras do Vento',handler:'falcao_garras'}},
+    urutau: {id:'urutau',name:'Urutau',hp:18,atk:3,skill1:{name:'Canto Sombrio',handler:'urutau_canto'},skill2:{name:'Voo Fantasma',handler:'urutau_voo'}},
+    aguia_cinzenta: {id:'aguia_cinzenta',name:'Águia-Cinzenta',hp:34,atk:4,isMiniBoss:true,skill1:{name:'Garras Reais',handler:'aguia_garras'},skill2:{name:'Mergulho Solar',handler:'aguia_mergulho'}},
+    guaraci: {id:'guaraci',name:'Guaraci',hp:52,atk:5,isBoss:true,skill1:{name:'Sol Devorador',handler:'guaraci_sol'},skill2:{name:'Onda de Calor',handler:'guaraci_onda'}},
+    espectro_saci: {id:'espectro_saci',name:'Espectro do Saci',hp:10,atk:2,isSpectral:true,skill1:{name:'Vórtices Etéreos',handler:'saci_vortices'},skill2:{name:'Vórtices Diagonais',handler:'saci_diagonais'}},
+    espectro_mapinguari: {id:'espectro_mapinguari',name:'Espectro do Mapinguari',hp:10,atk:2,isSpectral:true,skill1:{name:'Mordida Espectral',handler:'mapinguari_mordida'},skill2:{name:'Pedras Etéreas',handler:'mapinguari_pedras'}},
+    espectro_iara: {id:'espectro_iara',name:'Espectro da Iara',hp:10,atk:2,isSpectral:true,skill1:{name:'Tsunami Espectral',handler:'iara_tsunami'},skill2:{name:'Jatos Fantasmais',handler:'iara_jatos'}},
+    espectro_boitata: {id:'espectro_boitata',name:'Espectro do Boitatá',hp:10,atk:2,isSpectral:true,skill1:{name:'Colunas Etéreas',handler:'boitata_colunas'},skill2:{name:'Explosões Fantasmais',handler:'boitata_explosoes'}},
+    espectro_mula: {id:'espectro_mula',name:'Espectro da Mula sem Cabeça',hp:10,atk:2,isSpectral:true,skill1:{name:'Relincho Espectral',handler:'mula_relincho'},skill2:{name:'Bolas Fantasmais',handler:'mula_bolas'}},
+    espectro_corposeco: {id:'espectro_corposeco',name:'Espectro do Corpo Seco',hp:10,atk:2,isSpectral:true,skill1:{name:'Vapor Etéreo',handler:'corpo_seco_vapor'},skill2:{name:'Garras Espectrais',handler:'corpo_seco_garras'}},
+    espectro_lobisomem: {id:'espectro_lobisomem',name:'Espectro do Lobisomem',hp:10,atk:2,isSpectral:true,skill1:{name:'Garras Fantasmais',handler:'lobisomem_garras'},skill2:{name:'Tremor Espectral',handler:'lobisomem_tremor'}},
+    espectro_cuca: {id:'espectro_cuca',name:'Espectro da Cuca',hp:10,atk:2,isSpectral:true,skill1:{name:'Poção Etérea',handler:'cuca_pocao'},skill2:{name:'Poção Fantasmal',handler:'cuca_cura'}},
+    espectro_boto: {id:'espectro_boto',name:'Espectro do Boto Rosa',hp:10,atk:2,isSpectral:true,skill1:{name:'Corações Etéreos',handler:'boto_coracoes'},skill2:{name:'Jatos Fantasmais',handler:'boto_jatos'}},
+    espectro_boi: {id:'espectro_boi',name:'Espectro do Boi da Cara Preta',hp:10,atk:2,isSpectral:true,skill1:{name:'Face Etérea',handler:'boi_face'},skill2:{name:'Empurrão Espectral',handler:'boi_empurrao'}},
+    espectro_jaci: {id:'espectro_jaci',name:'Espectro da Jaci',hp:10,atk:2,isSpectral:true,skill1:{name:'Lua Etérea',handler:'jaci_lua'},skill2:{name:'Tempestade Fantasmal',handler:'jaci_tempestade'}},
+    espectro_guaraci: {id:'espectro_guaraci',name:'Espectro do Guaraci',hp:10,atk:2,isSpectral:true,skill1:{name:'Sol Etéreo',handler:'guaraci_sol'},skill2:{name:'Onda Fantasmal',handler:'guaraci_onda'}},
+    anhanga: {id:'anhanga',name:'Anhangá',hp:60,atk:6,isBoss:true,isFinalBoss:true,skill1:{name:'Fogo Intercalado',handler:'anhanga_fogo'},skill2:{name:'Devorar Natureza',handler:'anhanga_devora'}}
 };
-
 // =================================================================
-// 🏁 FIM DA PARTE 2/5
-// =================================================================
-// =================================================================
-// historia.js — V7.0 — Bloco 3/5
-// Sistema de FX + helpers + SISTEMA DE ESTRELAS + desbloqueio de heróis
-// =================================================================
-
-// =================================================================
-// 🎨 SLOTS DE SPRITES DE FX (preencha com URLs quando tiver os sprites)
-// -----------------------------------------------------------------
-// ⚠️ PRESERVADOS: todos os links que você já configurou estão mantidos.
+// 🎨 SLOTS DE SPRITES DE FX
 // =================================================================
 const STORY_FX_SPRITES = {
-    spike_burst:      'https://i.imgur.com/rEKf5aV.png',
-    spike_roll:       'https://i.imgur.com/jMfwakW.png',
-    jaw_snap:         'https://i.imgur.com/xSvWvNx.png',
-    tail_whip:        'https://i.imgur.com/H5ZbfwL.png',
-    antler_charge:    'https://i.imgur.com/jSLWgto.png',
-    hoof_stomp:       'https://i.imgur.com/SdClPec.png',
-    pounce_arc:       'https://i.imgur.com/23VkeNf.png',
-    claw_slash:       'https://i.imgur.com/23VkeNf.png',
-    fang_bite:        'https://i.imgur.com/LGPJ1nD.png',
-    wing_gust:        'https://i.imgur.com/ZLoFtuS.png',
-    peck_beak:        'https://i.imgur.com/9NqS6ye.png',
-    coil_wrap:        'https://i.imgur.com/WqNakSK.png',
-    sting_venom:      'https://i.imgur.com/GcHFnVX.png',
-    splash_wave:      'https://i.imgur.com/4kfuSUg.png',
-    fin_slash:        'https://i.imgur.com/HbejI8O.png',
-    tentacle_glow:    '',
-    ground_crack:     'https://i.imgur.com/z7IdFsb.png',
-    shockwave:        'https://i.imgur.com/9cKQQ07.png',
-    fog_cloud:        'https://i.imgur.com/DJIefCf.png',
-    swarm_cloud:      'https://i.imgur.com/6IRNOli.png',
-    spectral_veil:    '',
-    push_arrow:       '',
-    pull_chain:       '',
-    heal_orb:         '',
-    tile_flip:        '',
-    element_pulse:    'https://i.imgur.com/9Zxsavx.png',
-    flame_short:      'https://i.imgur.com/taNG7Pw.png',
-    impact:           '',
-    heavy_slash:      '',
+    spike_burst:'https://i.imgur.com/rEKf5aV.png',
+    spike_roll:'https://i.imgur.com/jMfwakW.png',
+    jaw_snap:'https://i.imgur.com/xSvWvNx.png',
+    tail_whip:'https://i.imgur.com/H5ZbfwL.png',
+    antler_charge:'https://i.imgur.com/jSLWgto.png',
+    hoof_stomp:'https://i.imgur.com/SdClPec.png',
+    pounce_arc:'https://i.imgur.com/23VkeNf.png',
+    claw_slash:'https://i.imgur.com/23VkeNf.png',
+    fang_bite:'https://i.imgur.com/LGPJ1nD.png',
+    wing_gust:'https://i.imgur.com/ZLoFtuS.png',
+    peck_beak:'https://i.imgur.com/9NqS6ye.png',
+    coil_wrap:'https://i.imgur.com/WqNakSK.png',
+    sting_venom:'https://i.imgur.com/GcHFnVX.png',
+    splash_wave:'https://i.imgur.com/4kfuSUg.png',
+    fin_slash:'https://i.imgur.com/HbejI8O.png',
+    tentacle_glow:'',
+    ground_crack:'https://i.imgur.com/z7IdFsb.png',
+    shockwave:'https://i.imgur.com/9cKQQ07.png',
+    fog_cloud:'https://i.imgur.com/DJIefCf.png',
+    swarm_cloud:'https://i.imgur.com/6IRNOli.png',
+    spectral_veil:'',
+    push_arrow:'',
+    pull_chain:'',
+    heal_orb:'',
+    tile_flip:'',
+    element_pulse:'https://i.imgur.com/9Zxsavx.png',
+    flame_short:'https://i.imgur.com/taNG7Pw.png',
+    impact:'',
+    heavy_slash:'',
+};
+// =================================================================
+// 🎬 GIFs do PODER ANCESTRAL dos heróis
+// -----------------------------------------------------------------
+// Como funciona:
+//   • Se o link estiver preenchido → usa o GIF
+//   • Se o link estiver VAZIO → cai no GIF fallback (por arquétipo)
+//     - Guerreiro → GIF do Tupã
+//     - Mago     → GIF do Sumé
+//     - Arqueiro → GIF do Caipora
+//   • Heróis base (Tupã/Sumé/Caipora) usam os GIFs originais do entidades.js
+//
+// Como preencher:
+//   Basta colar o link entre as aspas. Deixe '' (vazio) para usar o fallback.
+// =================================================================
+const STORY_BRAVELY_GIFS = {
+    // ---- BASE (já vêm do entidades.js) ----
+    'Tupa':    '',   // usa BRAVELY_TUPA original
+    'Sume':    '',   // usa BRAVELY_SUME original
+    'Caipora': '',   // usa BRAVELY_CAIPORA original
+
+    // ---- GUERREIROS ----
+    'Kanarott':  '',  // ← cole o link aqui
+    'Teperesik': '',  // ← cole o link aqui
+    'Eru':       '',  // ← cole o link aqui
+
+    // ---- MAGOS ----
+    'Anduré':          '',  // ← cole o link aqui
+    'Mãe da Mata':     '',  // ← cole o link aqui
+    'Pajé Anhanguera': '',  // ← cole o link aqui
+
+    // ---- ARQUEIROS ----
+    'Juruá':          '',  // ← cole o link aqui
+    'Araci':          '',  // ← cole o link aqui
+    'Bicho Folharal': '',  // ← cole o link aqui
+    "Tapyra'yawara":  '',  // ← cole o link aqui
+};
+
+// Fallback por arquétipo (usado quando o link acima está vazio)
+const STORY_BRAVELY_FALLBACK = {
+    'Guerreiro': 'Tupa',
+    'Mago':      'Sume',
+    'Arqueiro':  'Caipora',
 };
 
 // =================================================================
-// 🎨 HELPER fxSprite / fxElement
+// 🎬 Resolve qual GIF usar para o Bravely de um herói
+// -----------------------------------------------------------------
+// Prioridade:
+//   1. Link em STORY_BRAVELY_GIFS (se preenchido)
+//   2. Fallback por arquétipo (Guerreiro→Tupã, etc)
+//   3. GIF padrão do entidades.js (BRAVELY_TUPA)
 // =================================================================
+function getBravelyGifForHero(heroClass) {
+    // 1. Link direto na tabela?
+    const direct = STORY_BRAVELY_GIFS[heroClass];
+    if (direct && String(direct).trim() !== '') {
+        return direct;
+    }
+
+    // 2. Heróis base → usa os GIFs originais do entidades.js
+    if (heroClass === 'Tupa')   return (typeof SPRITES !== 'undefined' && SPRITES.BRAVELY_TUPA)   || '';
+    if (heroClass === 'Sume')   return (typeof SPRITES !== 'undefined' && SPRITES.BRAVELY_SUME)   || '';
+    if (heroClass === 'Caipora')return (typeof SPRITES !== 'undefined' && SPRITES.BRAVELY_CAIPORA)|| '';
+
+    // 3. Fallback por arquétipo
+    const heroData = (typeof STORY_HERO_CLASSES !== 'undefined') ? STORY_HERO_CLASSES[heroClass] : null;
+    if (heroData && heroData.role) {
+        const fallbackClass = STORY_BRAVELY_FALLBACK[heroData.role];
+        if (fallbackClass && typeof SPRITES !== 'undefined') {
+            const key = 'BRAVELY_' + fallbackClass.toUpperCase();
+            if (SPRITES[key]) return SPRITES[key];
+        }
+    }
+
+    // 4. Último recurso: GIF do Tupã
+    if (typeof SPRITES !== 'undefined' && SPRITES.BRAVELY_TUPA) return SPRITES.BRAVELY_TUPA;
+    return '';
+}
+// =================================================================
+// 🎬 Override do showBravelyAnimation — usa STORY_BRAVELY_GIFS
+// =================================================================
+(function installStoryBravelyAnimation() {
+
+    // Guarda o original (do entidades.js)
+    const _origShowBravely = window.showBravelyAnimation;
+
+    window.showBravelyAnimation = async function(playerClass) {
+        // Fora do modo história → original
+        if (!window._storyMode || !_origShowBravely) {
+            return _origShowBravely.apply(this, arguments);
+        }
+
+        // Modo história → usa nossa tabela
+        return new Promise((resolve) => {
+            const gifUrl = getBravelyGifForHero(playerClass);
+
+            // Se não achou nenhum GIF (nem fallback), usa o original
+            if (!gifUrl) {
+                return _origShowBravely.apply(this, arguments).then(resolve);
+            }
+
+            const overlay = document.createElement('div');
+            overlay.className = 'bravely-animation-overlay';
+            overlay.id = 'bravelyAnimationOverlay';
+
+            const gif = document.createElement('img');
+            gif.src = gifUrl;
+            gif.className = 'bravely-animation-gif';
+            gif.alt = 'Poder Ancestral';
+            gif.onerror = function() {
+                // Se o GIF falhar, cai no original
+                if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+                _origShowBravely.apply(window, [playerClass]).then(resolve);
+            };
+
+            overlay.appendChild(gif);
+
+            const board = tutorialMode ? document.getElementById('tutorialBoard') : document.getElementById('board');
+            if (board) board.appendChild(overlay);
+
+            try { playSfx('skill1'); } catch(e) {}
+
+            setTimeout(() => {
+                if (overlay.parentNode) {
+                    overlay.style.opacity = '0';
+                    overlay.style.transition = 'opacity 0.5s ease';
+                    setTimeout(() => {
+                        if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+                        resolve();
+                    }, 500);
+                } else {
+                    resolve();
+                }
+            }, 2000);
+        });
+    };
+
+    console.log('✅ showBravelyAnimation sobrescrito — usa STORY_BRAVELY_GIFS.');
+})();
+
 function fxSprite(key, cssFallbackHTML) {
     const url = STORY_FX_SPRITES[key];
     if (url && String(url).trim() !== '') {
@@ -2182,20 +1744,14 @@ function fxElement(key, cssFallbackHTML) {
 }
 
 // =================================================================
-// 🎨 CSS DOS EFEITOS (fallback)
+// 🎨 CSS DOS EFEITOS
 // =================================================================
 (function injectStoryFxCSS() {
     if (document.getElementById('storyFxStyle')) return;
     const style = document.createElement('style');
     style.id = 'storyFxStyle';
     style.textContent = `
-        .story-fx {
-            position: absolute;
-            pointer-events: none;
-            z-index: 55;
-            transform-origin: center center;
-            will-change: transform, opacity;
-        }
+        .story-fx { position: absolute; pointer-events: none; z-index: 55; transform-origin: center center; will-change: transform, opacity; }
         .fx-spike-burst { position:absolute;width:14px;height:14px;background:radial-gradient(circle,#fff5dc 0%,#d9b840 40%,#8a7018 100%);border-radius:50%;box-shadow:0 0 12px #d9b840,0 0 24px rgba(217,184,64,0.5);animation:fxSpikeBurst 0.6s ease-out forwards; }
         @keyframes fxSpikeBurst { 0%{transform:scale(0);opacity:0;} 40%{transform:scale(1.4);opacity:1;} 100%{transform:scale(2.2);opacity:0;} }
         .fx-spike-travel { position:absolute;width:8px;height:8px;background:linear-gradient(135deg,#d9b840,#8a7018);border-radius:50%;box-shadow:0 0 8px #d9b840;z-index:56;transition:left 0.25s linear,top 0.25s linear,opacity 0.25s; }
@@ -2239,8 +1795,6 @@ function fxElement(key, cssFallbackHTML) {
         @keyframes fxSwarmCloud { 0%{transform:scale(0.3) rotate(0deg);opacity:0;} 40%{transform:scale(1.1) rotate(180deg);opacity:1;} 100%{transform:scale(1.4) rotate(360deg);opacity:0;} }
         .fx-spectral-veil { position:absolute;width:140%;height:140%;left:-20%;top:-20%;background:radial-gradient(circle,rgba(142,68,173,0.9) 0%,rgba(142,68,173,0.5) 40%,transparent 70%);border-radius:50%;filter:blur(4px);animation:fxSpectralVeil 0.8s ease-out forwards; }
         @keyframes fxSpectralVeil { 0%{transform:scale(0.4);opacity:0;} 40%{transform:scale(1.1);opacity:1;} 100%{transform:scale(1.5);opacity:0;} }
-        .fx-tentacle-glow { position:absolute;width:100%;height:100%;background:linear-gradient(90deg,transparent 40%,rgba(200,128,224,0.9) 48%,rgba(255,255,255,1) 50%,rgba(200,128,224,0.9) 52%,transparent 60%),linear-gradient(0deg,transparent 40%,rgba(200,128,224,0.9) 48%,rgba(255,255,255,1) 50%,rgba(200,128,224,0.9) 52%,transparent 60%);animation:fxTentacleGlow 0.6s ease-out forwards; }
-        @keyframes fxTentacleGlow { 0%{transform:scale(0.5);opacity:0;} 40%{transform:scale(1.2);opacity:1;} 100%{transform:scale(1.5);opacity:0;} }
         .fx-push-arrow { position:absolute;width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:28px;color:#e8b923;text-shadow:0 0 8px #000,0 0 12px #e8b923;animation:fxPushArrow 0.5s ease-out forwards; }
         @keyframes fxPushArrow { 0%{transform:translate(0,0) scale(0.6);opacity:0;} 40%{transform:translate(8px,0) scale(1.2);opacity:1;} 100%{transform:translate(20px,0) scale(0.9);opacity:0;} }
         .fx-pull-chain { position:absolute;width:100%;height:100%;background:linear-gradient(90deg,transparent 30%,rgba(217,184,64,0.9) 48%,rgba(255,245,220,1) 50%,rgba(217,184,64,0.9) 52%,transparent 70%);animation:fxPullChain 0.5s ease-out forwards; }
@@ -2260,7 +1814,7 @@ function fxElement(key, cssFallbackHTML) {
 })();
 
 // =================================================================
-// 🧭 HELPERS DE POSICIONAMENTO
+// 🧭 HELPERS DE POSICIONAMENTO E FX
 // =================================================================
 function fxPos(x, y) {
     const s = (typeof getStep === 'function') ? getStep() : 59;
@@ -2274,61 +1828,40 @@ function fxPos(x, y) {
     return { left: (x * s + pad), top: (y * s + pad), step: s, pad };
 }
 
-// =================================================================
-// 🎬 spawnFxAt — FX único num tile
-// =================================================================
 function spawnFxAt(fxKey, cssClass, x, y, opts = {}) {
     const board = opts.appendTo || document.getElementById('board');
     if (!board) return null;
-
     const { left, top, step } = fxPos(x, y);
     const el = fxElement(fxKey, `<div class="${cssClass}"></div>`);
     if (!el) return null;
-
     el.style.left = left + 'px';
     el.style.top  = top + 'px';
-
     if (!el.style.width)  el.style.width  = step + 'px';
     if (!el.style.height) el.style.height = step + 'px';
-
     if (opts.scale)  el.style.transform = `scale(${opts.scale})`;
     if (opts.extraClass) el.classList.add(...String(opts.extraClass).split(' '));
     if (opts.delay)  el.style.animationDelay = opts.delay + 'ms';
-
     const duration = opts.duration || 800;
-    setTimeout(() => {
-        if (el.parentNode) el.parentNode.removeChild(el);
-    }, duration);
-
+    setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, duration);
     board.appendChild(el);
     return el;
 }
 
-// =================================================================
-// 🎬 spawnFxLine — FX em linha reta
-// =================================================================
 function spawnFxLine(fxKey, cssClass, fromX, fromY, dir, length, opts = {}) {
     const results = [];
     const dx = dir === 'right' ? 1 : dir === 'left'  ? -1 : 0;
     const dy = dir === 'down'  ? 1 : dir === 'up'    ? -1 : 0;
-
     for (let i = 0; i < length; i++) {
         const nx = fromX + dx * (i + 1);
         const ny = fromY + dy * (i + 1);
         if (nx < 0 || nx >= 8 || ny < 0 || ny >= 8) break;
         const delay = (opts.stagger || 0) * i;
-        const el = spawnFxAt(fxKey, cssClass, nx, ny, {
-            ...opts,
-            delay: (opts.delay || 0) + delay,
-        });
+        const el = spawnFxAt(fxKey, cssClass, nx, ny, { ...opts, delay: (opts.delay || 0) + delay });
         results.push({ x: nx, y: ny, el });
     }
     return results;
 }
 
-// =================================================================
-// 🎬 spawnFxArea — FX em área quadrada
-// =================================================================
 function spawnFxArea(fxKey, cssClass, cx, cy, radius, opts = {}) {
     const results = [];
     for (let dx = -radius; dx <= radius; dx++) {
@@ -2339,19 +1872,13 @@ function spawnFxArea(fxKey, cssClass, cx, cy, radius, opts = {}) {
             if (nx < 0 || nx >= 8 || ny < 0 || ny >= 8) continue;
             const dist = Math.max(Math.abs(dx), Math.abs(dy));
             const delay = (opts.stagger || 0) * dist;
-            const el = spawnFxAt(fxKey, cssClass, nx, ny, {
-                ...opts,
-                delay: (opts.delay || 0) + delay,
-            });
+            const el = spawnFxAt(fxKey, cssClass, nx, ny, { ...opts, delay: (opts.delay || 0) + delay });
             results.push({ x: nx, y: ny, el, dist });
         }
     }
     return results;
 }
 
-// =================================================================
-// 🎬 spawnFxCross — FX em cruz
-// =================================================================
 function spawnFxCross(fxKey, cssClass, cx, cy, length, opts = {}) {
     const results = [];
     if (opts.includeCenter) {
@@ -2364,19 +1891,13 @@ function spawnFxCross(fxKey, cssClass, cx, cy, length, opts = {}) {
             const ny = cy + dir.dy * i;
             if (nx < 0 || nx >= 8 || ny < 0 || ny >= 8) break;
             const delay = (opts.stagger || 0) * i;
-            const el = spawnFxAt(fxKey, cssClass, nx, ny, {
-                ...opts,
-                delay: (opts.delay || 0) + delay,
-            });
+            const el = spawnFxAt(fxKey, cssClass, nx, ny, { ...opts, delay: (opts.delay || 0) + delay });
             results.push({ x: nx, y: ny, el, dist: i, dir });
         }
     });
     return results;
 }
 
-// =================================================================
-// 🎬 spawnFxDiagonal — FX nas diagonais
-// =================================================================
 function spawnFxDiagonal(fxKey, cssClass, cx, cy, length, opts = {}) {
     const results = [];
     const dirs = [{dx:1,dy:1},{dx:1,dy:-1},{dx:-1,dy:1},{dx:-1,dy:-1}];
@@ -2386,57 +1907,40 @@ function spawnFxDiagonal(fxKey, cssClass, cx, cy, length, opts = {}) {
             const ny = cy + dir.dy * i;
             if (nx < 0 || nx >= 8 || ny < 0 || ny >= 8) break;
             const delay = (opts.stagger || 0) * i;
-            const el = spawnFxAt(fxKey, cssClass, nx, ny, {
-                ...opts,
-                delay: (opts.delay || 0) + delay,
-            });
+            const el = spawnFxAt(fxKey, cssClass, nx, ny, { ...opts, delay: (opts.delay || 0) + delay });
             results.push({ x: nx, y: ny, el, dist: i, dir });
         }
     });
     return results;
 }
 
-// =================================================================
-// 🎬 spawnTravelingFx — FX viajando de A até B
-// =================================================================
 function spawnTravelingFx(fxKey, cssClass, fromX, fromY, toX, toY, opts = {}) {
     const board = opts.appendTo || document.getElementById('board');
     if (!board) return null;
-
     const from = fxPos(fromX, fromY);
     const el = fxElement(fxKey, `<div class="${cssClass}"></div>`);
     if (!el) return null;
-
     el.style.left = from.left + 'px';
     el.style.top  = from.top  + 'px';
     el.style.width  = from.step + 'px';
     el.style.height = from.step + 'px';
     el.style.transition = `left ${opts.duration || 250}ms linear, top ${opts.duration || 250}ms linear, opacity ${opts.duration || 250}ms`;
-
     if (opts.extraClass) el.classList.add(...String(opts.extraClass).split(' '));
-
     board.appendChild(el);
-
     setTimeout(() => {
         const to = fxPos(toX, toY);
         el.style.left = to.left + 'px';
         el.style.top  = to.top  + 'px';
     }, 30);
-
     setTimeout(() => {
         if (opts.fadeOut !== false) el.style.opacity = '0';
     }, (opts.duration || 250) + 30);
-
     setTimeout(() => {
         if (el.parentNode) el.parentNode.removeChild(el);
     }, (opts.duration || 250) + 350);
-
     return el;
 }
 
-// =================================================================
-// 🎬 Helpers auxiliares
-// =================================================================
 function spawnPushArrow(x, y, direction) {
     const arrowMap = { right: '▶', left: '◀', up: '▲', down: '▼' };
     const glyph = arrowMap[direction] || '▶';
@@ -2649,151 +2153,131 @@ function buildDiagonalTiles(cx, cy, length) {
 }
 
 // =================================================================
-// ⭐ SISTEMA DE ESTRELAS — FUNÇÕES
+// 🦸 CLASS_DB ESTENDIDO
 // =================================================================
-
-/**
- * Calcula o score máximo teórico de uma fase.
- * Base: mesma fórmula do calculateFinalScore() do entidades.js
- *      1000 + ((bossMaxHp - 30) * 50)
- * Multiplicador: assume melhor caso (1.5x — ≤10 turnos)
- * Bônus máximo: ultimates + muiraquitãs + formas
- */
-function calcularMaxScorePossivel(cid, phase) {
-    if (!phase || !phase.enemies || phase.enemies.length === 0) return 1;
-
-    // HP do último inimigo (boss ou miniboss) — que define o teto do score no jogo base
-    const lastEnemyId = phase.enemies[phase.enemies.length - 1];
-    const lastEnemy = STORY_ENEMIES[lastEnemyId];
-    const bossHp = lastEnemy ? lastEnemy.hp : 30;
-
-    const cfg = STORY_STARS_CONFIG;
-    const base = 1000 + Math.max(0, (bossHp - 30) * 50);
-    const baseMult = base * cfg.REF_MAX_TURNS_MULT;
-    const ultimatesBonus = cfg.REF_MAX_ULTIMATES * cfg.REF_ULTIMATE_BONUS;
-    const amuletsBonus = cfg.REF_MAX_AMULETS * cfg.REF_AMULET_BONUS;
-    const shapesBonus = cfg.REF_SHAPE_LINHA + cfg.REF_SHAPE_L + cfg.REF_SHAPE_ZIGZAG + cfg.REF_SHAPE_QUADRADO;
-
-    return Math.floor(baseMult + ultimatesBonus + amuletsBonus + shapesBonus);
-}
-
-/**
- * Calcula as estrelas (0-3) a partir do score e do máximo teórico.
- */
-function calcularEstrelas(score, maxScore) {
-    if (!maxScore || maxScore <= 0) return 0;
-    const ratio = score / maxScore;
-    const cfg = STORY_STARS_CONFIG;
-    if (ratio >= cfg.THRESHOLD_3_STARS) return 3;
-    if (ratio >= cfg.THRESHOLD_2_STARS) return 2;
-    if (ratio >= cfg.THRESHOLD_1_STAR)  return 1;
-    return 0;
-}
-
-/**
- * Devolve as estrelas salvas de uma fase (0 se não existir).
- */
-function getStarsForPhase(phaseId) {
-    return STORY_PROGRESS.starsByPhase[phaseId] || 0;
-}
-
-/**
- * Salva as estrelas de uma fase, mantendo o maior valor já conquistado.
- * Devolve o valor efetivo salvo.
- */
-function saveStarsForPhase(phaseId, stars) {
-    const current = getStarsForPhase(phaseId);
-    const effective = Math.max(current, stars);
-    STORY_PROGRESS.starsByPhase[phaseId] = effective;
-    return effective;
-}
-
-/**
- * Soma total de estrelas do save atual.
- */
-function getTotalStars() {
-    return Object.values(STORY_PROGRESS.starsByPhase || {}).reduce((a,b)=>a+b, 0);
-}
-
-/**
- * Total máximo teórico de estrelas (todas as fases × 3).
- */
-function getMaxTotalStars() {
-    let totalPhases = 0;
-    Object.values(STORY_CHAPTERS).forEach(ch => { totalPhases += ch.phases.length; });
-    return totalPhases * STORY_STARS_CONFIG.MAX_STARS_PER_PHASE;
-}
-
-/**
- * Verifica se algum herói novo foi desbloqueado pelo total de estrelas.
- * Devolve array de heróis recém-desbloqueados.
- */
-function checkHeroUnlocks() {
-    if (!Array.isArray(STORY_PROGRESS.unlockedHeroesStory)) {
-        STORY_PROGRESS.unlockedHeroesStory = ['Tupa','Sume','Caipora'];
-    }
-    const totalStars = getTotalStars();
-    const unlocked = [];
-    STORY_HERO_UNLOCKS.forEach(entry => {
-        if (totalStars >= entry.starsNeeded && !STORY_PROGRESS.unlockedHeroesStory.includes(entry.className)) {
-            STORY_PROGRESS.unlockedHeroesStory.push(entry.className);
-            unlocked.push(entry);
-        }
+function buildStoryClassDB() {
+    const db = {};
+    Object.values(STORY_HERO_CLASSES).forEach(hero => {
+        db[hero.className] = {
+            hp: hero.hp,
+            atk: hero.atk,
+            min: hero.range || 0,
+            role: hero.role,
+            element: hero.element,
+            spriteKey: hero.spriteKey,
+            paKey: hero.paKey,
+        };
     });
-    if (unlocked.length > 0) {
-        saveStoryProgress();
-        unlocked.forEach(entry => {
-            showToast('🏅 HERÓI DESBLOQUEADO!', entry.displayName, '🏅');
-            try {
-                if (typeof playSfx === 'function') playSfx('win');
-            } catch(e) {}
-        });
-    }
-    return unlocked;
+    return db;
 }
 
-/**
- * Toast de notificação — usado pra herói desbloqueado e outros avisos.
- */
-function showToast(title, body, icon='⭐', durationMs = 4000) {
+function installStoryClassDB() {
     try {
-        const toast = document.createElement('div');
-        toast.className = 'story-toast';
-        toast.innerHTML = `
-            <div class="toast-wrap">
-                <div class="toast-icon">${icon}</div>
-                <div>
-                    <div class="toast-title">${title}</div>
-                    <div class="toast-body">${body}</div>
-                </div>
-            </div>`;
-        document.body.appendChild(toast);
-        setTimeout(() => {
-            toast.style.transition = 'transform .35s ease-in, opacity .35s ease-in';
-            toast.style.transform = 'translateX(120%)';
-            toast.style.opacity = '0';
-            setTimeout(() => {
-                if (toast.parentNode) toast.parentNode.removeChild(toast);
-            }, 400);
-        }, durationMs);
+        const storyDB = buildStoryClassDB();
+        if (!window._origClassDB) {
+            window._origClassDB = Object.assign({}, CLASS_DB);
+        }
+        Object.keys(CLASS_DB).forEach(k => delete CLASS_DB[k]);
+        Object.assign(CLASS_DB, storyDB);
+
+        if (typeof SPRITES !== 'undefined') {
+            Object.values(STORY_HERO_CLASSES).forEach(hero => {
+                if (hero.className && hero.spriteKey) {
+                    const url = SPRITES_STORY[hero.spriteKey];
+                    if (url && url.trim() !== '') {
+                        SPRITES[hero.className] = url;
+                    } else {
+                        SPRITES[hero.className] = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+                    }
+                }
+            });
+        }
     } catch(e) {
-        console.warn('showToast falhou:', e);
+        console.warn('[story] Falha ao instalar CLASS_DB estendido:', e);
     }
 }
 
-// =================================================================
-// 🏁 FIM DA PARTE 3/5
-// =================================================================
-// =================================================================
-// historia.js — V7.0 — Bloco 4/5
-// Handlers dos Atos 1-7 + CLASS_DB_STORY + PA dos heróis novos
-// =================================================================
+function restoreBaseClassDB() {
+    try {
+        if (window._origClassDB) {
+            Object.keys(CLASS_DB).forEach(k => delete CLASS_DB[k]);
+            Object.assign(CLASS_DB, window._origClassDB);
+        }
+    } catch(e) {}
+}
 
+// =================================================================
+// 🎯 PODER ANCESTRAL DOS HERÓIS NOVOS — efeitos EXTRA
+// =================================================================
+const STORY_HERO_PA = {
+    'kanarott_cruz_empurra': {
+        desc: 'Cruz 5×5 + empurra boss 2 tiles',
+        execute: async (active, target) => {
+            if (target && !target.dead) {
+                const dx = Math.sign(target.x - active.x) || 0;
+                const dy = Math.sign(target.y - active.y) || 0;
+                for (let k = 0; k < 2; k++) {
+                    const nx = target.x + dx;
+                    const ny = target.y + dy;
+                    if (nx < 0 || nx >= 8 || ny < 0 || ny >= 8) break;
+                    if (isOccupied(nx, ny, -1)) break;
+                    target.x = nx;
+                    target.y = ny;
+                }
+                updateVisuals();
+                addLog(`⚔️ Kanarott empurra o inimigo!`);
+            }
+            await sleep(200);
+        }
+    },
+    'teperesik_area2x2': { desc: 'Área 3×3 (dano já aplicado)', execute: async () => { await sleep(100); } },
+    'eru_linha_horizontal': { desc: 'Linha horizontal (dano já aplicado)', execute: async () => { await sleep(100); } },
+    'andure_area2x2_cura': {
+        desc: 'Área 3×3 + cura 3 HP em si mesmo',
+        execute: async (active, target) => {
+            active.hp = Math.min(active.maxHp, active.hp + 3);
+            if (typeof showHealEffect === 'function') showHealEffect(active.x, active.y, 3);
+            if (typeof updateHeroCard === 'function') updateHeroCard();
+            addLog(`💧 Anduré cura 3 HP!`);
+            await sleep(300);
+        }
+    },
+    'maedamata_area3x3_cura': {
+        desc: 'Área 5×5 + cura 4 HP em si mesmo',
+        execute: async (active, target) => {
+            active.hp = Math.min(active.maxHp, active.hp + 4);
+            if (typeof showHealEffect === 'function') showHealEffect(active.x, active.y, 4);
+            if (typeof updateHeroCard === 'function') updateHeroCard();
+            addLog(`🌳 Mãe da Mata cura 4 HP!`);
+            await sleep(300);
+        }
+    },
+    'paje_coluna_fogo': {
+        desc: 'Coluna + dobra dano se boss em FOGO',
+        execute: async (active, target) => {
+            if (target && !target.dead) {
+                const targetIdx = target.y * 8 + target.x;
+                if (grid[targetIdx] === 'FOGO') {
+                    const extraDmg = active.totalAtk || 3;
+                    applyDmg(target, extraDmg);
+                    addLog(`🔥 Alvo em FOGO! Dano dobrado (+${extraDmg})!`);
+                }
+            }
+            await sleep(200);
+        }
+    },
+    'jurua_area_alvo_3x3': { desc: 'Área 3×3 no alvo', execute: async () => { await sleep(100); } },
+    'araci_linha_horizontal': { desc: 'Linha horizontal', execute: async () => { await sleep(100); } },
+    'bicho_cruz_completa': { desc: 'Cruz completa no alvo', execute: async () => { await sleep(100); } },
+    'tapyra_coluna_alvo': { desc: 'Coluna vertical no alvo', execute: async () => { await sleep(100); } },
+};
+
+// =================================================================
+// 🎯 HANDLERS DOS ATOS 1-7
+// =================================================================
 const STORY_ANIMAL_SKILLS = {};
 
-// =================================================================
-// 🦔 ATO 1 — PORCO-ESPINHO
-// =================================================================
+// ATO 1 — PORCO-ESPINHO
 STORY_ANIMAL_SKILLS['porco_espinho_espinhos'] = async (enemy, skill) => {
     const atk = enemy.atk;
     addLog(`🦔 ${enemy.name} eriça os espinhos!`);
@@ -2848,11 +2332,11 @@ STORY_ANIMAL_SKILLS['porco_espinho_bote'] = async (enemy, skill) => {
         const nx = boss.x + dir.dx;
         const ny = boss.y + dir.dy;
         if (nx < 0 || nx >= 8 || ny < 0 || ny >= 8) break;
-        if (typeof isOccupied === 'function' && isOccupied(nx, ny, -1)) break;
+        if (isOccupied(nx, ny, -1)) break;
         spawnFxAt('spike_roll', 'fx-spike-roll', nx, ny, { duration: 500 });
         boss.x = nx; boss.y = ny;
         lastX = nx; lastY = ny;
-        if (typeof updateVisuals === 'function') updateVisuals();
+        updateVisuals();
         await sleep(180);
     }
     await sleep(200);
@@ -2866,10 +2350,8 @@ STORY_ANIMAL_SKILLS['porco_espinho_bote'] = async (enemy, skill) => {
     await sleep(300);
 };
 
-// =================================================================
-// 🐊 ATO 1 — JACARÉ
-// =================================================================
-STORY_ANIMAL_SKILLS['jacare_bocada'] = async (enemy, skill) => {
+// ATO 1 — JACARÉ
+STORY_ANIMAL_SKILLS['jacare_bocada'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🐊 ${enemy.name} abre a bocarra!`);
     const alive = players.filter(p => !p.dead);
@@ -2888,7 +2370,7 @@ STORY_ANIMAL_SKILLS['jacare_bocada'] = async (enemy, skill) => {
     await sleep(300);
 };
 
-STORY_ANIMAL_SKILLS['jacare_giro'] = async (enemy, skill) => {
+STORY_ANIMAL_SKILLS['jacare_giro'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🐊 ${enemy.name} gira a cauda em 360°!`);
     spawnFxAt('tail_whip', 'fx-tail-whip', boss.x, boss.y, { duration: 700, scale: 1.5 });
@@ -2907,10 +2389,8 @@ STORY_ANIMAL_SKILLS['jacare_giro'] = async (enemy, skill) => {
     await sleep(300);
 };
 
-// =================================================================
-// 🦌 ATO 1 — CERVO
-// =================================================================
-STORY_ANIMAL_SKILLS['cervo_investida'] = async (enemy, skill) => {
+// ATO 1 — CERVO
+STORY_ANIMAL_SKILLS['cervo_investida'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🦌 ${enemy.name} baixa os chifres e investe!`);
     const alive = players.filter(p => !p.dead);
@@ -2927,22 +2407,20 @@ STORY_ANIMAL_SKILLS['cervo_investida'] = async (enemy, skill) => {
         const nx = boss.x + dir.dx;
         const ny = boss.y + dir.dy;
         if (nx < 0 || nx >= 8 || ny < 0 || ny >= 8) break;
-        if (typeof isOccupied === 'function' && isOccupied(nx, ny, -1)) break;
+        if (isOccupied(nx, ny, -1)) break;
         spawnFxAt('antler_charge', 'fx-antler-charge', nx, ny, { duration: 400 });
         boss.x = nx; boss.y = ny;
         targetX = nx; targetY = ny;
-        if (typeof updateVisuals === 'function') updateVisuals();
+        updateVisuals();
         await sleep(150);
     }
     await sleep(200);
     spawnFxAt('shockwave', 'fx-shockwave', targetX, targetY, { duration: 600 });
-    players.forEach(p => {
-        if (!p.dead && p.x === targetX && p.y === targetY) applyDmg(p, atk);
-    });
+    players.forEach(p => { if (!p.dead && p.x === targetX && p.y === targetY) applyDmg(p, atk); });
     await sleep(300);
 };
 
-STORY_ANIMAL_SKILLS['cervo_chifrada'] = async (enemy, skill) => {
+STORY_ANIMAL_SKILLS['cervo_chifrada'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🦌 ${enemy.name} dá uma chifrada frontal!`);
     const alive = players.filter(p => !p.dead);
@@ -2966,10 +2444,8 @@ STORY_ANIMAL_SKILLS['cervo_chifrada'] = async (enemy, skill) => {
     await sleep(300);
 };
 
-// =================================================================
-// 🐆 ATO 1 — ONÇA-PARDA
-// =================================================================
-STORY_ANIMAL_SKILLS['onca_garra_dupla'] = async (enemy, skill) => {
+// ATO 1 — ONÇA-PARDA
+STORY_ANIMAL_SKILLS['onca_garra_dupla'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🐆 ${enemy.name} ataca com garra dupla!`);
     const alive = players.filter(p => !p.dead);
@@ -2988,9 +2464,7 @@ STORY_ANIMAL_SKILLS['onca_garra_dupla'] = async (enemy, skill) => {
         }
     }
     tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 400, scale: 0.85 });
-        }, i * 25);
+        setTimeout(() => { spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 400, scale: 0.85 }); }, i * 25);
     });
     await sleep(350);
     const dmg = Math.max(1, atk - 1);
@@ -2998,7 +2472,7 @@ STORY_ANIMAL_SKILLS['onca_garra_dupla'] = async (enemy, skill) => {
     await sleep(250);
 };
 
-STORY_ANIMAL_SKILLS['onca_salto'] = async (enemy, skill) => {
+STORY_ANIMAL_SKILLS['onca_salto'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🐆 ${enemy.name} salta mortalmente!`);
     const alive = players.filter(p => !p.dead);
@@ -3011,13 +2485,11 @@ STORY_ANIMAL_SKILLS['onca_salto'] = async (enemy, skill) => {
     });
     const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
     const fromX = boss.x, fromY = boss.y;
-    let landX = boss.x + dir.dx * 2;
-    let landY = boss.y + dir.dy * 2;
-    landX = Math.max(0, Math.min(7, landX));
-    landY = Math.max(0, Math.min(7, landY));
+    let landX = Math.max(0, Math.min(7, boss.x + dir.dx * 2));
+    let landY = Math.max(0, Math.min(7, boss.y + dir.dy * 2));
     spawnFxAt('pounce_arc', 'fx-pounce-arc', fromX, fromY, { duration: 700 });
     boss.x = landX; boss.y = landY;
-    if (typeof updateVisuals === 'function') updateVisuals();
+    updateVisuals();
     await sleep(350);
     spawnFxAt('shockwave', 'fx-shockwave', landX, landY, { duration: 600, scale: 1.4 });
     spawnFxAt('impact', 'fx-impact', landX, landY, { duration: 500 });
@@ -3028,10 +2500,8 @@ STORY_ANIMAL_SKILLS['onca_salto'] = async (enemy, skill) => {
     await sleep(300);
 };
 
-// =================================================================
-// 👺 ATO 1 — SACI (boss)
-// =================================================================
-STORY_ANIMAL_SKILLS['saci_vortices'] = async (enemy, skill) => {
+// ATO 1 — SACI
+STORY_ANIMAL_SKILLS['saci_vortices'] = async () => {
     const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 4;
     playSfx('saci1');
     addLog(`💨 Saci cria vórtices de vento!`);
@@ -3046,7 +2516,7 @@ STORY_ANIMAL_SKILLS['saci_vortices'] = async (enemy, skill) => {
     await sleep(700);
 };
 
-STORY_ANIMAL_SKILLS['saci_diagonais'] = async (enemy, skill) => {
+STORY_ANIMAL_SKILLS['saci_diagonais'] = async () => {
     const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 4;
     playSfx('saci');
     addLog(`💨 Saci lança vórtices diagonais!`);
@@ -3065,10 +2535,8 @@ STORY_ANIMAL_SKILLS['saci_diagonais'] = async (enemy, skill) => {
     await sleep(700);
 };
 
-// =================================================================
-// 🐜 ATO 2 — TAMANDUÁ-BANDEIRA
-// =================================================================
-STORY_ANIMAL_SKILLS['tamandua_garras'] = async (enemy, skill) => {
+// ATO 2 — TAMANDUÁ
+STORY_ANIMAL_SKILLS['tamandua_garras'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🐜 ${enemy.name} ataca com garras longas!`);
     spawnFxAt('claw_slash', 'fx-claw-slash', boss.x, boss.y, { duration: 500, scale: 1.4 });
@@ -3079,7 +2547,7 @@ STORY_ANIMAL_SKILLS['tamandua_garras'] = async (enemy, skill) => {
     await sleep(300);
 };
 
-STORY_ANIMAL_SKILLS['tamandua_bicada'] = async (enemy, skill) => {
+STORY_ANIMAL_SKILLS['tamandua_bicada'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🐜 ${enemy.name} dá uma bicada perfurante!`);
     const alive = players.filter(p => !p.dead);
@@ -3098,10 +2566,8 @@ STORY_ANIMAL_SKILLS['tamandua_bicada'] = async (enemy, skill) => {
     await sleep(250);
 };
 
-// =================================================================
-// 🦛 ATO 2 — ANTA
-// =================================================================
-STORY_ANIMAL_SKILLS['anta_pisada'] = async (enemy, skill) => {
+// ATO 2 — ANTA
+STORY_ANIMAL_SKILLS['anta_pisada'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🦛 ${enemy.name} dá uma pisada pesada!`);
     const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
@@ -3118,7 +2584,7 @@ STORY_ANIMAL_SKILLS['anta_pisada'] = async (enemy, skill) => {
     await sleep(300);
 };
 
-STORY_ANIMAL_SKILLS['anta_atropelamento'] = async (enemy, skill) => {
+STORY_ANIMAL_SKILLS['anta_atropelamento'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🦛 ${enemy.name} atropela!`);
     const alive = players.filter(p => !p.dead);
@@ -3135,27 +2601,23 @@ STORY_ANIMAL_SKILLS['anta_atropelamento'] = async (enemy, skill) => {
         const nx = boss.x + dir.dx;
         const ny = boss.y + dir.dy;
         if (nx < 0 || nx >= 8 || ny < 0 || ny >= 8) break;
-        if (typeof isOccupied === 'function' && isOccupied(nx, ny, -1)) {
+        if (isOccupied(nx, ny, -1)) {
             spawnFxAt('shockwave', 'fx-shockwave', nx, ny, { duration: 600 });
-            players.forEach(p => {
-                if (!p.dead && p.x === nx && p.y === ny) applyDmg(p, atk);
-            });
+            players.forEach(p => { if (!p.dead && p.x === nx && p.y === ny) applyDmg(p, atk); });
             hit = true;
             break;
         }
         spawnFxAt('hoof_stomp', 'fx-hoof-stomp', nx, ny, { duration: 400 });
         boss.x = nx; boss.y = ny;
-        if (typeof updateVisuals === 'function') updateVisuals();
+        updateVisuals();
         await sleep(140);
     }
     if (!hit) spawnFxAt('ground_crack', 'fx-ground-crack', boss.x, boss.y, { duration: 500 });
     await sleep(300);
 };
 
-// =================================================================
-// 🐗 ATO 2 — QUEIXADA
-// =================================================================
-STORY_ANIMAL_SKILLS['queixada_mordida'] = async (enemy, skill) => {
+// ATO 2 — QUEIXADA
+STORY_ANIMAL_SKILLS['queixada_mordida'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🐗 ${enemy.name} morde em linha!`);
     const alive = players.filter(p => !p.dead);
@@ -3174,7 +2636,7 @@ STORY_ANIMAL_SKILLS['queixada_mordida'] = async (enemy, skill) => {
     await sleep(250);
 };
 
-STORY_ANIMAL_SKILLS['queixada_estouro'] = async (enemy, skill) => {
+STORY_ANIMAL_SKILLS['queixada_estouro'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🐗 ${enemy.name} provoca um estouro de manada!`);
     const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
@@ -3192,10 +2654,8 @@ STORY_ANIMAL_SKILLS['queixada_estouro'] = async (enemy, skill) => {
     await sleep(300);
 };
 
-// =================================================================
-// 🐍 ATO 2 — SUCURI GIGANTE (mini-boss)
-// =================================================================
-STORY_ANIMAL_SKILLS['sucuri_bocarra'] = async (enemy, skill) => {
+// ATO 2 — SUCURI
+STORY_ANIMAL_SKILLS['sucuri_bocarra'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🐍 ${enemy.name} abre a bocarra!`);
     const alive = players.filter(p => !p.dead);
@@ -3214,7 +2674,7 @@ STORY_ANIMAL_SKILLS['sucuri_bocarra'] = async (enemy, skill) => {
     await sleep(250);
 };
 
-STORY_ANIMAL_SKILLS['sucuri_caudada'] = async (enemy, skill) => {
+STORY_ANIMAL_SKILLS['sucuri_caudada'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🐍 ${enemy.name} dá uma caudada devastadora!`);
     spawnFxAt('tail_whip', 'fx-tail-whip', boss.x, boss.y, { duration: 700, scale: 1.8 });
@@ -3233,10 +2693,8 @@ STORY_ANIMAL_SKILLS['sucuri_caudada'] = async (enemy, skill) => {
     await sleep(300);
 };
 
-// =================================================================
-// 🦥 ATO 2 — MAPINGUARI (boss)
-// =================================================================
-STORY_ANIMAL_SKILLS['mapinguari_mordida'] = async (enemy, skill) => {
+// ATO 2 — MAPINGUARI
+STORY_ANIMAL_SKILLS['mapinguari_mordida'] = async () => {
     const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 4;
     playSfx('minoa1');
     addLog(`🦥 Mapinguari dá uma mordida poderosa!`);
@@ -3247,7 +2705,7 @@ STORY_ANIMAL_SKILLS['mapinguari_mordida'] = async (enemy, skill) => {
     });
 };
 
-STORY_ANIMAL_SKILLS['mapinguari_pedras'] = async (enemy, skill) => {
+STORY_ANIMAL_SKILLS['mapinguari_pedras'] = async () => {
     playSfx('minoa2');
     addLog(`🦥 Mapinguari lança pedras!`);
     triggerRocks(boss.x, boss.y);
@@ -3256,10 +2714,8 @@ STORY_ANIMAL_SKILLS['mapinguari_pedras'] = async (enemy, skill) => {
     players.forEach(p => { if (!p.dead && rows.includes(p.y)) applyDmg(p, 2); });
 };
 
-// =================================================================
-// 🐟 ATO 3 — PIRANHA
-// =================================================================
-STORY_ANIMAL_SKILLS['piranha_cardume'] = async (enemy, skill) => {
+// ATO 3 — PIRANHA
+STORY_ANIMAL_SKILLS['piranha_cardume'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🐟 ${enemy.name} chama o cardume!`);
     const alive = players.filter(p => !p.dead);
@@ -3290,7 +2746,7 @@ STORY_ANIMAL_SKILLS['piranha_cardume'] = async (enemy, skill) => {
     await sleep(300);
 };
 
-STORY_ANIMAL_SKILLS['piranha_frenesi'] = async (enemy, skill) => {
+STORY_ANIMAL_SKILLS['piranha_frenesi'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🐟 ${enemy.name} entra em frenesi!`);
     spawnFxAt('swarm_cloud', 'fx-swarm-cloud', boss.x, boss.y, { duration: 700, scale: 1.4 });
@@ -3299,18 +2755,14 @@ STORY_ANIMAL_SKILLS['piranha_frenesi'] = async (enemy, skill) => {
     alive.forEach(p => {
         const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
         let dmg = atk;
-        if (d === 1) dmg = atk;
-        else if (d === 2) dmg = Math.max(1, atk);
-        else dmg = Math.max(1, atk - 1);
+        if (d > 2) dmg = Math.max(1, atk - 1);
         applyDmg(p, dmg);
     });
     await sleep(300);
 };
 
-// =================================================================
-// 🦦 ATO 3 — LONTRA
-// =================================================================
-STORY_ANIMAL_SKILLS['lontra_garras'] = async (enemy, skill) => {
+// ATO 3 — LONTRA
+STORY_ANIMAL_SKILLS['lontra_garras'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🦦 ${enemy.name} ataca com garras aquáticas!`);
     const alive = players.filter(p => !p.dead);
@@ -3329,7 +2781,7 @@ STORY_ANIMAL_SKILLS['lontra_garras'] = async (enemy, skill) => {
     await sleep(250);
 };
 
-STORY_ANIMAL_SKILLS['lontra_nado'] = async (enemy, skill) => {
+STORY_ANIMAL_SKILLS['lontra_nado'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🦦 ${enemy.name} nada rapidamente!`);
     const alive = players.filter(p => !p.dead);
@@ -3345,24 +2797,20 @@ STORY_ANIMAL_SKILLS['lontra_nado'] = async (enemy, skill) => {
         const nx = boss.x + dir.dx;
         const ny = boss.y + dir.dy;
         if (nx < 0 || nx >= 8 || ny < 0 || ny >= 8) break;
-        if (typeof isOccupied === 'function' && isOccupied(nx, ny, -1)) break;
+        if (isOccupied(nx, ny, -1)) break;
         spawnFxAt('splash_wave', 'fx-splash-wave', nx, ny, { duration: 500 });
         boss.x = nx; boss.y = ny;
-        if (typeof updateVisuals === 'function') updateVisuals();
+        updateVisuals();
         await sleep(150);
     }
     await sleep(200);
     spawnFxAt('splash_wave', 'fx-splash-wave', boss.x, boss.y, { duration: 600, scale: 1.4 });
-    players.forEach(p => {
-        if (!p.dead && p.x === boss.x && p.y === boss.y) applyDmg(p, atk);
-    });
+    players.forEach(p => { if (!p.dead && p.x === boss.x && p.y === boss.y) applyDmg(p, atk); });
     await sleep(300);
 };
 
-// =================================================================
-// 🦦 ATO 3 — ARIRANHA
-// =================================================================
-STORY_ANIMAL_SKILLS['ariranha_matilha'] = async (enemy, skill) => {
+// ATO 3 — ARIRANHA
+STORY_ANIMAL_SKILLS['ariranha_matilha'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🦦 ${enemy.name} chama a matilha!`);
     const tiles = buildCrossTiles(boss.x, boss.y, 1, false);
@@ -3377,7 +2825,7 @@ STORY_ANIMAL_SKILLS['ariranha_matilha'] = async (enemy, skill) => {
     await sleep(250);
 };
 
-STORY_ANIMAL_SKILLS['ariranha_bote'] = async (enemy, skill) => {
+STORY_ANIMAL_SKILLS['ariranha_bote'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🦦 ${enemy.name} dá o bote do rio!`);
     const alive = players.filter(p => !p.dead);
@@ -3396,10 +2844,8 @@ STORY_ANIMAL_SKILLS['ariranha_bote'] = async (enemy, skill) => {
     await sleep(250);
 };
 
-// =================================================================
-// 🐠 ATO 3 — PIRARUCU (mini-boss)
-// =================================================================
-STORY_ANIMAL_SKILLS['pirarucu_bocarra'] = async (enemy, skill) => {
+// ATO 3 — PIRARUCU
+STORY_ANIMAL_SKILLS['pirarucu_bocarra'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🐠 ${enemy.name} dá a bocarra!`);
     const alive = players.filter(p => !p.dead);
@@ -3418,7 +2864,7 @@ STORY_ANIMAL_SKILLS['pirarucu_bocarra'] = async (enemy, skill) => {
     await sleep(250);
 };
 
-STORY_ANIMAL_SKILLS['pirarucu_caudada'] = async (enemy, skill) => {
+STORY_ANIMAL_SKILLS['pirarucu_caudada'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🐠 ${enemy.name} dá uma caudada!`);
     spawnFxAt('tail_whip', 'fx-tail-whip', boss.x, boss.y, { duration: 700, scale: 1.7 });
@@ -3437,10 +2883,8 @@ STORY_ANIMAL_SKILLS['pirarucu_caudada'] = async (enemy, skill) => {
     await sleep(300);
 };
 
-// =================================================================
-// 🧜‍♀️ ATO 3 — IARA (boss)
-// =================================================================
-STORY_ANIMAL_SKILLS['iara_tsunami'] = async (enemy, skill) => {
+// ATO 3 — IARA
+STORY_ANIMAL_SKILLS['iara_tsunami'] = async () => {
     playSfx('iara1');
     addLog(`🌊 Iara invoca um tsunami!`);
     triggerTsunami();
@@ -3460,7 +2904,7 @@ STORY_ANIMAL_SKILLS['iara_tsunami'] = async (enemy, skill) => {
     updateVisuals();
 };
 
-STORY_ANIMAL_SKILLS['iara_jatos'] = async (enemy, skill) => {
+STORY_ANIMAL_SKILLS['iara_jatos'] = async () => {
     const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 4;
     playSfx('iara2');
     addLog(`💧 Iara lança jatos d'água!`);
@@ -3471,10 +2915,8 @@ STORY_ANIMAL_SKILLS['iara_jatos'] = async (enemy, skill) => {
     });
 };
 
-// =================================================================
-// 🐍 ATO 4 — CASCAVEL
-// =================================================================
-STORY_ANIMAL_SKILLS['cascavel_chocalho'] = async (enemy, skill) => {
+// ATO 4 — CASCAVEL
+STORY_ANIMAL_SKILLS['cascavel_chocalho'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🐍 ${enemy.name} agita o chocalho e ataca tiles de AR!`);
     let count = 0;
@@ -3493,7 +2935,7 @@ STORY_ANIMAL_SKILLS['cascavel_chocalho'] = async (enemy, skill) => {
     await sleep(700);
 };
 
-STORY_ANIMAL_SKILLS['cascavel_bote'] = async (enemy, skill) => {
+STORY_ANIMAL_SKILLS['cascavel_bote'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🐍 ${enemy.name} dá o bote peçonhento!`);
     const alive = players.filter(p => !p.dead);
@@ -3517,10 +2959,8 @@ STORY_ANIMAL_SKILLS['cascavel_bote'] = async (enemy, skill) => {
     await sleep(250);
 };
 
-// =================================================================
-// 🐍 ATO 4 — COBRA-CORAL
-// =================================================================
-STORY_ANIMAL_SKILLS['coral_aneis'] = async (enemy, skill) => {
+// ATO 4 — COBRA-CORAL
+STORY_ANIMAL_SKILLS['coral_aneis'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🐍 ${enemy.name} enrola em anéis coloridos!`);
     const alive = players.filter(p => !p.dead);
@@ -3549,7 +2989,7 @@ STORY_ANIMAL_SKILLS['coral_aneis'] = async (enemy, skill) => {
     await sleep(250);
 };
 
-STORY_ANIMAL_SKILLS['coral_peconha'] = async (enemy, skill) => {
+STORY_ANIMAL_SKILLS['coral_peconha'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🐍 ${enemy.name} espirra peçonha!`);
     const alive = players.filter(p => !p.dead);
@@ -3568,10 +3008,8 @@ STORY_ANIMAL_SKILLS['coral_peconha'] = async (enemy, skill) => {
     await sleep(250);
 };
 
-// =================================================================
-// 🐍 ATO 4 — JARARACA
-// =================================================================
-STORY_ANIMAL_SKILLS['jararaca_bote'] = async (enemy, skill) => {
+// ATO 4 — JARARACA
+STORY_ANIMAL_SKILLS['jararaca_bote'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🐍 ${enemy.name} dá o bote traiçoeiro!`);
     const alive = players.filter(p => !p.dead);
@@ -3595,7 +3033,7 @@ STORY_ANIMAL_SKILLS['jararaca_bote'] = async (enemy, skill) => {
     await sleep(250);
 };
 
-STORY_ANIMAL_SKILLS['jararaca_enrolar'] = async (enemy, skill) => {
+STORY_ANIMAL_SKILLS['jararaca_enrolar'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🐍 ${enemy.name} enrola e puxa!`);
     const alive = players.filter(p => !p.dead);
@@ -3613,10 +3051,8 @@ STORY_ANIMAL_SKILLS['jararaca_enrolar'] = async (enemy, skill) => {
     await sleep(300);
 };
 
-// =================================================================
-// 🐢 ATO 4 — TARTARUGA (mini-boss)
-// =================================================================
-STORY_ANIMAL_SKILLS['tartaruga_casco'] = async (enemy, skill) => {
+// ATO 4 — TARTARUGA
+STORY_ANIMAL_SKILLS['tartaruga_casco'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🐢 ${enemy.name} ergue o casco duro!`);
     const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
@@ -3626,7 +3062,7 @@ STORY_ANIMAL_SKILLS['tartaruga_casco'] = async (enemy, skill) => {
     await sleep(250);
 };
 
-STORY_ANIMAL_SKILLS['tartaruga_pancada'] = async (enemy, skill) => {
+STORY_ANIMAL_SKILLS['tartaruga_pancada'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🐢 ${enemy.name} dá uma pancada pesada!`);
     const alive = players.filter(p => !p.dead);
@@ -3655,10 +3091,8 @@ STORY_ANIMAL_SKILLS['tartaruga_pancada'] = async (enemy, skill) => {
     await sleep(300);
 };
 
-// =================================================================
-// 🔥 ATO 4 — BOITATÁ (boss)
-// =================================================================
-STORY_ANIMAL_SKILLS['boitata_colunas'] = async (enemy, skill) => {
+// ATO 4 — BOITATÁ
+STORY_ANIMAL_SKILLS['boitata_colunas'] = async () => {
     const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 4;
     playSfx('skill1');
     addLog(`🔥 Boitatá lança colunas de fogo!`);
@@ -3668,7 +3102,7 @@ STORY_ANIMAL_SKILLS['boitata_colunas'] = async (enemy, skill) => {
     players.forEach(p => { if (!p.dead && columns.includes(p.x)) applyDmg(p, bossAtk); });
 };
 
-STORY_ANIMAL_SKILLS['boitata_explosoes'] = async (enemy, skill) => {
+STORY_ANIMAL_SKILLS['boitata_explosoes'] = async () => {
     const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 4;
     playSfx('skill1');
     addLog(`🔥 Boitatá invoca explosões de fogo!`);
@@ -3687,10 +3121,8 @@ STORY_ANIMAL_SKILLS['boitata_explosoes'] = async (enemy, skill) => {
     await sleep(500);
 };
 
-// =================================================================
-// 🐐 ATO 5 — BODE
-// =================================================================
-STORY_ANIMAL_SKILLS['bode_cornada'] = async (enemy, skill) => {
+// ATO 5 — BODE
+STORY_ANIMAL_SKILLS['bode_cornada'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🐐 ${enemy.name} dá uma cornada!`);
     const alive = players.filter(p => !p.dead);
@@ -3709,7 +3141,7 @@ STORY_ANIMAL_SKILLS['bode_cornada'] = async (enemy, skill) => {
     await sleep(220);
 };
 
-STORY_ANIMAL_SKILLS['bode_marrada'] = async (enemy, skill) => {
+STORY_ANIMAL_SKILLS['bode_marrada'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🐐 ${enemy.name} dá uma marrada!`);
     const alive = players.filter(p => !p.dead);
@@ -3733,10 +3165,8 @@ STORY_ANIMAL_SKILLS['bode_marrada'] = async (enemy, skill) => {
     await sleep(280);
 };
 
-// =================================================================
-// 🐏 ATO 5 — CARNEIRO
-// =================================================================
-STORY_ANIMAL_SKILLS['carneiro_trombada'] = async (enemy, skill) => {
+// ATO 5 — CARNEIRO
+STORY_ANIMAL_SKILLS['carneiro_trombada'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🐏 ${enemy.name} tromba!`);
     const alive = players.filter(p => !p.dead);
@@ -3755,7 +3185,7 @@ STORY_ANIMAL_SKILLS['carneiro_trombada'] = async (enemy, skill) => {
     await sleep(250);
 };
 
-STORY_ANIMAL_SKILLS['carneiro_pisada'] = async (enemy, skill) => {
+STORY_ANIMAL_SKILLS['carneiro_pisada'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🐏 ${enemy.name} pisa com força!`);
     const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
@@ -3765,10 +3195,8 @@ STORY_ANIMAL_SKILLS['carneiro_pisada'] = async (enemy, skill) => {
     await sleep(250);
 };
 
-// =================================================================
-// 🐎 ATO 5 — CAVALO SELVAGEM
-// =================================================================
-STORY_ANIMAL_SKILLS['cavalo_coice'] = async (enemy, skill) => {
+// ATO 5 — CAVALO SELVAGEM
+STORY_ANIMAL_SKILLS['cavalo_coice'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🐎 ${enemy.name} dá um coice!`);
     const alive = players.filter(p => !p.dead);
@@ -3792,11 +3220,11 @@ STORY_ANIMAL_SKILLS['cavalo_coice'] = async (enemy, skill) => {
     await sleep(280);
 };
 
-STORY_ANIMAL_SKILLS['cavalo_relincho'] = async (enemy, skill) => {
+STORY_ANIMAL_SKILLS['cavalo_relincho'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🐎 ${enemy.name} relincha furiosamente!`);
     const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
-    tiles.forEach((t, i) => {
+    tiles.forEach((t) => {
         const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
         setTimeout(() => { spawnFxAt('shockwave', 'fx-shockwave', t.x, t.y, { duration: 500, scale: 0.8 }); }, dist * 50);
     });
@@ -3806,10 +3234,8 @@ STORY_ANIMAL_SKILLS['cavalo_relincho'] = async (enemy, skill) => {
     await sleep(280);
 };
 
-// =================================================================
-// 🐂 ATO 5 — TOURO BRAVO (mini-boss)
-// =================================================================
-STORY_ANIMAL_SKILLS['touro_cornada'] = async (enemy, skill) => {
+// ATO 5 — TOURO BRAVO
+STORY_ANIMAL_SKILLS['touro_cornada'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🐂 ${enemy.name} dá uma cornada violenta!`);
     const alive = players.filter(p => !p.dead);
@@ -3833,11 +3259,11 @@ STORY_ANIMAL_SKILLS['touro_cornada'] = async (enemy, skill) => {
     await sleep(280);
 };
 
-STORY_ANIMAL_SKILLS['touro_pisoteada'] = async (enemy, skill) => {
+STORY_ANIMAL_SKILLS['touro_pisoteada'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🐂 ${enemy.name} pisoteia o chão!`);
     const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
-    tiles.forEach((t, i) => {
+    tiles.forEach((t) => {
         const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
         setTimeout(() => {
             spawnFxAt('ground_crack', 'fx-ground-crack', t.x, t.y, { duration: 500 });
@@ -3850,10 +3276,8 @@ STORY_ANIMAL_SKILLS['touro_pisoteada'] = async (enemy, skill) => {
     await sleep(280);
 };
 
-// =================================================================
-// 🐴 ATO 5 — MULA SEM CABEÇA (boss)
-// =================================================================
-STORY_ANIMAL_SKILLS['mula_relincho'] = async (enemy, skill) => {
+// ATO 5 — MULA
+STORY_ANIMAL_SKILLS['mula_relincho'] = async () => {
     const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 4;
     playSfx('skill1');
     addLog(`🐴 Mula sem Cabeça relincha fogo em 3 colunas!`);
@@ -3863,7 +3287,7 @@ STORY_ANIMAL_SKILLS['mula_relincho'] = async (enemy, skill) => {
     players.forEach(p => { if (!p.dead && columns.includes(p.x)) applyDmg(p, bossAtk); });
 };
 
-STORY_ANIMAL_SKILLS['mula_bolas'] = async (enemy, skill) => {
+STORY_ANIMAL_SKILLS['mula_bolas'] = async () => {
     const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 4;
     playSfx('skill1');
     addLog(`🐴 Mula sem Cabeça lança bolas de fogo!`);
@@ -3881,10 +3305,8 @@ STORY_ANIMAL_SKILLS['mula_bolas'] = async (enemy, skill) => {
     await sleep(700);
 };
 
-// =================================================================
-// 🦅 ATO 6 — URUBU
-// =================================================================
-STORY_ANIMAL_SKILLS['urubu_voo'] = async (enemy, skill) => {
+// ATO 6 — URUBU
+STORY_ANIMAL_SKILLS['urubu_voo'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🦅 ${enemy.name} faz voo rasante!`);
     const alive = players.filter(p => !p.dead);
@@ -3908,7 +3330,7 @@ STORY_ANIMAL_SKILLS['urubu_voo'] = async (enemy, skill) => {
     await sleep(250);
 };
 
-STORY_ANIMAL_SKILLS['urubu_bicada'] = async (enemy, skill) => {
+STORY_ANIMAL_SKILLS['urubu_bicada'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🦅 ${enemy.name} dá uma bicada!`);
     const alive = players.filter(p => !p.dead);
@@ -3921,16 +3343,12 @@ STORY_ANIMAL_SKILLS['urubu_bicada'] = async (enemy, skill) => {
     });
     spawnFxAt('peck_beak', 'fx-peck-beak', nearest.x, nearest.y, { duration: 450, scale: 1.3 });
     await sleep(380);
-    players.forEach(p => {
-        if (!p.dead && p.x === nearest.x && p.y === nearest.y) applyDmg(p, atk);
-    });
+    players.forEach(p => { if (!p.dead && p.x === nearest.x && p.y === nearest.y) applyDmg(p, atk); });
     await sleep(220);
 };
 
-// =================================================================
-// 🦅 ATO 6 — CARCARÁ
-// =================================================================
-STORY_ANIMAL_SKILLS['carcara_garras'] = async (enemy, skill) => {
+// ATO 6 — CARCARÁ
+STORY_ANIMAL_SKILLS['carcara_garras'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🦅 ${enemy.name} ataca com garras afiadas!`);
     const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
@@ -3940,7 +3358,7 @@ STORY_ANIMAL_SKILLS['carcara_garras'] = async (enemy, skill) => {
     await sleep(250);
 };
 
-STORY_ANIMAL_SKILLS['carcara_mergulho'] = async (enemy, skill) => {
+STORY_ANIMAL_SKILLS['carcara_mergulho'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🦅 ${enemy.name} mergulha mortalmente!`);
     const alive = players.filter(p => !p.dead);
@@ -3959,10 +3377,8 @@ STORY_ANIMAL_SKILLS['carcara_mergulho'] = async (enemy, skill) => {
     await sleep(250);
 };
 
-// =================================================================
-// 🦔 ATO 6 — TATU
-// =================================================================
-STORY_ANIMAL_SKILLS['tatu_casco'] = async (enemy, skill) => {
+// ATO 6 — TATU
+STORY_ANIMAL_SKILLS['tatu_casco'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🦔 ${enemy.name} endurece o casco!`);
     const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
@@ -3972,7 +3388,7 @@ STORY_ANIMAL_SKILLS['tatu_casco'] = async (enemy, skill) => {
     await sleep(250);
 };
 
-STORY_ANIMAL_SKILLS['tatu_cavar'] = async (enemy, skill) => {
+STORY_ANIMAL_SKILLS['tatu_cavar'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🦔 ${enemy.name} cava uma armadilha!`);
     const alive = players.filter(p => !p.dead);
@@ -3987,20 +3403,16 @@ STORY_ANIMAL_SKILLS['tatu_cavar'] = async (enemy, skill) => {
     const ty = nearest.y;
     spawnFxAt('ground_crack', 'fx-ground-crack', tx, ty, { duration: 600, scale: 1.3 });
     await sleep(400);
-    players.forEach(p => {
-        if (!p.dead && p.x === tx && p.y === ty) applyDmg(p, atk);
-    });
+    players.forEach(p => { if (!p.dead && p.x === tx && p.y === ty) applyDmg(p, atk); });
     await sleep(280);
 };
 
-// =================================================================
-// 🐺 ATO 6 — LOBO-GUARÁ (mini-boss)
-// =================================================================
-STORY_ANIMAL_SKILLS['lobo_guara_uivo'] = async (enemy, skill) => {
+// ATO 6 — LOBO-GUARÁ
+STORY_ANIMAL_SKILLS['lobo_guara_uivo'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🐺 ${enemy.name} uiva!`);
     const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
-    tiles.forEach((t, i) => {
+    tiles.forEach((t) => {
         const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
         setTimeout(() => { spawnFxAt('shockwave', 'fx-shockwave', t.x, t.y, { duration: 500, scale: 0.9 }); }, dist * 55);
     });
@@ -4010,7 +3422,7 @@ STORY_ANIMAL_SKILLS['lobo_guara_uivo'] = async (enemy, skill) => {
     await sleep(280);
 };
 
-STORY_ANIMAL_SKILLS['lobo_guara_bote'] = async (enemy, skill) => {
+STORY_ANIMAL_SKILLS['lobo_guara_bote'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🐺 ${enemy.name} dá o bote selvagem!`);
     const alive = players.filter(p => !p.dead);
@@ -4029,10 +3441,8 @@ STORY_ANIMAL_SKILLS['lobo_guara_bote'] = async (enemy, skill) => {
     await sleep(250);
 };
 
-// =================================================================
-// 💀 ATO 6 — CORPO SECO (boss)
-// =================================================================
-STORY_ANIMAL_SKILLS['corpo_seco_vapor'] = async (enemy, skill) => {
+// ATO 6 — CORPO SECO
+STORY_ANIMAL_SKILLS['corpo_seco_vapor'] = async () => {
     const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 4;
     playSfx('garras');
     addLog(`💀 Corpo Seco sopra vapor podre!`);
@@ -4042,15 +3452,13 @@ STORY_ANIMAL_SKILLS['corpo_seco_vapor'] = async (enemy, skill) => {
         let tileY = boss.y + dir.dy;
         if (tileX >= 0 && tileX < 8 && tileY >= 0 && tileY < 8) {
             triggerPoisonGas(tileX, tileY);
-            players.forEach(p => {
-                if (!p.dead && p.x === tileX && p.y === tileY) applyDmg(p, bossAtk);
-            });
+            players.forEach(p => { if (!p.dead && p.x === tileX && p.y === tileY) applyDmg(p, bossAtk); });
         }
     });
     await sleep(600);
 };
 
-STORY_ANIMAL_SKILLS['corpo_seco_garras'] = async (enemy, skill) => {
+STORY_ANIMAL_SKILLS['corpo_seco_garras'] = async () => {
     const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 4;
     playSfx('garras');
     addLog(`💀 Corpo Seco ataca com garras!`);
@@ -4058,34 +3466,22 @@ STORY_ANIMAL_SKILLS['corpo_seco_garras'] = async (enemy, skill) => {
     const direction = attackDirections[Math.floor(Math.random() * 4)];
     let targetTiles = [];
     switch (direction) {
-        case 'left':
-            for (let dx = -2; dx <= 0; dx++) for (let dy = -2; dy <= 2; dy++) targetTiles.push({ x: boss.x + dx, y: boss.y + dy });
-            break;
-        case 'right':
-            for (let dx = 0; dx <= 2; dx++) for (let dy = -2; dy <= 2; dy++) targetTiles.push({ x: boss.x + dx, y: boss.y + dy });
-            break;
-        case 'up':
-            for (let dx = -2; dx <= 2; dx++) for (let dy = -2; dy <= 0; dy++) targetTiles.push({ x: boss.x + dx, y: boss.y + dy });
-            break;
-        case 'down':
-            for (let dx = -2; dx <= 2; dx++) for (let dy = 0; dy <= 2; dy++) targetTiles.push({ x: boss.x + dx, y: boss.y + dy });
-            break;
+        case 'left': for (let dx = -2; dx <= 0; dx++) for (let dy = -2; dy <= 2; dy++) targetTiles.push({ x: boss.x + dx, y: boss.y + dy }); break;
+        case 'right': for (let dx = 0; dx <= 2; dx++) for (let dy = -2; dy <= 2; dy++) targetTiles.push({ x: boss.x + dx, y: boss.y + dy }); break;
+        case 'up': for (let dx = -2; dx <= 2; dx++) for (let dy = -2; dy <= 0; dy++) targetTiles.push({ x: boss.x + dx, y: boss.y + dy }); break;
+        case 'down': for (let dx = -2; dx <= 2; dx++) for (let dy = 0; dy <= 2; dy++) targetTiles.push({ x: boss.x + dx, y: boss.y + dy }); break;
     }
     targetTiles.forEach(tile => {
         if (tile.x >= 0 && tile.x < 8 && tile.y >= 0 && tile.y < 8) {
             triggerClawSpin(tile.x, tile.y);
-            players.forEach(p => {
-                if (!p.dead && p.x === tile.x && p.y === tile.y) applyDmg(p, bossAtk + 1);
-            });
+            players.forEach(p => { if (!p.dead && p.x === tile.x && p.y === tile.y) applyDmg(p, bossAtk + 1); });
         }
     });
     await sleep(600);
 };
 
-// =================================================================
-// 🐕 ATO 7 — CACHORRO-DO-MATO
-// =================================================================
-STORY_ANIMAL_SKILLS['cachorro_mordida'] = async (enemy, skill) => {
+// ATO 7 — CACHORRO-DO-MATO
+STORY_ANIMAL_SKILLS['cachorro_mordida'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🐕 ${enemy.name} morde!`);
     const alive = players.filter(p => !p.dead);
@@ -4104,7 +3500,7 @@ STORY_ANIMAL_SKILLS['cachorro_mordida'] = async (enemy, skill) => {
     await sleep(220);
 };
 
-STORY_ANIMAL_SKILLS['cachorro_rosnado'] = async (enemy, skill) => {
+STORY_ANIMAL_SKILLS['cachorro_rosnado'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🐕 ${enemy.name} rosna ferozmente!`);
     const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
@@ -4114,10 +3510,8 @@ STORY_ANIMAL_SKILLS['cachorro_rosnado'] = async (enemy, skill) => {
     await sleep(250);
 };
 
-// =================================================================
-// 🦊 ATO 7 — RAPOSA
-// =================================================================
-STORY_ANIMAL_SKILLS['raposa_astucia'] = async (enemy, skill) => {
+// ATO 7 — RAPOSA
+STORY_ANIMAL_SKILLS['raposa_astucia'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🦊 ${enemy.name} usa de astúcia!`);
     const alive = players.filter(p => !p.dead);
@@ -4136,7 +3530,7 @@ STORY_ANIMAL_SKILLS['raposa_astucia'] = async (enemy, skill) => {
     await sleep(220);
 };
 
-STORY_ANIMAL_SKILLS['raposa_bote'] = async (enemy, skill) => {
+STORY_ANIMAL_SKILLS['raposa_bote'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🦊 ${enemy.name} dá um bote ágil!`);
     const alive = players.filter(p => !p.dead);
@@ -4152,23 +3546,19 @@ STORY_ANIMAL_SKILLS['raposa_bote'] = async (enemy, skill) => {
         const nx = boss.x + dir.dx;
         const ny = boss.y + dir.dy;
         if (nx < 0 || nx >= 8 || ny < 0 || ny >= 8) break;
-        if (typeof isOccupied === 'function' && isOccupied(nx, ny, -1)) break;
+        if (isOccupied(nx, ny, -1)) break;
         spawnFxAt('pounce_arc', 'fx-pounce-arc', nx, ny, { duration: 500, scale: 0.7 });
         boss.x = nx; boss.y = ny;
-        if (typeof updateVisuals === 'function') updateVisuals();
+        updateVisuals();
         await sleep(160);
     }
     await sleep(200);
-    players.forEach(p => {
-        if (!p.dead && p.x === boss.x && p.y === boss.y) applyDmg(p, atk);
-    });
+    players.forEach(p => { if (!p.dead && p.x === boss.x && p.y === boss.y) applyDmg(p, atk); });
     await sleep(280);
 };
 
-// =================================================================
-// 🦝 ATO 7 — GUAXINIM
-// =================================================================
-STORY_ANIMAL_SKILLS['guaxinim_garras'] = async (enemy, skill) => {
+// ATO 7 — GUAXINIM
+STORY_ANIMAL_SKILLS['guaxinim_garras'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🦝 ${enemy.name} ataca com garras noturnas!`);
     const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
@@ -4178,7 +3568,7 @@ STORY_ANIMAL_SKILLS['guaxinim_garras'] = async (enemy, skill) => {
     await sleep(250);
 };
 
-STORY_ANIMAL_SKILLS['guaxinim_surpresa'] = async (enemy, skill) => {
+STORY_ANIMAL_SKILLS['guaxinim_surpresa'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🦝 ${enemy.name} ataca de surpresa!`);
     const alive = players.filter(p => !p.dead);
@@ -4197,14 +3587,12 @@ STORY_ANIMAL_SKILLS['guaxinim_surpresa'] = async (enemy, skill) => {
     await sleep(220);
 };
 
-// =================================================================
-// 🐆 ATO 7 — JAGUATIRICA (mini-boss)
-// =================================================================
-STORY_ANIMAL_SKILLS['jaguatirica_garras'] = async (enemy, skill) => {
+// ATO 7 — JAGUATIRICA
+STORY_ANIMAL_SKILLS['jaguatirica_garras'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🐆 ${enemy.name} ataca com garras selvagens!`);
     const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
-    tiles.forEach((t, i) => {
+    tiles.forEach((t) => {
         const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
         setTimeout(() => { spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 500, scale: 0.9 }); }, dist * 55);
     });
@@ -4214,7 +3602,7 @@ STORY_ANIMAL_SKILLS['jaguatirica_garras'] = async (enemy, skill) => {
     await sleep(280);
 };
 
-STORY_ANIMAL_SKILLS['jaguatirica_salto'] = async (enemy, skill) => {
+STORY_ANIMAL_SKILLS['jaguatirica_salto'] = async (enemy) => {
     const atk = enemy.atk;
     addLog(`🐆 ${enemy.name} dá um salto mortal!`);
     const alive = players.filter(p => !p.dead);
@@ -4231,7 +3619,7 @@ STORY_ANIMAL_SKILLS['jaguatirica_salto'] = async (enemy, skill) => {
     let landY = Math.max(0, Math.min(7, boss.y + dir.dy * 2));
     spawnFxAt('pounce_arc', 'fx-pounce-arc', fromX, fromY, { duration: 700, scale: 1.3 });
     boss.x = landX; boss.y = landY;
-    if (typeof updateVisuals === 'function') updateVisuals();
+    updateVisuals();
     await sleep(350);
     spawnFxAt('shockwave', 'fx-shockwave', landX, landY, { duration: 600, scale: 1.4 });
     spawnFxAt('impact', 'fx-impact', landX, landY, { duration: 500 });
@@ -4242,10 +3630,8 @@ STORY_ANIMAL_SKILLS['jaguatirica_salto'] = async (enemy, skill) => {
     await sleep(300);
 };
 
-// =================================================================
-// 🐺 ATO 7 — LOBISOMEM (boss)
-// =================================================================
-STORY_ANIMAL_SKILLS['lobisomem_garras'] = async (enemy, skill) => {
+// ATO 7 — LOBISOMEM
+STORY_ANIMAL_SKILLS['lobisomem_garras'] = async () => {
     const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 4;
     playSfx('garras');
     addLog(`🐺 Lobisomem ataca com garras!`);
@@ -4258,7 +3644,7 @@ STORY_ANIMAL_SKILLS['lobisomem_garras'] = async (enemy, skill) => {
     await sleep(600);
 };
 
-STORY_ANIMAL_SKILLS['lobisomem_tremor'] = async (enemy, skill) => {
+STORY_ANIMAL_SKILLS['lobisomem_tremor'] = async () => {
     playSfx('minoa2');
     addLog(`🐺 Lobisomem treme a terra!`);
     triggerEarthquake();
@@ -4270,9 +3656,7 @@ STORY_ANIMAL_SKILLS['lobisomem_tremor'] = async (enemy, skill) => {
             const tileY = boss.y + dy;
             if (tileX >= 0 && tileX < 8 && tileY >= 0 && tileY < 8) {
                 triggerFlare(tileX, tileY);
-                players.forEach(p => {
-                    if (!p.dead && p.x === tileX && p.y === tileY) applyDmg(p, 2);
-                });
+                players.forEach(p => { if (!p.dead && p.x === tileX && p.y === tileY) applyDmg(p, 2); });
             }
         }
     }
@@ -4292,7 +3676,7 @@ STORY_ANIMAL_SKILLS['lobisomem_tremor'] = async (enemy, skill) => {
 };
 
 // =================================================================
-// 🎯 applyStorySkill — DELEGA pros handlers customizados
+// 🎯 applyStorySkill
 // =================================================================
 async function applyStorySkill(enemy, skill){
     if (!enemy || !skill) return;
@@ -4309,1448 +3693,48 @@ async function applyStorySkill(enemy, skill){
         return;
     }
     try {
-        await handler(enemy, skill);
+        let effectiveEnemy = enemy;
+        if (typeof skill.dmg === 'number' && skill.dmg > 0) {
+            effectiveEnemy = Object.assign({}, enemy, { atk: skill.dmg });
+        }
+        const isBossSkill = bossIsStoryBoss(enemy.id);
+        if (!isBossSkill) {
+            try { playSkillSound(handlerName); } catch(e) {}
+        }
+        await handler(effectiveEnemy, skill);
     } catch (e) {
         console.error('[story] erro no handler', handlerName, e);
     }
 }
 
 // =================================================================
-// 🎯 CLASS_DB ESTENDIDO (modo história)
-// -----------------------------------------------------------------
-// Não toca no entidades.js. Quando _storyMode = true, o CLASS_DB
-// é substituído por essa versão, que inclui os 10 heróis novos.
-// =================================================================
-function buildStoryClassDB() {
-    const db = {};
-    Object.values(STORY_HERO_CLASSES).forEach(hero => {
-        db[hero.className] = {
-            hp: hero.hp,
-            atk: hero.atk,
-            min: hero.range || 0,
-            role: hero.role,
-            element: hero.element,
-            spriteKey: hero.spriteKey,
-            paKey: hero.paKey,
-        };
-    });
-    return db;
-}
-
-function installStoryClassDB() {
-    try {
-        const storyDB = buildStoryClassDB();
-        // Salva o original (só na primeira vez)
-        if (!window._origClassDB) {
-            window._origClassDB = Object.assign({}, CLASS_DB);
-        }
-        // Substitui pelo estendido
-        Object.keys(CLASS_DB).forEach(k => delete CLASS_DB[k]);
-        Object.assign(CLASS_DB, storyDB);
-
-        // Adiciona sprites dos heróis novos ao SPRITES global (se existirem)
-        if (typeof SPRITES !== 'undefined') {
-            Object.values(STORY_HERO_CLASSES).forEach(hero => {
-                if (hero.className && hero.spriteKey) {
-                    const url = SPRITES_STORY[hero.spriteKey];
-                    if (url && url.trim() !== '') {
-                        SPRITES[hero.className] = url;
-                    } else {
-                        // Sem sprite → deixa undefined, os tokens usam fallback
-                        // (o jogo base usa <img src>, então vamos usar um placeholder transparente)
-                        SPRITES[hero.className] = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-                    }
-                }
-            });
-        }
-    } catch(e) {
-        console.warn('[story] Falha ao instalar CLASS_DB estendido:', e);
-    }
-}
-
-function restoreBaseClassDB() {
-    try {
-        if (window._origClassDB) {
-            Object.keys(CLASS_DB).forEach(k => delete CLASS_DB[k]);
-            Object.assign(CLASS_DB, window._origClassDB);
-        }
-    } catch(e) {}
-}
-
-// =================================================================
-// 🎯 POWER ANCESTRAL DOS HERÓIS NOVOS
-// -----------------------------------------------------------------
-// Cada herói tem um PA único. O executeAction original do entidades.js
-// trata apenas os 3 base. Aqui, fazemos um override condicional.
-// =================================================================
-const STORY_HERO_PA = {
-    // ---- Guerreiros ----
-    'kanarott_cruz_empurra': {
-        desc: 'Cruz centrada no herói (5×5) + empurra 2 tiles',
-        execute: async (active, target) => {
-            const atk = active.totalAtk || 3;
-            addLog(`⚔️ ${active.name}: PODER ANCESTRAL — Cruz de Kanarott!`);
-            const cx = active.x;
-            const cy = active.y;
-            const tiles = buildCrossTiles(cx, cy, 2, true);
-            tiles.forEach((t, i) => {
-                setTimeout(() => {
-                    spawnFxAt('impact', 'fx-impact', t.x, t.y, { duration: 500, scale: 1.2 });
-                }, i * 25);
-            });
-            await sleep(400);
-            // Dano nos inimigos (só boss no modo história)
-            if (typeof boss !== 'undefined' && !boss.dead) {
-                if (tiles.some(t => t.x === boss.x && t.y === boss.y)) {
-                    applyDmg(boss, atk);
-                    // Empurra boss 2 tiles pra fora
-                    for (let k = 0; k < 2; k++) {
-                        const dx = Math.sign(boss.x - cx) || 0;
-                        const dy = Math.sign(boss.y - cy) || 0;
-                        const nx = boss.x + dx;
-                        const ny = boss.y + dy;
-                        if (nx < 0 || nx >= 8 || ny < 0 || ny >= 8) break;
-                        if (isOccupied(nx, ny, -1)) break;
-                        boss.x = nx; boss.y = ny;
-                    }
-                    updateVisuals();
-                }
-            }
-            await sleep(300);
-        }
-    },
-    'teperesik_area2x2': {
-        desc: 'Área 3×3 ao redor do herói (8 tiles)',
-        execute: async (active, target) => {
-            const atk = active.totalAtk || 2;
-            addLog(`⚔️ ${active.name}: PODER ANCESTRAL — Guarda de Teperesik!`);
-            const tiles = buildAreaTiles(active.x, active.y, 1, false);
-            tiles.forEach((t, i) => {
-                setTimeout(() => {
-                    spawnFxAt('shockwave', 'fx-shockwave', t.x, t.y, { duration: 600, scale: 1.2 });
-                    spawnFxAt('ground_crack', 'fx-ground-crack', t.x, t.y, { duration: 500 });
-                }, i * 40);
-            });
-            await sleep(500);
-            if (typeof boss !== 'undefined' && !boss.dead) {
-                if (tiles.some(t => t.x === boss.x && t.y === boss.y)) applyDmg(boss, atk);
-            }
-            await sleep(300);
-        }
-    },
-    'eru_linha_horizontal': {
-        desc: 'Linha horizontal inteira (8 tiles)',
-        execute: async (active, target) => {
-            const atk = active.totalAtk || 5;
-            addLog(`⚔️ ${active.name}: PODER ANCESTRAL — Corte de Eru!`);
-            const tiles = [];
-            for (let x = 0; x < 8; x++) tiles.push({ x, y: active.y });
-            tiles.forEach((t, i) => {
-                setTimeout(() => {
-                    spawnFxAt('heavy_slash', 'fx-heavy-slash', t.x, t.y, { duration: 500, scale: 1.1 });
-                }, i * 40);
-            });
-            await sleep(500);
-            if (typeof boss !== 'undefined' && !boss.dead) {
-                if (tiles.some(t => t.x === boss.x && t.y === boss.y)) applyDmg(boss, atk);
-            }
-            await sleep(300);
-        }
-    },
-
-    // ---- Magos ----
-    'andure_area2x2_cura': {
-        desc: 'Área 3×3 + cura 3 HP em si mesmo e aliados',
-        execute: async (active, target) => {
-            const atk = active.totalAtk || 1;
-            addLog(`💧 ${active.name}: PODER ANCESTRAL — Benção de Anduré!`);
-            const tiles = buildAreaTiles(active.x, active.y, 1, true);
-            tiles.forEach((t, i) => {
-                setTimeout(() => {
-                    spawnFxAt('splash_wave', 'fx-splash-wave', t.x, t.y, { duration: 600, scale: 1.1 });
-                    spawnFxAt('heal_orb', 'fx-heal-orb', t.x, t.y, { duration: 800 });
-                }, i * 40);
-            });
-            await sleep(500);
-            // Cura
-            players.forEach(p => {
-                if (!p.dead && tiles.some(t => t.x === p.x && t.y === p.y)) {
-                    p.hp = Math.min(p.maxHp, p.hp + 3);
-                    if (typeof showHealEffect === 'function') showHealEffect(p.x, p.y, 3);
-                }
-            });
-            updateHeroCard();
-            // Dano
-            if (typeof boss !== 'undefined' && !boss.dead) {
-                if (tiles.some(t => t.x === boss.x && t.y === boss.y)) applyDmg(boss, atk);
-            }
-            await sleep(300);
-        }
-    },
-    'maedamata_area3x3_cura': {
-        desc: 'Área 5×5 + cura 4 HP em si mesmo e aliados',
-        execute: async (active, target) => {
-            const atk = active.totalAtk || 1;
-            addLog(`🌳 ${active.name}: PODER ANCESTRAL — Abraço da Mãe da Mata!`);
-            const tiles = buildAreaTiles(active.x, active.y, 2, true);
-            tiles.forEach((t, i) => {
-                setTimeout(() => {
-                    spawnFxAt('element_pulse', 'fx-element-pulse', t.x, t.y, { duration: 700, scale: 1.3, extraClass: 'elem-TERRA' });
-                    spawnFxAt('heal_orb', 'fx-heal-orb', t.x, t.y, { duration: 800 });
-                }, i * 25);
-            });
-            await sleep(600);
-            players.forEach(p => {
-                if (!p.dead && tiles.some(t => t.x === p.x && t.y === p.y)) {
-                    p.hp = Math.min(p.maxHp, p.hp + 4);
-                    if (typeof showHealEffect === 'function') showHealEffect(p.x, p.y, 4);
-                }
-            });
-            updateHeroCard();
-            if (typeof boss !== 'undefined' && !boss.dead) {
-                if (tiles.some(t => t.x === boss.x && t.y === boss.y)) applyDmg(boss, atk);
-            }
-            await sleep(300);
-        }
-    },
-    'paje_coluna_fogo': {
-        desc: 'Coluna vertical inteira + 2× dano se alvo em FOGO',
-        execute: async (active, target) => {
-            const atk = active.totalAtk || 3;
-            addLog(`🔥 ${active.name}: PODER ANCESTRAL — Fúria do Pajé!`);
-            const tiles = [];
-            for (let y = 0; y < 8; y++) tiles.push({ x: active.x, y });
-            if (typeof triggerFireColumn === 'function') {
-                triggerFireColumn(active.x);
-            } else {
-                tiles.forEach((t, i) => {
-                    setTimeout(() => {
-                        spawnFxAt('flame_short', 'fx-flame-short', t.x, t.y, { duration: 600, delay: i * 30 });
-                    }, i * 30);
-                });
-            }
-            await sleep(600);
-            if (typeof boss !== 'undefined' && !boss.dead) {
-                if (boss.x === active.x) {
-                    let dmg = atk;
-                    const bossTileIdx = boss.y * 8 + boss.x;
-                    if (grid[bossTileIdx] === 'FOGO') {
-                        dmg *= 2;
-                        addLog(`🔥 Alvo em FOGO! Dano dobrado!`);
-                    }
-                    applyDmg(boss, dmg);
-                }
-            }
-            await sleep(300);
-        }
-    },
-
-    // ---- Arqueiros ----
-    'jurua_area_alvo_3x3': {
-        desc: 'Área 3×3 centrada no alvo',
-        execute: async (active, target) => {
-            const atk = active.totalAtk || 3;
-            addLog(`🏹 ${active.name}: PODER ANCESTRAL — Flecha Certeira!`);
-            const tx = (typeof boss !== 'undefined' && !boss.dead) ? boss.x : active.x;
-            const ty = (typeof boss !== 'undefined' && !boss.dead) ? boss.y : active.y;
-            const tiles = buildAreaTiles(tx, ty, 1, true);
-            // FX
-            if (typeof spawnArrowProjectile === 'function') spawnArrowProjectile(active, { x: tx, y: ty });
-            tiles.forEach((t, i) => {
-                setTimeout(() => {
-                    spawnFxAt('impact', 'fx-impact', t.x, t.y, { duration: 500, scale: 1.1 });
-                }, i * 35);
-            });
-            await sleep(500);
-            if (typeof boss !== 'undefined' && !boss.dead) {
-                if (tiles.some(t => t.x === boss.x && t.y === boss.y)) applyDmg(boss, atk);
-            }
-            await sleep(300);
-        }
-    },
-    'araci_linha_horizontal': {
-        desc: 'Linha horizontal inteira a partir do herói',
-        execute: async (active, target) => {
-            const atk = active.totalAtk || 2;
-            addLog(`🦜 ${active.name}: PODER ANCESTRAL — Flechas do Vento!`);
-            const tiles = [];
-            for (let x = 0; x < 8; x++) tiles.push({ x, y: active.y });
-            tiles.forEach((t, i) => {
-                setTimeout(() => {
-                    spawnFxAt('wing_gust', 'fx-wing-gust', t.x, t.y, { duration: 500 });
-                }, i * 40);
-            });
-            await sleep(500);
-            if (typeof boss !== 'undefined' && !boss.dead) {
-                if (tiles.some(t => t.x === boss.x && t.y === boss.y)) applyDmg(boss, atk);
-            }
-            await sleep(300);
-        }
-    },
-    'bicho_cruz_completa': {
-        desc: 'Cruz completa (linha + coluna do alvo) — 15 tiles',
-        execute: async (active, target) => {
-            const atk = active.totalAtk || 2;
-            addLog(`🐿️ ${active.name}: PODER ANCESTRAL — Cruz do Folharal!`);
-            const tx = (typeof boss !== 'undefined' && !boss.dead) ? boss.x : active.x;
-            const ty = (typeof boss !== 'undefined' && !boss.dead) ? boss.y : active.y;
-            const tiles = [];
-            for (let x = 0; x < 8; x++) tiles.push({ x, y: ty });
-            for (let y = 0; y < 8; y++) if (y !== ty) tiles.push({ x: tx, y });
-            tiles.forEach((t, i) => {
-                setTimeout(() => {
-                    spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 450, scale: 0.9 });
-                }, i * 25);
-            });
-            await sleep(500);
-            if (typeof boss !== 'undefined' && !boss.dead) {
-                if (tiles.some(t => t.x === boss.x && t.y === boss.y)) applyDmg(boss, atk);
-            }
-            await sleep(300);
-        }
-    },
-    'tapyra_coluna_alvo': {
-        desc: 'Coluna vertical inteira a partir do alvo',
-        execute: async (active, target) => {
-            const atk = active.totalAtk || 3;
-            addLog(`🐆 ${active.name}: PODER ANCESTRAL — Flecha Colunar!`);
-            const tx = (typeof boss !== 'undefined' && !boss.dead) ? boss.x : active.x;
-            const tiles = [];
-            for (let y = 0; y < 8; y++) tiles.push({ x: tx, y });
-            tiles.forEach((t, i) => {
-                setTimeout(() => {
-                    spawnFxAt('heavy_slash', 'fx-heavy-slash', t.x, t.y, { duration: 450, scale: 1.0 });
-                }, i * 35);
-            });
-            await sleep(500);
-            if (typeof boss !== 'undefined' && !boss.dead) {
-                if (tiles.some(t => t.x === boss.x && t.y === boss.y)) applyDmg(boss, atk);
-            }
-            await sleep(300);
-        }
-    },
-};
-
-// =================================================================
-// 🏁 FIM DA PARTE 4/5
-// =================================================================
-// =================================================================
-// historia.js — V7.0 — Bloco 5/5
-// Handlers Atos 8-13 + overrides + vitória com estrelas + OCA + init
-// =================================================================
-
-// =================================================================
-// 🦇 ATO 8 — MORCEGO
-// =================================================================
-STORY_ANIMAL_SKILLS['morcego_voo'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🦇 ${enemy.name} faz voo sombrio!`);
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('wing_gust', 'fx-wing-gust', t.x, t.y, { duration: 450 });
-            spawnFxAt('swarm_cloud', 'fx-swarm-cloud', t.x, t.y, { duration: 500, scale: 0.8 });
-        }, i * 130);
-    });
-    await sleep(420);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-STORY_ANIMAL_SKILLS['morcego_eco'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🦇 ${enemy.name} emite um eco estridente!`);
-    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('shockwave', 'fx-shockwave', t.x, t.y, { duration: 500, scale: 0.9 });
-            spawnFxAt('spectral_veil', 'fx-spectral-veil', t.x, t.y, { duration: 500, scale: 0.5 });
-        }, i * 40);
-    });
-    await sleep(500);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-// =================================================================
-// 🦉 ATO 8 — CORUJA
-// =================================================================
-STORY_ANIMAL_SKILLS['coruja_garras'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🦉 ${enemy.name} ataca com garras noturnas!`);
-    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 450 });
-            spawnFxAt('fog_cloud', 'fx-fog-cloud', t.x, t.y, { duration: 600, scale: 0.7 });
-        }, i * 45);
-    });
-    await sleep(500);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-STORY_ANIMAL_SKILLS['coruja_voo'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🦉 ${enemy.name} faz voo silencioso!`);
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 3);
-    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('fog_cloud', 'fx-fog-cloud', t.x, t.y, { duration: 500, scale: 0.7 }); }, i * 100); });
-    await sleep(420);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-// =================================================================
-// 🐸 ATO 8 — SAPO-CURURU
-// =================================================================
-STORY_ANIMAL_SKILLS['sapo_veneno'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐸 ${enemy.name} espirra veneno em cruz!`);
-    const tiles = buildCrossTiles(boss.x, boss.y, 2, false);
-    spawnFxAt('sting_venom', 'fx-sting-venom', boss.x, boss.y, { duration: 700, scale: 1.5 });
-    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('sting-venom', 'fx-sting-venom', t.x, t.y, { duration: 700, scale: 0.8 }); }, i * 50); });
-    await sleep(600);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-STORY_ANIMAL_SKILLS['sapo_lingua'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐸 ${enemy.name} lança a língua pegajosa!`);
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('fin_slash', 'fx-fin-slash', t.x, t.y, { duration: 450, scale: 0.9 }); }, i * 130); });
-    await sleep(420);
-    damagePlayersAt(tiles, atk);
-    tiles.forEach(t => {
-        players.forEach(p => {
-            if (!p.dead && p.x === t.x && p.y === t.y) tryPullPlayer(p, boss.x, boss.y, 1);
-        });
-    });
-    await sleep(250);
-};
-
-// =================================================================
-// 🐦 ATO 8 — SERIEMA (mini-boss)
-// =================================================================
-STORY_ANIMAL_SKILLS['seriema_bicada'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐦 ${enemy.name} dá uma bicada feroz!`);
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('peck_beak', 'fx-peck-beak', t.x, t.y, { duration: 450, scale: 1.3 }); }, i * 130); });
-    await sleep(420);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-STORY_ANIMAL_SKILLS['seriema_grito'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐦 ${enemy.name} dá um grito de guerra!`);
-    const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
-    tiles.forEach((t, i) => {
-        const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
-        setTimeout(() => { spawnFxAt('shockwave', 'fx-shockwave', t.x, t.y, { duration: 500, scale: 0.9 }); }, dist * 55);
-    });
-    await sleep(550);
-    const dmg = Math.max(1, atk - 1);
-    damagePlayersAt(tiles, dmg);
-    await sleep(280);
-};
-
-// =================================================================
-// 🧙‍♀️ ATO 8 — CUCA (boss)
-// =================================================================
-STORY_ANIMAL_SKILLS['cuca_pocao'] = async (enemy, skill) => {
-    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 4;
-    playSfx('cucask1');
-    addLog(`🧙 Cuca lança poção em um quadrante!`);
-    const quadrantX = Math.random() < 0.5 ? 0 : 4;
-    const quadrantY = Math.random() < 0.5 ? 0 : 4;
-    for (let x = quadrantX; x < quadrantX + 4; x++) {
-        for (let y = quadrantY; y < quadrantY + 4; y++) {
-            triggerPoisonGas(x, y);
-        }
-    }
-    setTimeout(() => {
-        for (let x = quadrantX; x < quadrantX + 4; x++) {
-            for (let y = quadrantY; y < quadrantY + 4; y++) {
-                if (x >= 0 && x < 8 && y >= 0 && y < 8) {
-                    players.forEach(p => {
-                        if (!p.dead && p.x === x && p.y === y) applyDmg(p, bossAtk);
-                    });
-                }
-            }
-        }
-    }, 300);
-    await sleep(600);
-};
-
-STORY_ANIMAL_SKILLS['cuca_cura'] = async (enemy, skill) => {
-    playSfx('cucask2');
-    addLog(`🧙 Cuca bebe uma poção curativa!`);
-    triggerPotion(boss.x, boss.y);
-    await sleep(400);
-    boss.hp = Math.min(boss.maxHp, boss.hp + 2);
-    showHealEffect(boss.x, boss.y, 2);
-    updateVisuals();
-    addLog(`💊 Cuca recuperou 2 HP!`);
-    await sleep(400);
-};
-
-// =================================================================
-// 🐟 ATO 9 — TUCUNARÉ
-// =================================================================
-STORY_ANIMAL_SKILLS['tucunare_bote'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐟 ${enemy.name} dá o bote aquático!`);
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('splash_wave', 'fx-splash-wave', t.x, t.y, { duration: 500 });
-            spawnFxAt('fang_bite', 'fx-fang-bite', t.x, t.y, { duration: 450 });
-        }, i * 130);
-    });
-    await sleep(420);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-STORY_ANIMAL_SKILLS['tucunare_cardume'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐟 ${enemy.name} chama o cardume!`);
-    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
-    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('swarm_cloud', 'fx-swarm-cloud', t.x, t.y, { duration: 500 }); }, i * 45); });
-    await sleep(500);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-// =================================================================
-// 🐟 ATO 9 — PIRAÍBA
-// =================================================================
-STORY_ANIMAL_SKILLS['piraiba_bocarra'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐟 ${enemy.name} dá a bocarra!`);
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('jaw_snap', 'fx-jaw-snap', t.x, t.y, { duration: 500, scale: 1.3 }); }, i * 130); });
-    await sleep(420);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-STORY_ANIMAL_SKILLS['piraiba_caudada'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐟 ${enemy.name} dá uma caudada!`);
-    spawnFxAt('tail_whip', 'fx-tail-whip', boss.x, boss.y, { duration: 700, scale: 1.6 });
-    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
-    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('splash_wave', 'fx-splash-wave', t.x, t.y, { duration: 500, scale: 0.8 }); }, i * 40); });
-    await sleep(500);
-    damagePlayersAt(tiles, atk);
-    players.forEach(p => {
-        if (p.dead) return;
-        if (tiles.some(t => t.x === p.x && t.y === p.y)) {
-            const dx = Math.sign(p.x - boss.x);
-            const dy = Math.sign(p.y - boss.y);
-            tryPushPlayer(p, dx || 0, dy || 0, 2);
-        }
-    });
-    await sleep(300);
-};
-
-// =================================================================
-// 🐟 ATO 9 — DOURADA
-// =================================================================
-STORY_ANIMAL_SKILLS['dourada_escamas'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐟 ${enemy.name} ergue as escamas douradas!`);
-    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('fin_slash', 'fx-fin-slash', t.x, t.y, { duration: 450 });
-            spawnFxAt('element_pulse', 'fx-element-pulse', t.x, t.y, { duration: 500, scale: 0.8 });
-        }, i * 45);
-    });
-    await sleep(500);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-STORY_ANIMAL_SKILLS['dourada_nado'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐟 ${enemy.name} nada rapidamente!`);
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 3);
-    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('splash_wave', 'fx-splash-wave', t.x, t.y, { duration: 400, scale: 0.7 }); }, i * 100); });
-    await sleep(420);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-// =================================================================
-// 🦭 ATO 9 — PEIXE-BOI (mini-boss)
-// =================================================================
-STORY_ANIMAL_SKILLS['peixe_boi_corpulencia'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🦭 ${enemy.name} usa a corpulência!`);
-    const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
-    tiles.forEach((t, i) => {
-        const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
-        setTimeout(() => { spawnFxAt('splash_wave', 'fx-splash-wave', t.x, t.y, { duration: 500, scale: 0.9 }); }, dist * 55);
-    });
-    await sleep(550);
-    const dmg = Math.max(1, atk - 1);
-    damagePlayersAt(tiles, dmg);
-    await sleep(280);
-};
-
-STORY_ANIMAL_SKILLS['peixe_boi_pancada'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🦭 ${enemy.name} dá uma pancada na água!`);
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('splash_wave', 'fx-splash-wave', t.x, t.y, { duration: 500, scale: 1.2 });
-            spawnFxAt('shockwave', 'fx-shockwave', t.x, t.y, { duration: 500, scale: 0.9 });
-        }, i * 130);
-    });
-    await sleep(420);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-// =================================================================
-// 🐬 ATO 9 — BOTO ROSA (boss)
-// =================================================================
-STORY_ANIMAL_SKILLS['boto_coracoes'] = async (enemy, skill) => {
-    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 5;
-    playSfx('boto_skill1');
-    addLog(`🐬 Boto Rosa quebra corações na área!`);
-    for (let dx = -1; dx <= 1; dx++) {
-        for (let dy = -1; dy <= 1; dy++) {
-            if (dx === 0 && dy === 0) continue;
-            const tileX = boss.x + dx;
-            const tileY = boss.y + dy;
-            if (tileX >= 0 && tileX < 8 && tileY >= 0 && tileY < 8) {
-                triggerBrokenHeart(tileX, tileY);
-                players.forEach(p => {
-                    if (!p.dead && p.x === tileX && p.y === tileY) applyDmg(p, bossAtk);
-                });
-            }
-        }
-    }
-    await sleep(600);
-};
-
-STORY_ANIMAL_SKILLS['boto_jatos'] = async (enemy, skill) => {
-    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 5;
-    playSfx('boto_skill2');
-    addLog(`🐬 Boto Rosa lança jatos d'água em cruz!`);
-    for (let y = 0; y < 8; y++) triggerWaterJet(boss.x, y);
-    for (let x = 0; x < 8; x++) triggerWaterJet(x, boss.y);
-    await sleep(600);
-    players.forEach(p => {
-        if (!p.dead && (p.x === boss.x || p.y === boss.y)) applyDmg(p, bossAtk);
-    });
-};
-
-// =================================================================
-// 🐃 ATO 10 — BÚFALO SELVAGEM
-// =================================================================
-STORY_ANIMAL_SKILLS['bufalo_marrada'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐃 ${enemy.name} dá uma marrada selvagem!`);
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('antler_charge', 'fx-antler-charge', t.x, t.y, { duration: 500 });
-            spawnFxAt('hoof_stomp', 'fx-hoof-stomp', t.x, t.y, { duration: 500, scale: 0.9 });
-        }, i * 130);
-    });
-    await sleep(420);
-    damagePlayersAt(tiles, atk);
-    tiles.forEach(t => {
-        players.forEach(p => {
-            if (!p.dead && p.x === t.x && p.y === t.y) tryPushPlayer(p, dir.dx, dir.dy, 1);
-        });
-    });
-    await sleep(280);
-};
-
-STORY_ANIMAL_SKILLS['bufalo_pisoteada'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐃 ${enemy.name} pisoteia o chão!`);
-    const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
-    tiles.forEach((t, i) => {
-        const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
-        setTimeout(() => {
-            spawnFxAt('ground_crack', 'fx-ground-crack', t.x, t.y, { duration: 500 });
-            if (dist === 1) spawnFxAt('hoof_stomp', 'fx-hoof-stomp', t.x, t.y, { duration: 500 });
-        }, dist * 55);
-    });
-    await sleep(550);
-    const dmg = Math.max(1, atk - 1);
-    damagePlayersAt(tiles, dmg);
-    await sleep(280);
-};
-
-// =================================================================
-// 🐄 ATO 10 — VACA LOUCA
-// =================================================================
-STORY_ANIMAL_SKILLS['vaca_coice'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐄 ${enemy.name} dá um coice!`);
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('hoof_stomp', 'fx-hoof-stomp', t.x, t.y, { duration: 450, scale: 1.2 }); }, i * 130); });
-    await sleep(420);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-STORY_ANIMAL_SKILLS['vaca_mugido'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐄 ${enemy.name} dá um mugido de fúria!`);
-    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
-    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('shockwave', 'fx-shockwave', t.x, t.y, { duration: 500, scale: 0.9 }); }, i * 45); });
-    await sleep(500);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-// =================================================================
-// 🐐 ATO 10 — CABRA PRETA
-// =================================================================
-STORY_ANIMAL_SKILLS['cabra_cornada'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐐 ${enemy.name} dá uma cornada!`);
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 1);
-    spawnFxAt('antler_charge', 'fx-antler-charge', boss.x + dir.dx, boss.y + dir.dy, { duration: 500, scale: 1.2 });
-    await sleep(380);
-    damagePlayersAt(tiles, atk);
-    await sleep(220);
-};
-
-STORY_ANIMAL_SKILLS['cabra_bote'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐐 ${enemy.name} dá um bote agourento!`);
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('antler_charge', 'fx-antler-charge', t.x, t.y, { duration: 450 }); }, i * 130); });
-    await sleep(420);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-// =================================================================
-// 🐂 ATO 10 — ZEBU (mini-boss)
-// =================================================================
-STORY_ANIMAL_SKILLS['zebu_marrada'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐂 ${enemy.name} dá uma marrada bruta!`);
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('antler_charge', 'fx-antler-charge', t.x, t.y, { duration: 500, scale: 1.3 }); }, i * 130); });
-    await sleep(420);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-STORY_ANIMAL_SKILLS['zebu_pisada'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐂 ${enemy.name} dá uma pisada pesada!`);
-    const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
-    tiles.forEach((t, i) => {
-        const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
-        setTimeout(() => {
-            spawnFxAt('ground_crack', 'fx-ground-crack', t.x, t.y, { duration: 500 });
-            if (dist === 1) spawnFxAt('hoof_stomp', 'fx-hoof-stomp', t.x, t.y, { duration: 500, scale: 1.1 });
-        }, dist * 55);
-    });
-    await sleep(550);
-    const dmg = Math.max(1, atk - 1);
-    damagePlayersAt(tiles, dmg);
-    await sleep(280);
-};
-
-// =================================================================
-// 🐂 ATO 10 — BOI DA CARA PRETA (boss)
-// =================================================================
-STORY_ANIMAL_SKILLS['boi_face'] = async (enemy, skill) => {
-    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 5;
-    playSfx('boi_skill1');
-    addLog(`🐂 Boi da Cara Preta mostra sua face assustadora!`);
-    for (let dx = -1; dx <= 1; dx++) {
-        for (let dy = -1; dy <= 1; dy++) {
-            if (dx === 0 && dy === 0) continue;
-            const tileX = boss.x + dx;
-            const tileY = boss.y + dy;
-            if (tileX >= 0 && tileX < 8 && tileY >= 0 && tileY < 8) {
-                triggerScaryFace(tileX, tileY);
-                players.forEach(p => {
-                    if (!p.dead && p.x === tileX && p.y === tileY) applyDmg(p, bossAtk);
-                });
-            }
-        }
-    }
-    const affectedIndices = [];
-    for (let dx = -1; dx <= 1; dx++) {
-        for (let dy = -1; dy <= 1; dy++) {
-            const tileX = boss.x + dx;
-            const tileY = boss.y + dy;
-            if (tileX >= 0 && tileX < 8 && tileY >= 0 && tileY < 8) {
-                affectedIndices.push(tileY * 8 + tileX);
-            }
-        }
-    }
-    affectedIndices.forEach(idx => {
-        const newColor = COLORS[Math.floor(Math.random() * 4)];
-        grid[idx] = newColor;
-        const tile = document.querySelectorAll('#grid .tile')[idx];
-        if (tile) tile.className = `tile bg-${newColor}`;
-    });
-    addLog(`🌪️ Tiles ao redor foram embaralhados!`);
-    await sleep(600);
-};
-
-STORY_ANIMAL_SKILLS['boi_empurrao'] = async (enemy, skill) => {
-    playSfx('boi_skill2');
-    addLog(`🐂 Boi da Cara Preta empurra os heróis para as bordas!`);
-    players.forEach(p => {
-        if (!p.dead) {
-            let nx = p.x, ny = p.y;
-            if (p.x < 4) nx = Math.max(0, p.x - 1);
-            else nx = Math.min(7, p.x + 1);
-            if (p.y < 4) ny = Math.max(0, p.y - 1);
-            else ny = Math.min(7, p.y + 1);
-            let finalX = p.x, finalY = p.y;
-            let stepX = p.x < nx ? 1 : -1;
-            for (let x = p.x; x !== nx; x += stepX) {
-                if (!isOccupied(x + stepX, p.y, p.id)) finalX = x + stepX;
-                else break;
-            }
-            let stepY = p.y < ny ? 1 : -1;
-            for (let y = p.y; y !== ny; y += stepY) {
-                if (!isOccupied(finalX, y + stepY, p.id)) finalY = y + stepY;
-                else break;
-            }
-            p.x = finalX;
-            p.y = finalY;
-        }
-    });
-    updateVisuals();
-    addLog(`🌪️ Heróis foram empurrados para as bordas!`);
-    await sleep(400);
-    players.forEach(p => { if (!p.dead) applyDmg(p, 1); });
-};
-
-// =================================================================
-// 🐈 ATO 11 — GATO-DO-MATO
-// =================================================================
-STORY_ANIMAL_SKILLS['gato_mato_garras'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐈 ${enemy.name} ataca com garras noturnas!`);
-    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
-    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 450 }); }, i * 40); });
-    await sleep(480);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-STORY_ANIMAL_SKILLS['gato_mato_salto'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐈 ${enemy.name} dá um salto silencioso!`);
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    const fromX = boss.x, fromY = boss.y;
-    const landX = Math.max(0, Math.min(7, boss.x + dir.dx * 2));
-    const landY = Math.max(0, Math.min(7, boss.y + dir.dy * 2));
-    spawnFxAt('pounce_arc', 'fx-pounce-arc', fromX, fromY, { duration: 600, scale: 1.1 });
-    boss.x = landX; boss.y = landY;
-    if (typeof updateVisuals === 'function') updateVisuals();
-    await sleep(350);
-    spawnFxAt('claw_slash', 'fx-claw-slash', landX, landY, { duration: 500, scale: 1.3 });
-    const tiles = buildAreaTiles(landX, landY, 1, true);
-    await sleep(250);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-// =================================================================
-// 🦋 ATO 11 — MARIPOSA GIGANTE
-// =================================================================
-STORY_ANIMAL_SKILLS['mariposa_po'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🦋 ${enemy.name} espalha pó lunar!`);
-    const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
-    tiles.forEach((t, i) => {
-        const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
-        setTimeout(() => {
-            spawnFxAt('fog_cloud', 'fx-fog-cloud', t.x, t.y, { duration: 700, scale: 0.9 });
-            spawnFxAt('element_pulse', 'fx-element-pulse', t.x, t.y, { duration: 700, scale: 0.7 });
-        }, dist * 55);
-    });
-    await sleep(600);
-    const dmg = Math.max(1, atk - 1);
-    damagePlayersAt(tiles, dmg);
-    await sleep(280);
-};
-
-STORY_ANIMAL_SKILLS['mariposa_voo'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🦋 ${enemy.name} faz voo rasante!`);
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 3);
-    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('wing_gust', 'fx-wing-gust', t.x, t.y, { duration: 450, scale: 0.8 }); }, i * 100); });
-    await sleep(420);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-// =================================================================
-// 🦝 ATO 11 — QUATI
-// =================================================================
-STORY_ANIMAL_SKILLS['quati_garras'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🦝 ${enemy.name} ataca com garras afiadas!`);
-    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
-    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 450, scale: 0.9 }); }, i * 40); });
-    await sleep(480);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-STORY_ANIMAL_SKILLS['quati_bote'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🦝 ${enemy.name} dá um bote rápido!`);
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
-    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('fang_bite', 'fx-fang-bite', t.x, t.y, { duration: 450, scale: 0.9 }); }, i * 130); });
-    await sleep(400);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-// =================================================================
-// 🐆 ATO 11 — SUÇUARANA (mini-boss)
-// =================================================================
-STORY_ANIMAL_SKILLS['sucuarana_garra'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐆 ${enemy.name} dá uma garra fatal!`);
-    const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
-    tiles.forEach((t, i) => {
-        const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
-        setTimeout(() => { spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 500, scale: 1.1 }); }, dist * 55);
-    });
-    await sleep(550);
-    const dmg = Math.max(1, atk - 1);
-    damagePlayersAt(tiles, dmg);
-    await sleep(280);
-};
-
-STORY_ANIMAL_SKILLS['sucuarana_salto'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🐆 ${enemy.name} dá um salto mortal!`);
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    const fromX = boss.x, fromY = boss.y;
-    const landX = Math.max(0, Math.min(7, boss.x + dir.dx * 2));
-    const landY = Math.max(0, Math.min(7, boss.y + dir.dy * 2));
-    spawnFxAt('pounce_arc', 'fx-pounce-arc', fromX, fromY, { duration: 700, scale: 1.4 });
-    boss.x = landX; boss.y = landY;
-    if (typeof updateVisuals === 'function') updateVisuals();
-    await sleep(350);
-    spawnFxAt('shockwave', 'fx-shockwave', landX, landY, { duration: 600, scale: 1.4 });
-    const tiles = buildAreaTiles(landX, landY, 1, true);
-    const dmg = Math.max(1, atk - 1);
-    await sleep(280);
-    damagePlayersAt(tiles, dmg);
-    await sleep(280);
-};
-
-// =================================================================
-// 🌙 ATO 11 — JACI (boss)
-// =================================================================
-STORY_ANIMAL_SKILLS['jaci_lua'] = async (enemy, skill) => {
-    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 5;
-    playSfx('jaci_skill1');
-    addLog(`🌙 Jaci invoca a lua e ataca todos os tiles de AR!`);
-    triggerMoon(boss.x, boss.y);
-    await sleep(400);
-    let arTilesAttacked = 0;
-    grid.forEach((element, idx) => {
-        if (element === 'AR') {
-            const x = idx % 8;
-            const y = Math.floor(idx / 8);
-            triggerMoonRay(x, y);
-            arTilesAttacked++;
-            players.forEach(p => {
-                if (!p.dead && p.x === x && p.y === y) setTimeout(() => applyDmg(p, bossAtk), 200);
-            });
-        }
-    });
-    addLog(`🌪️ ${arTilesAttacked} tiles de AR foram atingidos!`);
-    await sleep(600);
-};
-
-STORY_ANIMAL_SKILLS['jaci_tempestade'] = async (enemy, skill) => {
-    playSfx('jaci_skill2');
-    addLog(`🌙 Jaci invoca uma tempestade em todo o tabuleiro!`);
-    triggerStorm();
-    await sleep(500);
-    players.forEach(p => { if (!p.dead) applyDmg(p, 1); });
-    boss.hp = Math.min(boss.maxHp, boss.hp + 1);
-    showHealEffect(boss.x, boss.y, 1);
-    updateVisuals();
-    addLog(`💊 Jaci recuperou 1 HP!`);
-    await sleep(400);
-};
-
-// =================================================================
-// 🦅 ATO 12 — GAVIÃO
-// =================================================================
-STORY_ANIMAL_SKILLS['gaviao_voo'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🦅 ${enemy.name} faz voo rasante!`);
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 3);
-    tiles.forEach((t, i) => {
-        setTimeout(() => {
-            spawnFxAt('wing_gust', 'fx-wing-gust', t.x, t.y, { duration: 450 });
-            spawnFxAt('peck_beak', 'fx-peck-beak', t.x, t.y, { duration: 400 });
-        }, i * 100);
-    });
-    await sleep(420);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-STORY_ANIMAL_SKILLS['gaviao_garras'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🦅 ${enemy.name} ataca com garras cortantes!`);
-    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
-    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 450, scale: 0.9 }); }, i * 40); });
-    await sleep(480);
-    damagePlayersAt(tiles, atk);
-    await sleep(250);
-};
-
-// =================================================================
-// 🦅 ATO 12 — FALCÃO
-// =================================================================
-STORY_ANIMAL_SKILLS['falcao_mergulho'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🦅 ${enemy.name} faz mergulho mortal!`);
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-    const tx = nearest.x;
-    const ty = nearest.y;
-    const fromX = boss.x, fromY = boss.y;
-    spawnTravelingFx('wing_gust', 'fx-wing-gust', fromX, fromY, tx, ty, { duration: 350 });
-    spawnFxAt('impact', 'fx-impact', tx, ty, { duration: 500, delay: 350 });
-    await sleep(420);
-    players.forEach(p => {
-        if (!p.dead && p.x === tx && p.y === ty) applyDmg(p, atk);
-    });
-    boss.x = tx; boss.y = ty;
-    if (typeof updateVisuals === 'function') updateVisuals();
-    await sleep(280);
-};
-
-STORY_ANIMAL_SKILLS['falcao_garras'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🦅 ${enemy.name} ataca com garras do vento!`);
-    const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
-    tiles.forEach((t, i) => {
-        const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
-        setTimeout(() => { spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 500, scale: 0.9 }); }, dist * 55);
-    });
-    await sleep(550);
-    const dmg = Math.max(1, atk - 1);
-    damagePlayersAt(tiles, dmg);
-    await sleep(280);
-};
-
-// =================================================================
-// 🦉 ATO 12 — URUTAU
-// =================================================================
-STORY_ANIMAL_SKILLS['urutau_canto'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🦉 ${enemy.name} entoa um canto sombrio!`);
-    const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
-    tiles.forEach((t, i) => {
-        const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
-        setTimeout(() => { spawnFxAt('spectral_veil', 'fx-spectral-veil', t.x, t.y, { duration: 700, scale: 0.8 }); }, dist * 55);
-    });
-    await sleep(600);
-    const dmg = Math.max(1, atk - 1);
-    damagePlayersAt(tiles, dmg);
-    await sleep(280);
-};
-
-STORY_ANIMAL_SKILLS['urutau_voo'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🦉 ${enemy.name} faz voo fantasma!`);
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
-    for (let i = 0; i < 3; i++) {
-        const nx = boss.x + dir.dx;
-        const ny = boss.y + dir.dy;
-        if (nx < 0 || nx >= 8 || ny < 0 || ny >= 8) break;
-        if (typeof isOccupied === 'function' && isOccupied(nx, ny, -1)) break;
-        spawnFxAt('spectral_veil', 'fx-spectral-veil', nx, ny, { duration: 500, scale: 0.7 });
-        boss.x = nx; boss.y = ny;
-        if (typeof updateVisuals === 'function') updateVisuals();
-        await sleep(130);
-    }
-    await sleep(200);
-    spawnFxAt('impact', 'fx-impact', boss.x, boss.y, { duration: 500, scale: 1.2 });
-    players.forEach(p => {
-        if (!p.dead && Math.abs(p.x - boss.x) <= 1 && Math.abs(p.y - boss.y) <= 1) applyDmg(p, atk);
-    });
-    await sleep(280);
-};
-
-// =================================================================
-// 🦅 ATO 12 — ÁGUIA-CINZENTA (mini-boss)
-// =================================================================
-STORY_ANIMAL_SKILLS['aguia_garras'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🦅 ${enemy.name} ataca com garras reais!`);
-    const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
-    tiles.forEach((t, i) => {
-        const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
-        setTimeout(() => { spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 500, scale: 1.1 }); }, dist * 55);
-    });
-    await sleep(550);
-    const dmg = Math.max(1, atk - 1);
-    damagePlayersAt(tiles, dmg);
-    await sleep(280);
-};
-
-STORY_ANIMAL_SKILLS['aguia_mergulho'] = async (enemy, skill) => {
-    const atk = enemy.atk;
-    addLog(`🦅 ${enemy.name} faz mergulho solar!`);
-    const alive = players.filter(p => !p.dead);
-    if (alive.length === 0) return;
-    let nearest = alive[0];
-    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
-    alive.forEach(p => {
-        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-    });
-    const tx = nearest.x;
-    const ty = nearest.y;
-    const fromX = boss.x, fromY = boss.y;
-    spawnTravelingFx('wing_gust', 'fx-wing-gust', fromX, fromY, tx, ty, { duration: 400 });
-    spawnFxAt('element_pulse', 'fx-element-pulse', tx, ty, { duration: 700, delay: 400, scale: 1.3 });
-    await sleep(500);
-    const hitTiles = [{ x: tx, y: ty }].concat(buildCrossTiles(tx, ty, 1, false));
-    damagePlayersAt(hitTiles, atk);
-    boss.x = tx; boss.y = ty;
-    if (typeof updateVisuals === 'function') updateVisuals();
-    await sleep(280);
-};
-
-// =================================================================
-// ☀️ ATO 12 — GUARACI (boss)
-// =================================================================
-STORY_ANIMAL_SKILLS['guaraci_sol'] = async (enemy, skill) => {
-    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 5;
-    playSfx('guaraci_skill1');
-    addLog(`☀️ Guaraci invoca o sol e ataca todos os tiles de FOGO!`);
-    triggerSun(boss.x, boss.y);
-    await sleep(400);
-    let fireTilesAttacked = 0;
-    grid.forEach((element, idx) => {
-        if (element === 'FOGO') {
-            const x = idx % 8;
-            const y = Math.floor(idx / 8);
-            triggerSunRay(x, y);
-            fireTilesAttacked++;
-            players.forEach(p => {
-                if (!p.dead && p.x === x && p.y === y) setTimeout(() => applyDmg(p, bossAtk), 200);
-            });
-        }
-    });
-    addLog(`🔥 ${fireTilesAttacked} tiles de FOGO foram atingidos!`);
-    await sleep(600);
-};
-
-STORY_ANIMAL_SKILLS['guaraci_onda'] = async (enemy, skill) => {
-    playSfx('guaraci_skill2');
-    addLog(`☀️ Guaraci invoca uma onda de calor!`);
-    triggerHeatWave();
-    await sleep(500);
-    players.forEach(p => { if (!p.dead) applyDmg(p, 1); });
-    boss.hp = Math.min(boss.maxHp, boss.hp + 1);
-    showHealEffect(boss.x, boss.y, 1);
-    updateVisuals();
-    addLog(`💊 Guaraci recuperou 1 HP!`);
-    await sleep(400);
-};
-
-// =================================================================
-// 👹 ATO 13 — ANHANGÁ (final boss)
-// =================================================================
-STORY_ANIMAL_SKILLS['anhanga_fogo'] = async (enemy, skill) => {
-    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 6;
-    playSfx('anhanga_skill1');
-    addLog(`👹 ANHANGÁ: 'Sintam meu fogo intercalado!'`);
-    const columnsToAttack = [];
-    for (let col = boss.x; col < 8; col += 2) columnsToAttack.push(col);
-    for (let col = boss.x; col >= 0; col -= 2) columnsToAttack.push(col);
-    const uniqueColumns = [...new Set(columnsToAttack)];
-    uniqueColumns.forEach(col => {
-        if (col >= 0 && col <= 7) triggerFireColumn(col);
-    });
-    await sleep(600);
-    players.forEach(p => {
-        if (!p.dead && uniqueColumns.includes(p.x)) applyDmg(p, bossAtk);
-    });
-};
-
-STORY_ANIMAL_SKILLS['anhanga_devora'] = async (enemy, skill) => {
-    playSfx('anhanga_skill2');
-    addLog(`👹 ANHANGÁ: 'Eu me alimento da natureza!'`);
-    const board = document.getElementById('board');
-    const s = getStep();
-    const suckEffect = document.createElement('div');
-    suckEffect.style.position = 'absolute';
-    suckEffect.style.left = (boss.x * s + 8) + 'px';
-    suckEffect.style.top = (boss.y * s + 8) + 'px';
-    suckEffect.style.width = '20px';
-    suckEffect.style.height = '20px';
-    suckEffect.style.background = 'radial-gradient(circle, #8e44ad, #9b59b6, transparent)';
-    suckEffect.style.borderRadius = '50%';
-    suckEffect.style.boxShadow = '0 0 20px #8e44ad';
-    suckEffect.style.animation = 'pulseSkill 0.8s infinite alternate';
-    suckEffect.style.zIndex = '55';
-    board.appendChild(suckEffect);
-    triggerPotion(boss.x, boss.y);
-    await sleep(400);
-    boss.hp = Math.min(boss.maxHp, boss.hp + 3);
-    showHealEffect(boss.x, boss.y, 3);
-    updateVisuals();
-    addLog(`💊 Anhangá recuperou 3 HP!`);
-    setTimeout(() => { if (suckEffect.parentNode) suckEffect.parentNode.removeChild(suckEffect); }, 1000);
-};
-
-// =================================================================
-// 🔧 PATCH applyStorySkill — suporta skill.dmg + chama som por arquétipo
-// =================================================================
-const _origApplyStorySkill = applyStorySkill;
-async function applyStorySkillPatched(enemy, skill) {
-    if (!enemy || !skill) return;
-    const handlerName = skill.handler;
-
-    // Toca som da skill (só animais comuns — bosses tocam dentro do handler)
-    const isBossSkill = (typeof bossIsStoryBoss === 'function') && bossIsStoryBoss(enemy.id);
-    if (!isBossSkill && handlerName) {
-        try { playSkillSound(handlerName); } catch(e) {}
-    }
-
-    // Se skill tem dmg customizado, clona enemy com atk = skill.dmg
-    let effectiveEnemy = enemy;
-    if (typeof skill.dmg === 'number' && skill.dmg > 0) {
-        effectiveEnemy = Object.assign({}, enemy, { atk: skill.dmg });
-    }
-
-    return _origApplyStorySkill.call(this, effectiveEnemy, skill);
-}
-// Sobrescreve globalmente
-window.applyStorySkill = applyStorySkillPatched;
-
-// =================================================================
 // 🔊 SISTEMA DE SOM POR ARQUÉTIPO
 // =================================================================
 const STORY_SKILL_SOUNDS = {
-    porco_espinho_espinhos: '', porco_espinho_bote: '', jacare_bocada: '', jacare_giro: '',
-    cervo_investida: '', cervo_chifrada: '', onca_garra_dupla: '', onca_salto: '',
-    tamandua_garras: '', tamandua_bicada: '', anta_pisada: '', anta_atropelamento: '',
-    queixada_mordida: '', queixada_estouro: '', sucuri_bocarra: '', sucuri_caudada: '',
-    piranha_cardume: '', piranha_frenesi: '', lontra_garras: '', lontra_nado: '',
-    ariranha_matilha: '', ariranha_bote: '', pirarucu_bocarra: '', pirarucu_caudada: '',
-    cascavel_chocalho: '', cascavel_bote: '', coral_aneis: '', coral_peconha: '',
-    jararaca_bote: '', jararaca_enrolar: '', tartaruga_casco: '', tartaruga_pancada: '',
-    bode_cornada: '', bode_marrada: '', carneiro_trombada: '', carneiro_pisada: '',
-    cavalo_coice: '', cavalo_relincho: '', touro_cornada: '', touro_pisoteada: '',
-    urubu_voo: '', urubu_bicada: '', carcaara_garras: '', carcaara_mergulho: '',
-    tatu_casco: '', tatu_cavar: '', lobo_guara_uivo: '', lobo_guara_bote: '',
-    cachorro_mordida: '', cachorro_rosnado: '', raposa_astucia: '', raposa_bote: '',
-    guaxinim_garras: '', guaxinim_surpresa: '', jaguatirica_garras: '', jaguatirica_salto: '',
-    morcego_voo: '', morcego_eco: '', coruja_garras: '', coruja_voo: '',
-    sapo_veneno: '', sapo_lingua: '', seriema_bicada: '', seriema_grito: '',
-    tucunare_bote: '', tucunare_cardume: '', piraiba_bocarra: '', piraiba_caudada: '',
-    dourada_escamas: '', dourada_nado: '', peixe_boi_corpulencia: '', peixe_boi_pancada: '',
-    bufalo_marrada: '', bufalo_pisoteada: '', vaca_coice: '', vaca_mugido: '',
-    cabra_cornada: '', cabra_bote: '', zebu_marrada: '', zebu_pisada: '',
-    gato_mato_garras: '', gato_mato_salto: '', mariposa_po: '', mariposa_voo: '',
-    quati_garras: '', quati_bote: '', sucuarana_garra: '', sucuarana_salto: '',
-    gaviao_voo: '', gaviao_garras: '', falcao_mergulho: '', falcao_garras: '',
-    urutau_canto: '', urutau_voo: '', aguia_garras: '', aguia_mergulho: '',
+    porco_espinho_espinhos:'',porco_espinho_bote:'',jacare_bocada:'',jacare_giro:'',
+    cervo_investida:'',cervo_chifrada:'',onca_garra_dupla:'',onca_salto:'',
+    tamandua_garras:'',tamandua_bicada:'',anta_pisada:'',anta_atropelamento:'',
+    queixada_mordida:'',queixada_estouro:'',sucuri_bocarra:'',sucuri_caudada:'',
+    piranha_cardume:'',piranha_frenesi:'',lontra_garras:'',lontra_nado:'',
+    ariranha_matilha:'',ariranha_bote:'',pirarucu_bocarra:'',pirarucu_caudada:'',
+    cascavel_chocalho:'',cascavel_bote:'',coral_aneis:'',coral_peconha:'',
+    jararaca_bote:'',jararaca_enrolar:'',tartaruga_casco:'',tartaruga_pancada:'',
+    bode_cornada:'',bode_marrada:'',carneiro_trombada:'',carneiro_pisada:'',
+    cavalo_coice:'',cavalo_relincho:'',touro_cornada:'',touro_pisoteada:'',
+    urubu_voo:'',urubu_bicada:'',carcaara_garras:'',carcaara_mergulho:'',
+    tatu_casco:'',tatu_cavar:'',lobo_guara_uivo:'',lobo_guara_bote:'',
+    cachorro_mordida:'',cachorro_rosnado:'',raposa_astucia:'',raposa_bote:'',
+    guaxinim_garras:'',guaxinim_surpresa:'',jaguatirica_garras:'',jaguatirica_salto:'',
+    morcego_voo:'',morcego_eco:'',coruja_garras:'',coruja_voo:'',
+    sapo_veneno:'',sapo_lingua:'',seriema_bicada:'',seriema_grito:'',
+    tucunare_bote:'',tucunare_cardume:'',piraiba_bocarra:'',piraiba_caudada:'',
+    dourada_escamas:'',dourada_nado:'',peixe_boi_corpulencia:'',peixe_boi_pancada:'',
+    bufalo_marrada:'',bufalo_pisoteada:'',vaca_coice:'',vaca_mugido:'',
+    cabra_cornada:'',cabra_bote:'',zebu_marrada:'',zebu_pisada:'',
+    gato_mato_garras:'',gato_mato_salto:'',mariposa_po:'',mariposa_voo:'',
+    quati_garras:'',quati_bote:'',sucuarana_garra:'',sucuarana_salto:'',
+    gaviao_voo:'',gaviao_garras:'',falcao_mergulho:'',falcao_garras:'',
+    urutau_canto:'',urutau_voo:'',aguia_garras:'',aguia_mergulho:'',
 };
 
 const STORY_ARCHETYPE_SOUNDS = {
@@ -5795,26 +3779,6 @@ const STORY_SKILL_FALLBACK_MAP = {
     raposa_astucia:'som_mordida_rapida', raposa_bote:'som_mordida',
     guaxinim_garras:'som_garra', guaxinim_surpresa:'som_mordida_rapida',
     jaguatirica_garras:'som_garra', jaguatirica_salto:'som_rugido',
-    morcego_voo:'som_voo', morcego_eco:'som_espectral',
-    coruja_garras:'som_garra_ave', coruja_voo:'som_voo',
-    sapo_veneno:'som_veneno', sapo_lingua:'som_mordida_rapida',
-    seriema_bicada:'som_bicada', seriema_grito:'som_rugido',
-    tucunare_bote:'som_bocarra', tucunare_cardume:'som_mordida_rapida',
-    piraiba_bocarra:'som_bocarra', piraiba_caudada:'som_caudada',
-    dourada_escamas:'som_splash', dourada_nado:'som_nado',
-    peixe_boi_corpulencia:'som_splash', peixe_boi_pancada:'som_splash',
-    bufalo_marrada:'som_investida', bufalo_pisoteada:'som_pisada',
-    vaca_coice:'som_coice', vaca_mugido:'som_mugido',
-    cabra_cornada:'som_cornada', cabra_bote:'som_investida',
-    zebu_marrada:'som_investida', zebu_pisada:'som_pisada',
-    gato_mato_garras:'som_garra', gato_mato_salto:'som_rugido',
-    mariposa_po:'som_ventania', mariposa_voo:'som_voo',
-    quati_garras:'som_garra', quati_bote:'som_mordida_rapida',
-    sucuarana_garra:'som_garra', sucuarana_salto:'som_rugido',
-    gaviao_voo:'som_voo', gaviao_garras:'som_garra_ave',
-    falcao_mergulho:'som_voo', falcao_garras:'som_garra_ave',
-    urutau_canto:'som_espectral', urutau_voo:'som_voo',
-    aguia_garras:'som_garra_ave', aguia_mergulho:'som_voo',
 };
 
 function playSkillSound(handlerName) {
@@ -5834,6 +3798,1048 @@ function playSkillSound(handlerName) {
 function bossIsStoryBoss(enemyId) {
     return ['saci','mapinguari','iara','boitata','mula','corpo_seco','lobisomem','cuca','boto','boi','jaci','guaraci','anhanga'].includes(enemyId);
 }
+// =================================================================
+// 🦇 ATO 8 — MORCEGO
+// =================================================================
+STORY_ANIMAL_SKILLS['morcego_voo'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🦇 ${enemy.name} faz voo sombrio!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
+    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
+    tiles.forEach((t, i) => {
+        setTimeout(() => {
+            spawnFxAt('wing_gust', 'fx-wing-gust', t.x, t.y, { duration: 450 });
+            spawnFxAt('swarm_cloud', 'fx-swarm-cloud', t.x, t.y, { duration: 500, scale: 0.8 });
+        }, i * 130);
+    });
+    await sleep(420);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+STORY_ANIMAL_SKILLS['morcego_eco'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🦇 ${enemy.name} emite um eco estridente!`);
+    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
+    tiles.forEach((t, i) => {
+        setTimeout(() => {
+            spawnFxAt('shockwave', 'fx-shockwave', t.x, t.y, { duration: 500, scale: 0.9 });
+            spawnFxAt('spectral_veil', 'fx-spectral-veil', t.x, t.y, { duration: 500, scale: 0.5 });
+        }, i * 40);
+    });
+    await sleep(500);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+// =================================================================
+// 🦉 ATO 8 — CORUJA
+// =================================================================
+STORY_ANIMAL_SKILLS['coruja_garras'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🦉 ${enemy.name} ataca com garras noturnas!`);
+    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
+    tiles.forEach((t, i) => {
+        setTimeout(() => {
+            spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 450 });
+            spawnFxAt('fog_cloud', 'fx-fog-cloud', t.x, t.y, { duration: 600, scale: 0.7 });
+        }, i * 45);
+    });
+    await sleep(500);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+STORY_ANIMAL_SKILLS['coruja_voo'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🦉 ${enemy.name} faz voo silencioso!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
+    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 3);
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('fog_cloud', 'fx-fog-cloud', t.x, t.y, { duration: 500, scale: 0.7 }); }, i * 100); });
+    await sleep(420);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+// =================================================================
+// 🐸 ATO 8 — SAPO-CURURU
+// =================================================================
+STORY_ANIMAL_SKILLS['sapo_veneno'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🐸 ${enemy.name} espirra veneno em cruz!`);
+    const tiles = buildCrossTiles(boss.x, boss.y, 2, false);
+    spawnFxAt('sting_venom', 'fx-sting-venom', boss.x, boss.y, { duration: 700, scale: 1.5 });
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('sting_venom', 'fx-sting-venom', t.x, t.y, { duration: 700, scale: 0.8 }); }, i * 50); });
+    await sleep(600);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+STORY_ANIMAL_SKILLS['sapo_lingua'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🐸 ${enemy.name} lança a língua pegajosa!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
+    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('fin_slash', 'fx-fin-slash', t.x, t.y, { duration: 450, scale: 0.9 }); }, i * 130); });
+    await sleep(420);
+    damagePlayersAt(tiles, atk);
+    tiles.forEach(t => {
+        players.forEach(p => {
+            if (!p.dead && p.x === t.x && p.y === t.y) tryPullPlayer(p, boss.x, boss.y, 1);
+        });
+    });
+    await sleep(250);
+};
+
+// =================================================================
+// 🐦 ATO 8 — SERIEMA
+// =================================================================
+STORY_ANIMAL_SKILLS['seriema_bicada'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🐦 ${enemy.name} dá uma bicada feroz!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
+    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('peck_beak', 'fx-peck-beak', t.x, t.y, { duration: 450, scale: 1.3 }); }, i * 130); });
+    await sleep(420);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+STORY_ANIMAL_SKILLS['seriema_grito'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🐦 ${enemy.name} dá um grito de guerra!`);
+    const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
+    tiles.forEach((t) => {
+        const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
+        setTimeout(() => { spawnFxAt('shockwave', 'fx-shockwave', t.x, t.y, { duration: 500, scale: 0.9 }); }, dist * 55);
+    });
+    await sleep(550);
+    const dmg = Math.max(1, atk - 1);
+    damagePlayersAt(tiles, dmg);
+    await sleep(280);
+};
+
+// =================================================================
+// 🧙‍♀️ ATO 8 — CUCA
+// =================================================================
+STORY_ANIMAL_SKILLS['cuca_pocao'] = async () => {
+    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 4;
+    playSfx('cucask1');
+    addLog(`🧙 Cuca lança poção em um quadrante!`);
+    const quadrantX = Math.random() < 0.5 ? 0 : 4;
+    const quadrantY = Math.random() < 0.5 ? 0 : 4;
+    for (let x = quadrantX; x < quadrantX + 4; x++) {
+        for (let y = quadrantY; y < quadrantY + 4; y++) {
+            triggerPoisonGas(x, y);
+        }
+    }
+    setTimeout(() => {
+        for (let x = quadrantX; x < quadrantX + 4; x++) {
+            for (let y = quadrantY; y < quadrantY + 4; y++) {
+                if (x >= 0 && x < 8 && y >= 0 && y < 8) {
+                    players.forEach(p => { if (!p.dead && p.x === x && p.y === y) applyDmg(p, bossAtk); });
+                }
+            }
+        }
+    }, 300);
+    await sleep(600);
+};
+
+STORY_ANIMAL_SKILLS['cuca_cura'] = async () => {
+    playSfx('cucask2');
+    addLog(`🧙 Cuca bebe uma poção curativa!`);
+    triggerPotion(boss.x, boss.y);
+    await sleep(400);
+    boss.hp = Math.min(boss.maxHp, boss.hp + 2);
+    showHealEffect(boss.x, boss.y, 2);
+    updateVisuals();
+    addLog(`💊 Cuca recuperou 2 HP!`);
+    await sleep(400);
+};
+
+// =================================================================
+// 🐟 ATO 9 — TUCUNARÉ
+// =================================================================
+STORY_ANIMAL_SKILLS['tucunare_bote'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🐟 ${enemy.name} dá o bote aquático!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
+    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
+    tiles.forEach((t, i) => {
+        setTimeout(() => {
+            spawnFxAt('splash_wave', 'fx-splash-wave', t.x, t.y, { duration: 500 });
+            spawnFxAt('fang_bite', 'fx-fang-bite', t.x, t.y, { duration: 450 });
+        }, i * 130);
+    });
+    await sleep(420);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+STORY_ANIMAL_SKILLS['tucunare_cardume'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🐟 ${enemy.name} chama o cardume!`);
+    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('swarm_cloud', 'fx-swarm-cloud', t.x, t.y, { duration: 500 }); }, i * 45); });
+    await sleep(500);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+// =================================================================
+// 🐟 ATO 9 — PIRAÍBA
+// =================================================================
+STORY_ANIMAL_SKILLS['piraiba_bocarra'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🐟 ${enemy.name} dá a bocarra!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
+    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('jaw_snap', 'fx-jaw-snap', t.x, t.y, { duration: 500, scale: 1.3 }); }, i * 130); });
+    await sleep(420);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+STORY_ANIMAL_SKILLS['piraiba_caudada'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🐟 ${enemy.name} dá uma caudada!`);
+    spawnFxAt('tail_whip', 'fx-tail-whip', boss.x, boss.y, { duration: 700, scale: 1.6 });
+    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('splash_wave', 'fx-splash-wave', t.x, t.y, { duration: 500, scale: 0.8 }); }, i * 40); });
+    await sleep(500);
+    damagePlayersAt(tiles, atk);
+    players.forEach(p => {
+        if (p.dead) return;
+        if (tiles.some(t => t.x === p.x && t.y === p.y)) {
+            const dx = Math.sign(p.x - boss.x);
+            const dy = Math.sign(p.y - boss.y);
+            tryPushPlayer(p, dx || 0, dy || 0, 2);
+        }
+    });
+    await sleep(300);
+};
+
+// =================================================================
+// 🐟 ATO 9 — DOURADA
+// =================================================================
+STORY_ANIMAL_SKILLS['dourada_escamas'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🐟 ${enemy.name} ergue as escamas douradas!`);
+    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
+    tiles.forEach((t, i) => {
+        setTimeout(() => {
+            spawnFxAt('fin_slash', 'fx-fin-slash', t.x, t.y, { duration: 450 });
+            spawnFxAt('element_pulse', 'fx-element-pulse', t.x, t.y, { duration: 500, scale: 0.8 });
+        }, i * 45);
+    });
+    await sleep(500);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+STORY_ANIMAL_SKILLS['dourada_nado'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🐟 ${enemy.name} nada rapidamente!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
+    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 3);
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('splash_wave', 'fx-splash-wave', t.x, t.y, { duration: 400, scale: 0.7 }); }, i * 100); });
+    await sleep(420);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+// =================================================================
+// 🦭 ATO 9 — PEIXE-BOI
+// =================================================================
+STORY_ANIMAL_SKILLS['peixe_boi_corpulencia'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🦭 ${enemy.name} usa a corpulência!`);
+    const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
+    tiles.forEach((t) => {
+        const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
+        setTimeout(() => { spawnFxAt('splash_wave', 'fx-splash-wave', t.x, t.y, { duration: 500, scale: 0.9 }); }, dist * 55);
+    });
+    await sleep(550);
+    const dmg = Math.max(1, atk - 1);
+    damagePlayersAt(tiles, dmg);
+    await sleep(280);
+};
+
+STORY_ANIMAL_SKILLS['peixe_boi_pancada'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🦭 ${enemy.name} dá uma pancada na água!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
+    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
+    tiles.forEach((t, i) => {
+        setTimeout(() => {
+            spawnFxAt('splash_wave', 'fx-splash-wave', t.x, t.y, { duration: 500, scale: 1.2 });
+            spawnFxAt('shockwave', 'fx-shockwave', t.x, t.y, { duration: 500, scale: 0.9 });
+        }, i * 130);
+    });
+    await sleep(420);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+// =================================================================
+// 🐬 ATO 9 — BOTO ROSA
+// =================================================================
+STORY_ANIMAL_SKILLS['boto_coracoes'] = async () => {
+    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 5;
+    playSfx('boto_skill1');
+    addLog(`🐬 Boto Rosa quebra corações na área!`);
+    for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+            if (dx === 0 && dy === 0) continue;
+            const tileX = boss.x + dx;
+            const tileY = boss.y + dy;
+            if (tileX >= 0 && tileX < 8 && tileY >= 0 && tileY < 8) {
+                triggerBrokenHeart(tileX, tileY);
+                players.forEach(p => { if (!p.dead && p.x === tileX && p.y === tileY) applyDmg(p, bossAtk); });
+            }
+        }
+    }
+    await sleep(600);
+};
+
+STORY_ANIMAL_SKILLS['boto_jatos'] = async () => {
+    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 5;
+    playSfx('boto_skill2');
+    addLog(`🐬 Boto Rosa lança jatos d'água em cruz!`);
+    for (let y = 0; y < 8; y++) triggerWaterJet(boss.x, y);
+    for (let x = 0; x < 8; x++) triggerWaterJet(x, boss.y);
+    await sleep(600);
+    players.forEach(p => { if (!p.dead && (p.x === boss.x || p.y === boss.y)) applyDmg(p, bossAtk); });
+};
+
+// =================================================================
+// 🐃 ATO 10 — BÚFALO SELVAGEM
+// =================================================================
+STORY_ANIMAL_SKILLS['bufalo_marrada'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🐃 ${enemy.name} dá uma marrada selvagem!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
+    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
+    tiles.forEach((t, i) => {
+        setTimeout(() => {
+            spawnFxAt('antler_charge', 'fx-antler-charge', t.x, t.y, { duration: 500 });
+            spawnFxAt('hoof_stomp', 'fx-hoof-stomp', t.x, t.y, { duration: 500, scale: 0.9 });
+        }, i * 130);
+    });
+    await sleep(420);
+    damagePlayersAt(tiles, atk);
+    tiles.forEach(t => {
+        players.forEach(p => {
+            if (!p.dead && p.x === t.x && p.y === t.y) tryPushPlayer(p, dir.dx, dir.dy, 1);
+        });
+    });
+    await sleep(280);
+};
+
+STORY_ANIMAL_SKILLS['bufalo_pisoteada'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🐃 ${enemy.name} pisoteia o chão!`);
+    const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
+    tiles.forEach((t) => {
+        const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
+        setTimeout(() => {
+            spawnFxAt('ground_crack', 'fx-ground-crack', t.x, t.y, { duration: 500 });
+            if (dist === 1) spawnFxAt('hoof_stomp', 'fx-hoof-stomp', t.x, t.y, { duration: 500 });
+        }, dist * 55);
+    });
+    await sleep(550);
+    const dmg = Math.max(1, atk - 1);
+    damagePlayersAt(tiles, dmg);
+    await sleep(280);
+};
+
+// =================================================================
+// 🐄 ATO 10 — VACA LOUCA
+// =================================================================
+STORY_ANIMAL_SKILLS['vaca_coice'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🐄 ${enemy.name} dá um coice!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
+    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('hoof_stomp', 'fx-hoof-stomp', t.x, t.y, { duration: 450, scale: 1.2 }); }, i * 130); });
+    await sleep(420);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+STORY_ANIMAL_SKILLS['vaca_mugido'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🐄 ${enemy.name} dá um mugido de fúria!`);
+    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('shockwave', 'fx-shockwave', t.x, t.y, { duration: 500, scale: 0.9 }); }, i * 45); });
+    await sleep(500);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+// =================================================================
+// 🐐 ATO 10 — CABRA PRETA
+// =================================================================
+STORY_ANIMAL_SKILLS['cabra_cornada'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🐐 ${enemy.name} dá uma cornada!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
+    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 1);
+    spawnFxAt('antler_charge', 'fx-antler-charge', boss.x + dir.dx, boss.y + dir.dy, { duration: 500, scale: 1.2 });
+    await sleep(380);
+    damagePlayersAt(tiles, atk);
+    await sleep(220);
+};
+
+STORY_ANIMAL_SKILLS['cabra_bote'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🐐 ${enemy.name} dá um bote agourento!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
+    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('antler_charge', 'fx-antler-charge', t.x, t.y, { duration: 450 }); }, i * 130); });
+    await sleep(420);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+// =================================================================
+// 🐂 ATO 10 — ZEBU
+// =================================================================
+STORY_ANIMAL_SKILLS['zebu_marrada'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🐂 ${enemy.name} dá uma marrada bruta!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
+    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('antler_charge', 'fx-antler-charge', t.x, t.y, { duration: 500, scale: 1.3 }); }, i * 130); });
+    await sleep(420);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+STORY_ANIMAL_SKILLS['zebu_pisada'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🐂 ${enemy.name} dá uma pisada pesada!`);
+    const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
+    tiles.forEach((t) => {
+        const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
+        setTimeout(() => {
+            spawnFxAt('ground_crack', 'fx-ground-crack', t.x, t.y, { duration: 500 });
+            if (dist === 1) spawnFxAt('hoof_stomp', 'fx-hoof-stomp', t.x, t.y, { duration: 500, scale: 1.1 });
+        }, dist * 55);
+    });
+    await sleep(550);
+    const dmg = Math.max(1, atk - 1);
+    damagePlayersAt(tiles, dmg);
+    await sleep(280);
+};
+
+// =================================================================
+// 🐂 ATO 10 — BOI DA CARA PRETA
+// =================================================================
+STORY_ANIMAL_SKILLS['boi_face'] = async () => {
+    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 5;
+    playSfx('boi_skill1');
+    addLog(`🐂 Boi da Cara Preta mostra sua face assustadora!`);
+    for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+            if (dx === 0 && dy === 0) continue;
+            const tileX = boss.x + dx;
+            const tileY = boss.y + dy;
+            if (tileX >= 0 && tileX < 8 && tileY >= 0 && tileY < 8) {
+                triggerScaryFace(tileX, tileY);
+                players.forEach(p => { if (!p.dead && p.x === tileX && p.y === tileY) applyDmg(p, bossAtk); });
+            }
+        }
+    }
+    const affectedIndices = [];
+    for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+            const tileX = boss.x + dx;
+            const tileY = boss.y + dy;
+            if (tileX >= 0 && tileX < 8 && tileY >= 0 && tileY < 8) {
+                affectedIndices.push(tileY * 8 + tileX);
+            }
+        }
+    }
+    affectedIndices.forEach(idx => {
+        const newColor = COLORS[Math.floor(Math.random() * 4)];
+        grid[idx] = newColor;
+        const tile = document.querySelectorAll('#grid .tile')[idx];
+        if (tile) tile.className = `tile bg-${newColor}`;
+    });
+    addLog(`🌪️ Tiles ao redor foram embaralhados!`);
+    await sleep(600);
+};
+
+STORY_ANIMAL_SKILLS['boi_empurrao'] = async () => {
+    playSfx('boi_skill2');
+    addLog(`🐂 Boi da Cara Preta empurra os heróis para as bordas!`);
+    players.forEach(p => {
+        if (!p.dead) {
+            let nx = p.x, ny = p.y;
+            if (p.x < 4) nx = Math.max(0, p.x - 1);
+            else nx = Math.min(7, p.x + 1);
+            if (p.y < 4) ny = Math.max(0, p.y - 1);
+            else ny = Math.min(7, p.y + 1);
+            let finalX = p.x, finalY = p.y;
+            let stepX = p.x < nx ? 1 : -1;
+            for (let x = p.x; x !== nx; x += stepX) {
+                if (!isOccupied(x + stepX, p.y, p.id)) finalX = x + stepX;
+                else break;
+            }
+            let stepY = p.y < ny ? 1 : -1;
+            for (let y = p.y; y !== ny; y += stepY) {
+                if (!isOccupied(finalX, y + stepY, p.id)) finalY = y + stepY;
+                else break;
+            }
+            p.x = finalX;
+            p.y = finalY;
+        }
+    });
+    updateVisuals();
+    addLog(`🌪️ Heróis foram empurrados para as bordas!`);
+    await sleep(400);
+    players.forEach(p => { if (!p.dead) applyDmg(p, 1); });
+};
+
+// =================================================================
+// 🐈 ATO 11 — GATO-DO-MATO
+// =================================================================
+STORY_ANIMAL_SKILLS['gato_mato_garras'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🐈 ${enemy.name} ataca com garras noturnas!`);
+    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 450 }); }, i * 40); });
+    await sleep(480);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+STORY_ANIMAL_SKILLS['gato_mato_salto'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🐈 ${enemy.name} dá um salto silencioso!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
+    const fromX = boss.x, fromY = boss.y;
+    const landX = Math.max(0, Math.min(7, boss.x + dir.dx * 2));
+    const landY = Math.max(0, Math.min(7, boss.y + dir.dy * 2));
+    spawnFxAt('pounce_arc', 'fx-pounce-arc', fromX, fromY, { duration: 600, scale: 1.1 });
+    boss.x = landX; boss.y = landY;
+    updateVisuals();
+    await sleep(350);
+    spawnFxAt('claw_slash', 'fx-claw-slash', landX, landY, { duration: 500, scale: 1.3 });
+    const tiles = buildAreaTiles(landX, landY, 1, true);
+    await sleep(250);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+// =================================================================
+// 🦋 ATO 11 — MARIPOSA GIGANTE
+// =================================================================
+STORY_ANIMAL_SKILLS['mariposa_po'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🦋 ${enemy.name} espalha pó lunar!`);
+    const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
+    tiles.forEach((t) => {
+        const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
+        setTimeout(() => {
+            spawnFxAt('fog_cloud', 'fx-fog-cloud', t.x, t.y, { duration: 700, scale: 0.9 });
+            spawnFxAt('element_pulse', 'fx-element-pulse', t.x, t.y, { duration: 700, scale: 0.7 });
+        }, dist * 55);
+    });
+    await sleep(600);
+    const dmg = Math.max(1, atk - 1);
+    damagePlayersAt(tiles, dmg);
+    await sleep(280);
+};
+
+STORY_ANIMAL_SKILLS['mariposa_voo'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🦋 ${enemy.name} faz voo rasante!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
+    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 3);
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('wing_gust', 'fx-wing-gust', t.x, t.y, { duration: 450, scale: 0.8 }); }, i * 100); });
+    await sleep(420);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+// =================================================================
+// 🦝 ATO 11 — QUATI
+// =================================================================
+STORY_ANIMAL_SKILLS['quati_garras'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🦝 ${enemy.name} ataca com garras afiadas!`);
+    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 450, scale: 0.9 }); }, i * 40); });
+    await sleep(480);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+STORY_ANIMAL_SKILLS['quati_bote'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🦝 ${enemy.name} dá um bote rápido!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
+    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 2);
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('fang_bite', 'fx-fang-bite', t.x, t.y, { duration: 450, scale: 0.9 }); }, i * 130); });
+    await sleep(400);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+// =================================================================
+// 🐆 ATO 11 — SUÇUARANA
+// =================================================================
+STORY_ANIMAL_SKILLS['sucuarana_garra'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🐆 ${enemy.name} dá uma garra fatal!`);
+    const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
+    tiles.forEach((t) => {
+        const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
+        setTimeout(() => { spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 500, scale: 1.1 }); }, dist * 55);
+    });
+    await sleep(550);
+    const dmg = Math.max(1, atk - 1);
+    damagePlayersAt(tiles, dmg);
+    await sleep(280);
+};
+
+STORY_ANIMAL_SKILLS['sucuarana_salto'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🐆 ${enemy.name} dá um salto mortal!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
+    const fromX = boss.x, fromY = boss.y;
+    const landX = Math.max(0, Math.min(7, boss.x + dir.dx * 2));
+    const landY = Math.max(0, Math.min(7, boss.y + dir.dy * 2));
+    spawnFxAt('pounce_arc', 'fx-pounce-arc', fromX, fromY, { duration: 700, scale: 1.4 });
+    boss.x = landX; boss.y = landY;
+    updateVisuals();
+    await sleep(350);
+    spawnFxAt('shockwave', 'fx-shockwave', landX, landY, { duration: 600, scale: 1.4 });
+    const tiles = buildAreaTiles(landX, landY, 1, true);
+    const dmg = Math.max(1, atk - 1);
+    await sleep(280);
+    damagePlayersAt(tiles, dmg);
+    await sleep(280);
+};
+
+// =================================================================
+// 🌙 ATO 11 — JACI
+// =================================================================
+STORY_ANIMAL_SKILLS['jaci_lua'] = async () => {
+    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 5;
+    playSfx('jaci_skill1');
+    addLog(`🌙 Jaci invoca a lua e ataca todos os tiles de AR!`);
+    triggerMoon(boss.x, boss.y);
+    await sleep(400);
+    let arTilesAttacked = 0;
+    grid.forEach((element, idx) => {
+        if (element === 'AR') {
+            const x = idx % 8;
+            const y = Math.floor(idx / 8);
+            triggerMoonRay(x, y);
+            arTilesAttacked++;
+            players.forEach(p => {
+                if (!p.dead && p.x === x && p.y === y) setTimeout(() => applyDmg(p, bossAtk), 200);
+            });
+        }
+    });
+    addLog(`🌪️ ${arTilesAttacked} tiles de AR foram atingidos!`);
+    await sleep(600);
+};
+
+STORY_ANIMAL_SKILLS['jaci_tempestade'] = async () => {
+    playSfx('jaci_skill2');
+    addLog(`🌙 Jaci invoca uma tempestade em todo o tabuleiro!`);
+    triggerStorm();
+    await sleep(500);
+    players.forEach(p => { if (!p.dead) applyDmg(p, 1); });
+    boss.hp = Math.min(boss.maxHp, boss.hp + 1);
+    showHealEffect(boss.x, boss.y, 1);
+    updateVisuals();
+    addLog(`💊 Jaci recuperou 1 HP!`);
+    await sleep(400);
+};
+
+// =================================================================
+// 🦅 ATO 12 — GAVIÃO
+// =================================================================
+STORY_ANIMAL_SKILLS['gaviao_voo'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🦅 ${enemy.name} faz voo rasante!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
+    const tiles = buildLineTiles(boss.x, boss.y, dir.name, 3);
+    tiles.forEach((t, i) => {
+        setTimeout(() => {
+            spawnFxAt('wing_gust', 'fx-wing-gust', t.x, t.y, { duration: 450 });
+            spawnFxAt('peck_beak', 'fx-peck-beak', t.x, t.y, { duration: 400 });
+        }, i * 100);
+    });
+    await sleep(420);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+STORY_ANIMAL_SKILLS['gaviao_garras'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🦅 ${enemy.name} ataca com garras cortantes!`);
+    const tiles = buildAreaTiles(boss.x, boss.y, 1, false);
+    tiles.forEach((t, i) => { setTimeout(() => { spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 450, scale: 0.9 }); }, i * 40); });
+    await sleep(480);
+    damagePlayersAt(tiles, atk);
+    await sleep(250);
+};
+
+// =================================================================
+// 🦅 ATO 12 — FALCÃO
+// =================================================================
+STORY_ANIMAL_SKILLS['falcao_mergulho'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🦅 ${enemy.name} faz mergulho mortal!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const tx = nearest.x;
+    const ty = nearest.y;
+    const fromX = boss.x, fromY = boss.y;
+    spawnTravelingFx('wing_gust', 'fx-wing-gust', fromX, fromY, tx, ty, { duration: 350 });
+    spawnFxAt('impact', 'fx-impact', tx, ty, { duration: 500, delay: 350 });
+    await sleep(420);
+    players.forEach(p => { if (!p.dead && p.x === tx && p.y === ty) applyDmg(p, atk); });
+    boss.x = tx; boss.y = ty;
+    updateVisuals();
+    await sleep(280);
+};
+
+STORY_ANIMAL_SKILLS['falcao_garras'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🦅 ${enemy.name} ataca com garras do vento!`);
+    const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
+    tiles.forEach((t) => {
+        const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
+        setTimeout(() => { spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 500, scale: 0.9 }); }, dist * 55);
+    });
+    await sleep(550);
+    const dmg = Math.max(1, atk - 1);
+    damagePlayersAt(tiles, dmg);
+    await sleep(280);
+};
+
+// =================================================================
+// 🦉 ATO 12 — URUTAU
+// =================================================================
+STORY_ANIMAL_SKILLS['urutau_canto'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🦉 ${enemy.name} entoa um canto sombrio!`);
+    const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
+    tiles.forEach((t) => {
+        const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
+        setTimeout(() => { spawnFxAt('spectral_veil', 'fx-spectral-veil', t.x, t.y, { duration: 700, scale: 0.8 }); }, dist * 55);
+    });
+    await sleep(600);
+    const dmg = Math.max(1, atk - 1);
+    damagePlayersAt(tiles, dmg);
+    await sleep(280);
+};
+
+STORY_ANIMAL_SKILLS['urutau_voo'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🦉 ${enemy.name} faz voo fantasma!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const dir = dirToward(boss.x, boss.y, nearest.x, nearest.y);
+    for (let i = 0; i < 3; i++) {
+        const nx = boss.x + dir.dx;
+        const ny = boss.y + dir.dy;
+        if (nx < 0 || nx >= 8 || ny < 0 || ny >= 8) break;
+        if (isOccupied(nx, ny, -1)) break;
+        spawnFxAt('spectral_veil', 'fx-spectral-veil', nx, ny, { duration: 500, scale: 0.7 });
+        boss.x = nx; boss.y = ny;
+        updateVisuals();
+        await sleep(130);
+    }
+    await sleep(200);
+    spawnFxAt('impact', 'fx-impact', boss.x, boss.y, { duration: 500, scale: 1.2 });
+    players.forEach(p => { if (!p.dead && Math.abs(p.x - boss.x) <= 1 && Math.abs(p.y - boss.y) <= 1) applyDmg(p, atk); });
+    await sleep(280);
+};
+
+// =================================================================
+// 🦅 ATO 12 — ÁGUIA-CINZENTA
+// =================================================================
+STORY_ANIMAL_SKILLS['aguia_garras'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🦅 ${enemy.name} ataca com garras reais!`);
+    const tiles = buildAreaTiles(boss.x, boss.y, 2, false);
+    tiles.forEach((t) => {
+        const dist = Math.max(Math.abs(t.x - boss.x), Math.abs(t.y - boss.y));
+        setTimeout(() => { spawnFxAt('claw_slash', 'fx-claw-slash', t.x, t.y, { duration: 500, scale: 1.1 }); }, dist * 55);
+    });
+    await sleep(550);
+    const dmg = Math.max(1, atk - 1);
+    damagePlayersAt(tiles, dmg);
+    await sleep(280);
+};
+
+STORY_ANIMAL_SKILLS['aguia_mergulho'] = async (enemy) => {
+    const atk = enemy.atk;
+    addLog(`🦅 ${enemy.name} faz mergulho solar!`);
+    const alive = players.filter(p => !p.dead);
+    if (alive.length === 0) return;
+    let nearest = alive[0];
+    let minDist = Math.abs(alive[0].x - boss.x) + Math.abs(alive[0].y - boss.y);
+    alive.forEach(p => {
+        const d = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+    const tx = nearest.x;
+    const ty = nearest.y;
+    const fromX = boss.x, fromY = boss.y;
+    spawnTravelingFx('wing_gust', 'fx-wing-gust', fromX, fromY, tx, ty, { duration: 400 });
+    spawnFxAt('element_pulse', 'fx-element-pulse', tx, ty, { duration: 700, delay: 400, scale: 1.3 });
+    await sleep(500);
+    const hitTiles = [{ x: tx, y: ty }].concat(buildCrossTiles(tx, ty, 1, false));
+    damagePlayersAt(hitTiles, atk);
+    boss.x = tx; boss.y = ty;
+    updateVisuals();
+    await sleep(280);
+};
+
+// =================================================================
+// ☀️ ATO 12 — GUARACI
+// =================================================================
+STORY_ANIMAL_SKILLS['guaraci_sol'] = async () => {
+    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 5;
+    playSfx('guaraci_skill1');
+    addLog(`☀️ Guaraci invoca o sol e ataca todos os tiles de FOGO!`);
+    triggerSun(boss.x, boss.y);
+    await sleep(400);
+    let fireTilesAttacked = 0;
+    grid.forEach((element, idx) => {
+        if (element === 'FOGO') {
+            const x = idx % 8;
+            const y = Math.floor(idx / 8);
+            triggerSunRay(x, y);
+            fireTilesAttacked++;
+            players.forEach(p => {
+                if (!p.dead && p.x === x && p.y === y) setTimeout(() => applyDmg(p, bossAtk), 200);
+            });
+        }
+    });
+    addLog(`🔥 ${fireTilesAttacked} tiles de FOGO foram atingidos!`);
+    await sleep(600);
+};
+
+STORY_ANIMAL_SKILLS['guaraci_onda'] = async () => {
+    playSfx('guaraci_skill2');
+    addLog(`☀️ Guaraci invoca uma onda de calor!`);
+    triggerHeatWave();
+    await sleep(500);
+    players.forEach(p => { if (!p.dead) applyDmg(p, 1); });
+    boss.hp = Math.min(boss.maxHp, boss.hp + 1);
+    showHealEffect(boss.x, boss.y, 1);
+    updateVisuals();
+    addLog(`💊 Guaraci recuperou 1 HP!`);
+    await sleep(400);
+};
+
+// =================================================================
+// 👹 ATO 13 — ANHANGÁ
+// =================================================================
+STORY_ANIMAL_SKILLS['anhanga_fogo'] = async () => {
+    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 6;
+    playSfx('anhanga_skill1');
+    addLog(`👹 ANHANGÁ: 'Sintam meu fogo intercalado!'`);
+    const columnsToAttack = [];
+    for (let col = boss.x; col < 8; col += 2) columnsToAttack.push(col);
+    for (let col = boss.x; col >= 0; col -= 2) columnsToAttack.push(col);
+    const uniqueColumns = [...new Set(columnsToAttack)];
+    uniqueColumns.forEach(col => { if (col >= 0 && col <= 7) triggerFireColumn(col); });
+    await sleep(600);
+    players.forEach(p => { if (!p.dead && uniqueColumns.includes(p.x)) applyDmg(p, bossAtk); });
+};
+
+STORY_ANIMAL_SKILLS['anhanga_devora'] = async () => {
+    playSfx('anhanga_skill2');
+    addLog(`👹 ANHANGÁ: 'Eu me alimento da natureza!'`);
+    const board = document.getElementById('board');
+    const s = getStep();
+    const suckEffect = document.createElement('div');
+    suckEffect.style.position = 'absolute';
+    suckEffect.style.left = (boss.x * s + 8) + 'px';
+    suckEffect.style.top = (boss.y * s + 8) + 'px';
+    suckEffect.style.width = '20px';
+    suckEffect.style.height = '20px';
+    suckEffect.style.background = 'radial-gradient(circle, #8e44ad, #9b59b6, transparent)';
+    suckEffect.style.borderRadius = '50%';
+    suckEffect.style.boxShadow = '0 0 20px #8e44ad';
+    suckEffect.style.animation = 'pulseSkill 0.8s infinite alternate';
+    suckEffect.style.zIndex = '55';
+    board.appendChild(suckEffect);
+    triggerPotion(boss.x, boss.y);
+    await sleep(400);
+    boss.hp = Math.min(boss.maxHp, boss.hp + 3);
+    showHealEffect(boss.x, boss.y, 3);
+    updateVisuals();
+    addLog(`💊 Anhangá recuperou 3 HP!`);
+    setTimeout(() => { if (suckEffect.parentNode) suckEffect.parentNode.removeChild(suckEffect); }, 1000);
+};
 
 // =================================================================
 // 📖 ESTADO RUNTIME
@@ -6134,14 +5140,12 @@ function handleStoryPhaseVictory(phase, drops, finalScore, rankSnapshot){
         }
     }
 
-    // ⭐ ESTRELAS
     const maxScore = calcularMaxScorePossivel(cid, phase);
     const stars = calcularEstrelas(finalScore, maxScore);
     const effectiveStars = saveStarsForPhase(phase.id, stars);
     const totalStars = getTotalStars();
     saveStoryProgress();
 
-    // Verifica desbloqueio de heróis
     const unlockedHeroes = checkHeroUnlocks();
 
     const xp = (phase.reward && phase.reward.xp) || 0;
@@ -6195,14 +5199,13 @@ function getNextPhaseId(pid, cid){
 }
 
 // =================================================================
-// 🎯 OVERRIDES CONDICIONAIS
+// 🎯 OVERRIDES CONDICIONAIS (SEM executeAction — V8.1 cuida)
 // =================================================================
 let _origApplyDmg = null;
 let _origManageTurns = null;
 let _origHandleBossDefeat = null;
 let _origBossAI = null;
 let _origSaveAndRefresh = null;
-let _origExecuteAction = null;
 let _overridesInstalled = false;
 
 function installStoryOverrides(){
@@ -6213,7 +5216,6 @@ function installStoryOverrides(){
     if (typeof window.handleBossDefeat === 'function') _origHandleBossDefeat = window.handleBossDefeat;
     if (typeof window.bossAI === 'function') _origBossAI = window.bossAI;
     if (typeof window.saveAndRefresh === 'function') _origSaveAndRefresh = window.saveAndRefresh;
-    if (typeof window.executeAction === 'function') _origExecuteAction = window.executeAction;
 
     window.applyDmg = function(t, amt){
         if (!window._storyMode || !_origApplyDmg) return _origApplyDmg.apply(this, arguments);
@@ -6308,72 +5310,9 @@ function installStoryOverrides(){
         };
     }
 
-    // PA dos heróis novos — override do executeAction
-    if (_origExecuteAction) {
-        window.executeAction = async function() {
-            if (!window._storyMode) return _origExecuteAction.apply(this, arguments);
-            if (!gameActive || path.length === 0 || arcadeBossTransition || isExecutingAction) return;
-            if (bossAIIsRunning) return;
-
-            const active = players[currentPlayerIdx];
-            if (!active) return;
-            const heroData = STORY_HERO_CLASSES[active.class];
-            if (!heroData || !heroData.paKey || heroData.paKey.startsWith('base_')) {
-                // Herói base → usa o executeAction original
-                return _origExecuteAction.apply(this, arguments);
-            }
-
-            isExecutingAction = true;
-            const usedPath = [...path];
-            const threshold = parseInt(document.getElementById('bravely_tiles').value) || 9;
-            const isBravely = usedPath.length >= threshold;
-            const target = (mode === "BOSS" || mode === "ARCADE") ? boss : players.find(p => p.id !== active.id && !p.dead);
-
-            // Move o herói pelo caminho
-            for (const idx of usedPath) {
-                active.x = idx % 8;
-                active.y = Math.floor(idx / 8);
-                checkAmulet(active, active.x, active.y);
-                updateVisuals();
-                updateHeroCard();
-                if (isOccupied(active.x, active.y, active.id)) break;
-                await sleep(100);
-            }
-
-            // Se fez Bravely (9+ tiles), ativa o PA único
-            if (isBravely && heroData.paKey) {
-                const paFn = STORY_HERO_PA[heroData.paKey];
-                if (paFn && typeof paFn.execute === 'function') {
-                    try {
-                        active.totalAtk = (CLASS_DB[active.class]?.atk || 0) + (active.bonusAtk || 0);
-                        await paFn.execute(active, target);
-                    } catch(e) { console.warn('[story] PA falhou:', e); }
-                }
-            } else if (usedPath.length > 0 && !target.dead) {
-                // Sem Bravely: ataque normal (delega pro original que já cuida)
-                // Simplificação: aplica dano básico baseado na distância
-                const info = CLASS_DB[active.class];
-                const dist = Math.abs(active.x - target.x) + Math.abs(active.y - target.y);
-                if (info && dist >= info.min) {
-                    const dmg = info.atk + (active.bonusAtk || 0);
-                    if (typeof applyDmg === 'function') applyDmg(target, dmg);
-                }
-            }
-
-            usedPath.forEach(idx => {
-                const gridEl = document.getElementById('grid');
-                if (gridEl.childNodes[idx]) gridEl.replaceChild(createTile(idx), gridEl.childNodes[idx]);
-            });
-
-            path = []; renderPath();
-            RANKING.turns++;
-            isExecutingAction = false;
-
-            if (gameActive && !boss.dead) manageTurns();
-            updateAllSpriteDirections();
-            updateHeroCard();
-        };
-    }
+    // ⚠️ NÃO sobrescrevemos executeAction aqui.
+    // O executeAction para heróis novos é instalado no bloco final do arquivo
+    // (installStoryExecuteAction), que também cuida do triggerBravelyChain.
 
     _overridesInstalled = true;
 }
@@ -6385,7 +5324,6 @@ function restoreBaseGameFunctions(){
     if (_origHandleBossDefeat) window.handleBossDefeat = _origHandleBossDefeat;
     if (_origBossAI) window.bossAI = _origBossAI;
     if (_origSaveAndRefresh) window.saveAndRefresh = _origSaveAndRefresh;
-    if (_origExecuteAction) window.executeAction = _origExecuteAction;
     _overridesInstalled = false;
 }
 
@@ -6455,7 +5393,7 @@ async function storyEnemyAI(){
 }
 
 // =================================================================
-// 🎬 DIÁLOGOS
+// 🎬 DIÁLOGOS DE ABERTURA/FINAL
 // =================================================================
 function showBossIntroDialog(enemyId){
     const cid = STORY_PROGRESS.currentChapter || 1;
@@ -6703,11 +5641,9 @@ function showStoryVictoryScreen(phase, drops, rewards, meta){
     ov.className = 'story-result-overlay';
 
     const stars = meta.stars;
-    const starsJustEarned = meta.starsJustEarned;
     const totalStars = meta.totalStars;
     const maxStars = getMaxTotalStars();
 
-    // HTML das estrelas grandes
     let starsHTML = '<div class="story-stars-big">';
     for (let i = 1; i <= 3; i++) {
         const on = i <= stars;
@@ -6762,7 +5698,6 @@ function showStoryVictoryScreen(phase, drops, rewards, meta){
             </div>`;
     }
 
-    // Aviso de herói desbloqueado
     let heroUnlockHTML = '';
     if (meta.unlockedHeroes && meta.unlockedHeroes.length > 0) {
         heroUnlockHTML = meta.unlockedHeroes.map(h => `
@@ -6795,13 +5730,16 @@ function showStoryVictoryScreen(phase, drops, rewards, meta){
         </div>`;
     document.body.appendChild(ov);
 
-    // Animação das estrelas (1 → 300ms → 2 → 300ms → 3)
     setTimeout(() => {
-        for (let i = 1; i <= 3; i++) {
-            const el = ov.querySelector(`.story-star[data-star="${i}"]`);
-            if (!el) continue;
-            setTimeout(() => { el.classList.add('show'); }, i * 300);
-        }
+        const starEls = ov.querySelectorAll('.story-stars-big .story-star');
+        starEls.forEach((el, i) => {
+            const starNum = i + 1;
+            if (starNum <= stars) {
+                setTimeout(() => el.classList.add('show'), starNum * 300);
+            } else {
+                el.classList.add('show');
+            }
+        });
     }, 200);
 
     if (typeof playSfx === 'function') playSfx('win');
@@ -7134,7 +6072,6 @@ function renderAtosScreen(){
         const comp = ch.phases.filter(p => isPhaseCompleted(p.id)).length;
         const tot = ch.phases.length;
         const pct = Math.round((comp / tot) * 100);
-        // Soma as estrelas do capítulo
         let chapStars = 0;
         ch.phases.forEach(p => { chapStars += getStarsForPhase(p.id); });
         const chapMax = tot * 3;
@@ -7195,7 +6132,6 @@ function renderChapterPhases(ch){
         else if (un) statusIcon = `<span class="story-phase-available">${uiIcon('arrow')}</span>`;
         else statusIcon = uiIcon('lock');
 
-        // Estrelinhas do card
         let starsHTML = '<span class="story-phase-stars">';
         for (let i = 1; i <= 3; i++) {
             starsHTML += `<span class="story-star ${i <= stars ? 'on' : 'off'}">★</span>`;
@@ -7237,14 +6173,13 @@ function renderChapterPhases(ch){
 }
 
 // =================================================================
-// 🏠 OCA (com heróis bloqueados)
+// 🏠 OCA
 // =================================================================
 function renderOcaScreen(){
     const screen = document.getElementById('storyScreen');
     if (!screen) return;
     const saveEl = getSaveElement();
 
-    // Junta heróis base + novos
     const unlockedList = STORY_PROGRESS.unlockedHeroesStory || ['Tupa','Sume','Caipora'];
     const allHeroes = Object.values(STORY_HERO_CLASSES);
 
@@ -7252,7 +6187,6 @@ function renderOcaScreen(){
         const isUnlocked = hero.starsNeeded === 0 || unlockedList.includes(hero.className);
         const isSelected = STORY_PROGRESS.selectedHeroes.includes(hero.className);
 
-        // Sprite: base usa SPRITES do entidades.js; novos usam SPRITES_STORY
         let spriteSrc = '';
         if (hero.spriteKey) {
             const url = SPRITES_STORY[hero.spriteKey];
@@ -7261,14 +6195,10 @@ function renderOcaScreen(){
             spriteSrc = SPRITES[hero.className];
         }
 
-        // Fallback: emoji (só pros novos sem sprite)
         const emoji = hero.spriteKey ? (EMOJI_STORY[hero.spriteKey] || '?') : '';
-
-        // Elemento
         const el = hero.element || saveEl;
         const elDisplay = hero.element ? hero.element : `${saveEl} (dinâmico)`;
 
-        // Bloco bloqueado
         if (!isUnlocked) {
             const spriteBlock = spriteSrc
                 ? `<img src="${spriteSrc}" class="story-hero-sprite" alt="${hero.displayName}">`
@@ -7284,7 +6214,6 @@ function renderOcaScreen(){
             </div>`;
         }
 
-        // Bloco desbloqueado
         const spriteBlock = spriteSrc
             ? `<img src="${spriteSrc}" class="story-hero-sprite" alt="${hero.displayName}">`
             : `<div class="story-hero-sprite" style="display:flex;align-items:center;justify-content:center;font-size:3.5rem;">${emoji}</div>`;
@@ -7320,7 +6249,6 @@ function renderOcaScreen(){
 }
 
 function toggleHeroSelection(heroClass){
-    // Só permite selecionar heróis desbloqueados
     const unlockedList = STORY_PROGRESS.unlockedHeroesStory || ['Tupa','Sume','Caipora'];
     const heroData = STORY_HERO_CLASSES[heroClass];
     if (!heroData) return;
@@ -7405,6 +6333,350 @@ window.playSkillSound = playSkillSound;
 window.showToast = showToast;
 window.getTotalStars = getTotalStars;
 
+console.log('✅ historia.js — Parte 5/6 carregada.');
+// =================================================================
+// historia.js — V8.1 — BLOCOS FINAIS DE CORREÇÃO
+// =================================================================
+// ⚠️ Este bloco PRECISA vir por último no arquivo.
+// Ele sobrescreve triggerBravelyChain e executeAction para heróis novos,
+// corrigindo:
+//   • Guerreiro atacando à distância (agora ataca SÓ adjacente)
+//   • PA sem animação / sem som
+//   • Bravely sem chamar showBravelyAnimation
+// =================================================================
+
+// =================================================================
+// V8.1 — triggerBravelyChain para heróis novos
+// =================================================================
+(function installStoryBravelyChain() {
+
+    const _origBravelyChain = window.triggerBravelyChain;
+
+    window.triggerBravelyChain = async function(active, target, totalAtk) {
+        // Fora do modo história → original
+        if (!window._storyMode || !_origBravelyChain) {
+            return _origBravelyChain.apply(this, arguments);
+        }
+
+        const heroData = STORY_HERO_CLASSES[active.class];
+        // Herói base → original (Tupã/Sumé/Caipora)
+        if (!heroData || !heroData.paKey || heroData.paKey.startsWith('base_')) {
+            return _origBravelyChain.apply(this, arguments);
+        }
+
+        // ============================================================
+        // HERÓI NOVO — animação + FX + dano + efeitos extras
+        // ============================================================
+        const element = active.element || 'FOGO';
+        const paKey = heroData.paKey;
+
+        // 1. Overlay "PODER ANCESTRAL"
+        if (typeof showPoderAncestralEffect === 'function') {
+            try { showPoderAncestralEffect(); } catch(e) {}
+        }
+        await sleep(300);
+
+        // 2. Toca o som de skill
+        try { playSfx('skill1'); } catch(e) {}
+
+        // 3. Calcula os tiles afetados pelo PA
+        const paTiles = getPAaffectedTiles(active, paKey, target);
+
+        // 4. FX elemental em cada tile
+        paTiles.forEach((idx) => {
+            const tx = idx % 8;
+            const ty = Math.floor(idx / 8);
+            const dist = Math.abs(tx - active.x) + Math.abs(ty - active.y);
+            setTimeout(() => {
+                if (typeof triggerElementalFX === 'function') {
+                    let fxType = 'COL';
+                    if (paKey.includes('linha')) fxType = 'ROW';
+                    triggerElementalFX(element, fxType === 'ROW' ? ty : tx, fxType, active.x, active.y);
+                }
+            }, dist * 60);
+        });
+
+        await sleep(400);
+
+        // 5. Dano no alvo (se estiver em algum tile do PA)
+        if (target && !target.dead) {
+            const targetIdx = target.y * 8 + target.x;
+            if (paTiles.includes(targetIdx)) {
+                if (typeof applyDmg === 'function') applyDmg(target, totalAtk);
+            }
+        }
+
+        // 6. Efeitos EXTRAS únicos (empurrar, curar, dobro se em FOGO)
+        const paFn = STORY_HERO_PA[paKey];
+        if (paFn && typeof paFn.execute === 'function') {
+            try { await paFn.execute(active, target, totalAtk); }
+            catch(e) { console.warn('[story] Erro no efeito extra do PA:', e); }
+        }
+
+        // 7. Trocar tiles afetados pelo elemento do herói
+        paTiles.forEach(idx => {
+            grid[idx] = element;
+            const tile = document.querySelectorAll('#grid .tile')[idx];
+            if (tile) tile.className = `tile bg-${element}`;
+            if (element === 'TERRA' && typeof updateTitleStats === 'function') updateTitleStats('earth_tile');
+            else if (element === 'AR' && typeof updateTitleStats === 'function') updateTitleStats('air_tile');
+        });
+
+        // 8. Registra estatística
+        if (typeof updateTitleStats === 'function') updateTitleStats('bravely_chain');
+    };
+
+    // ================================================================
+    // 🎯 Tiles afetados pelo PA (forma de cada herói)
+    // ================================================================
+    function getPAaffectedTiles(active, paKey, target) {
+        const tiles = [];
+        const cx = active.x;
+        const cy = active.y;
+
+        if (paKey === 'kanarott_cruz_empurra') {
+            for (let i = -2; i <= 2; i++) {
+                const ny = cy + i;
+                if (ny >= 0 && ny < 8) tiles.push(ny * 8 + cx);
+            }
+            for (let i = -2; i <= 2; i++) {
+                if (i === 0) continue;
+                const nx = cx + i;
+                if (nx >= 0 && nx < 8) tiles.push(cy * 8 + nx);
+            }
+        }
+        else if (paKey === 'teperesik_area2x2') {
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dy = -1; dy <= 1; dy++) {
+                    if (dx === 0 && dy === 0) continue;
+                    const nx = cx + dx, ny = cy + dy;
+                    if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) tiles.push(ny * 8 + nx);
+                }
+            }
+        }
+        else if (paKey === 'eru_linha_horizontal') {
+            for (let x = 0; x < 8; x++) tiles.push(cy * 8 + x);
+        }
+        else if (paKey === 'andure_area2x2_cura') {
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dy = -1; dy <= 1; dy++) {
+                    const nx = cx + dx, ny = cy + dy;
+                    if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) tiles.push(ny * 8 + nx);
+                }
+            }
+        }
+        else if (paKey === 'maedamata_area3x3_cura') {
+            for (let dx = -2; dx <= 2; dx++) {
+                for (let dy = -2; dy <= 2; dy++) {
+                    const nx = cx + dx, ny = cy + dy;
+                    if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) tiles.push(ny * 8 + nx);
+                }
+            }
+        }
+        else if (paKey === 'paje_coluna_fogo') {
+            for (let y = 0; y < 8; y++) tiles.push(y * 8 + cx);
+        }
+        else if (paKey === 'jurua_area_alvo_3x3') {
+            if (target && !target.dead) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dy = -1; dy <= 1; dy++) {
+                        const nx = target.x + dx, ny = target.y + dy;
+                        if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) tiles.push(ny * 8 + nx);
+                    }
+                }
+            }
+        }
+        else if (paKey === 'araci_linha_horizontal') {
+            for (let x = 0; x < 8; x++) tiles.push(cy * 8 + x);
+        }
+        else if (paKey === 'bicho_cruz_completa') {
+            if (target && !target.dead) {
+                for (let x = 0; x < 8; x++) tiles.push(target.y * 8 + x);
+                for (let y = 0; y < 8; y++) if (y !== target.y) tiles.push(y * 8 + target.x);
+            }
+        }
+        else if (paKey === 'tapyra_coluna_alvo') {
+            if (target && !target.dead) {
+                for (let y = 0; y < 8; y++) tiles.push(y * 8 + target.x);
+            }
+        }
+
+        return tiles;
+    }
+
+    console.log('✅ V8.1 — triggerBravelyChain para heróis novos instalado.');
+})();
+
+// =================================================================
+// V8.1 — executeAction para heróis novos
+// -----------------------------------------------------------------
+// • Guerreiro: move e ataca SÓ tile adjacente a cada passo
+// • Mago/Arqueiro: move e ataca à distância se usedPath >= min
+// • Bravely: SEMPRE chama showBravelyAnimation + triggerBravelyChain
+// =================================================================
+(function installStoryExecuteAction() {
+
+    const _exec = window.executeAction;
+
+    window.executeAction = async function() {
+        if (!window._storyMode) {
+            return _exec.apply(this, arguments);
+        }
+
+        if (!gameActive || path.length === 0 || arcadeBossTransition || isExecutingAction) return;
+        if (bossAIIsRunning) return;
+
+        const active = players[currentPlayerIdx];
+        if (!active) return;
+
+        const heroData = STORY_HERO_CLASSES[active.class];
+        // Herói base → executeAction original
+        if (!heroData || !heroData.paKey || heroData.paKey.startsWith('base_')) {
+            return _exec.apply(this, arguments);
+        }
+
+        // ============================================
+        // HERÓI NOVO
+        // ============================================
+        isExecutingAction = true;
+
+        const target = (mode === "BOSS" || mode === "ARCADE")
+            ? boss
+            : players.find(p => p.id !== active.id && !p.dead);
+
+        const info = CLASS_DB[active.class];
+        const usedPath = [...path];
+        const threshold = parseInt(document.getElementById('bravely_tiles').value) || 9;
+        const isBravely = usedPath.length >= threshold;
+
+        // --- Detectar forma ---
+        let skillAtkBonus = 0;
+        const shape = (typeof detectShape === 'function') ? detectShape(usedPath) : null;
+        if (shape && RANKING.shapes[shape] !== undefined) {
+            RANKING.shapes[shape]++;
+            if (typeof updateTitleStats === 'function') updateTitleStats('shape_executed', 1, shape);
+        }
+        if (shape) {
+            if (shape === "LINHA") {
+                skillAtkBonus = 2;
+                active.hp = Math.min(active.maxHp, active.hp + 1);
+                if (typeof showHealEffect === 'function') showHealEffect(active.x, active.y, 1);
+                if (typeof updateTitleStats === 'function') updateTitleStats('healing', 1);
+            }
+            if (shape === "L") {
+                skillAtkBonus = 0;
+                active.hp = Math.min(active.maxHp, active.hp + 2);
+                if (typeof showHealEffect === 'function') showHealEffect(active.x, active.y, 2);
+                if (typeof updateTitleStats === 'function') updateTitleStats('healing', 2);
+            }
+            if (shape === "ZIGZAG") skillAtkBonus = 3;
+            if (shape === "QUADRADO") active.skillUsed = false;
+        }
+
+        const titleAtkBonus = active.titleBonus?.ATK || 0;
+        const tileBonus = (usedPath.length > 0 && grid[usedPath[0]] === active.element) ? 1 : 0;
+        const totalAtk = info.atk + (active.bonusAtk || 0) + tileBonus + skillAtkBonus + titleAtkBonus;
+
+        // ============================================
+        // GUERREIRO — ataca SÓ ADJACENTE a cada passo
+        // ============================================
+        if (heroData.role === 'Guerreiro') {
+            const dealAdjacentDmg = () => {
+                if (!target || target.dead) return;
+                const dist = Math.abs(active.x - target.x) + Math.abs(active.y - target.y);
+                if (dist <= 1) {
+                    try { playSfx('atkg'); } catch(e) {}
+                    if (typeof applyDmg === 'function') applyDmg(target, totalAtk);
+                    if (typeof spawnSwordEffect === 'function') spawnSwordEffect(target.x, target.y);
+                }
+            };
+
+            dealAdjacentDmg();
+
+            for (const idx of usedPath) {
+                active.x = idx % 8;
+                active.y = Math.floor(idx / 8);
+                if (typeof checkAmulet === 'function') checkAmulet(active, active.x, active.y);
+                if (typeof updateVisuals === 'function') updateVisuals();
+                if (typeof updateHeroCard === 'function') updateHeroCard();
+                if (typeof isOccupied === 'function' && isOccupied(active.x, active.y, active.id)) break;
+                dealAdjacentDmg();
+                await sleep(120);
+            }
+        }
+        // ============================================
+        // MAGO / ARQUEIRO — ataca à distância
+        // ============================================
+        else {
+            for (const idx of usedPath) {
+                active.x = idx % 8;
+                active.y = Math.floor(idx / 8);
+                if (typeof checkAmulet === 'function') checkAmulet(active, active.x, active.y);
+                if (typeof updateVisuals === 'function') updateVisuals();
+                if (typeof updateHeroCard === 'function') updateHeroCard();
+                if (typeof isOccupied === 'function' && isOccupied(active.x, active.y, active.id)) break;
+                await sleep(100);
+            }
+
+            if (usedPath.length >= info.min && target && !target.dead) {
+                const extra = usedPath.length - info.min;
+                if (heroData.role === 'Arqueiro') {
+                    if (typeof spawnArrowProjectile === 'function') await spawnArrowProjectile(active, target);
+                    try { playSfx('atka'); } catch(e) {}
+                } else {
+                    if (typeof spawnProjectile === 'function') await spawnProjectile(active, target, 'Magic');
+                    try { playSfx('atkm'); } catch(e) {}
+                }
+                if (typeof applyDmg === 'function') applyDmg(target, totalAtk + extra);
+            }
+        }
+
+        // --- Limpar tiles usados ---
+        usedPath.forEach(idx => {
+            const gridEl = document.getElementById('grid');
+            if (gridEl.childNodes[idx] && typeof createTile === 'function') {
+                gridEl.replaceChild(createTile(idx), gridEl.childNodes[idx]);
+            }
+        });
+
+        // ============================================
+        // BRAVELY (PA)
+        // ============================================
+        if (isBravely) {
+            if (typeof showBravelyAnimation === 'function') {
+                await showBravelyAnimation(active.class);
+            }
+            if (typeof triggerBravelyChain === 'function') {
+                await triggerBravelyChain(active, target, totalAtk);
+            }
+
+            path = [];
+            if (typeof renderPath === 'function') renderPath();
+            RANKING.turns++;
+            isExecutingAction = false;
+
+            if (mode === "ARCADE" && boss.dead) return;
+            if (mode === "BOSS" || mode === "ARCADE") {
+                if (gameActive && typeof manageTurns === 'function') manageTurns();
+                return;
+            }
+        }
+
+        path = [];
+        if (typeof renderPath === 'function') renderPath();
+        RANKING.turns++;
+
+        if (mode === "ARCADE" && boss.dead) { isExecutingAction = false; return; }
+        if (gameActive && typeof manageTurns === 'function') manageTurns();
+
+        if (typeof updateAllSpriteDirections === 'function') updateAllSpriteDirections();
+        if (typeof updateHeroCard === 'function') updateHeroCard();
+        isExecutingAction = false;
+    };
+
+    console.log('✅ V8.1 — executeAction para heróis novos instalado.');
+})();
+
 // =================================================================
 // 🚀 AUTO-INIT
 // =================================================================
@@ -7418,7 +6690,7 @@ window.getTotalStars = getTotalStars;
             } else {
                 console.log('📖 Nenhum save. O modal aparecerá ao entrar.');
             }
-            console.log('📖 historia.js V7.0 pronto.');
+            console.log('📖 historia.js V8.1 pronto.');
         } catch(e) {
             console.error('❌ Erro no auto-init:', e);
         }
@@ -7450,14 +6722,6 @@ window.testStarSystem = function(){
     console.log('⭐ Total de estrelas:', getTotalStars(), '/', getMaxTotalStars());
     console.log('⭐ Estrelas por fase:', STORY_PROGRESS.starsByPhase);
     console.log('⭐ Heróis desbloqueados:', STORY_PROGRESS.unlockedHeroesStory);
-    console.log('⭐ Próximo herói a desbloquear:');
-    const totalStars = getTotalStars();
-    for (const entry of STORY_HERO_UNLOCKS) {
-        if (totalStars < entry.starsNeeded) {
-            console.log(`   ${entry.displayName} — faltam ${entry.starsNeeded - totalStars} estrelas`);
-            break;
-        }
-    }
 };
 
 window.resetStoryMode = function(){
@@ -7492,7 +6756,6 @@ window.unlockAllStoryChapters = function(){
 
 window.giveStars = function(count){
     count = parseInt(count) || 10;
-    // Distribui estrelas em fases já concluídas
     const completed = STORY_PROGRESS.completedPhases;
     if (completed.length === 0) {
         alert('Complete pelo menos 1 fase antes de dar estrelas.');
@@ -7513,122 +6776,7 @@ window.giveStars = function(count){
     renderAldeiaScreen();
 };
 
-window.testUiIcons = function(){
-    const keys = [
-        'ui_gold','ui_xp','ui_swap','ui_home','ui_play','ui_gift','ui_crown',
-        'ui_sparkle','ui_skull','ui_lock','ui_check','ui_arrow','ui_warn','ui_medal',
-        'ui_star','ui_star_empty',
-        'elem_fogo','elem_agua','elem_terra','elem_ar',
-        'aldeia_bg','aldeia_atos','aldeia_oca','aldeia_loja','aldeia_ritual',
-        'aldeia_bestiario','aldeia_tesouraria',
-        'capa_ato1','capa_ato2','capa_ato3','capa_ato4','capa_ato5','capa_ato6',
-        'capa_ato7','capa_ato8','capa_ato9','capa_ato10','capa_ato11','capa_ato12','capa_ato13',
-        'heroi_Kanarott','heroi_Jurua','heroi_BichoFolharal','heroi_Eru','heroi_Teperesik',
-        'heroi_Andure','heroi_PajeAnhanguera','heroi_MaeDaMata','heroi_Araci','heroi_Tapyrayawara'
-    ];
-    const preenchidos = [];
-    const vazios = [];
-    keys.forEach(k => {
-        const url = SPRITES_STORY[k];
-        if (url && url.trim() !== '') {
-            preenchidos.push(`✅ ${k} → ${url}`);
-        } else {
-            vazios.push(`⚪ ${k}`);
-        }
-    });
-    console.log(`\n=== ÍCONES COM IMAGEM (${preenchidos.length}/${keys.length}) ===`);
-    preenchidos.forEach(p => console.log(p));
-    console.log(`\n=== AINDA EM EMOJI (${vazios.length}) ===`);
-    vazios.forEach(v => console.log(v));
-};
-
 // =================================================================
-// FIM — historia.js V7.0
+// FIM — historia.js V8.1
 // =================================================================
-// =================================================================
-// historia.js — V7.2 — Sistema de estrelas ajustado
-// -----------------------------------------------------------------
-// • 1 estrela mínima garantida ao fechar a fase
-// • Limiares mais generosos (60% / 35% / 15%)
-// • MaxScore mais realista (1 ultimate, 2 muiraquitãs, 1 forma)
-// • Turnos têm peso no multiplicador
-// • Animação: só conquistadas aparecem com delay; vazias já visíveis
-// =================================================================
-
-(function applyStarSystemV72() {
-
-    // ---- 1. Atualiza a config global de limiares ----
-    if (typeof STORY_STARS_CONFIG !== 'undefined') {
-        STORY_STARS_CONFIG.THRESHOLD_3_STARS = 0.60;
-        STORY_STARS_CONFIG.THRESHOLD_2_STARS = 0.35;
-        STORY_STARS_CONFIG.THRESHOLD_1_STAR  = 0.15;
-        STORY_STARS_CONFIG.REF_MAX_ULTIMATES = 1;
-        STORY_STARS_CONFIG.REF_MAX_AMULETS   = 2;
-    }
-
-    // ---- 2. Substitui calcularMaxScorePossivel ----
-    window.calcularMaxScorePossivel = function(cid, phase) {
-        if (!phase || !phase.enemies || phase.enemies.length === 0) return 100;
-        const lastEnemyId = phase.enemies[phase.enemies.length - 1];
-        const lastEnemy = STORY_ENEMIES[lastEnemyId];
-        const bossHp = lastEnemy ? lastEnemy.hp : 30;
-
-        // base igual ao entidades.js (SEM clamp, pode ser negativo)
-        const baseRaw = 1000 + ((bossHp - 30) * 50);
-        // mas garante mínimo de 100 pra não zerar
-        const base = Math.max(100, baseRaw);
-
-        // multiplicador de turnos (melhor caso)
-        const baseMult = base * 1.5;
-
-        // bônus realistas do que dá pra fazer numa fase
-        const ultimatesBonus = 1 * 150;   // 1 ultimate
-        const amuletsBonus   = 2 * 100;   // 2 muiraquitãs
-        const shapesBonus    = 100;        // 1 forma (média)
-
-        return Math.floor(baseMult + ultimatesBonus + amuletsBonus + shapesBonus);
-    };
-
-    // ---- 3. Substitui calcularEstrelas (garante 1 mínimo) ----
-    window.calcularEstrelas = function(score, maxScore) {
-        if (!maxScore || maxScore <= 0) return 1;   // fallback: 1 estrela
-        const ratio = score / maxScore;
-        if (ratio >= 0.60) return 3;
-        if (ratio >= 0.35) return 2;
-        return 1;   // ⚠️ mínimo 1 (nunca 0 se fechou a fase)
-    };
-
-    // ---- 4. Substitui showStoryVictoryScreen pra corrigir animação ----
-    const _origShowVictory = window.showStoryVictoryScreen;
-
-    window.showStoryVictoryScreen = function(phase, drops, rewards, meta) {
-        _origShowVictory.call(this, phase, drops, rewards, meta);
-
-        const ov = document.getElementById('storyVictoryOverlay');
-        if (!ov) return;
-
-        const stars = meta.stars || 0;
-        const starEls = ov.querySelectorAll('.story-stars-big .story-star');
-
-        // Reset: esconde todas
-        starEls.forEach(el => el.classList.remove('show'));
-
-        // Vazias aparecem imediatamente; conquistadas aparecem em sequência
-        setTimeout(() => {
-            starEls.forEach((el, i) => {
-                const starNum = i + 1;
-                if (starNum <= stars) {
-                    // Conquistada — aparece em sequência (300ms cada)
-                    setTimeout(() => el.classList.add('show'), starNum * 300);
-                } else {
-                    // Vazia — aparece imediatamente
-                    el.classList.add('show');
-                }
-            });
-        }, 200);
-
-        console.log(`⭐ Estrelas: ${stars}/3 — Score: ${meta.score}/${meta.maxScore} (${Math.round(meta.score/meta.maxScore*100)}%)`);
-    };
-
-    console.log('✅ Sistema de estrelas V7.2 aplicado (limiares generosos + mínimo 1).');
-})();
+console.log('✅ historia.js — Parte 6/6 (V8.1) carregada. Arquivo completo.');
