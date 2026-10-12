@@ -1577,7 +1577,7 @@ const STORY_FX_SPRITES = {
     tile_flip:'',
     element_pulse:'https://i.imgur.com/9Zxsavx.png',
     flame_short:'https://i.imgur.com/taNG7Pw.png',
-    impact:'',
+    impact:'https://i.imgur.com/sOtm43e.png',
     heavy_slash:'',
 };
 // =================================================================
@@ -9633,3 +9633,2509 @@ getEnemySkillGrid = getEnemySkillGridPrecise;
 })();
 
 console.log('✅ Bestiário: padrões precisos das skills carregados.');
+// =================================================================
+// historia.js — V8.3 — TESOURARIA (Inventário + Forja + Amuletos)
+// -----------------------------------------------------------------
+// Contém:
+//   1. Tabela de ARMAS (Tacape / Flecha / Cajado) — 39 armas
+//   2. Tabela de AMULETOS — 13 amuletos (1 por ato, do boss)
+//   3. Tabela de RECEITAS de craft (materiais + ouro)
+//   4. Tabela de VENDA de materiais
+//   5. UI da Tesouraria com 3 abas (Inventário / Forja / Amuletos)
+//   6. Sistema de venda no Curandeiro (para materiais)
+//   7. Sistema de equipar arma + amuleto por herói
+//   8. Aplicação em batalha (ATK, HP, elemento, efeitos)
+//   9. CSS completo
+//
+// ⚠️ Colar no FINAL do historia.js, sem substituir nada.
+// =================================================================
+
+// =================================================================
+// 1. MATERIAIS — preço de venda
+// =================================================================
+// Preços: comum 2, raro 8, boss 30
+const STORY_MATERIAL_PRICES = {
+    // Comuns (drop 70-80%)
+    espinho: 2, pele_jacare: 2, chifre_cervo: 2, garra_onca: 2,
+    pelo_tamandua: 2, couro_anta: 2, cera_queixada: 2, escama_sucuri: 2,
+    escama_piranha: 2, pelo_lontra: 2, pelo_ariranha: 2, escama_pirarucu: 2,
+    pele_cascavel: 2, anel_coral: 2, pele_jararaca: 2, casco_tartaruga: 2,
+    chifre_bode: 2, la_carneiro: 2, crina_cavalo: 2, chifre_touro: 2,
+    pena_urubu: 2, pena_carcara: 2, placa_tatu: 2, pelo_lobo_guara: 2,
+    pelo_cachorro_mato: 2, cauda_raposa: 2, mascara_guaxinim: 2, pelo_jaguatirica: 2,
+    asa_morcego: 2, pena_coruja: 2, pele_sapo: 2, pena_seriema: 2,
+    escama_tucunare: 2, escama_piraiba: 2, escama_dourada: 2, couro_peixe_boi: 2,
+    chifre_bufalo: 2, sino_vaca: 2, chifre_cabra: 2, corcova_zebu: 2,
+    pelo_gato_mato: 2, asa_mariposa: 2, mascara_quati: 2, pelo_sucuarana: 2,
+    pena_gaviao: 2, pena_falcao: 2, pena_urutau: 2, pena_aguia: 2,
+
+    // Raros (drop 10-40%)
+    espinho_raro: 8, escama_brilhante: 8, chifre_ancestral: 8, garra_lendaria: 8,
+    garra_tamandua: 8, chifre_anta: 8, presa_queixada: 8, pele_sucuri: 8,
+    dente_piranha: 8, garra_lontra: 8, dente_ariranha: 8, lingua_pirarucu: 8,
+    chocalho_cascavel: 8, veneno_coral: 8, presa_jararaca: 8, ovo_tartaruga: 8,
+    pelo_bode: 8, chifre_carneiro: 8, casco_cavalo: 8, couro_touro: 8,
+    bico_urubu: 8, garra_carcara: 8, garra_tatu: 8, presa_lobo_guara: 8,
+    presa_cachorro_mato: 8, pelo_raposa: 8, garra_guaxinim: 8, garra_jaguatirica: 8,
+    presa_morcego: 8, olho_coruja: 8, veneno_sapo: 8, bico_seriema: 8,
+    dente_tucunare: 8, lingua_piraiba: 8, barbatana_dourada: 8, osso_peixe_boi: 8,
+    couro_bufalo: 8, chifre_vaca: 8, pelo_cabra: 8, chifre_zebu: 8,
+    garra_gato_mato: 8, po_mariposa: 8, cauda_quati: 8, garra_sucuarana: 8,
+    garra_gaviao: 8, garra_falcao: 8, olho_urutau: 8, garra_aguia: 8,
+
+    // Boss (drop 100%)
+    gorro_saci: 30, amuleto_saci: 30,
+    pelo_mapinguari: 30, amuleto_mapinguari: 30,
+    joia_iara: 30, amuleto_iara: 30,
+    escama_boitata: 30, amuleto_boitata: 30,
+    ferradura_mula: 30, amuleto_mula: 30,
+    osso_corpo_seco: 30, amuleto_corpo_seco: 30,
+    pelo_lobisomem: 30, amuleto_lobisomem: 30,
+    caldeirao_cuca: 30, amuleto_cuca: 30,
+    flor_boto: 30, amuleto_boto: 30,
+    chifre_boi: 30, amuleto_boi: 30,
+    raio_lunar: 30, amuleto_jaci: 30,
+    coroa_solar: 30, amuleto_guaraci: 30,
+    fragmento_abismo: 30, essencia_anhanga: 30,
+};
+
+function getMaterialPrice(matId) {
+    return STORY_MATERIAL_PRICES[matId] || 2;
+}
+
+// =================================================================
+// 2. ARMAS — 3 arquétipos × 13 atos
+// =================================================================
+// Cada arma:
+//   id, nome, tipo ('tacape'|'flecha'|'cajado'), ato, atkBonus,
+//   custoOuro, receita (materiais), emoji
+// =================================================================
+const STORY_WEAPONS = {
+    // ============ ATO 1 — Saci (Redemoinho) ============
+    'tacape_1':  { id:'tacape_1',  nome:'Tacape do Redemoinho',   tipo:'tacape', ato:1, atkBonus:1, custoOuro:80,  emoji:'🪓', receita:{ espinho:3, pele_jacare:2 } },
+    'flecha_1':  { id:'flecha_1',  nome:'Flecha do Redemoinho',   tipo:'flecha', ato:1, atkBonus:1, custoOuro:80,  emoji:'🏹', receita:{ espinho:3, chifre_cervo:2 } },
+    'cajado_1':  { id:'cajado_1',  nome:'Cajado do Redemoinho',   tipo:'cajado', ato:1, atkBonus:1, custoOuro:80,  emoji:'🪄', receita:{ espinho:3, garra_onca:2 } },
+
+    // ============ ATO 2 — Mapinguari ============
+    'tacape_2':  { id:'tacape_2',  nome:'Tacape da Mata Fechada', tipo:'tacape', ato:2, atkBonus:1, custoOuro:80,  emoji:'🪓', receita:{ pelo_tamandua:3, couro_anta:2 } },
+    'flecha_2':  { id:'flecha_2',  nome:'Flecha da Mata Fechada', tipo:'flecha', ato:2, atkBonus:1, custoOuro:80,  emoji:'🏹', receita:{ pelo_tamandua:3, cera_queixada:2 } },
+    'cajado_2':  { id:'cajado_2',  nome:'Cajado da Mata Fechada', tipo:'cajado', ato:2, atkBonus:1, custoOuro:80,  emoji:'🪄', receita:{ pelo_tamandua:3, escama_sucuri:2 } },
+
+    // ============ ATO 3 — Iara ============
+    'tacape_3':  { id:'tacape_3',  nome:'Tacape do Rio',          tipo:'tacape', ato:3, atkBonus:1, custoOuro:80,  emoji:'🪓', receita:{ escama_piranha:3, pelo_lontra:2 } },
+    'flecha_3':  { id:'flecha_3',  nome:'Flecha do Rio',          tipo:'flecha', ato:3, atkBonus:1, custoOuro:80,  emoji:'🏹', receita:{ escama_piranha:3, pelo_ariranha:2 } },
+    'cajado_3':  { id:'cajado_3',  nome:'Cajado do Rio',          tipo:'cajado', ato:3, atkBonus:1, custoOuro:80,  emoji:'🪄', receita:{ escama_piranha:3, escama_pirarucu:2 } },
+
+    // ============ ATO 4 — Boitatá ============
+    'tacape_4':  { id:'tacape_4',  nome:'Tacape de Fogo',         tipo:'tacape', ato:4, atkBonus:1, custoOuro:150, emoji:'🪓', receita:{ pele_cascavel:3, anel_coral:2 } },
+    'flecha_4':  { id:'flecha_4',  nome:'Flecha de Fogo',         tipo:'flecha', ato:4, atkBonus:1, custoOuro:150, emoji:'🏹', receita:{ pele_cascavel:3, pele_jararaca:2 } },
+    'cajado_4':  { id:'cajado_4',  nome:'Cajado de Fogo',         tipo:'cajado', ato:4, atkBonus:1, custoOuro:150, emoji:'🪄', receita:{ pele_cascavel:3, casco_tartaruga:2 } },
+
+    // ============ ATO 5 — Mula ============
+    'tacape_5':  { id:'tacape_5',  nome:'Tacape do Curral',       tipo:'tacape', ato:5, atkBonus:1, custoOuro:150, emoji:'🪓', receita:{ chifre_bode:3, la_carneiro:2 } },
+    'flecha_5':  { id:'flecha_5',  nome:'Flecha do Curral',       tipo:'flecha', ato:5, atkBonus:1, custoOuro:150, emoji:'🏹', receita:{ chifre_bode:3, crina_cavalo:2 } },
+    'cajado_5':  { id:'cajado_5',  nome:'Cajado do Curral',       tipo:'cajado', ato:5, atkBonus:1, custoOuro:150, emoji:'🪄', receita:{ chifre_bode:3, chifre_touro:2 } },
+
+    // ============ ATO 6 — Corpo Seco ============
+    'tacape_6':  { id:'tacape_6',  nome:'Tacape do Sertão',       tipo:'tacape', ato:6, atkBonus:1, custoOuro:150, emoji:'🪓', receita:{ pena_urubu:3, pena_carcara:2 } },
+    'flecha_6':  { id:'flecha_6',  nome:'Flecha do Sertão',       tipo:'flecha', ato:6, atkBonus:1, custoOuro:150, emoji:'🏹', receita:{ pena_urubu:3, placa_tatu:2 } },
+    'cajado_6':  { id:'cajado_6',  nome:'Cajado do Sertão',       tipo:'cajado', ato:6, atkBonus:1, custoOuro:150, emoji:'🪄', receita:{ pena_urubu:3, pelo_lobo_guara:2 } },
+
+    // ============ ATO 7 — Lobisomem ============
+    'tacape_7':  { id:'tacape_7',  nome:'Tacape da Lua Cheia',    tipo:'tacape', ato:7, atkBonus:1, custoOuro:250, emoji:'🪓', receita:{ pelo_cachorro_mato:3, cauda_raposa:2 } },
+    'flecha_7':  { id:'flecha_7',  nome:'Flecha da Lua Cheia',    tipo:'flecha', ato:7, atkBonus:1, custoOuro:250, emoji:'🏹', receita:{ pelo_cachorro_mato:3, mascara_guaxinim:2 } },
+    'cajado_7':  { id:'cajado_7',  nome:'Cajado da Lua Cheia',    tipo:'cajado', ato:7, atkBonus:1, custoOuro:250, emoji:'🪄', receita:{ pelo_cachorro_mato:3, pelo_jaguatirica:2 } },
+
+    // ============ ATO 8 — Cuca ============
+    'tacape_8':  { id:'tacape_8',  nome:'Tacape do Pântano',      tipo:'tacape', ato:8, atkBonus:1, custoOuro:250, emoji:'🪓', receita:{ asa_morcego:3, pena_coruja:2 } },
+    'flecha_8':  { id:'flecha_8',  nome:'Flecha do Pântano',      tipo:'flecha', ato:8, atkBonus:1, custoOuro:250, emoji:'🏹', receita:{ asa_morcego:3, pele_sapo:2 } },
+    'cajado_8':  { id:'cajado_8',  nome:'Cajado do Pântano',      tipo:'cajado', ato:8, atkBonus:1, custoOuro:250, emoji:'🪄', receita:{ asa_morcego:3, pena_seriema:2 } },
+
+    // ============ ATO 9 — Boto ============
+    'tacape_9':  { id:'tacape_9',  nome:'Tacape do Remanso',      tipo:'tacape', ato:9, atkBonus:1, custoOuro:250, emoji:'🪓', receita:{ escama_tucunare:3, escama_piraiba:2 } },
+    'flecha_9':  { id:'flecha_9',  nome:'Flecha do Remanso',      tipo:'flecha', ato:9, atkBonus:1, custoOuro:250, emoji:'🏹', receita:{ escama_tucunare:3, escama_dourada:2 } },
+    'cajado_9':  { id:'cajado_9',  nome:'Cajado do Remanso',      tipo:'cajado', ato:9, atkBonus:1, custoOuro:250, emoji:'🪄', receita:{ escama_tucunare:3, couro_peixe_boi:2 } },
+
+    // ============ ATO 10 — Boi ============
+    'tacape_10': { id:'tacape_10', nome:'Tacape da Cara Preta',   tipo:'tacape', ato:10, atkBonus:1, custoOuro:400, emoji:'🪓', receita:{ chifre_bufalo:3, sino_vaca:2 } },
+    'flecha_10': { id:'flecha_10', nome:'Flecha da Cara Preta',   tipo:'flecha', ato:10, atkBonus:1, custoOuro:400, emoji:'🏹', receita:{ chifre_bufalo:3, chifre_cabra:2 } },
+    'cajado_10': { id:'cajado_10', nome:'Cajado da Cara Preta',   tipo:'cajado', ato:10, atkBonus:1, custoOuro:400, emoji:'🪄', receita:{ chifre_bufalo:3, corcova_zebu:2 } },
+
+    // ============ ATO 11 — Jaci ============
+    'tacape_11': { id:'tacape_11', nome:'Tacape Enluarado',       tipo:'tacape', ato:11, atkBonus:1, custoOuro:400, emoji:'🪓', receita:{ pelo_gato_mato:3, asa_mariposa:2 } },
+    'flecha_11': { id:'flecha_11', nome:'Flecha Enluarada',       tipo:'flecha', ato:11, atkBonus:1, custoOuro:400, emoji:'🏹', receita:{ pelo_gato_mato:3, mascara_quati:2 } },
+    'cajado_11': { id:'cajado_11', nome:'Cajado Enluarado',       tipo:'cajado', ato:11, atkBonus:1, custoOuro:400, emoji:'🪄', receita:{ pelo_gato_mato:3, pelo_sucuarana:2 } },
+
+    // ============ ATO 12 — Guaraci ============
+    'tacape_12': { id:'tacape_12', nome:'Tacape Solar',           tipo:'tacape', ato:12, atkBonus:1, custoOuro:400, emoji:'🪓', receita:{ pena_gaviao:3, pena_falcao:2 } },
+    'flecha_12': { id:'flecha_12', nome:'Flecha Solar',           tipo:'flecha', ato:12, atkBonus:1, custoOuro:400, emoji:'🏹', receita:{ pena_gaviao:3, pena_urutau:2 } },
+    'cajado_12': { id:'cajado_12', nome:'Cajado Solar',           tipo:'cajado', ato:12, atkBonus:1, custoOuro:400, emoji:'🪄', receita:{ pena_gaviao:3, pena_aguia:2 } },
+
+    // ============ ATO 13 — Anhangá ============
+    'tacape_13': { id:'tacape_13', nome:'Tacape do Abismo',       tipo:'tacape', ato:13, atkBonus:1, custoOuro:700, emoji:'🪓', receita:{ fragmento_abismo:2, essencia_anhanga:1 } },
+    'flecha_13': { id:'flecha_13', nome:'Flecha do Abismo',       tipo:'flecha', ato:13, atkBonus:1, custoOuro:700, emoji:'🏹', receita:{ fragmento_abismo:2, essencia_anhanga:1 } },
+    'cajado_13': { id:'cajado_13', nome:'Cajado do Abismo',       tipo:'cajado', ato:13, atkBonus:1, custoOuro:700, emoji:'🪄', receita:{ fragmento_abismo:2, essencia_anhanga:1 } },
+};
+
+// =================================================================
+// 3. AMULETOS — 1 por ato, do boss
+// =================================================================
+// Cada amuleto:
+//   id, nome, ato, custoOuro, receita (materiais + item único),
+//   efeito: { elementOverride, hpBonus, atkBonus, healPerTurn }
+// =================================================================
+const STORY_AMULETS = {
+    'amuleto_1':  { id:'amuleto_1',  nome:'Cachimbo do Saci',           ato:1,  custoOuro:150,  emoji:'🧿',
+        receita:{ gorro_saci:1, espinho:3, pele_jacare:2 },
+        efeito:{ elementOverride:'AR', hpBonus:2 } },
+
+    'amuleto_2':  { id:'amuleto_2',  nome:'Presa do Mapinguari',        ato:2,  custoOuro:150,  emoji:'🧿',
+        receita:{ pelo_mapinguari:1, pelo_tamandua:3, couro_anta:2 },
+        efeito:{ hpBonus:3 } },
+
+    'amuleto_3':  { id:'amuleto_3',  nome:'Concha da Iara',             ato:3,  custoOuro:150,  emoji:'🧿',
+        receita:{ joia_iara:1, escama_piranha:3, escama_pirarucu:2 },
+        efeito:{ elementOverride:'AGUA', hpBonus:2 } },
+
+    'amuleto_4':  { id:'amuleto_4',  nome:'Escama do Boitatá',          ato:4,  custoOuro:250,  emoji:'🧿',
+        receita:{ escama_boitata:1, pele_cascavel:3, casco_tartaruga:2 },
+        efeito:{ elementOverride:'FOGO', hpBonus:2 } },
+
+    'amuleto_5':  { id:'amuleto_5',  nome:'Ferradura da Mula',          ato:5,  custoOuro:250,  emoji:'🧿',
+        receita:{ ferradura_mula:1, chifre_bode:3, chifre_touro:2 },
+        efeito:{ atkBonus:1, hpBonus:2 } },
+
+    'amuleto_6':  { id:'amuleto_6',  nome:'Osso do Corpo Seco',         ato:6,  custoOuro:250,  emoji:'🧿',
+        receita:{ osso_corpo_seco:1, pena_urubu:3, pelo_lobo_guara:2 },
+        efeito:{ hpBonus:3, healPerTurn:1 } },
+
+    'amuleto_7':  { id:'amuleto_7',  nome:'Presa do Lobisomem',         ato:7,  custoOuro:400,  emoji:'🧿',
+        receita:{ pelo_lobisomem:1, pelo_cachorro_mato:3, pelo_jaguatirica:2 },
+        efeito:{ atkBonus:1, hpBonus:2 } },
+
+    'amuleto_8':  { id:'amuleto_8',  nome:'Caldeirão da Cuca',          ato:8,  custoOuro:400,  emoji:'🧿',
+        receita:{ caldeirao_cuca:1, asa_morcego:3, pena_coruja:2 },
+        efeito:{ healPerTurn:2 } },
+
+    'amuleto_9':  { id:'amuleto_9',  nome:'Flor do Boto',               ato:9,  custoOuro:400,  emoji:'🧿',
+        receita:{ flor_boto:1, escama_tucunare:3, escama_dourada:2 },
+        efeito:{ elementOverride:'AGUA', hpBonus:3 } },
+
+    'amuleto_10': { id:'amuleto_10', nome:'Chifre do Boi da Cara Preta',ato:10, custoOuro:650,  emoji:'🧿',
+        receita:{ chifre_boi:1, chifre_bufalo:3, corcova_zebu:2 },
+        efeito:{ atkBonus:1, hpBonus:4 } },
+
+    'amuleto_11': { id:'amuleto_11', nome:'Raio Lunar da Jaci',         ato:11, custoOuro:650,  emoji:'🧿',
+        receita:{ raio_lunar:1, pelo_gato_mato:3, asa_mariposa:2 },
+        efeito:{ elementOverride:'AR', hpBonus:3 } },
+
+    'amuleto_12': { id:'amuleto_12', nome:'Coroa Solar do Guaraci',     ato:12, custoOuro:650,  emoji:'🧿',
+        receita:{ coroa_solar:1, pena_gaviao:3, pena_aguia:2 },
+        efeito:{ elementOverride:'FOGO', hpBonus:4 } },
+
+    'amuleto_13': { id:'amuleto_13', nome:'Coração de Anhangá',         ato:13, custoOuro:1200, emoji:'🧿',
+        receita:{ essencia_anhanga:1, fragmento_abismo:2 },
+        efeito:{ atkBonus:2, hpBonus:5 } },
+};
+
+// =================================================================
+// 4. HELPERS
+// =================================================================
+
+function getArchetypeFromHeroClass(heroClass) {
+    const h = STORY_HERO_CLASSES[heroClass];
+    if (!h) return null;
+    if (h.role === 'Guerreiro') return 'tacape';
+    if (h.role === 'Arqueiro')  return 'flecha';
+    if (h.role === 'Mago')      return 'cajado';
+    return null;
+}
+
+function getWeaponById(id) {
+    return STORY_WEAPONS[id] || null;
+}
+
+function getAmuletById(id) {
+    return STORY_AMULETS[id] || null;
+}
+
+function hasMaterials(recipe) {
+    if (!recipe) return true;
+    for (const [matId, qty] of Object.entries(recipe)) {
+        const has = STORY_PROGRESS.inventory[matId] || 0;
+        if (has < qty) return false;
+    }
+    return true;
+}
+
+function consumeMaterials(recipe) {
+    if (!recipe) return;
+    for (const [matId, qty] of Object.entries(recipe)) {
+        STORY_PROGRESS.inventory[matId] -= qty;
+        if (STORY_PROGRESS.inventory[matId] <= 0) {
+            delete STORY_PROGRESS.inventory[matId];
+        }
+    }
+}
+
+function refundMaterials(recipe, percent = 0.5) {
+    if (!recipe) return;
+    for (const [matId, qty] of Object.entries(recipe)) {
+        const refund = Math.floor(qty * percent);
+        if (refund > 0) {
+            addMaterial(matId, refund);
+        }
+    }
+}
+
+// =================================================================
+// 5. CRAFTING
+// =================================================================
+
+function isWeaponCrafted(weaponId) {
+    if (!Array.isArray(STORY_PROGRESS.craftedWeapons)) STORY_PROGRESS.craftedWeapons = [];
+    return STORY_PROGRESS.craftedWeapons.includes(weaponId);
+}
+
+function isAmuletCrafted(amuletId) {
+    if (!Array.isArray(STORY_PROGRESS.craftedAmulets)) STORY_PROGRESS.craftedAmulets = [];
+    return STORY_PROGRESS.craftedAmulets.includes(amuletId);
+}
+
+function isWeaponAvailable(weaponId) {
+    const w = getWeaponById(weaponId);
+    if (!w) return false;
+    // Disponível se o ato está desbloqueado
+    return STORY_PROGRESS.unlockedChapters.includes(w.ato);
+}
+
+function isAmuletAvailable(amuletId) {
+    const a = getAmuletById(amuletId);
+    if (!a) return false;
+    return STORY_PROGRESS.unlockedChapters.includes(a.ato);
+}
+
+function craftWeapon(weaponId) {
+    const w = getWeaponById(weaponId);
+    if (!w) return { ok:false, error:'Arma não encontrada.' };
+    if (isWeaponCrafted(weaponId)) return { ok:false, error:'Você já forjou esta arma.' };
+    if (!isWeaponAvailable(weaponId)) return { ok:false, error:'Ato ainda não desbloqueado.' };
+
+    if (!hasMaterials(w.receita)) return { ok:false, error:'Materiais insuficientes.' };
+    if ((STORY_PROGRESS.gold || 0) < w.custoOuro) return { ok:false, error:`Faltam ${w.custoOuro - (STORY_PROGRESS.gold||0)} de ouro.` };
+
+    consumeMaterials(w.receita);
+    STORY_PROGRESS.gold -= w.custoOuro;
+    STORY_PROGRESS.craftedWeapons.push(weaponId);
+    saveStoryProgress();
+    return { ok:true };
+}
+
+function craftAmulet(amuletId) {
+    const a = getAmuletById(amuletId);
+    if (!a) return { ok:false, error:'Amuleto não encontrado.' };
+    if (isAmuletCrafted(amuletId)) return { ok:false, error:'Você já forjou este amuleto.' };
+    if (!isAmuletAvailable(amuletId)) return { ok:false, error:'Ato ainda não desbloqueado.' };
+
+    if (!hasMaterials(a.receita)) return { ok:false, error:'Materiais insuficientes.' };
+    if ((STORY_PROGRESS.gold || 0) < a.custoOuro) return { ok:false, error:`Faltam ${a.custoOuro - (STORY_PROGRESS.gold||0)} de ouro.` };
+
+    consumeMaterials(a.receita);
+    STORY_PROGRESS.gold -= a.custoOuro;
+    STORY_PROGRESS.craftedAmulets.push(amuletId);
+    saveStoryProgress();
+    return { ok:true };
+}
+
+function dismantleWeapon(weaponId) {
+    const w = getWeaponById(weaponId);
+    if (!w) return { ok:false, error:'Arma não encontrada.' };
+    if (!isWeaponCrafted(weaponId)) return { ok:false, error:'Você não tem essa arma.' };
+
+    // Remove de quem estiver equipado
+    for (const heroClass in STORY_PROGRESS.heroEquipment || {}) {
+        if (STORY_PROGRESS.heroEquipment[heroClass].arma === weaponId) {
+            STORY_PROGRESS.heroEquipment[heroClass].arma = null;
+        }
+    }
+
+    refundMaterials(w.receita, 0.5);
+    STORY_PROGRESS.craftedWeapons = STORY_PROGRESS.craftedWeapons.filter(id => id !== weaponId);
+    saveStoryProgress();
+    return { ok:true };
+}
+
+function dismantleAmulet(amuletId) {
+    const a = getAmuletById(amuletId);
+    if (!a) return { ok:false, error:'Amuleto não encontrado.' };
+    if (!isAmuletCrafted(amuletId)) return { ok:false, error:'Você não tem esse amuleto.' };
+
+    for (const heroClass in STORY_PROGRESS.heroEquipment || {}) {
+        if (STORY_PROGRESS.heroEquipment[heroClass].amuleto === amuletId) {
+            STORY_PROGRESS.heroEquipment[heroClass].amuleto = null;
+        }
+    }
+
+    refundMaterials(a.receita, 0.5);
+    STORY_PROGRESS.craftedAmulets = STORY_PROGRESS.craftedAmulets.filter(id => id !== amuletId);
+    saveStoryProgress();
+    return { ok:true };
+}
+
+// =================================================================
+// 6. EQUIPAR / DESEQUIPAR
+// =================================================================
+
+function getHeroEquipment(heroClass) {
+    if (!STORY_PROGRESS.heroEquipment) STORY_PROGRESS.heroEquipment = {};
+    if (!STORY_PROGRESS.heroEquipment[heroClass]) {
+        STORY_PROGRESS.heroEquipment[heroClass] = { arma: null, amuleto: null };
+    }
+    return STORY_PROGRESS.heroEquipment[heroClass];
+}
+
+function equipWeapon(heroClass, weaponId) {
+    const w = getWeaponById(weaponId);
+    if (!w) return { ok:false, error:'Arma não encontrada.' };
+    if (!isWeaponCrafted(weaponId)) return { ok:false, error:'Você não tem essa arma.' };
+
+    const expectedTipo = getArchetypeFromHeroClass(heroClass);
+    if (w.tipo !== expectedTipo) {
+        return { ok:false, error:`${STORY_HERO_CLASSES[heroClass].displayName} não pode usar ${w.tipo}.` };
+    }
+
+    // Se outro herói está usando, desequipa
+    for (const hc in STORY_PROGRESS.heroEquipment) {
+        if (hc !== heroClass && STORY_PROGRESS.heroEquipment[hc].arma === weaponId) {
+            STORY_PROGRESS.heroEquipment[hc].arma = null;
+        }
+    }
+
+    getHeroEquipment(heroClass).arma = weaponId;
+    saveStoryProgress();
+    return { ok:true };
+}
+
+function equipAmulet(heroClass, amuletId) {
+    const a = getAmuletById(amuletId);
+    if (!a) return { ok:false, error:'Amuleto não encontrado.' };
+    if (!isAmuletCrafted(amuletId)) return { ok:false, error:'Você não tem esse amuleto.' };
+
+    for (const hc in STORY_PROGRESS.heroEquipment) {
+        if (hc !== heroClass && STORY_PROGRESS.heroEquipment[hc].amuleto === amuletId) {
+            STORY_PROGRESS.heroEquipment[hc].amuleto = null;
+        }
+    }
+
+    getHeroEquipment(heroClass).amuleto = amuletId;
+    saveStoryProgress();
+    return { ok:true };
+}
+
+function unequipWeapon(heroClass) {
+    getHeroEquipment(heroClass).arma = null;
+    saveStoryProgress();
+}
+
+function unequipAmulet(heroClass) {
+    getHeroEquipment(heroClass).amuleto = null;
+    saveStoryProgress();
+}
+
+// =================================================================
+// 7. APLICAR EQUIPAMENTO EM BATALHA
+// =================================================================
+// Chamado junto com applyHeroLevelBonus no initStoryBattle.
+// =================================================================
+function applyHeroEquipment(player) {
+    if (!player) return;
+    const eq = getHeroEquipment(player.class);
+
+    // Aplica arma
+    if (eq.arma) {
+        const w = getWeaponById(eq.arma);
+        if (w) {
+            player.bonusAtk = (player.bonusAtk || 0) + w.atkBonus;
+            player.equippedWeapon = w;
+        }
+    }
+
+    // Aplica amuleto
+    if (eq.amuleto) {
+        const a = getAmuletById(eq.amuleto);
+        if (a) {
+            const ef = a.efeito;
+            if (ef.hpBonus) {
+                player.maxHp += ef.hpBonus;
+                player.hp = player.maxHp;
+            }
+            if (ef.atkBonus) {
+                player.bonusAtk = (player.bonusAtk || 0) + ef.atkBonus;
+            }
+            if (ef.elementOverride) {
+                player.element = ef.elementOverride;
+            }
+            player.equippedAmulet = a;
+            player.healPerTurn = (player.healPerTurn || 0) + (ef.healPerTurn || 0);
+        }
+    }
+}
+
+// Hook: aplica equipamento ao criar players em batalha
+(function hookApplyEquipment() {
+    const _origApplyLevel = window.applyHeroLevelBonus;
+    if (typeof _origApplyLevel === 'function') {
+        window.applyHeroLevelBonus = function(player) {
+            _origApplyLevel.apply(this, arguments);
+            applyHeroEquipment(player);
+        };
+    } else {
+        // Se não existe, criamos o hook direto no initStoryBattle
+        const _origInit = window.initStoryBattle;
+        if (typeof _origInit === 'function') {
+            window.initStoryBattle = async function() {
+                await _origInit.apply(this, arguments);
+                if (Array.isArray(players)) {
+                    players.forEach(p => applyHeroEquipment(p));
+                    if (typeof updateHeroCard === 'function') updateHeroCard();
+                }
+            };
+        }
+    }
+})();
+
+// =================================================================
+// 8. UI DA TESOURARIA (3 abas)
+// =================================================================
+
+let tesourariaTab = 'inventario';
+
+function renderTesourariaScreen() {
+    const screen = document.getElementById('storyScreen');
+    if (!screen) return;
+
+    // Mapa de materiais
+    const inv = STORY_PROGRESS.inventory || {};
+    const materialIds = Object.keys(inv).filter(id => inv[id] > 0);
+
+    // Cabeçalho
+    const totalXP = STORY_PROGRESS.totalXP || 0;
+    const totalGold = STORY_PROGRESS.gold || 0;
+
+    // Aba ativa
+    let contentHTML = '';
+    if (tesourariaTab === 'inventario') {
+        contentHTML = renderTesourariaInventario(materialIds);
+    } else if (tesourariaTab === 'forja') {
+        contentHTML = renderTesourariaForja();
+    } else if (tesourariaTab === 'amuletos') {
+        contentHTML = renderTesourariaAmuletos();
+    }
+
+    screen.innerHTML = `
+        <div class="story-container">
+            <div class="story-header">
+                <h1 class="story-title">🏛️ TESOURARIA</h1>
+                <p class="story-subtitle">Inventário, forja e amuletos.</p>
+                <div style="text-align:center;margin-top:15px;display:flex;gap:15px;justify-content:center;flex-wrap:wrap;">
+                    <span class="story-stars-counter" style="background:rgba(58,42,24,.9);border:1px solid #6a5024;padding:8px 14px;border-radius:20px;font-family:'Cinzel',serif;font-weight:700;color:#e8b923;">
+                        ${uiIcon('xp')} ${totalXP} XP
+                    </span>
+                    <span class="story-stars-counter" style="background:rgba(58,42,24,.9);border:1px solid #6a5024;padding:8px 14px;border-radius:20px;font-family:'Cinzel',serif;font-weight:700;color:#e8b923;">
+                        ${uiIcon('gold')} ${totalGold}
+                    </span>
+                </div>
+            </div>
+            <div class="tesouraria-tabs">
+                <button class="tesouraria-tab ${tesourariaTab === 'inventario' ? 'active' : ''}" onclick="tesourariaTab='inventario'; renderTesourariaScreen();">📦 Inventário</button>
+                <button class="tesouraria-tab ${tesourariaTab === 'forja' ? 'active' : ''}" onclick="tesourariaTab='forja'; renderTesourariaScreen();">⚔️ Forja de Armas</button>
+                <button class="tesouraria-tab ${tesourariaTab === 'amuletos' ? 'active' : ''}" onclick="tesourariaTab='amuletos'; renderTesourariaScreen();">🧿 Forja de Amuletos</button>
+            </div>
+            <div class="tesouraria-content">${contentHTML}</div>
+            <div class="story-footer"><button class="story-back-btn" onclick="renderAldeiaScreen()">← VOLTAR À ALDEIA</button></div>
+        </div>
+    `;
+}
+
+// ---- Aba Inventário ----
+function renderTesourariaInventario(materialIds) {
+    if (materialIds.length === 0) {
+        return `
+            <div class="tesouraria-empty">
+                <div class="tesouraria-empty-icon">📦</div>
+                <div class="tesouraria-empty-text">Seu inventário está vazio.</div>
+                <div class="tesouraria-empty-hint">Derrote inimigos nas fases para coletar materiais.</div>
+            </div>`;
+    }
+
+    // Ordena por preço (decrescente)
+    materialIds.sort((a, b) => getMaterialPrice(b) - getMaterialPrice(a));
+
+    const totalValue = materialIds.reduce((sum, id) => sum + getMaterialPrice(id) * (inv_count(id) || 0), 0);
+
+    function inv_count(id) { return STORY_PROGRESS.inventory[id] || 0; }
+
+    const cardsHTML = materialIds.map(id => {
+        const m = STORY_MATERIALS[id];
+        const qty = STORY_PROGRESS.inventory[id];
+        const price = getMaterialPrice(id);
+        return `
+            <div class="tesouraria-item">
+                <div class="tesouraria-item-icon">${m.emoji}</div>
+                <div class="tesouraria-item-name">${m.name}</div>
+                <div class="tesouraria-item-qty">×${qty}</div>
+                <div class="tesouraria-item-price">${uiIcon('gold')} ${price} / un.</div>
+            </div>`;
+    }).join('');
+
+    return `
+        <div class="tesouraria-total">
+            Valor total do inventário: <b>${uiIcon('gold')} ${totalValue}</b>
+        </div>
+        <div class="tesouraria-grid">${cardsHTML}</div>
+        <div class="tesouraria-hint">💡 Venda materiais no <b>Curandeiro</b> para ganhar ouro.</div>
+    `;
+}
+
+// ---- Aba Forja ----
+function renderTesourariaForja() {
+    // Lista todas as armas dos atos desbloqueados
+    const allWeapons = Object.values(STORY_WEAPONS).filter(w => isWeaponAvailable(w.id));
+
+    if (allWeapons.length === 0) {
+        return `<div class="tesouraria-empty">
+            <div class="tesouraria-empty-icon">⚔️</div>
+            <div class="tesouraria-empty-text">Nenhuma forja liberada ainda.</div>
+            <div class="tesouraria-empty-hint">Complete fases para liberar receitas.</div>
+        </div>`;
+    }
+
+    const cardsHTML = allWeapons.map(w => {
+        const crafted = isWeaponCrafted(w.id);
+        const canCraft = hasMaterials(w.receita) && (STORY_PROGRESS.gold || 0) >= w.custoOuro;
+
+        // Lista de materiais
+        const recHTML = Object.entries(w.receita).map(([matId, qty]) => {
+            const m = STORY_MATERIALS[matId];
+            if (!m) return '';
+            const has = STORY_PROGRESS.inventory[matId] || 0;
+            const ok = has >= qty ? 'ok' : 'no';
+            return `<span class="forge-recipe-mat ${ok}">${m.emoji} ${has}/${qty}</span>`;
+        }).join('');
+
+        let actionHTML = '';
+        if (crafted) {
+            actionHTML = `
+                <div class="forge-forged-tag">✅ Forjada</div>
+                <button class="forge-btn danger" onclick="handleDismantleWeapon('${w.id}')">🔥 Desmanchar</button>`;
+        } else {
+            actionHTML = `
+                <div class="forge-ouro ${canCraft ? 'ok' : 'no'}">${uiIcon('gold')} ${w.custoOuro}</div>
+                <button class="forge-btn" ${canCraft ? '' : 'disabled'} onclick="handleCraftWeapon('${w.id}')">
+                    ${canCraft ? '🔨 Forjar' : '✕ Sem recursos'}
+                </button>`;
+        }
+
+        const tipoLabel = { tacape:'Tacape', flecha:'Flecha', cajado:'Cajado' }[w.tipo];
+
+        return `
+            <div class="forge-card ${crafted ? 'crafted' : ''}">
+                <div class="forge-card-header">
+                    <div class="forge-emoji">${w.emoji}</div>
+                    <div class="forge-info">
+                        <div class="forge-name">${w.nome}</div>
+                        <div class="forge-meta">Ato ${w.ato} · ${tipoLabel} · +${w.atkBonus} ATK</div>
+                    </div>
+                </div>
+                <div class="forge-recipe">${recHTML}</div>
+                <div class="forge-actions">${actionHTML}</div>
+            </div>`;
+    }).join('');
+
+    return `<div class="forge-grid">${cardsHTML}</div>`;
+}
+
+// ---- Aba Amuletos ----
+function renderTesourariaAmuletos() {
+    const allAmulets = Object.values(STORY_AMULETS).filter(a => isAmuletAvailable(a.id));
+
+    if (allAmulets.length === 0) {
+        return `<div class="tesouraria-empty">
+            <div class="tesouraria-empty-icon">🧿</div>
+            <div class="tesouraria-empty-text">Nenhum amuleto liberado ainda.</div>
+            <div class="tesouraria-empty-hint">Derrote o boss do ato para revelar o amuleto.</div>
+        </div>`;
+    }
+
+    const cardsHTML = allAmulets.map(a => {
+        const crafted = isAmuletCrafted(a.id);
+        const canCraft = hasMaterials(a.receita) && (STORY_PROGRESS.gold || 0) >= a.custoOuro;
+
+        const recHTML = Object.entries(a.receita).map(([matId, qty]) => {
+            const m = STORY_MATERIALS[matId];
+            if (!m) return '';
+            const has = STORY_PROGRESS.inventory[matId] || 0;
+            const ok = has >= qty ? 'ok' : 'no';
+            return `<span class="forge-recipe-mat ${ok}">${m.emoji} ${has}/${qty}</span>`;
+        }).join('');
+
+        // Efeitos em texto
+        const ef = a.efeito;
+        let efHTML = [];
+        if (ef.elementOverride) efHTML.push(`🎨 Elemento → ${ef.elementOverride}`);
+        if (ef.hpBonus)         efHTML.push(`❤️ +${ef.hpBonus} HP`);
+        if (ef.atkBonus)        efHTML.push(`⚔️ +${ef.atkBonus} ATK`);
+        if (ef.healPerTurn)     efHTML.push(`💚 Cura ${ef.healPerTurn} HP/turno`);
+
+        let actionHTML = '';
+        if (crafted) {
+            actionHTML = `
+                <div class="forge-forged-tag">✅ Forjado</div>
+                <button class="forge-btn danger" onclick="handleDismantleAmulet('${a.id}')">🔥 Desmanchar</button>`;
+        } else {
+            actionHTML = `
+                <div class="forge-ouro ${canCraft ? 'ok' : 'no'}">${uiIcon('gold')} ${a.custoOuro}</div>
+                <button class="forge-btn" ${canCraft ? '' : 'disabled'} onclick="handleCraftAmulet('${a.id}')">
+                    ${canCraft ? '🔨 Forjar' : '✕ Sem recursos'}
+                </button>`;
+        }
+
+        return `
+            <div class="forge-card ${crafted ? 'crafted amulet' : 'amulet'}">
+                <div class="forge-card-header">
+                    <div class="forge-emoji">${a.emoji}</div>
+                    <div class="forge-info">
+                        <div class="forge-name">${a.nome}</div>
+                        <div class="forge-meta">Ato ${a.ato}</div>
+                    </div>
+                </div>
+                <div class="forge-effects">${efHTML.join(' · ')}</div>
+                <div class="forge-recipe">${recHTML}</div>
+                <div class="forge-actions">${actionHTML}</div>
+            </div>`;
+    }).join('');
+
+    return `<div class="forge-grid">${cardsHTML}</div>`;
+}
+
+// ---- Handlers ----
+function handleCraftWeapon(id) {
+    const r = craftWeapon(id);
+    if (!r.ok) { showToast('❌ Não foi possível', r.error, '❌'); return; }
+    const w = getWeaponById(id);
+    showToast('🔨 Arma forjada!', `${w.emoji} ${w.nome}`, '🔨');
+    try { playSfx('win'); } catch(e) {}
+    renderTesourariaScreen();
+}
+
+function handleCraftAmulet(id) {
+    const r = craftAmulet(id);
+    if (!r.ok) { showToast('❌ Não foi possível', r.error, '❌'); return; }
+    const a = getAmuletById(id);
+    showToast('🔨 Amuleto forjado!', `${a.emoji} ${a.nome}`, '🔨');
+    try { playSfx('win'); } catch(e) {}
+    renderTesourariaScreen();
+}
+
+function handleDismantleWeapon(id) {
+    const w = getWeaponById(id);
+    if (!w) return;
+    if (!confirm(`Desmanchar "${w.nome}"?\n\nVocê receberá 50% dos materiais de volta.`)) return;
+    const r = dismantleWeapon(id);
+    if (!r.ok) { showToast('❌ Não foi possível', r.error, '❌'); return; }
+    showToast('🔥 Desmanchada', `50% dos materiais devolvidos.`, '🔥');
+    renderTesourariaScreen();
+}
+
+function handleDismantleAmulet(id) {
+    const a = getAmuletById(id);
+    if (!a) return;
+    if (!confirm(`Desmanchar "${a.nome}"?\n\nVocê receberá 50% dos materiais de volta.`)) return;
+    const r = dismantleAmulet(id);
+    if (!r.ok) { showToast('❌ Não foi possível', r.error, '❌'); return; }
+    showToast('🔥 Desmanchado', `50% dos materiais devolvidos.`, '🔥');
+    renderTesourariaScreen();
+}
+
+// =================================================================
+// 9. CURANDEIRO — Venda de materiais
+// =================================================================
+
+function renderLojaScreenCompleta() {
+    const screen = document.getElementById('storyScreen');
+    if (!screen) return;
+    const gold = STORY_PROGRESS.gold || 0;
+
+    // Compra (itens fixos)
+    const buyHTML = STORY_SHOP_ITEMS.map(it => {
+        const m = STORY_MATERIALS[it.id];
+        const emoji = m ? m.emoji : (it.emoji || '❓');
+        const can = gold >= it.price;
+        return `<div class="story-shop-item ${can?'':'disabled'}">
+            <div class="story-shop-emoji">${emoji}</div>
+            <div class="story-shop-name">${it.name}</div>
+            <div class="story-shop-desc">${it.description}</div>
+            <div class="story-shop-price">${uiIcon('gold')} ${it.price}</div>
+            <button class="story-shop-btn" ${can?'':'disabled'} onclick="buyShopItem('${it.id}',${it.price})">COMPRAR</button>
+        </div>`;
+    }).join('');
+
+    // Venda (inventário)
+    const inv = STORY_PROGRESS.inventory || {};
+    const sellIds = Object.keys(inv).filter(id => inv[id] > 0);
+
+    let sellHTML = '';
+    if (sellIds.length === 0) {
+        sellHTML = '<div class="tesouraria-empty" style="margin:0;padding:30px;"><div class="tesouraria-empty-text">Nenhum material para vender.</div></div>';
+    } else {
+        sellIds.sort((a, b) => getMaterialPrice(b) - getMaterialPrice(a));
+        sellHTML = '<div class="sell-grid">' + sellIds.map(id => {
+            const m = STORY_MATERIALS[id];
+            const qty = inv[id];
+            const price = getMaterialPrice(id);
+            return `<div class="sell-card">
+                <div class="sell-icon">${m.emoji}</div>
+                <div class="sell-info">
+                    <div class="sell-name">${m.name}</div>
+                    <div class="sell-qty">×${qty}</div>
+                    <div class="sell-price">${uiIcon('gold')} ${price} cada</div>
+                </div>
+                <button class="sell-btn" onclick="handleSellMaterial('${id}', 1)">Vender 1</button>
+                <button class="sell-btn sell-all" onclick="handleSellMaterial('${id}', ${qty})">Vender tudo (${price * qty})</button>
+            </div>`;
+        }).join('') + '</div>';
+    }
+
+    screen.innerHTML = `
+        <div class="story-container">
+            <div class="story-header">
+                <h1 class="story-title">🧙 CURANDEIRO</h1>
+                <p class="story-subtitle">"Compro e vendo. Seja bem-vindo." (${gold} ${uiIcon('gold')})</p>
+            </div>
+
+            <div class="curandeiro-tabs">
+                <button class="curandeiro-tab active" onclick="curandeiroTab='comprar'; renderLojaScreenCompleta();">🛒 Comprar</button>
+                <button class="curandeiro-tab" onclick="curandeiroTab='vender'; renderLojaScreenCompleta();">💰 Vender</button>
+            </div>
+
+            <div class="curandeiro-content">
+                ${(typeof curandeiroTab !== 'undefined' && curandeiroTab === 'vender') ? sellHTML : '<div class="story-shop-grid">' + buyHTML + '</div>'}
+            </div>
+
+            <div class="story-footer"><button class="story-back-btn" onclick="renderAldeiaScreen()">← VOLTAR À ALDEIA</button></div>
+        </div>
+    `;
+}
+
+let curandeiroTab = 'comprar';
+
+function handleSellMaterial(matId, qty) {
+    const inv = STORY_PROGRESS.inventory[matId] || 0;
+    if (inv < qty) { showToast('❌', 'Quantidade insuficiente.', '❌'); return; }
+    const price = getMaterialPrice(matId) * qty;
+    STORY_PROGRESS.inventory[matId] -= qty;
+    if (STORY_PROGRESS.inventory[matId] <= 0) delete STORY_PROGRESS.inventory[matId];
+    addGold(price);
+    saveStoryProgress();
+    const m = STORY_MATERIALS[matId];
+    showToast('💰 Vendido!', `${m.emoji} ${m.name} ×${qty} → +${price} ouro`, '💰');
+    renderLojaScreenCompleta();
+}
+
+// Hook: substitui renderLojaScreen pra usar a versão com abas
+(function patchLojaWithSell() {
+    if (typeof window.renderLojaScreen === 'function') {
+        window.renderLojaScreen = renderLojaScreenCompleta;
+    }
+})();
+
+// Hook: substitui enterAldeiaLocation para Tesouraria
+(function patchEnterAldeiaForTesouraria() {
+    const _orig = window.enterAldeiaLocation;
+    window.enterAldeiaLocation = function(key) {
+        if (key === 'tesouraria') {
+            return renderTesourariaScreen();
+        }
+        return _orig.apply(this, arguments);
+    };
+})();
+
+// =================================================================
+// 10. INTEGRAÇÃO NO PAINEL DE DETALHES DO HERÓI (equipar)
+// =================================================================
+(function patchHeroDetailsWithEquipment() {
+    if (typeof window.openHeroDetails !== 'function') {
+        console.warn('[story] openHeroDetails não existe, pulando patch de equipamento.');
+        return;
+    }
+
+    const _origOpen = window.openHeroDetails;
+    window.openHeroDetails = function(heroClass) {
+        // Chama o original primeiro
+        _origOpen.apply(this, arguments);
+
+        // Depois injeta a seção de equipamento no painel
+        const panel = document.querySelector('.hero-details-panel');
+        if (!panel) return;
+
+        const eq = getHeroEquipment(heroClass);
+        const archetype = getArchetypeFromHeroClass(heroClass);
+
+        // Armas compatíveis
+        const availableWeapons = (STORY_PROGRESS.craftedWeapons || [])
+            .map(id => getWeaponById(id))
+            .filter(w => w && w.tipo === archetype);
+
+        // Todos os amuletos forjados
+        const availableAmulets = (STORY_PROGRESS.craftedAmulets || [])
+            .map(id => getAmuletById(id))
+            .filter(Boolean);
+
+        const weaponOptions = ['<option value="">— Nenhuma —</option>']
+            .concat(availableWeapons.map(w => `<option value="${w.id}" ${eq.arma === w.id ? 'selected' : ''}>${w.nome} (+${w.atkBonus} ATK)</option>`))
+            .join('');
+
+        const amuletOptions = ['<option value="">— Nenhum —</option>']
+            .concat(availableAmulets.map(a => `<option value="${a.id}" ${eq.amuleto === a.id ? 'selected' : ''}>${a.nome}</option>`))
+            .join('');
+
+        const eqHTML = `
+            <div class="hero-details-section">
+                <div class="hero-details-section-title">⚔️ EQUIPAMENTO</div>
+                <div class="equip-row">
+                    <label class="equip-label">Arma</label>
+                    <select class="equip-select" onchange="handleEquipWeapon('${heroClass.replace(/'/g,"\\'")}', this.value)">
+                        ${weaponOptions}
+                    </select>
+                </div>
+                <div class="equip-row">
+                    <label class="equip-label">Amuleto</label>
+                    <select class="equip-select" onchange="handleEquipAmulet('${heroClass.replace(/'/g,"\\'")}', this.value)">
+                        ${amuletOptions}
+                    </select>
+                </div>
+                ${availableWeapons.length === 0 && availableAmulets.length === 0
+                    ? '<div class="equip-empty">Forje armas e amuletos na <b>Tesouraria</b> pra equipar aqui.</div>'
+                    : ''}
+            </div>`;
+
+        // Insere antes da seção de NOTAS (último filho)
+        const notas = panel.querySelector('.hero-details-notes');
+        if (notas) {
+            notas.insertAdjacentHTML('beforebegin', eqHTML);
+        } else {
+            panel.insertAdjacentHTML('beforeend', eqHTML);
+        }
+    };
+
+    console.log('✅ Painel do herói patcheado com Equipamento.');
+})();
+
+function handleEquipWeapon(heroClass, weaponId) {
+    if (!weaponId) {
+        unequipWeapon(heroClass);
+        showToast('⚔️', 'Arma removida.', '⚔️');
+        return;
+    }
+    const r = equipWeapon(heroClass, weaponId);
+    if (!r.ok) { showToast('❌', r.error, '❌'); return; }
+    const w = getWeaponById(weaponId);
+    showToast('⚔️ Equipado!', `${w.emoji} ${w.nome}`, '⚔️');
+}
+
+function handleEquipAmulet(heroClass, amuletId) {
+    if (!amuletId) {
+        unequipAmulet(heroClass);
+        showToast('🧿', 'Amuleto removido.', '🧿');
+        return;
+    }
+    const r = equipAmulet(heroClass, amuletId);
+    if (!r.ok) { showToast('❌', r.error, '❌'); return; }
+    const a = getAmuletById(amuletId);
+    showToast('🧿 Equipado!', `${a.emoji} ${a.nome}`, '🧿');
+}
+
+// =================================================================
+// 11. CSS
+// =================================================================
+(function injectTesourariaCSS() {
+    if (document.getElementById('tesourariaStyle')) return;
+    const style = document.createElement('style');
+    style.id = 'tesourariaStyle';
+    style.textContent = `
+        /* ---- Tabs ---- */
+        .tesouraria-tabs, .curandeiro-tabs {
+            display: flex; justify-content: center;
+            gap: 12px; flex-wrap: wrap; margin-bottom: 24px;
+        }
+        .tesouraria-tab, .curandeiro-tab {
+            padding: 10px 20px;
+            background: linear-gradient(135deg, #3d2d18, #2a1f10);
+            color: #c8b787; border: 1px solid #6a5024;
+            border-radius: 24px; cursor: pointer;
+            font-family: 'Cinzel', serif;
+            font-weight: 700; font-size: 0.9rem;
+            letter-spacing: 1px; transition: all 0.2s;
+        }
+        .tesouraria-tab:hover, .curandeiro-tab:hover {
+            color: #e8dcc4; border-color: #c9a227;
+        }
+        .tesouraria-tab.active, .curandeiro-tab.active {
+            background: linear-gradient(180deg, rgba(232,185,35,.2), transparent 45%),
+                        linear-gradient(135deg, #6a5024, #3d2d18);
+            color: #fff5dc; border-color: #e8b923;
+            box-shadow: 0 0 15px rgba(232,185,35,.35);
+        }
+
+        /* ---- Inventário ---- */
+        .tesouraria-total {
+            text-align: center;
+            font-family: 'Cinzel', serif;
+            color: #d9c89a; font-size: 1rem;
+            padding: 12px;
+            background: rgba(10,6,2,.5);
+            border-radius: 6px;
+            border: 1px solid rgba(201,162,39,.3);
+            margin-bottom: 20px;
+        }
+        .tesouraria-total b { color: #e8b923; }
+        .tesouraria-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 12px;
+        }
+        .tesouraria-item {
+            background: rgba(10,6,2,.6);
+            border: 1px solid rgba(201,162,39,.25);
+            border-radius: 8px;
+            padding: 12px 8px;
+            text-align: center;
+            transition: all 0.2s;
+        }
+        .tesouraria-item:hover {
+            border-color: #c9a227;
+            transform: translateY(-2px);
+        }
+        .tesouraria-item-icon { font-size: 2rem; line-height: 1; margin-bottom: 6px; }
+        .tesouraria-item-name {
+            font-family: 'EB Garamond', serif;
+            color: #d9c89a; font-size: 0.85rem;
+            margin-bottom: 4px;
+            line-height: 1.2;
+        }
+        .tesouraria-item-qty {
+            font-family: 'Cinzel', serif;
+            color: #e8b923; font-weight: 700;
+            font-size: 1rem; margin-bottom: 4px;
+        }
+        .tesouraria-item-price {
+            font-family: 'Cinzel', serif;
+            color: #8a7a52; font-size: 0.75rem;
+        }
+        .tesouraria-item-price img { width: 12px; height: 12px; vertical-align: middle; }
+
+        .tesouraria-hint {
+            text-align: center;
+            font-family: 'EB Garamond', serif;
+            color: #8a7a52; font-size: 0.9rem;
+            font-style: italic;
+            margin-top: 20px;
+            padding: 10px;
+        }
+
+        /* ---- Empty ---- */
+        .tesouraria-empty {
+            text-align: center;
+            padding: 60px 20px;
+            background: rgba(10,6,2,.4);
+            border: 2px dashed #3d2d18;
+            border-radius: 8px;
+        }
+        .tesouraria-empty-icon { font-size: 4rem; opacity: 0.5; margin-bottom: 16px; }
+        .tesouraria-empty-text {
+            font-family: 'Cinzel', serif;
+            color: #8a7a52; font-size: 1.1rem;
+            margin-bottom: 8px;
+        }
+        .tesouraria-empty-hint {
+            font-family: 'EB Garamond', serif;
+            color: #6a5024; font-size: 0.9rem;
+            font-style: italic;
+        }
+
+        /* ---- Forja ---- */
+        .forge-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 16px;
+        }
+        .forge-card {
+            background: linear-gradient(180deg, rgba(201,162,39,.06), transparent 40%),
+                        linear-gradient(180deg, rgba(42,31,16,.95), rgba(26,18,8,.95));
+            border: 2px solid #3d2d18;
+            border-radius: 8px;
+            padding: 14px;
+            display: flex; flex-direction: column; gap: 10px;
+            transition: all 0.3s;
+        }
+        .forge-card:hover { border-color: #6a5024; }
+        .forge-card.crafted { border-color: #4a7040; }
+        .forge-card.amulet { border-color: #6a2a8a; }
+        .forge-card.amulet.crafted { border-color: #8a4aba; }
+
+        .forge-card-header {
+            display: flex; align-items: center; gap: 10px;
+        }
+        .forge-emoji { font-size: 2rem; line-height: 1; }
+        .forge-info { flex: 1; min-width: 0; }
+        .forge-name {
+            font-family: 'Cinzel', serif;
+            color: #f0e2c0; font-size: 1rem;
+            letter-spacing: 0.5px;
+            margin-bottom: 2px;
+        }
+        .forge-meta {
+            font-family: 'EB Garamond', serif;
+            color: #b8a577; font-size: 0.8rem;
+            font-style: italic;
+        }
+        .forge-effects {
+            font-family: 'EB Garamond', serif;
+            color: #8ac070; font-size: 0.85rem;
+            padding: 6px 10px;
+            background: rgba(107,163,92,.1);
+            border-left: 3px solid #6ba35c;
+            border-radius: 4px;
+        }
+        .forge-recipe {
+            display: flex; flex-wrap: wrap; gap: 6px;
+        }
+        .forge-recipe-mat {
+            display: inline-flex; align-items: center;
+            gap: 4px; padding: 3px 8px;
+            font-family: 'EB Garamond', serif;
+            font-size: 0.8rem;
+            background: rgba(10,6,2,.5);
+            border-radius: 12px;
+        }
+        .forge-recipe-mat.ok { color: #8ac070; border: 1px solid rgba(107,163,92,.5); }
+        .forge-recipe-mat.no { color: #d05050; border: 1px solid rgba(168,50,50,.5); }
+        .forge-ouro {
+            text-align: center;
+            font-family: 'Cinzel', serif;
+            font-size: 0.9rem; font-weight: 700;
+            padding: 6px;
+        }
+        .forge-ouro.ok { color: #8ac070; }
+        .forge-ouro.no { color: #d05050; }
+        .forge-ouro img { width: 16px; height: 16px; vertical-align: middle; }
+        .forge-actions {
+            display: flex; flex-direction: column; gap: 6px;
+            margin-top: auto;
+        }
+        .forge-forged-tag {
+            text-align: center;
+            font-family: 'Cinzel', serif;
+            color: #8ac070; font-size: 0.85rem;
+            letter-spacing: 1px;
+        }
+        .forge-btn {
+            padding: 10px;
+            background: linear-gradient(180deg, rgba(232,185,35,.25), transparent 45%),
+                        linear-gradient(135deg, #8a6a2e, #4a3418);
+            color: #fff5dc; border: 2px solid #e8b923;
+            border-radius: 4px; cursor: pointer;
+            font-family: 'Cinzel', serif; font-weight: 700;
+            font-size: 0.9rem; letter-spacing: 1.5px;
+            transition: all 0.2s;
+        }
+        .forge-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 18px rgba(0,0,0,.6), 0 0 25px rgba(232,185,35,.5);
+        }
+        .forge-btn:disabled {
+            background: #2a1f10; color: #6a5024;
+            border-color: #3d2d18; cursor: not-allowed;
+        }
+        .forge-btn.danger {
+            background: linear-gradient(180deg, rgba(232,80,80,.2), transparent 45%),
+                        linear-gradient(135deg, #6a2020, #3a1010);
+            border-color: #a83232; color: #f5c8c8;
+        }
+        .forge-btn.danger:hover {
+            box-shadow: 0 6px 18px rgba(0,0,0,.6), 0 0 25px rgba(168,50,50,.5);
+        }
+
+        /* ---- Venda no Curandeiro ---- */
+        .sell-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 12px;
+        }
+        .sell-card {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 14px;
+            background: rgba(10,6,2,.5);
+            border: 1px solid rgba(201,162,39,.25);
+            border-radius: 6px;
+        }
+        .sell-icon { font-size: 1.8rem; line-height: 1; }
+        .sell-info { flex: 1; min-width: 0; }
+        .sell-name {
+            font-family: 'EB Garamond', serif;
+            color: #d9c89a; font-size: 0.9rem;
+        }
+        .sell-qty {
+            font-family: 'Cinzel', serif;
+            color: #8a7a52; font-size: 0.75rem;
+        }
+        .sell-price {
+            font-family: 'Cinzel', serif;
+            color: #e8b923; font-size: 0.85rem;
+            margin-top: 2px;
+        }
+        .sell-price img { width: 12px; height: 12px; vertical-align: middle; }
+        .sell-btn {
+            padding: 6px 10px;
+            background: linear-gradient(135deg, #3d2d18, #2a1f10);
+            color: #d9c89a; border: 1px solid #6a5024;
+            border-radius: 4px; cursor: pointer;
+            font-family: 'Cinzel', serif;
+            font-weight: 700; font-size: 0.75rem;
+            transition: all 0.2s;
+        }
+        .sell-btn:hover {
+            color: #fff5dc; border-color: #c9a227;
+        }
+        .sell-btn.sell-all {
+            background: linear-gradient(135deg, #4a7040, #2a4520);
+            border-color: #6ba35c; color: #e0f0d0;
+        }
+
+        /* ---- Equipamento no painel do herói ---- */
+        .equip-row {
+            display: flex; flex-direction: column; gap: 4px;
+            margin-bottom: 10px;
+        }
+        .equip-label {
+            font-family: 'Cinzel', serif;
+            color: #8a7a52; font-size: 0.75rem;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+        .equip-select {
+            padding: 8px 10px;
+            background: rgba(10,6,2,.6);
+            color: #e8dcc4;
+            border: 1px solid rgba(201,162,39,.3);
+            border-radius: 4px;
+            font-family: 'EB Garamond', serif;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+        .equip-select:focus {
+            outline: none; border-color: #e8b923;
+        }
+        .equip-empty {
+            font-family: 'EB Garamond', serif;
+            color: #8a7a52; font-size: 0.85rem;
+            font-style: italic;
+            padding: 8px 10px;
+            background: rgba(10,6,2,.4);
+            border-radius: 4px;
+            margin-top: 6px;
+        }
+
+        @media (max-width: 600px) {
+            .tesouraria-grid { grid-template-columns: repeat(2, 1fr); }
+            .forge-grid { grid-template-columns: 1fr; }
+            .sell-grid { grid-template-columns: 1fr; }
+        }
+    `;
+    document.head.appendChild(style);
+    console.log('✅ CSS da Tesouraria injetado.');
+})();
+
+// =================================================================
+// 12. EXPOR NO WINDOW
+// =================================================================
+window.renderTesourariaScreen      = renderTesourariaScreen;
+window.handleCraftWeapon           = handleCraftWeapon;
+window.handleCraftAmulet           = handleCraftAmulet;
+window.handleDismantleWeapon       = handleDismantleWeapon;
+window.handleDismantleAmulet       = handleDismantleAmulet;
+window.handleSellMaterial          = handleSellMaterial;
+window.handleEquipWeapon           = handleEquipWeapon;
+window.handleEquipAmulet           = handleEquipAmulet;
+window.getMaterialPrice            = getMaterialPrice;
+window.applyHeroEquipment          = applyHeroEquipment;
+window.equipWeapon                 = equipWeapon;
+window.equipAmulet                 = equipAmulet;
+window.unequipWeapon               = unequipWeapon;
+window.unequipAmulet               = unequipAmulet;
+window.getHeroEquipment            = getHeroEquipment;
+window.STORY_WEAPONS               = STORY_WEAPONS;
+window.STORY_AMULETS               = STORY_AMULETS;
+window.STORY_MATERIAL_PRICES       = STORY_MATERIAL_PRICES;
+
+console.log('✅ historia.js V8.3 — TESOURARIA completa carregada.');
+// Destrava TESOURARIA
+(function unlockTesouraria() {
+    const _orig = window.renderAldeiaScreen;
+    if (typeof _orig !== 'function') return;
+    window.renderAldeiaScreen = function() {
+        const ss = document.getElementById('storyScreen');
+        if (!ss) return;
+        _orig.apply(this, arguments);
+
+        // Re-renderiza trocando o cadeado da tesouraria
+        const cards = ss.querySelectorAll('.story-ald-location');
+        cards.forEach(card => {
+            const name = card.querySelector('.story-ald-loc-name');
+            if (name && name.textContent.trim().toUpperCase().includes('TESOURARIA')) {
+                card.classList.remove('locked');
+                const lockedEl = card.querySelector('.story-ald-loc-locked');
+                if (lockedEl) lockedEl.remove();
+                const descEl = card.querySelector('.story-ald-loc-desc');
+                if (descEl) descEl.textContent = 'Inventário, forja e amuletos';
+                card.setAttribute('onclick', "enterAldeiaLocation('tesouraria')");
+            }
+        });
+    };
+})();
+// =================================================================
+// 🎨 SPRITES DAS ARMAS E AMULETOS
+// -----------------------------------------------------------------
+// Mesma lógica do SPRITES_STORY:
+//   • Link preenchido → usa o sprite
+//   • Link vazio → cai no emoji
+//
+// Como preencher:
+//   Cole o link entre as aspas. Deixe '' (vazio) pra usar o emoji.
+// =================================================================
+
+const STORY_WEAPON_SPRITES = {
+    // ---- TACAPES ----
+    'tacape_1':  '',  // ← cole o link aqui
+    'tacape_2':  '',
+    'tacape_3':  '',
+    'tacape_4':  '',
+    'tacape_5':  '',
+    'tacape_6':  '',
+    'tacape_7':  '',
+    'tacape_8':  '',
+    'tacape_9':  '',
+    'tacape_10': '',
+    'tacape_11': '',
+    'tacape_12': '',
+    'tacape_13': '',
+
+    // ---- FLECHAS ----
+    'flecha_1':  '',
+    'flecha_2':  '',
+    'flecha_3':  '',
+    'flecha_4':  '',
+    'flecha_5':  '',
+    'flecha_6':  '',
+    'flecha_7':  '',
+    'flecha_8':  '',
+    'flecha_9':  '',
+    'flecha_10': '',
+    'flecha_11': '',
+    'flecha_12': '',
+    'flecha_13': '',
+
+    // ---- CAJADOS ----
+    'cajado_1':  '',
+    'cajado_2':  '',
+    'cajado_3':  '',
+    'cajado_4':  '',
+    'cajado_5':  '',
+    'cajado_6':  '',
+    'cajado_7':  '',
+    'cajado_8':  '',
+    'cajado_9':  '',
+    'cajado_10': '',
+    'cajado_11': '',
+    'cajado_12': '',
+    'cajado_13': '',
+};
+
+const STORY_AMULET_SPRITES = {
+    'amuleto_1':  '',  // ← cole o link aqui
+    'amuleto_2':  '',
+    'amuleto_3':  '',
+    'amuleto_4':  '',
+    'amuleto_5':  '',
+    'amuleto_6':  '',
+    'amuleto_7':  '',
+    'amuleto_8':  '',
+    'amuleto_9':  '',
+    'amuleto_10': '',
+    'amuleto_11': '',
+    'amuleto_12': '',
+    'amuleto_13': '',
+};
+
+// Emojis de fallback (caso o sprite esteja vazio)
+const STORY_WEAPON_EMOJIS = {
+    // Padrão por tipo, caso o item específico não tenha emoji definido
+    tacape: '🪓',
+    flecha: '🏹',
+    cajado: '🪄',
+};
+const STORY_AMULET_EMOJI_DEFAULT = '🧿';
+
+// ---- Funções de resolução ----
+
+function getWeaponIcon(weaponId, size = 'normal') {
+    const w = STORY_WEAPONS[weaponId];
+    if (!w) return '❓';
+
+    const url = STORY_WEAPON_SPRITES[weaponId];
+    const emoji = w.emoji || STORY_WEAPON_EMOJIS[w.tipo] || '⚔️';
+
+    if (url && String(url).trim() !== '') {
+        const cls = size === 'large' ? 'weapon-icon weapon-icon-large'
+                  : size === 'small' ? 'weapon-icon weapon-icon-small'
+                  : 'weapon-icon';
+        return `<img src="${url}" class="${cls}" alt="${w.nome}" onerror="this.outerHTML='${emoji}'">`;
+    }
+
+    const cls = size === 'large' ? 'weapon-emoji weapon-emoji-large'
+              : size === 'small' ? 'weapon-emoji weapon-emoji-small'
+              : 'weapon-emoji';
+    return `<span class="${cls}">${emoji}</span>`;
+}
+
+function getAmuletIcon(amuletId, size = 'normal') {
+    const a = STORY_AMULETS[amuletId];
+    if (!a) return '❓';
+
+    const url = STORY_AMULET_SPRITES[amuletId];
+    const emoji = a.emoji || STORY_AMULET_EMOJI_DEFAULT;
+
+    if (url && String(url).trim() !== '') {
+        const cls = size === 'large' ? 'weapon-icon weapon-icon-large'
+                  : size === 'small' ? 'weapon-icon weapon-icon-small'
+                  : 'weapon-icon';
+        return `<img src="${url}" class="${cls}" alt="${a.nome}" onerror="this.outerHTML='${emoji}'">`;
+    }
+
+    const cls = size === 'large' ? 'weapon-emoji weapon-emoji-large'
+              : size === 'small' ? 'weapon-emoji weapon-emoji-small'
+              : 'weapon-emoji';
+    return `<span class="${cls}">${emoji}</span>`;
+}
+
+// =================================================================
+// 🔧 PATCH — Substitui o emoji direto pelos getWeaponIcon/getAmuletIcon
+// =================================================================
+
+// Patch no renderTesourariaForja
+(function patchForgeIcons() {
+    if (typeof window.renderTesourariaForja === 'function') {
+        // Não temos acesso direto à função interna, então vamos
+        // sobrescrever o renderTesourariaScreen inteiro
+        // com uma versão que usa getWeaponIcon/getAmuletIcon
+    }
+})();
+
+// Como as funções de render são internas, o jeito mais simples é
+// sobrescrever os cards no DOM após render. Fazemos via MutationObserver.
+(function patchForgeIconsViaObserver() {
+    if (window._forgeIconObserverInstalled) return;
+    window._forgeIconObserverInstalled = true;
+
+    function patchCards() {
+        // Patch nos cards de forja (armas)
+        document.querySelectorAll('.forge-card').forEach(card => {
+            const emojiEl = card.querySelector('.forge-emoji');
+            if (!emojiEl || emojiEl.dataset.iconPatched === '1') return;
+
+            // Descobre o nome da arma pelo texto
+            const nameEl = card.querySelector('.forge-name');
+            if (!nameEl) return;
+            const nomeArma = nameEl.textContent.trim();
+
+            // Procura a arma pelo nome
+            const weaponId = Object.keys(STORY_WEAPONS).find(id => STORY_WEAPONS[id].nome === nomeArma);
+            const amuletId = Object.keys(STORY_AMULETS).find(id => STORY_AMULETS[id].nome === nomeArma);
+
+            let html = '';
+            if (weaponId) html = getWeaponIcon(weaponId, 'large');
+            else if (amuletId) html = getAmuletIcon(amuletId, 'large');
+
+            if (html) {
+                emojiEl.innerHTML = html;
+                emojiEl.dataset.iconPatched = '1';
+            }
+        });
+
+        // Patch nos selects de equipamento (painel de detalhes)
+        document.querySelectorAll('.equip-select').forEach(sel => {
+            // Não muda o texto do select (só o label do botão é texto),
+            // então não precisa patchar aqui por enquanto
+        });
+    }
+
+    const observer = new MutationObserver(() => {
+        if (document.getElementById('storyScreen')?.classList.contains('active')) {
+            patchCards();
+        }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    console.log('✅ Observer de ícones de arma/amuleto instalado.');
+})();
+
+// CSS pros ícones
+(function injectWeaponIconCSS() {
+    if (document.getElementById('weaponIconStyle')) return;
+    const style = document.createElement('style');
+    style.id = 'weaponIconStyle';
+    style.textContent = `
+        .weapon-icon {
+            width: 1em;
+            height: 1em;
+            object-fit: contain;
+            vertical-align: -0.15em;
+            display: inline-block;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.6));
+        }
+        .weapon-icon-small { width: 0.85em; height: 0.85em; }
+        .weapon-icon-large { width: 2em;   height: 2em; }
+
+        .weapon-emoji { display: inline-block; line-height: 1; }
+        .weapon-emoji-small { font-size: 0.85em; }
+        .weapon-emoji-large { font-size: 2em; }
+    `;
+    document.head.appendChild(style);
+    console.log('✅ CSS dos ícones de arma/amuleto injetado.');
+})();
+
+console.log('✅ Tabelas de sprites de arma/amuleto carregadas.');
+// =================================================================
+// historia.js — V8.5 — ATMOSFERA DO TABULEIRO (versão limpa)
+// -----------------------------------------------------------------
+// Um único CSS, sem conflitos, com posicionamento correto das
+// partículas (percentual relativo ao container pai via top/bottom).
+// =================================================================
+
+// =================================================================
+// 1. MAPA DE ATMOSFERA POR ATO
+// =================================================================
+const STORY_ATO_ATMOSPHERE = {
+    1:  'atm-folhas',
+    2:  'atm-nevoa-ambar',
+    3:  'atm-agua',
+    4:  'atm-brasas',
+    5:  'atm-chamas',
+    6:  'atm-poeira',
+    7:  'atm-luar',
+    8:  'atm-fumaca-roxa',
+    9:  'atm-rio-bolhas',
+    10: 'atm-tempestade',
+    11: 'atm-estrelas',
+    12: 'atm-sol',
+    13: 'atm-abismo',
+};
+
+// =================================================================
+// 2. CSS LIMPO
+// =================================================================
+(function injectCleanAtmosphereCSS() {
+    const old = document.getElementById('atmosphereStyleClean');
+    if (old) old.remove();
+
+    const style = document.createElement('style');
+    style.id = 'atmosphereStyleClean';
+    style.textContent = `
+        /* ============ BOARD ============ */
+        #board {
+            position: relative;
+        }
+
+        /* ============ CAMADAS ============ */
+        #board > .board-atmosphere {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            border-radius: 6px;
+            overflow: hidden;
+            z-index: 0;
+        }
+        #board > .board-particles {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            overflow: hidden;
+            border-radius: 6px;
+            z-index: 3;
+        }
+        #board > .grid {
+            position: relative;
+            z-index: 1;
+        }
+        #board > .token {
+            z-index: 10;
+        }
+        #board > .story-fx,
+        #board > [class*="fx-"] {
+            z-index: 50;
+        }
+
+        /* ============ PARTÍCULAS ============ */
+        .atm-particle {
+            position: absolute;
+            pointer-events: none;
+            opacity: 0;
+            will-change: top, bottom, left, transform, opacity;
+        }
+
+        /* 1. FOLHAS */
+        .atm-particle.pt-folha {
+            top: -30px;
+            width: var(--p-size, 8px);
+            height: var(--p-size, 8px);
+            background: linear-gradient(135deg, #6a8a4a, #3a5020);
+            border-radius: 50% 10% 50% 10%;
+            box-shadow: 0 0 4px rgba(0,0,0,0.4);
+            animation: folhaFall linear infinite;
+        }
+        @keyframes folhaFall {
+            0%   { top: -30px;             transform: translateX(0) rotate(0deg); opacity: 0; }
+            10%  { opacity: 0.85; }
+            50%  { top: 50%;               transform: translateX(20px) rotate(180deg); opacity: 0.9; }
+            90%  { opacity: 0.7; }
+            100% { top: calc(100% + 30px); transform: translateX(-15px) rotate(360deg); opacity: 0; }
+        }
+
+        /* 2. NÉVOA ÂMBAR */
+        .atm-particle.pt-poeira-ambar {
+            bottom: -30px;
+            width: var(--p-size, 5px);
+            height: var(--p-size, 5px);
+            background: radial-gradient(circle, #d9b840, rgba(217,184,64,0));
+            border-radius: 50%;
+            animation: poeiraFlutua ease-in-out infinite;
+        }
+        @keyframes poeiraFlutua {
+            0%   { bottom: -30px;             transform: translateX(0) scale(0.6); opacity: 0; }
+            30%  { opacity: 0.9; }
+            50%  { bottom: 40%;               transform: translateX(15px) scale(1.1); opacity: 0.7; }
+            80%  { opacity: 0.6; }
+            100% { bottom: calc(100% + 30px); transform: translateX(-10px) scale(0.7); opacity: 0; }
+        }
+
+        /* 3. ÁGUA (BOLHAS) */
+        .atm-particle.pt-bolha {
+            bottom: -20px;
+            width: var(--p-size, 8px);
+            height: var(--p-size, 8px);
+            background: radial-gradient(circle at 30% 30%, rgba(200,230,245,0.9), rgba(74,140,181,0.5) 60%, transparent 100%);
+            border: 1px solid rgba(200,230,245,0.4);
+            border-radius: 50%;
+            animation: bolhaSobe ease-in infinite;
+        }
+        @keyframes bolhaSobe {
+            0%   { bottom: -20px;             transform: translateX(0) scale(0.5); opacity: 0; }
+            20%  { opacity: 0.9; }
+            80%  { opacity: 0.7; }
+            100% { bottom: calc(100% + 20px); transform: translateX(10px) scale(1.2); opacity: 0; }
+        }
+
+        /* 4. BRASAS */
+        .atm-particle.pt-brasa {
+            bottom: -20px;
+            width: var(--p-size, 5px);
+            height: var(--p-size, 5px);
+            background: radial-gradient(circle, #fff5dc 0%, #e67e22 40%, #a83232 80%, transparent 100%);
+            border-radius: 50%;
+            box-shadow: 0 0 6px rgba(232, 110, 35, 0.8);
+            animation: brasaSubindo ease-out infinite;
+        }
+        @keyframes brasaSubindo {
+            0%   { bottom: -20px;             transform: translateX(0) scale(0.4); opacity: 0; }
+            15%  { opacity: 1; }
+            70%  { opacity: 0.9; }
+            100% { bottom: calc(100% + 20px); transform: translateX(20px) scale(0.3); opacity: 0; }
+        }
+
+        /* 5. FAÍSCAS */
+        .atm-particle.pt-faisca {
+            bottom: -10px;
+            width: var(--p-size, 4px);
+            height: var(--p-size, 4px);
+            background: #e8b923;
+            border-radius: 50%;
+            box-shadow: 0 0 8px #e8b923, 0 0 14px rgba(232,185,35,0.6);
+            animation: faiscaPula ease-out infinite;
+        }
+        @keyframes faiscaPula {
+            0%   { bottom: -10px;             transform: translateX(0) scale(0.3); opacity: 0; }
+            20%  { opacity: 1; }
+            60%  { opacity: 0.8; }
+            100% { bottom: calc(100% + 10px); transform: translateX(30px) scale(0.2); opacity: 0; }
+        }
+
+        /* 6. POEIRA */
+        .atm-particle.pt-poeira {
+            left: -30px;
+            width: var(--p-size, 6px);
+            height: var(--p-size, 6px);
+            background: radial-gradient(circle, rgba(180, 140, 90, 0.8), rgba(139,90,43,0));
+            border-radius: 50%;
+            animation: poeiraHorizontal linear infinite;
+        }
+        @keyframes poeiraHorizontal {
+            0%   { left: -30px;              transform: translateY(0) scale(0.6); opacity: 0; }
+            20%  { opacity: 0.7; }
+            80%  { opacity: 0.6; }
+            100% { left: calc(100% + 30px);  transform: translateY(-10px) scale(0.9); opacity: 0; }
+        }
+
+        /* 7. LUAR */
+        .atm-particle.pt-luar {
+            bottom: -20px;
+            width: var(--p-size, 5px);
+            height: var(--p-size, 5px);
+            background: radial-gradient(circle, #d0e0f0, rgba(168,192,216,0));
+            border-radius: 50%;
+            box-shadow: 0 0 6px rgba(168,192,216,0.8);
+            animation: luarSobe ease-in-out infinite;
+        }
+        @keyframes luarSobe {
+            0%   { bottom: -20px;             transform: scale(0.5); opacity: 0; }
+            30%  { opacity: 0.8; }
+            70%  { opacity: 0.7; }
+            100% { bottom: calc(100% + 20px); transform: scale(1); opacity: 0; }
+        }
+
+        /* 8. FUMAÇA ROXA + COGUMELOS */
+        .atm-particle.pt-fumaca {
+            bottom: -30px;
+            width: var(--p-size, 14px);
+            height: var(--p-size, 14px);
+            background: radial-gradient(circle, rgba(142,68,173,0.7) 0%, rgba(90,42,112,0.4) 40%, transparent 75%);
+            border-radius: 50%;
+            filter: blur(3px);
+            animation: fumacaSobe ease-in-out infinite;
+        }
+        @keyframes fumacaSobe {
+            0%   { bottom: -30px;             transform: translateX(0) scale(0.5); opacity: 0; }
+            30%  { opacity: 0.6; }
+            70%  { opacity: 0.5; }
+            100% { bottom: calc(100% + 30px); transform: translateX(20px) scale(1.4); opacity: 0; }
+        }
+        .atm-particle.pt-cogumelo {
+            top: 50%;
+            width: var(--p-size, 7px);
+            height: var(--p-size, 7px);
+            background: radial-gradient(circle, #c080e0 0%, #8e44ad 60%, transparent 100%);
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(192,128,224,0.9);
+            animation: cogumeloPisca ease-in-out infinite;
+        }
+        @keyframes cogumeloPisca {
+            0%, 100% { opacity: 0.3; transform: scale(0.7); }
+            50%      { opacity: 1;   transform: scale(1.2); }
+        }
+
+        /* 9. RIO */
+        .atm-particle.pt-bolha-rio {
+            bottom: -20px;
+            width: var(--p-size, 8px);
+            height: var(--p-size, 8px);
+            background: radial-gradient(circle at 30% 30%, rgba(232,67,147,0.7), rgba(52,152,219,0.4) 60%, transparent 100%);
+            border: 1px solid rgba(232, 67, 147, 0.5);
+            border-radius: 50%;
+            animation: bolhaRioSobe ease-in infinite;
+        }
+        @keyframes bolhaRioSobe {
+            0%   { bottom: -20px;             transform: translateX(0) scale(0.5); opacity: 0; }
+            20%  { opacity: 0.9; }
+            80%  { opacity: 0.7; }
+            100% { bottom: calc(100% + 20px); transform: translateX(-10px) scale(1.3); opacity: 0; }
+        }
+
+        /* 10. GOTAS */
+        .atm-particle.pt-gota {
+            top: -20px;
+            width: 2px;
+            height: 10px;
+            background: linear-gradient(180deg, transparent, rgba(168, 192, 216, 0.9));
+            animation: gotaCai linear infinite;
+        }
+        @keyframes gotaCai {
+            0%   { top: -20px;             opacity: 0; }
+            10%  { opacity: 0.9; }
+            100% { top: calc(100% + 20px); opacity: 0.5; }
+        }
+
+        /* 11. ESTRELAS */
+        .atm-particle.pt-estrela {
+            top: 30%;
+            width: var(--p-size, 5px);
+            height: var(--p-size, 5px);
+            background: radial-gradient(circle, #fff5dc, #f1c40f 60%, transparent 100%);
+            border-radius: 50%;
+            box-shadow: 0 0 8px #f1c40f;
+            animation: estrelaPisca ease-in-out infinite;
+        }
+        @keyframes estrelaPisca {
+            0%, 100% { opacity: 0.2; transform: scale(0.7); }
+            50%      { opacity: 1;   transform: scale(1.3); }
+        }
+
+        /* 12. SOL */
+        .atm-particle.pt-sol {
+            bottom: -20px;
+            width: var(--p-size, 7px);
+            height: var(--p-size, 7px);
+            background: radial-gradient(circle, #fff5dc 0%, #e8b923 50%, #a83232 100%);
+            border-radius: 50%;
+            box-shadow: 0 0 12px rgba(232, 185, 35, 0.9);
+            animation: solFaisca ease-out infinite;
+        }
+        @keyframes solFaisca {
+            0%   { bottom: -20px;             transform: translateX(0) scale(0.4); opacity: 0; }
+            20%  { opacity: 1; }
+            60%  { opacity: 0.9; }
+            100% { bottom: calc(100% + 20px); transform: translateX(25px) scale(0.3); opacity: 0; }
+        }
+
+        /* 13. ABISMO */
+        .atm-particle.pt-abismo {
+            top: 40%;
+            width: var(--p-size, 6px);
+            height: var(--p-size, 6px);
+            background: radial-gradient(circle, #c080e0, #6a1090 60%, transparent 100%);
+            border-radius: 50%;
+            box-shadow: 0 0 12px rgba(106, 16, 144, 0.9);
+            animation: abismoFlutua ease-in-out infinite;
+        }
+        @keyframes abismoFlutua {
+            0%, 100% { transform: translate(0, 0) scale(0.7); opacity: 0.5; }
+            50%      { transform: translate(10px, -15px) scale(1.2); opacity: 1; }
+        }
+
+        /* ============ FUNDOS POR ATO ============ */
+        .board-atmosphere.atm-folhas-bg {
+            background: radial-gradient(ellipse at center, rgba(74,107,58,0.10) 0%, rgba(74,107,58,0.05) 40%, transparent 70%);
+        }
+        .board-atmosphere.atm-nevoa-ambar-bg {
+            background:
+                radial-gradient(ellipse at top, rgba(217,184,64,0.10), transparent 55%),
+                radial-gradient(ellipse at bottom, rgba(74,60,30,0.20), transparent 60%);
+        }
+        .board-atmosphere.atm-agua-bg {
+            background: linear-gradient(180deg, rgba(52,152,219,0.08) 0%, rgba(52,152,219,0.18) 50%, rgba(52,152,219,0.08) 100%);
+        }
+        .board-atmosphere.atm-brasas-bg {
+            background: radial-gradient(ellipse at bottom, rgba(232,110,35,0.20) 0%, rgba(168,50,50,0.10) 40%, transparent 75%);
+        }
+        .board-atmosphere.atm-chamas-bg {
+            background:
+                linear-gradient(90deg, rgba(168,50,50,0.20) 0%, transparent 15%, transparent 85%, rgba(168,50,50,0.20) 100%),
+                radial-gradient(ellipse at bottom, rgba(232,110,35,0.15), transparent 60%);
+        }
+        .board-atmosphere.atm-poeira-bg {
+            background:
+                radial-gradient(ellipse at top, rgba(217,184,64,0.06), transparent 55%),
+                linear-gradient(180deg, rgba(139,90,43,0.10), rgba(74,60,30,0.15));
+        }
+        .board-atmosphere.atm-luar-bg {
+            background:
+                radial-gradient(ellipse at top, rgba(168,192,216,0.15), transparent 55%),
+                linear-gradient(180deg, rgba(52,73,94,0.10), rgba(15,21,32,0.20));
+        }
+        .board-atmosphere.atm-fumaca-roxa-bg {
+            background:
+                radial-gradient(circle at 25% 70%, rgba(142,68,173,0.15), transparent 40%),
+                radial-gradient(circle at 75% 30%, rgba(90,42,112,0.15), transparent 40%),
+                linear-gradient(180deg, rgba(31,10,42,0.10), rgba(15,5,21,0.20));
+        }
+        .board-atmosphere.atm-rio-bolhas-bg {
+            background: linear-gradient(180deg, rgba(232,67,147,0.05) 0%, rgba(52,152,219,0.12) 50%, rgba(232,67,147,0.08) 100%);
+        }
+        .board-atmosphere.atm-tempestade-bg {
+            background:
+                radial-gradient(ellipse at top, rgba(44,62,80,0.20), transparent 55%),
+                linear-gradient(180deg, rgba(10,15,21,0.20), rgba(5,8,13,0.30));
+        }
+        .board-atmosphere.atm-estrelas-bg {
+            background:
+                radial-gradient(ellipse at top, rgba(241,196,15,0.10), transparent 55%),
+                radial-gradient(ellipse at bottom, rgba(168,192,216,0.10), transparent 60%),
+                linear-gradient(180deg, rgba(26,21,5,0.10), rgba(13,10,2,0.15));
+        }
+        .board-atmosphere.atm-sol-bg {
+            background:
+                radial-gradient(ellipse at top, rgba(230,126,34,0.20), transparent 60%),
+                linear-gradient(180deg, rgba(217,184,64,0.10), rgba(168,50,50,0.10));
+        }
+        .board-atmosphere.atm-abismo-bg {
+            background:
+                radial-gradient(ellipse at center, rgba(80,20,120,0.20), transparent 60%),
+                linear-gradient(180deg, rgba(26,8,37,0.20), rgba(10,4,18,0.30));
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .atm-particle { animation: none !important; }
+        }
+    `;
+    document.head.appendChild(style);
+    console.log('✅ CSS limpo da atmosfera injetado.');
+})();
+
+// =================================================================
+// 3. GERADOR DE PARTÍCULAS
+// =================================================================
+function generateParticlesForAto(cid) {
+    const atmClass = STORY_ATO_ATMOSPHERE[cid];
+    if (!atmClass) return '';
+
+    const makeParticles = (count, cls, opts = {}) => {
+        let html = '';
+        for (let i = 0; i < count; i++) {
+            const left = Math.random() * 100;
+            const delay = Math.random() * 6;
+            const duration = 4 + Math.random() * 4;
+            const size = opts.sizeMin + Math.random() * (opts.sizeMax - opts.sizeMin);
+
+            html += `<div class="atm-particle ${cls}"
+                          style="left:${left}%;animation-delay:-${delay}s;animation-duration:${duration}s;--p-size:${size}px;"></div>`;
+        }
+        return html;
+    };
+
+    switch (atmClass) {
+        case 'atm-folhas':      return makeParticles(14, 'pt-folha',         { sizeMin:6,  sizeMax:12 });
+        case 'atm-nevoa-ambar': return makeParticles(12, 'pt-poeira-ambar',  { sizeMin:3,  sizeMax:6  });
+        case 'atm-agua':        return makeParticles(16, 'pt-bolha',         { sizeMin:4,  sizeMax:10 });
+        case 'atm-brasas':      return makeParticles(18, 'pt-brasa',         { sizeMin:3,  sizeMax:6  });
+        case 'atm-chamas':      return makeParticles(20, 'pt-faisca',        { sizeMin:2,  sizeMax:5  });
+        case 'atm-poeira':      return makeParticles(14, 'pt-poeira',        { sizeMin:4,  sizeMax:8  });
+        case 'atm-luar':        return makeParticles(12, 'pt-luar',          { sizeMin:3,  sizeMax:6  });
+        case 'atm-fumaca-roxa': return makeParticles(10, 'pt-fumaca',        { sizeMin:8,  sizeMax:16 })
+                                     + makeParticles(8,  'pt-cogumelo',      { sizeMin:5,  sizeMax:9  });
+        case 'atm-rio-bolhas':  return makeParticles(20, 'pt-bolha-rio',     { sizeMin:4,  sizeMax:10 });
+        case 'atm-tempestade':  return makeParticles(24, 'pt-gota',          { sizeMin:2,  sizeMax:4  });
+        case 'atm-estrelas':    return makeParticles(20, 'pt-estrela',       { sizeMin:3,  sizeMax:7  });
+        case 'atm-sol':         return makeParticles(16, 'pt-sol',           { sizeMin:4,  sizeMax:9  });
+        case 'atm-abismo':      return makeParticles(16, 'pt-abismo',        { sizeMin:4,  sizeMax:8  });
+        default:                return '';
+    }
+}
+
+// =================================================================
+// 4. APLICAR / LIMPAR ATMOSFERA
+// =================================================================
+function clearBoardAtmosphere() {
+    const board = document.getElementById('board');
+    if (!board) return;
+
+    board.querySelectorAll(':scope > .board-atmosphere, :scope > .board-particles').forEach(el => el.remove());
+
+    board.classList.forEach(cls => {
+        if (cls.startsWith('atm-')) board.classList.remove(cls);
+    });
+    board.classList.remove('has-atmosphere');
+}
+
+function applyBoardAtmosphere(cid) {
+    const board = document.getElementById('board');
+    if (!board) return;
+    if (!window._storyMode) return;
+    if (!cid) return;
+
+    clearBoardAtmosphere();
+
+    const atmClass = STORY_ATO_ATMOSPHERE[cid];
+    if (!atmClass) return;
+
+    board.classList.add(atmClass);
+    board.classList.add('has-atmosphere');
+
+    // Camada de fundo
+    const atmos = document.createElement('div');
+    atmos.className = 'board-atmosphere ' + atmClass + '-bg';
+    board.appendChild(atmos);
+
+    // Camada de partículas
+    const part = document.createElement('div');
+    part.className = 'board-particles ' + atmClass + '-pt';
+    part.innerHTML = generateParticlesForAto(cid);
+    board.appendChild(part);
+
+    // Reorganiza a ordem no DOM (grid primeiro, atmosfera, partículas)
+    const grid = board.querySelector(':scope > .grid');
+    if (grid && grid !== board.firstElementChild) {
+        board.insertBefore(grid, board.firstElementChild);
+    }
+
+    console.log('[atmosfera] Aplicada no Ato', cid, '→', atmClass);
+}
+
+// =================================================================
+// 5. HOOKS
+// =================================================================
+(function hookAtmosphereInit() {
+    const _origInit = window.initStoryBattle;
+    if (typeof _origInit !== 'function') return;
+
+    window.initStoryBattle = async function() {
+        await _origInit.apply(this, arguments);
+        // Espera dois frames pra garantir que o DOM está pronto
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+        const cid = STORY_PROGRESS.currentChapter || 1;
+        applyBoardAtmosphere(cid);
+    };
+})();
+
+(function hookAtmosphereCleanup() {
+    const _origFinish = window.finishStoryPhase;
+    if (typeof _origFinish === 'function') {
+        window.finishStoryPhase = function() {
+            clearBoardAtmosphere();
+            return _origFinish.apply(this, arguments);
+        };
+    }
+    const _origReturn = window.returnFromStoryVictory;
+    if (typeof _origReturn === 'function') {
+        window.returnFromStoryVictory = function() {
+            clearBoardAtmosphere();
+            return _origReturn.apply(this, arguments);
+        };
+    }
+})();
+
+// =================================================================
+// 6. TESTES
+// =================================================================
+window.testAtmosphere = function(cid) {
+    cid = parseInt(cid) || 1;
+    applyBoardAtmosphere(cid);
+    console.log('[atmosfera] Testando Ato', cid);
+};
+window.clearAtmosphere = function() {
+    clearBoardAtmosphere();
+    console.log('[atmosfera] Limpa.');
+};
+
+console.log('✅ historia.js V8.5 — Atmosfera LIMPA carregada.');
+// =================================================================
+// historia.js — V8.6 — Fixes:
+//   1. Sprite do boss não some na lateral
+//   2. Bravely continua mesmo se o boss morrer (versão SEGURA)
+// -----------------------------------------------------------------
+// Importante: esta versão NÃO sobrescreve executeAction.
+// Só intercepta o triggerBravelyChain quando o target está morto.
+// =================================================================
+
+// =================================================================
+// FIX 1 — updateBossCard usa SPRITES_STORY no modo história
+// =================================================================
+(function fixBossCardSprite() {
+    const _origUpdateBossCard = window.updateBossCard;
+    if (typeof _origUpdateBossCard !== 'function') return;
+
+    window.updateBossCard = function() {
+        // Fora do modo história → original
+        if (!window._storyMode) {
+            return _origUpdateBossCard.apply(this, arguments);
+        }
+
+        const spriteEl = document.getElementById('bossCardSprite');
+        const nameEl   = document.getElementById('bossCardName');
+        const hpEl     = document.getElementById('bossCardHp');
+
+        if (!spriteEl || !nameEl || !hpEl) return;
+
+        // Pega o ID do inimigo atual da fila da história
+        const enemyId = (typeof storyEnemiesRemaining !== 'undefined' && storyEnemiesRemaining[0])
+            ? storyEnemiesRemaining[0]
+            : null;
+
+        if (!enemyId) {
+            spriteEl.style.display = 'none';
+            nameEl.textContent = '—';
+            hpEl.innerHTML = 'HP: — / —';
+            return;
+        }
+
+        const enemy = STORY_ENEMIES[enemyId];
+        if (!enemy) return;
+
+        // Resolve o sprite (mesma lógica do applyStoryEnemyToBoss)
+        let sprite = SPRITES_STORY[enemyId];
+        if (!sprite || sprite.trim() === '') {
+            const bk = STORY_TO_BASE_BOSS[enemyId];
+            if (bk && typeof SPRITES !== 'undefined' && SPRITES[bk]) sprite = SPRITES[bk];
+        }
+        const has = sprite && sprite.trim() !== '';
+
+        if (has) {
+            if (spriteEl.src !== sprite) spriteEl.src = sprite;
+            spriteEl.style.display = '';
+            spriteEl.classList.remove('spectral-boss');
+            if (enemy.isSpectral) spriteEl.classList.add('spectral-boss');
+        } else {
+            spriteEl.style.display = 'none';
+        }
+
+        nameEl.textContent = enemy.name;
+        hpEl.innerHTML = `HP: <b>${boss.hp}</b> / ${boss.maxHp}`;
+    };
+
+    console.log('✅ updateBossCard sobrescrito — sprite do boss sempre visível.');
+})();
+
+// =================================================================
+// FIX 2 — Bravely continua quando o boss morre (VERSÃO SEGURA)
+// -----------------------------------------------------------------
+// Intercepta só o triggerBravelyChain, sem tocar no executeAction.
+// Se o target estiver morto, espera a transição e redireciona
+// pro próximo inimigo.
+// =================================================================
+(function fixBravelyOnDeadTarget() {
+    const _origBravely = window.triggerBravelyChain;
+    if (typeof _origBravely !== 'function') return;
+
+    window.triggerBravelyChain = async function(active, target, totalAtk) {
+        // Fora do modo história → original
+        if (!window._storyMode) {
+            return _origBravely.apply(this, arguments);
+        }
+
+        // Se o target está vivo, chama o original normalmente
+        if (target && !target.dead) {
+            return _origBravely.apply(this, arguments);
+        }
+
+        // Target morto ou nulo → espera transição e redireciona
+        console.log('[fix bravely] target morto, aguardando próximo...');
+
+        let attempts = 0;
+        while (arcadeBossTransition && attempts < 30) {
+            await sleep(150);
+            attempts++;
+        }
+
+        // Pega o novo target (boss atual vivo)
+        const novoTarget = (mode === "BOSS" || mode === "ARCADE")
+            ? boss
+            : players.find(p => p.id !== active.id && !p.dead);
+
+        // Se há um novo target vivo, redireciona
+        if (novoTarget && !novoTarget.dead) {
+            console.log('[fix bravely] redirecionando pra novo target:', novoTarget.name || novoTarget.class);
+            return _origBravely.call(this, active, novoTarget, totalAtk);
+        }
+
+        // Se não há, apenas ignora
+        console.log('[fix bravely] nenhum target vivo, pulando PA');
+    };
+
+    console.log('✅ fixBravelyOnDeadTarget instalado (versão segura).');
+})();
+
+console.log('✅ historia.js V8.6 — Fixes aplicados (sprite boss + PA continuado).');
+// =================================================================
+// 🎨 TABELA DE SPRITES DOS MATERIAIS DROPADOS
+// -----------------------------------------------------------------
+// Nova tabela dedicada só pra materiais (drops).
+// Mesmo padrão de STORY_WEAPON_SPRITES e STORY_AMULET_SPRITES.
+//
+// Como preencher:
+//   Cole o link entre as aspas. Se vazio, cai no emoji do SPRITES_STORY
+//   antigo (que também tem fallback pro STORY_MATERIALS.emoji).
+//
+// Prioridade de resolução:
+//   1. STORY_MATERIAL_SPRITES (esta tabela)
+//   2. SPRITES_STORY (tabela antiga, se por acaso tiver link lá)
+//   3. STORY_MATERIALS.emoji (emoji do material)
+// =================================================================
+const STORY_MATERIAL_SPRITES = {
+    // ============ ATO 1 — Mata do Saci ============
+    'espinho':         'https://i.imgur.com/lEnuaey.png',  // ← Espinho
+    'espinho_raro':    'https://i.imgur.com/YNUNntc.png',  // ← Espinho Raro
+    'pele_jacare':     'https://i.imgur.com/BG6eT8i.png',  // ← Pele de Jacaré
+    'escama_brilhante':'https://i.imgur.com/FKvYzZ3.png',  // ← Escama Brilhante
+    'chifre_cervo':    'https://i.imgur.com/I41gtiJ.png',  // ← Chifre de Cervo
+    'chifre_ancestral':'https://i.imgur.com/8kPnUtX.png',  // ← Chifre Ancestral
+    'garra_onca':      'https://i.imgur.com/TLwSsmn.png',  // ← Garra de Onça
+    'garra_lendaria':  'https://i.imgur.com/8yK7V89.png',  // ← Garra Lendária
+    // Boss
+    'gorro_saci':      '',  // ← Gorro do Saci
+    'amuleto_saci':    '',  // ← Amuleto do Saci
+
+    // ============ ATO 2 — Mata Fechada ============
+    'pelo_tamandua':   'https://i.imgur.com/nkvQ3EG.png',  // ← Pelo de Tamanduá
+    'garra_tamandua':  '',  // ← Garra de Tamanduá
+    'couro_anta':      'https://i.imgur.com/WDIf5e7.png',  // ← Couro de Anta
+    'chifre_anta':     '',  // ← Chifre de Anta
+    'cera_queixada':   'https://i.imgur.com/lp2iykt.png',  // ← Cera de Queixada
+    'presa_queixada':  '',  // ← Presa de Queixada
+    'escama_sucuri':   'https://i.imgur.com/ITchbmQ.png',  // ← Escama de Sucuri
+    'pele_sucuri':     '',  // ← Pele de Sucuri
+    // Boss
+    'pelo_mapinguari': '',  // ← Pelo do Mapinguari
+    'amuleto_mapinguari':'',// ← Amuleto do Mapinguari
+
+    // ============ ATO 3 — Águas Profundas ============
+    'escama_piranha':  'https://i.imgur.com/kgoUTpU.png',  // ← Escama de Piranha
+    'dente_piranha':   'https://i.imgur.com/3zk4fmC.png',  // ← Dente de Piranha
+    'pelo_lontra':     'https://i.imgur.com/kI3a2zX.png',  // ← Pelo de Lontra
+    'garra_lontra':    '',  // ← Garra de Lontra
+    'pelo_ariranha':   'https://i.imgur.com/zCM98NX.png',  // ← Pelo de Ariranha
+    'dente_ariranha':  '',  // ← Dente de Ariranha
+    'escama_pirarucu': 'https://i.imgur.com/XpUjh4G.png',  // ← Escama de Pirarucu
+    'lingua_pirarucu': '',  // ← Língua de Pirarucu
+    // Boss
+    'joia_iara':       '',  // ← Joia da Iara
+    'amuleto_iara':    '',  // ← Amuleto da Iara
+
+    // ============ ATO 4 — Chamas da Noite ============
+    'pele_cascavel':    'https://i.imgur.com/l8tPijz.png',  // ← Pele de Cascavel
+    'chocalho_cascavel':'',  // ← Chocalho de Cascavel
+    'anel_coral':       'https://i.imgur.com/ecZV4QI.png',  // ← Anel de Coral
+    'veneno_coral':     '',  // ← Veneno de Coral
+    'pele_jararaca':    'https://i.imgur.com/hOJwfmd.png',  // ← Pele de Jararaca
+    'presa_jararaca':   '',  // ← Presa de Jararaca
+    'casco_tartaruga':  'https://i.imgur.com/O4HKJzr.png',  // ← Casco de Tartaruga
+    'ovo_tartaruga':    '',  // ← Ovo de Tartaruga
+    // Boss
+    'escama_boitata':   '',  // ← Escama Flamejante
+    'amuleto_boitata':  '',  // ← Amuleto do Boitatá
+
+    // ============ ATO 5 — Maldição do Fogo ============
+    'chifre_bode':      'https://i.imgur.com/PEUng6v.png',  // ← Chifre de Bode
+    'pelo_bode':        '',  // ← Pelo de Bode
+    'la_carneiro':      'https://i.imgur.com/RDgvubw.png',  // ← Lã de Carneiro
+    'chifre_carneiro':  '',  // ← Chifre de Carneiro
+    'crina_cavalo':     'https://i.imgur.com/4YV8EKn.png',  // ← Crina de Cavalo
+    'casco_cavalo':     '',  // ← Casco de Cavalo
+    'chifre_touro':     'https://i.imgur.com/YRtPJ8l.png',  // ← Chifre de Touro
+    'couro_touro':      '',  // ← Couro de Touro
+    // Boss
+    'ferradura_mula':   '',  // ← Ferradura da Mula
+    'amuleto_mula':     '',  // ← Amuleto da Mula
+
+    // ============ ATO 6 — Ossos do Sertão ============
+    'pena_urubu':         'https://i.imgur.com/rXrxotX.png',  // ← Pena de Urubu
+    'bico_urubu':         '',  // ← Bico de Urubu
+    'pena_carcara':       'https://i.imgur.com/WZ6M71Z.png',  // ← Pena de Carcará
+    'garra_carcara':      '',  // ← Garra de Carcará
+    'placa_tatu':         'https://i.imgur.com/PWN8WJN.png',  // ← Placa de Tatu
+    'garra_tatu':         '',  // ← Garra de Tatu
+    'pelo_lobo_guara':    'https://i.imgur.com/SACZHLY.png',  // ← Pelo de Lobo-Guará
+    'presa_lobo_guara':   '',  // ← Presa de Lobo-Guará
+    // Boss
+    'osso_corpo_seco':    '',  // ← Osso Amaldiçoado
+    'amuleto_corpo_seco': '',  // ← Amuleto do Corpo Seco
+
+    // ============ ATO 7 — Maldição da Lua ============
+    'pelo_cachorro_mato': 'https://i.imgur.com/CzuZlmm.png',  // ← Pelo de Cachorro-do-Mato
+    'presa_cachorro_mato':'',  // ← Presa de Cachorro-do-Mato
+    'cauda_raposa':       'https://i.imgur.com/VA8rW74.png',  // ← Cauda de Raposa
+    'pelo_raposa':        '',  // ← Pelo de Raposa
+    'mascara_guaxinim':   'https://i.imgur.com/hpcbhjV.png',  // ← Máscara de Guaxinim
+    'garra_guaxinim':     '',  // ← Garra de Guaxinim
+    'pelo_jaguatirica':   'https://i.imgur.com/PJpgkA5.png',  // ← Pelo de Jaguatirica
+    'garra_jaguatirica':  '',  // ← Garra de Jaguatirica
+    // Boss
+    'pelo_lobisomem':     '',  // ← Pelo de Lobisomem
+    'amuleto_lobisomem':  '',  // ← Amuleto do Lobisomem
+
+    // ============ ATO 8 — Poções e Sombras ============
+    'asa_morcego':        'https://i.imgur.com/ZGi0F9K.png',  // ← Asa de Morcego
+    'presa_morcego':      '',  // ← Presa de Morcego
+    'pena_coruja':        '',  // ← Pena de Coruja
+    'olho_coruja':        '',  // ← Olho de Coruja
+    'pele_sapo':          '',  // ← Pele de Sapo
+    'veneno_sapo':        '',  // ← Veneno de Sapo
+    'pena_seriema':       '',  // ← Pena de Seriema
+    'bico_seriema':       '',  // ← Bico de Seriema
+    // Boss
+    'caldeirao_cuca':     '',  // ← Fragmento do Caldeirão
+    'amuleto_cuca':       '',  // ← Amuleto da Cuca
+
+    // ============ ATO 9 — Canto das Águas ============
+    'escama_tucunare':    '',  // ← Escama de Tucunaré
+    'dente_tucunare':     '',  // ← Dente de Tucunaré
+    'escama_piraiba':     '',  // ← Escama de Piraíba
+    'lingua_piraiba':     '',  // ← Língua de Piraíba
+    'escama_dourada':     '',  // ← Escama Dourada
+    'barbatana_dourada':  '',  // ← Barbatana Dourada
+    'couro_peixe_boi':    '',  // ← Couro de Peixe-Boi
+    'osso_peixe_boi':     '',  // ← Osso de Peixe-Boi
+    // Boss
+    'flor_boto':          '',  // ← Flor do Boto
+    'amuleto_boto':       '',  // ← Amuleto do Boto
+
+    // ============ ATO 10 — Terror do Pasto ============
+    'chifre_bufalo':      '',  // ← Chifre de Búfalo
+    'couro_bufalo':       '',  // ← Couro de Búfalo
+    'sino_vaca':          '',  // ← Sino da Vaca Louca
+    'chifre_vaca':        '',  // ← Chifre da Vaca Louca
+    'chifre_cabra':       '',  // ← Chifre de Cabra Preta
+    'pelo_cabra':         '',  // ← Pelo de Cabra Preta
+    'corcova_zebu':       '',  // ← Corcova de Zebu
+    'chifre_zebu':        '',  // ← Chifre de Zebu
+    // Boss
+    'chifre_boi':         '',  // ← Chifre do Boi da Cara Preta
+    'amuleto_boi':        '',  // ← Amuleto do Boi da Cara Preta
+
+    // ============ ATO 11 — Luz Fria da Lua ============
+    'pelo_gato_mato':     '',  // ← Pelo de Gato-do-Mato
+    'garra_gato_mato':    '',  // ← Garra de Gato-do-Mato
+    'asa_mariposa':       '',  // ← Asa de Mariposa Gigante
+    'po_mariposa':        '',  // ← Pó Lunar
+    'mascara_quati':      '',  // ← Máscara de Quati
+    'cauda_quati':        '',  // ← Cauda de Quati
+    'pelo_sucuarana':     '',  // ← Pelo de Suçuarana
+    'garra_sucuarana':    '',  // ← Garra de Suçuarana
+    // Boss
+    'raio_lunar':         '',  // ← Raio Lunar
+    'amuleto_jaci':       '',  // ← Amuleto da Jaci
+
+    // ============ ATO 12 — O Sol Devorador ============
+    'pena_gaviao':        '',  // ← Pena de Gavião
+    'garra_gaviao':       '',  // ← Garra de Gavião
+    'pena_falcao':        '',  // ← Pena de Falcão
+    'garra_falcao':       '',  // ← Garra de Falcão
+    'pena_urutau':        '',  // ← Pena de Urutau
+    'olho_urutau':        '',  // ← Olho de Urutau
+    'pena_aguia':         '',  // ← Pena de Águia
+    'garra_aguia':        '',  // ← Garra de Águia
+    // Boss
+    'coroa_solar':        '',  // ← Coroa Solar
+    'amuleto_guaraci':    '',  // ← Amuleto do Guaraci
+
+    // ============ ATO 13 — O Senhor do Abismo ============
+    'fragmento_abismo':   '',  // ← Fragmento do Abismo
+    'essencia_anhanga':   '',  // ← Essência de Anhangá
+
+    // ============ Consumíveis ============
+    'pocao_cura':         '',  // ← Poção de Cura
+};
+
+// =================================================================
+// 🔧 RESOLUÇÃO DE SPRITE — função unificada
+// -----------------------------------------------------------------
+// Prioridade:
+//   1. STORY_MATERIAL_SPRITES (nova tabela)
+//   2. SPRITES_STORY (tabela antiga)
+//   3. Emoji do STORY_MATERIALS
+// =================================================================
+function getMaterialIcon(matId, size = 'normal') {
+    const m = STORY_MATERIALS[matId];
+    if (!m) return '<span style="opacity:0.5;">?</span>';
+
+    // 1. Tabela nova
+    let url = STORY_MATERIAL_SPRITES[matId];
+
+    // 2. Tabela antiga (compatibilidade)
+    if (!url || String(url).trim() === '') {
+        url = (typeof SPRITES_STORY !== 'undefined') ? SPRITES_STORY[matId] : '';
+    }
+
+    // 3. Emoji de fallback
+    const emoji = m.emoji || '❓';
+
+    if (url && String(url).trim() !== '') {
+        const cls = size === 'large' ? 'material-icon material-icon-large'
+                  : size === 'small' ? 'material-icon material-icon-small'
+                  : 'material-icon';
+        return `<img src="${url}" class="${cls}" alt="${m.name}" onerror="this.outerHTML='${emoji}'">`;
+    }
+
+    const cls = size === 'large' ? 'material-emoji material-emoji-large'
+              : size === 'small' ? 'material-emoji material-emoji-small'
+              : 'material-emoji';
+    return `<span class="${cls}">${emoji}</span>`;
+}
+
+// =================================================================
+// 🎨 CSS dos ícones de material
+// =================================================================
+(function injectMaterialIconCSS() {
+    if (document.getElementById('materialIconStyle')) return;
+    const style = document.createElement('style');
+    style.id = 'materialIconStyle';
+    style.textContent = `
+        .material-icon {
+            width: 1em;
+            height: 1em;
+            object-fit: contain;
+            vertical-align: -0.15em;
+            display: inline-block;
+            filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5));
+        }
+        .material-icon-small { width: 0.85em; height: 0.85em; }
+        .material-icon-large { width: 2em;    height: 2em; }
+
+        .material-emoji { display: inline-block; line-height: 1; }
+        .material-emoji-small { font-size: 0.85em; }
+        .material-emoji-large { font-size: 2em; }
+    `;
+    document.head.appendChild(style);
+    console.log('✅ CSS dos ícones de material injetado.');
+})();
+
+// =================================================================
+// 🔧 PATCH — Substitui os usos diretos de .emoji por getMaterialIcon
+// -----------------------------------------------------------------
+// Aplica em: Tesouraria (inventário + receitas), Loja (venda),
+// Resultado de vitória (drops).
+// =================================================================
+
+// Patch 1 — Cards do inventário na Tesouraria
+(function patchTesourariaInventoryIcons() {
+    if (window._tesourariaInvIconObserver) return;
+    window._tesourariaInvIconObserver = true;
+
+    const patchCards = () => {
+        document.querySelectorAll('.tesouraria-item').forEach(card => {
+            if (card.dataset.iconPatched === '1') return;
+            const iconEl = card.querySelector('.tesouraria-item-icon');
+            const nameEl = card.querySelector('.tesouraria-item-name');
+            if (!iconEl || !nameEl) return;
+
+            const matName = nameEl.textContent.trim();
+            const matId = Object.keys(STORY_MATERIALS).find(id => STORY_MATERIALS[id].name === matName);
+            if (!matId) return;
+
+            iconEl.innerHTML = getMaterialIcon(matId, 'large');
+            iconEl.dataset.iconPatched = '1';
+            card.dataset.iconPatched = '1';
+        });
+    };
+
+    const observer = new MutationObserver(() => {
+        const ss = document.getElementById('storyScreen');
+        if (ss?.classList.contains('active')) patchCards();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    console.log('✅ Observer de ícones do inventário instalado.');
+})();
+
+// Patch 2 — Receitas da Forja
+(function patchForgeRecipeIcons() {
+    if (window._forgeRecipeIconObserver) return;
+    window._forgeRecipeIconObserver = true;
+
+    const patchRecipes = () => {
+        document.querySelectorAll('.forge-recipe-mat').forEach(el => {
+            if (el.dataset.iconPatched === '1') return;
+            // Pega o texto pra descobrir qual material é
+            const text = el.textContent.trim();
+            // Formato: "🦔 3/5" — pega o nome
+            const matId = Object.keys(STORY_MATERIALS).find(id => {
+                const m = STORY_MATERIALS[id];
+                return text.includes(m.name) || text.includes(m.emoji);
+            });
+            if (!matId) return;
+
+            const m = STORY_MATERIALS[matId];
+            const has = STORY_PROGRESS.inventory[matId] || 0;
+            // Recalcula o "requerido" pela classe de cor
+            const qty = text.match(/(\d+)\/(\d+)/);
+            if (!qty) return;
+            const qtyHas = qty[1], qtyNeed = qty[2];
+            const okClass = el.classList.contains('ok') ? 'ok' : 'no';
+
+            el.innerHTML = `${getMaterialIcon(matId, 'small')} ${qtyHas}/${qtyNeed}`;
+            el.classList.remove('ok', 'no');
+            el.classList.add(okClass);
+            el.dataset.iconPatched = '1';
+        });
+    };
+
+    const observer = new MutationObserver(() => {
+        const ss = document.getElementById('storyScreen');
+        if (ss?.classList.contains('active')) patchRecipes();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    console.log('✅ Observer de ícones das receitas instalado.');
+})();
+
+// Patch 3 — Cards de venda no Curandeiro
+(function patchSellIcons() {
+    if (window._sellIconObserver) return;
+    window._sellIconObserver = true;
+
+    const patchSell = () => {
+        document.querySelectorAll('.sell-card').forEach(card => {
+            if (card.dataset.iconPatched === '1') return;
+            const iconEl = card.querySelector('.sell-icon');
+            const nameEl = card.querySelector('.sell-name');
+            if (!iconEl || !nameEl) return;
+
+            const matName = nameEl.textContent.trim();
+            const matId = Object.keys(STORY_MATERIALS).find(id => STORY_MATERIALS[id].name === matName);
+            if (!matId) return;
+
+            iconEl.innerHTML = getMaterialIcon(matId, 'large');
+            iconEl.dataset.iconPatched = '1';
+            card.dataset.iconPatched = '1';
+        });
+    };
+
+    const observer = new MutationObserver(() => {
+        const ss = document.getElementById('storyScreen');
+        if (ss?.classList.contains('active')) patchSell();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    console.log('✅ Observer de ícones de venda instalado.');
+})();
+
+// Patch 4 — Drops na tela de vitória
+(function patchVictoryDropIcons() {
+    if (window._victoryDropIconObserver) return;
+    window._victoryDropIconObserver = true;
+
+    const patchVictory = () => {
+        document.querySelectorAll('.story-result-drop').forEach(card => {
+            if (card.dataset.iconPatched === '1') return;
+            const iconEl = card.querySelector('.story-result-drop-emoji');
+            const nameEl = card.querySelector('.story-result-drop-name');
+            if (!iconEl || !nameEl) return;
+
+            const matName = nameEl.textContent.trim();
+            const matId = Object.keys(STORY_MATERIALS).find(id => STORY_MATERIALS[id].name === matName);
+            if (!matId) return;
+
+            iconEl.innerHTML = getMaterialIcon(matId, 'large');
+            iconEl.dataset.iconPatched = '1';
+            card.dataset.iconPatched = '1';
+        });
+    };
+
+    const observer = new MutationObserver(() => {
+        const ov = document.getElementById('storyVictoryOverlay');
+        if (ov) patchVictory();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    console.log('✅ Observer de ícones de drops instalado.');
+})();
+
+// =================================================================
+// 🌐 Expõe no window
+// =================================================================
+window.STORY_MATERIAL_SPRITES = STORY_MATERIAL_SPRITES;
+window.getMaterialIcon = getMaterialIcon;
+
+console.log('✅ Tabela de sprites dos materiais carregada.');
