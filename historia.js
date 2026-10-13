@@ -10916,34 +10916,34 @@ console.log('✅ historia.js V8.3 — TESOURARIA completa carregada.');
 
 const STORY_WEAPON_SPRITES = {
     // ---- TACAPES ----
-    'tacape_1':  '',  // ← cole o link aqui
-    'tacape_2':  '',
-    'tacape_3':  '',
-    'tacape_4':  '',
-    'tacape_5':  '',
-    'tacape_6':  '',
-    'tacape_7':  '',
-    'tacape_8':  '',
-    'tacape_9':  '',
-    'tacape_10': '',
-    'tacape_11': '',
-    'tacape_12': '',
-    'tacape_13': '',
+    'tacape_1':  'https://i.imgur.com/JeMUGif.png',  // ← cole o link aqui
+    'tacape_2':  'https://i.imgur.com/bonFE6Q.png',
+    'tacape_3':  'https://i.imgur.com/CKbLG63.png',
+    'tacape_4':  'https://i.imgur.com/vDTc5ET.png',
+    'tacape_5':  'https://i.imgur.com/0KV05fS.png',
+    'tacape_6':  'https://i.imgur.com/7FI3hyM.png',
+    'tacape_7':  'https://i.imgur.com/fc432IH.png',
+    'tacape_8':  'https://i.imgur.com/60239w2.png',
+    'tacape_9':  'https://i.imgur.com/o0wTy1Q.png',
+    'tacape_10': 'https://i.imgur.com/iMlw6g5.png',
+    'tacape_11': 'https://i.imgur.com/JO3VQKP.png',
+    'tacape_12': 'https://i.imgur.com/yXW92BI.png',
+    'tacape_13': 'https://i.imgur.com/AFY5TpJ.png',
 
     // ---- FLECHAS ----
-    'flecha_1':  '',
-    'flecha_2':  '',
-    'flecha_3':  '',
-    'flecha_4':  '',
-    'flecha_5':  '',
-    'flecha_6':  '',
-    'flecha_7':  '',
-    'flecha_8':  '',
-    'flecha_9':  '',
-    'flecha_10': '',
-    'flecha_11': '',
-    'flecha_12': '',
-    'flecha_13': '',
+    'flecha_1':  'https://i.imgur.com/W1SWNIm.png',
+    'flecha_2':  'https://i.imgur.com/brvmlds.png',
+    'flecha_3':  'https://i.imgur.com/s6UQFIB.png',
+    'flecha_4':  'https://i.imgur.com/UZogzVw.png',
+    'flecha_5':  'https://i.imgur.com/9RHZmRc.png',
+    'flecha_6':  'https://i.imgur.com/V32dqsu.png',
+    'flecha_7':  'https://i.imgur.com/V32dqsu.png',
+    'flecha_8':  'https://i.imgur.com/gB6NQb6.png',
+    'flecha_9':  'https://i.imgur.com/QEKCFfr.png',
+    'flecha_10': 'https://i.imgur.com/lr6637l.png',
+    'flecha_11': 'https://i.imgur.com/7e4xi88.png',
+    'flecha_12': 'https://i.imgur.com/TlFeeUD.png',
+    'flecha_13': 'https://i.imgur.com/jIrYoSM.png',
 
     // ---- CAJADOS ----
     'cajado_1':  '',
@@ -12308,3 +12308,3897 @@ console.log('✅ Tabela de sprites dos materiais carregada.');
 })();
 
 console.log('✅ Botão flutuante "VOLTAR" pronto pra uso.');
+// =================================================================
+// historia.js — BLOCO CORRETIVO 1 (V9.0 — Correções Críticas)
+// -----------------------------------------------------------------
+// Cole NO FINAL de historia.js, sem substituir nada.
+//
+// Contém:
+//   1. handleStoryBossDefeat exposta corretamente em window
+//      (corrige o hook quebrado do bestiário)
+//   2. Reset de _storyPurificationShowing movido para advanceStoryEnemy
+//      (corrige travamento de purificação em mortes em cadeia)
+//   3. PA (triggerBravelyChain) SEMPRE dispara, mesmo com alvo morto
+//      (corrige o PA não aparecer quando o boss morre no ataque base)
+//   4. Botão flutuante "VOLTAR" reduzido
+//   5. Registro de derrota no bestiário dentro do próprio
+//      handleStoryBossDefeat (não depende mais de hook externo)
+// =================================================================
+
+// =================================================================
+// 1 + 5. handleStoryBossDefeat — reescrita robusta
+// -----------------------------------------------------------------
+// Sobrescreve a versão anterior (que estava exposta errada).
+// Agora:
+//   • Exposta corretamente em window
+//   • Registra a derrota no bestiário ANTES de qualquer transição
+//   • Reset de _storyPurificationShowing movido pro finally
+//   • Guarda contra dupla execução usando o ID do inimigo atual
+// =================================================================
+(function installRobustHandleStoryBossDefeat() {
+    // Guarda a versão anterior (que era local, não estava em window)
+    const _orig = window.handleStoryBossDefeat;
+
+    window.handleStoryBossDefeat = async function() {
+        if (!window._storyMode) {
+            if (typeof _orig === 'function') return _orig.apply(this, arguments);
+            return;
+        }
+
+        // ---- GUARD anti-duplicação ----
+        // Usa o ID do inimigo atual como chave. Se já estamos processando
+        // a morte desse inimigo, ignora a chamada duplicada.
+        const enemyId = (typeof storyEnemiesRemaining !== 'undefined' && storyEnemiesRemaining[0])
+            ? storyEnemiesRemaining[0]
+            : null;
+
+        if (!enemyId) return;
+
+        if (window._processingBossDefeat === enemyId) {
+            console.log('[story] handleStoryBossDefeat ignorado (duplicado):', enemyId);
+            return;
+        }
+        window._processingBossDefeat = enemyId;
+
+        try {
+            // ---- REGISTRO NO BESTIÁRIO (antes de tudo) ----
+            if (!Array.isArray(STORY_PROGRESS.enemiesDefeatedIds)) {
+                STORY_PROGRESS.enemiesDefeatedIds = [];
+            }
+            if (!STORY_PROGRESS.enemiesDefeatedIds.includes(enemyId)) {
+                STORY_PROGRESS.enemiesDefeatedIds.push(enemyId);
+                saveStoryProgress();
+                console.log('[story] Inimigo registrado no bestiário:', enemyId);
+            }
+
+            // ---- DROPS ----
+            const drops = rollStoryDrops(enemyId);
+            let dropTxt = '';
+            drops.forEach(d => {
+                addMaterial(d.id, d.qty);
+                const m = STORY_MATERIALS[d.id];
+                if (m) dropTxt += ` ${m.emoji} ${m.name}×${d.qty}`;
+                storyPendingDrops.push({ id: d.id, qty: d.qty });
+            });
+            saveStoryProgress();
+
+            addLog(`💀 ${getStoryEnemyName(enemyId)} foi derrotado!`);
+            if (dropTxt) {
+                addLog(`${uiIcon('gift')} Drops:${dropTxt}`);
+            } else {
+                addLog(`${uiIcon('gift')} Nenhum drop.`);
+            }
+
+            STORY_PROGRESS.enemiesDefeated = (STORY_PROGRESS.enemiesDefeated || 0) + 1;
+            saveStoryProgress();
+
+            // ---- PURIFICAÇÃO VISUAL ----
+            if (typeof showPurificacao === 'function') {
+                try {
+                    await showPurificacao(boss.type, boss.x, boss.y, false);
+                } catch(e) {
+                    console.warn('[story] Erro na purificação visual:', e);
+                }
+            }
+
+            // ---- MENSAGEM DE PURIFICAÇÃO ----
+            await showPurificationMessage(enemyId);
+
+            // ---- DIÁLOGO FINAL (só bosses com epílogo) ----
+            const isBoss = STORY_FINAL_DIALOGS[enemyId] !== undefined;
+            if (isBoss) {
+                await showBossFinalDialog(enemyId);
+            }
+
+            // ---- AVANÇA PARA O PRÓXIMO INIMIGO ----
+            await advanceStoryEnemy();
+
+        } catch (e) {
+            console.error('[story] Erro em handleStoryBossDefeat:', e);
+        } finally {
+            // Libera o guard pra permitir a próxima morte
+            window._processingBossDefeat = null;
+        }
+    };
+
+    console.log('✅ handleStoryBossDefeat robusta instalada.');
+})();
+
+// =================================================================
+// 2. advanceStoryEnemy — reset correto de _storyPurificationShowing
+// -----------------------------------------------------------------
+// A versão anterior resetava dentro do próprio handleStoryBossDefeat,
+// o que travava purificações em cadeia. Agora o reset acontece aqui,
+// que é o ponto natural (após a transição para o próximo inimigo).
+// =================================================================
+(function patchAdvanceStoryEnemyReset() {
+    const _origAdvance = window.advanceStoryEnemy;
+    if (typeof _origAdvance !== 'function') {
+        console.warn('[story] advanceStoryEnemy não encontrada, pulando patch.');
+        return;
+    }
+
+    window.advanceStoryEnemy = async function() {
+        // Reseta o flag ANTES de qualquer transição
+        window._storyPurificationShowing = false;
+
+        try {
+            return await _origAdvance.apply(this, arguments);
+        } catch (e) {
+            console.error('[story] Erro em advanceStoryEnemy:', e);
+            window._storyPurificationShowing = false;
+        }
+    };
+
+    console.log('✅ advanceStoryEnemy patcheada — reset de purificação correto.');
+})();
+
+// =================================================================
+// 3. PA dispara SEMPRE, mesmo com alvo morto
+// -----------------------------------------------------------------
+// Reinstala o triggerBravelyChain pra funcionar corretamente quando
+// o boss morre no ataque base antes do PA executar.
+//
+// Estratégia:
+//   • Salva a referência do alvo original ANTES de qualquer dano
+//   • Se o alvo morrer no meio do caminho, ainda assim converte os
+//     tiles afetados pelo PA (efeito estratégico)
+//   • Efeitos extras (empurrar, curar, dobro se em FOGO) só rodam
+//     se houver alvo vivo
+//   • Se o PA estava em execução e o boss morreu, redireciona pro
+//     próximo boss se ele já estiver no board
+// =================================================================
+(function installBravelyAlwaysFires() {
+    // Guarda a versão atual (do bloco V8.1 anterior)
+    const _origBravely = window.triggerBravelyChain;
+    if (typeof _origBravely !== 'function') {
+        console.warn('[story] triggerBravelyChain não encontrada, pulando patch.');
+        return;
+    }
+
+    window.triggerBravelyChain = async function(active, target, totalAtk) {
+        // Fora do modo história → original
+        if (!window._storyMode) {
+            return _origBravely.apply(this, arguments);
+        }
+
+        const heroData = STORY_HERO_CLASSES[active.class];
+        // Herói base → original (Tupã/Sumé/Caipora)
+        if (!heroData || !heroData.paKey || heroData.paKey.startsWith('base_')) {
+            return _origBravely.apply(this, arguments);
+        }
+
+        // ============================================================
+        // HERÓI NOVO — versão robusta
+        // ============================================================
+        const element = active.element || 'FOGO';
+        const paKey = heroData.paKey;
+
+        // ---- Salva o snapshot do alvo original ----
+        // Mesmo que o alvo morra no meio do PA, guardamos a posição
+        // original pra calcular os tiles corretamente.
+        const targetSnapshot = target ? {
+            x: target.x,
+            y: target.y,
+            dead: target.dead,
+            id: target.id
+        } : null;
+
+        // ---- 1. Overlay "PODER ANCESTRAL" ----
+        if (typeof showPoderAncestralEffect === 'function') {
+            try { showPoderAncestralEffect(); } catch(e) {}
+        }
+        await sleep(300);
+
+        // ---- 2. Som ----
+        try { playSfx('skill1'); } catch(e) {}
+
+        // ---- 3. Calcula os tiles afetados pelo PA ----
+        // IMPORTANTE: usa o snapshot do alvo, não o estado atual.
+        // Isso garante que mesmo se o alvo morreu, os tiles são calculados.
+        const paTiles = getPAaffectedTilesWithSnapshot(active, paKey, targetSnapshot);
+
+        // ---- 4. FX elemental em cada tile ----
+        paTiles.forEach((idx) => {
+            const tx = idx % 8;
+            const ty = Math.floor(idx / 8);
+            const dist = Math.abs(tx - active.x) + Math.abs(ty - active.y);
+            setTimeout(() => {
+                if (typeof triggerElementalFX === 'function') {
+                    let fxType = 'COL';
+                    if (paKey.includes('linha')) fxType = 'ROW';
+                    triggerElementalFX(element, fxType === 'ROW' ? ty : tx, fxType, active.x, active.y);
+                }
+            }, dist * 60);
+        });
+
+        await sleep(400);
+
+        // ---- 5. Dano no alvo (se ainda estiver vivo) ----
+        // Só aplica dano se o alvo original ainda estiver vivo.
+        // Se morreu no ataque base, o PA não causa mais dano — mas
+        // ainda converte tiles (o efeito estratégico).
+        if (target && !target.dead) {
+            const targetIdx = target.y * 8 + target.x;
+            if (paTiles.includes(targetIdx)) {
+                if (typeof applyDmg === 'function') applyDmg(target, totalAtk);
+            }
+        }
+
+        // ---- 6. Efeitos EXTRAS únicos ----
+        // Só rodam se houver alvo vivo. Usa o snapshot pra posição.
+        const targetForExtras = (target && !target.dead) ? target : null;
+        const paFn = STORY_HERO_PA[paKey];
+        if (paFn && typeof paFn.execute === 'function') {
+            try {
+                // Para o PA do Kanarott (empurrar), precisamos de um alvo vivo.
+                // Se o alvo morreu, passamos um "target fake" com a posição
+                // original pra que os efeitos de cura ainda rodem.
+                const targetArg = targetForExtras || (targetSnapshot ? {
+                    x: targetSnapshot.x,
+                    y: targetSnapshot.y,
+                    dead: true,  // marca como morto pra evitar empurrar
+                    id: targetSnapshot.id
+                } : null);
+
+                await paFn.execute(active, targetArg, totalAtk);
+            } catch(e) {
+                console.warn('[story] Erro no efeito extra do PA:', e);
+            }
+        }
+
+        // ---- 7. Trocar tiles afetados pelo elemento do herói ----
+        // ESSENCIAL: sempre converte os tiles, independente do alvo.
+        // É aqui que está o valor estratégico do PA com alvo morto.
+        paTiles.forEach(idx => {
+            grid[idx] = element;
+            const tile = document.querySelectorAll('#grid .tile')[idx];
+            if (tile) tile.className = `tile bg-${element}`;
+            if (element === 'TERRA' && typeof updateTitleStats === 'function') {
+                updateTitleStats('earth_tile');
+            } else if (element === 'AR' && typeof updateTitleStats === 'function') {
+                updateTitleStats('air_tile');
+            }
+        });
+
+        // ---- 8. Estatística ----
+        if (typeof updateTitleStats === 'function') updateTitleStats('bravely_chain');
+
+        console.log('[story] PA executado. Tiles convertidos:', paTiles.length,
+                    '| Alvo vivo:', targetForExtras ? 'sim' : 'não');
+
+        // ---- 9. Se o boss morreu durante o PA, o fluxo de vitória ----
+        // ---- já foi disparado por applyDmg. Não faz nada aqui. ----
+    };
+
+    // ================================================================
+    // getPAaffectedTiles COM SNAPSHOT
+    // Mesma lógica do V8.1, mas aceita um objeto snapshot do alvo
+    // (que pode estar morto) em vez de exigir o objeto vivo.
+    // ================================================================
+    function getPAaffectedTilesWithSnapshot(active, paKey, targetSnapshot) {
+        const tiles = [];
+        const cx = active.x;
+        const cy = active.y;
+
+        // Helper: verifica se o alvo snapshot existe e está no tabuleiro
+        const hasTarget = targetSnapshot &&
+                          typeof targetSnapshot.x === 'number' &&
+                          typeof targetSnapshot.y === 'number';
+
+        if (paKey === 'kanarott_cruz_empurra') {
+            for (let i = -2; i <= 2; i++) {
+                const ny = cy + i;
+                if (ny >= 0 && ny < 8) tiles.push(ny * 8 + cx);
+            }
+            for (let i = -2; i <= 2; i++) {
+                if (i === 0) continue;
+                const nx = cx + i;
+                if (nx >= 0 && nx < 8) tiles.push(cy * 8 + nx);
+            }
+        }
+        else if (paKey === 'teperesik_area2x2') {
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dy = -1; dy <= 1; dy++) {
+                    if (dx === 0 && dy === 0) continue;
+                    const nx = cx + dx, ny = cy + dy;
+                    if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) tiles.push(ny * 8 + nx);
+                }
+            }
+        }
+        else if (paKey === 'eru_linha_horizontal') {
+            for (let x = 0; x < 8; x++) tiles.push(cy * 8 + x);
+        }
+        else if (paKey === 'andure_area2x2_cura') {
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dy = -1; dy <= 1; dy++) {
+                    const nx = cx + dx, ny = cy + dy;
+                    if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) tiles.push(ny * 8 + nx);
+                }
+            }
+        }
+        else if (paKey === 'maedamata_area3x3_cura') {
+            for (let dx = -2; dx <= 2; dx++) {
+                for (let dy = -2; dy <= 2; dy++) {
+                    const nx = cx + dx, ny = cy + dy;
+                    if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) tiles.push(ny * 8 + nx);
+                }
+            }
+        }
+        else if (paKey === 'paje_coluna_fogo') {
+            for (let y = 0; y < 8; y++) tiles.push(y * 8 + cx);
+        }
+        else if (paKey === 'jurua_area_alvo_3x3') {
+            if (hasTarget) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dy = -1; dy <= 1; dy++) {
+                        const nx = targetSnapshot.x + dx, ny = targetSnapshot.y + dy;
+                        if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) tiles.push(ny * 8 + nx);
+                    }
+                }
+            }
+        }
+        else if (paKey === 'araci_linha_horizontal') {
+            for (let x = 0; x < 8; x++) tiles.push(cy * 8 + x);
+        }
+        else if (paKey === 'bicho_cruz_completa') {
+            if (hasTarget) {
+                for (let x = 0; x < 8; x++) tiles.push(targetSnapshot.y * 8 + x);
+                for (let y = 0; y < 8; y++) {
+                    if (y !== targetSnapshot.y) tiles.push(y * 8 + targetSnapshot.x);
+                }
+            }
+        }
+        else if (paKey === 'tapyra_coluna_alvo') {
+            if (hasTarget) {
+                for (let y = 0; y < 8; y++) tiles.push(y * 8 + targetSnapshot.x);
+            }
+        }
+
+        return tiles;
+    }
+
+    console.log('✅ triggerBravelyChain robusta instalada — PA dispara com alvo vivo ou morto.');
+})();
+
+// =================================================================
+// 4. Botão flutuante "VOLTAR" reduzido
+// -----------------------------------------------------------------
+// Reduz padding, fonte, e em telas pequenas troca o texto por só "←".
+// =================================================================
+(function shrinkFloatingBackBtn() {
+    // Remove o CSS antigo (se existir)
+    const oldStyle = document.getElementById('floatingBackBtnStyle');
+    if (oldStyle) oldStyle.remove();
+
+    // Injeta o CSS novo
+    const style = document.createElement('style');
+    style.id = 'floatingBackBtnStyle';
+    style.textContent = `
+        .floating-back-btn {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 9800;
+            padding: 6px 12px;
+            background:
+                linear-gradient(180deg, rgba(232, 185, 35, 0.15), transparent 45%),
+                linear-gradient(135deg, #6a5024 0%, #4a3418 60%, #2a1f10 100%);
+            color: #f0e2c0;
+            border: 1.5px solid #c9a227;
+            border-radius: 20px;
+            cursor: pointer;
+            font-family: 'Cinzel', serif;
+            font-weight: 700;
+            font-size: 0.7rem;
+            letter-spacing: 1px;
+            transition: all 0.2s;
+            box-shadow:
+                0 3px 10px rgba(0, 0, 0, 0.6),
+                0 0 15px rgba(201, 162, 39, 0.2);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+            -webkit-tap-highlight-color: transparent;
+            line-height: 1;
+            opacity: 0.9;
+        }
+
+        .floating-back-btn:hover {
+            background:
+                linear-gradient(180deg, rgba(232, 185, 35, 0.3), transparent 45%),
+                linear-gradient(135deg, #8a6a2e 0%, #6a4a20 60%, #3a2a14 100%);
+            border-color: #e8b923;
+            color: #fff5dc;
+            transform: translateY(-1px);
+            box-shadow:
+                0 4px 15px rgba(0, 0, 0, 0.7),
+                0 0 22px rgba(232, 185, 35, 0.4);
+            opacity: 1;
+        }
+
+        .floating-back-btn:active {
+            transform: translateY(0);
+            box-shadow:
+                0 2px 8px rgba(0, 0, 0, 0.6),
+                0 0 10px rgba(201, 162, 39, 0.3);
+        }
+
+        /* Em telas muito pequenas, esconde o texto e mostra só a seta */
+        @media (max-width: 600px) {
+            .floating-back-btn {
+                top: 8px;
+                left: 8px;
+                padding: 7px 11px;
+                font-size: 1rem;
+                letter-spacing: 0;
+                border-radius: 50%;
+                width: 34px;
+                height: 34px;
+                justify-content: center;
+            }
+            .floating-back-btn .fb-text {
+                display: none;
+            }
+        }
+    `;
+    document.head.appendChild(style);
+
+    // Reposiciona o botão: em vez de "← VOLTAR À ALDEIA" fixo,
+    // coloca o texto num span pra poder escondê-lo em telas pequenas.
+    const btn = document.getElementById('floatingBackBtn');
+    if (btn) {
+        // Guarda a ação do clique
+        const clickHandler = btn.onclick;
+
+        // Reescreve o conteúdo com o span
+        btn.innerHTML = '←<span class="fb-text"> VOLTAR</span>';
+
+        // Restaura o handler
+        if (clickHandler) btn.onclick = clickHandler;
+    }
+
+    console.log('✅ Botão flutuante reduzido.');
+})();
+
+// =================================================================
+// 5. Registro retroativo do bestiário
+// -----------------------------------------------------------------
+// Sincroniza bossesDefeated antigos com enemiesDefeatedIds.
+// Roda uma vez ao carregar.
+// =================================================================
+(function syncBestiaryRetroactive() {
+    if (!Array.isArray(STORY_PROGRESS.enemiesDefeatedIds)) {
+        STORY_PROGRESS.enemiesDefeatedIds = [];
+    }
+    if (Array.isArray(STORY_PROGRESS.bossesDefeated)) {
+        STORY_PROGRESS.bossesDefeated.forEach(id => {
+            if (!STORY_PROGRESS.enemiesDefeatedIds.includes(id)) {
+                STORY_PROGRESS.enemiesDefeatedIds.push(id);
+            }
+        });
+    }
+    if (typeof saveStoryProgress === 'function') saveStoryProgress();
+    console.log('✅ Bestiário retroativo sincronizado.');
+})();
+
+console.log('✅ BLOCO CORRETIVO 1 (V9.0) carregado com sucesso.');
+// =================================================================
+// historia.js — BLOCO CORRETIVO 2 (V9.0 — Armas Escaladas)
+// -----------------------------------------------------------------
+// Cole NO FINAL de historia.js, depois do Bloco 1.
+//
+// Contém:
+//   1. STORY_WEAPONS reescrita com:
+//      • atkBonus escalonado por ato (1/2/3)
+//      • elemento (AR/TERRA/AGUA/FOGO/ANY)
+//   2. Hook no executeAction pra aplicar bônus elemental da arma
+//      (EMPILHA com o bônus do elemento do herói — Opção A)
+//   3. Painel de detalhes do herói mostra o elemento da arma
+//   4. Tooltip/legenda explicando o bônus
+// =================================================================
+
+// =================================================================
+// 1. ELEMENTO POR ATO (baseado no boss)
+// =================================================================
+const STORY_ATO_ELEMENT = {
+    1:  'AR',      // Saci (redemoinho)
+    2:  'TERRA',   // Mapinguari
+    3:  'AGUA',    // Iara
+    4:  'FOGO',    // Boitatá
+    5:  'FOGO',    // Mula sem Cabeça
+    6:  'TERRA',   // Corpo Seco
+    7:  'AR',      // Lobisomem
+    8:  'AGUA',    // Cuca (poções)
+    9:  'AGUA',    // Boto Rosa
+    10: 'TERRA',   // Boi da Cara Preta
+    11: 'AR',      // Jaci
+    12: 'FOGO',    // Guaraci
+    13: 'ANY',     // Anhangá — conta pra qualquer elemento do herói
+};
+
+// =================================================================
+// 2. TABELA DE ATK POR ATO (escala)
+// =================================================================
+const STORY_ATO_ATK_SCALE = {
+    1: 1, 2: 1, 3: 1, 4: 1,
+    5: 2, 6: 2, 7: 2, 8: 2,
+    9: 3, 10: 3, 11: 3, 12: 3,
+    13: 3,
+};
+
+// =================================================================
+// 3. REESCREVE STORY_WEAPONS
+// -----------------------------------------------------------------
+// Cada arma ganha:
+//   • atkBonus:      ATK base (fixo, sempre soma)
+//   • elemento:      elemento que dá o bônus extra quando o tile bate
+//   • elementoBonus: valor do bônus extra (mesmo do atkBonus por enquanto)
+//
+// O elemento é aplicado a TODAS as armas do mesmo ato.
+// =================================================================
+(function rewriteWeaponsTable() {
+    if (typeof STORY_WEAPONS === 'undefined') {
+        console.warn('[story] STORY_WEAPONS não encontrada, pulando Bloco 2.');
+        return;
+    }
+
+    // Itera todas as armas e adiciona elemento + elementoBonus
+    Object.keys(STORY_WEAPONS).forEach(weaponId => {
+        const w = STORY_WEAPONS[weaponId];
+        const ato = w.ato;
+        const elemento = STORY_ATO_ELEMENT[ato] || 'ANY';
+        const atkBonus = STORY_ATO_ATK_SCALE[ato] || 1;
+
+        // Atualiza os campos
+        w.atkBonus = atkBonus;
+        w.elemento = elemento;
+        w.elementoBonus = atkBonus;  // mesmo valor, empilha com o do herói
+    });
+
+    console.log('[story] STORY_WEAPONS reescrita com elemento + escala de ATK.');
+    console.log('[story] Amostra:', {
+        tacape_1: STORY_WEAPONS.tacape_1,
+        tacape_5: STORY_WEAPONS.tacape_5,
+        tacape_9: STORY_WEAPONS.tacape_9,
+        tacape_13: STORY_WEAPONS.tacape_13,
+    });
+})();
+
+// =================================================================
+// 4. HOOK NO executeAction — aplica bônus elemental da arma
+// -----------------------------------------------------------------
+// EMPILHA com o bônus do elemento do herói (Opção A).
+//
+// Regra:
+//   • Tile do elemento do HERÓI  → +1 (já existia)
+//   • Tile do elemento da ARMA   → +atkBonus (novo, empilha)
+//   • Arma do Ato 13 (ANY)       → +3 sempre que o tile for do
+//                                   elemento do herói
+// =================================================================
+(function hookWeaponElementalBonus() {
+    const _exec = window.executeAction;
+    if (typeof _exec !== 'function') {
+        console.warn('[story] executeAction não encontrada, pulando hook de bônus elemental.');
+        return;
+    }
+
+    window.executeAction = async function() {
+        // Fora do modo história → original
+        if (!window._storyMode) {
+            return _exec.apply(this, arguments);
+        }
+
+        // Só age em herói novo
+        const active = players[currentPlayerIdx];
+        if (!active) return _exec.apply(this, arguments);
+
+        const heroData = STORY_HERO_CLASSES[active.class];
+        if (!heroData || !heroData.paKey || heroData.paKey.startsWith('base_')) {
+            return _exec.apply(this, arguments);
+        }
+
+        // Aplica o bônus elemental da arma manipulando `active.bonusAtk`
+        // temporariamente. O `_exec` recalcula `totalAtk` internamente,
+        // então somamos aqui antes de chamá-la.
+        const weapon = active.equippedWeapon;
+        const eq = (typeof getHeroEquipment === 'function') ? getHeroEquipment(active.class) : null;
+        const weaponId = eq && eq.arma ? eq.arma : null;
+        const w = weaponId && typeof getWeaponById === 'function' ? getWeaponById(weaponId) : null;
+
+        // Se não tem arma equipada, não faz nada
+        if (!w) {
+            return _exec.apply(this, arguments);
+        }
+
+        // Detecta se o tile inicial do caminho bate com o elemento da arma
+        let weaponElementBonus = 0;
+        if (path.length > 0) {
+            const firstTileElement = grid[path[0]];
+            const weaponElem = w.elemento;
+
+            if (weaponElem === 'ANY') {
+                // Ato 13: conta se o tile for do elemento do HERÓI
+                if (firstTileElement === active.element) {
+                    weaponElementBonus = w.elementoBonus || 0;
+                }
+            } else if (firstTileElement === weaponElem) {
+                // Bônus normal: tile bate com o elemento da arma
+                weaponElementBonus = w.elementoBonus || 0;
+            }
+        }
+
+        if (weaponElementBonus > 0) {
+            // Salva o valor original
+            const origBonusAtk = active.bonusAtk || 0;
+            // Soma o bônus elemental da arma (o _exec vai usar info.atk + bonusAtk + tileBonus...)
+            active.bonusAtk = origBonusAtk + weaponElementBonus;
+
+            addLog(`⚔️ Bônus elemental da arma (${w.elemento === 'ANY' ? 'abissal' : w.elemento}): +${weaponElementBonus} ATK!`);
+
+            try {
+                return await _exec.apply(this, arguments);
+            } finally {
+                // Restaura
+                active.bonusAtk = origBonusAtk;
+            }
+        }
+
+        return _exec.apply(this, arguments);
+    };
+
+    console.log('✅ Hook de bônus elemental da arma instalado.');
+})();
+
+// =================================================================
+// 5. PAINEL DE DETALHES DO HERÓI — mostra o elemento da arma
+// -----------------------------------------------------------------
+// Sobrescreve o patchHeroDetailsWithEquipment pra incluir o elemento
+// da arma e a legenda de bônus elemental.
+// =================================================================
+(function enhanceHeroDetailsWithWeaponElement() {
+    if (typeof window.openHeroDetails !== 'function') {
+        console.warn('[story] openHeroDetails não existe, pulando enriquecimento.');
+        return;
+    }
+
+    const _origOpen = window.openHeroDetails;
+    window.openHeroDetails = function(heroClass) {
+        _origOpen.apply(this, arguments);
+
+        const panel = document.querySelector('.hero-details-panel');
+        if (!panel) return;
+
+        const eq = (typeof getHeroEquipment === 'function') ? getHeroEquipment(heroClass) : null;
+        if (!eq || !eq.arma) return;
+
+        const w = (typeof getWeaponById === 'function') ? getWeaponById(eq.arma) : null;
+        if (!w || !w.elemento) return;
+
+        // Remove versão anterior (se houver)
+        const oldSection = panel.querySelector('.hero-details-weapon-element');
+        if (oldSection) oldSection.remove();
+
+        // Monta a seção nova
+        const elemDisplay = w.elemento === 'ANY'
+            ? `✨ ${w.elementoBonus} ATK sempre que o tile for do elemento do herói`
+            : `${elemIcon(w.elemento)} ${w.elemento} (+${w.elementoBonus} ATK quando o tile for deste elemento)`;
+
+        const sectionHTML = `
+            <div class="hero-details-section hero-details-weapon-element">
+                <div class="hero-details-section-title">⚔️ BÔNUS ELEMENTAL DA ARMA</div>
+                <div class="hero-details-weapon-element-line">
+                    <span class="hero-details-weapon-element-label">Arma:</span>
+                    <span class="hero-details-weapon-element-value">${w.emoji || '⚔️'} ${w.nome}</span>
+                </div>
+                <div class="hero-details-weapon-element-line">
+                    <span class="hero-details-weapon-element-label">Elemento:</span>
+                    <span class="hero-details-weapon-element-value">${elemDisplay}</span>
+                </div>
+                <div class="hero-details-note" style="margin-top:8px;">
+                    💡 Os bônus do <b>elemento do herói</b> e do <b>elemento da arma</b> <b>empilham</b>.
+                    Se o tile bater com os dois, você ganha os dois bônus.
+                </div>
+            </div>`;
+
+        // Insere antes da seção de NOTAS (último filho) ou no final
+        const notas = panel.querySelector('.hero-details-notes');
+        if (notas) {
+            notas.insertAdjacentHTML('beforebegin', sectionHTML);
+        } else {
+            panel.insertAdjacentHTML('beforeend', sectionHTML);
+        }
+    };
+
+    console.log('✅ Painel do herói enriquecido com elemento da arma.');
+})();
+
+// =================================================================
+// 6. CSS auxiliar do elemento da arma
+// =================================================================
+(function injectWeaponElementCSS() {
+    if (document.getElementById('weaponElementStyle')) return;
+    const style = document.createElement('style');
+    style.id = 'weaponElementStyle';
+    style.textContent = `
+        .hero-details-weapon-element-line {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 8px;
+            background: rgba(10, 6, 2, 0.4);
+            border-radius: 4px;
+            margin-bottom: 6px;
+            font-family: 'EB Garamond', serif;
+            font-size: 0.9rem;
+        }
+        .hero-details-weapon-element-line:last-child {
+            margin-bottom: 0;
+        }
+        .hero-details-weapon-element-label {
+            color: #8a7a52;
+            font-weight: 700;
+            letter-spacing: 1px;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+        }
+        .hero-details-weapon-element-value {
+            color: #e8dcc4;
+            text-align: right;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .hero-details-weapon-element-value img {
+            width: 18px;
+            height: 18px;
+            object-fit: contain;
+            vertical-align: middle;
+        }
+        .hero-details-weapon-element {
+            background: rgba(201, 162, 39, 0.04);
+            border-top: 1px solid rgba(201, 162, 39, 0.2);
+        }
+    `;
+    document.head.appendChild(style);
+    console.log('✅ CSS do elemento da arma injetado.');
+})();
+
+// =================================================================
+// 7. EXPÕE NO WINDOW
+// =================================================================
+window.STORY_ATO_ELEMENT = STORY_ATO_ELEMENT;
+window.STORY_ATO_ATK_SCALE = STORY_ATO_ATK_SCALE;
+
+console.log('✅ BLOCO CORRETIVO 2 (V9.0 — Armas Escaladas) carregado.');
+// =================================================================
+// historia.js — BLOCO CORRETIVO 3 (V9.0 — Equipamento Visual)
+// -----------------------------------------------------------------
+// Cole NO FINAL de historia.js, depois do Bloco 2.
+//
+// Contém:
+//   1. Substitui o <select> de equipamento por uma GRADE DE CARDS
+//      visuais no painel de detalhes do herói
+//   2. Nova aba "⚔️ Equipamentos" no Inventário da Tesouraria
+//      (mostra armas/amuletos forjados, quem está usando, e permite
+//       equipar/desequipar diretamente de lá)
+//   3. CSS completo dos cards
+// =================================================================
+
+// =================================================================
+// 1. SOBRESCREVE openHeroDetails pra usar cards visuais
+// -----------------------------------------------------------------
+// Remove a seção de equipamento baseada em <select> e injeta uma
+// grade de cards com sprite + nome + bônus + botão equipar/desequipar.
+// =================================================================
+(function installVisualEquipmentInHeroDetails() {
+    if (typeof window.openHeroDetails !== 'function') {
+        console.warn('[story] openHeroDetails não existe, pulando Bloco 3.');
+        return;
+    }
+
+    // Guarda a versão atual (que já injeta a seção "BÔNUS ELEMENTAL DA ARMA")
+    const _origOpen = window.openHeroDetails;
+
+    window.openHeroDetails = function(heroClass) {
+        _origOpen.apply(this, arguments);
+
+        const panel = document.querySelector('.hero-details-panel');
+        if (!panel) return;
+
+        // Remove a seção de equipamento antiga (com <select>)
+        const oldEquip = panel.querySelector('.hero-details-equipment');
+        if (oldEquip) oldEquip.remove();
+
+        // Remove a seção de elemento da arma antiga (vamos refazer junto)
+        const oldWeaponElem = panel.querySelector('.hero-details-weapon-element');
+        if (oldWeaponElem) oldWeaponElem.remove();
+
+        // ---- Monta os dados ----
+        const heroData = STORY_HERO_CLASSES[heroClass];
+        if (!heroData) return;
+
+        const archetype = getArchetypeFromHeroClass(heroClass);
+        const eq = getHeroEquipment(heroClass);
+
+        // Armas compatíveis forjadas
+        const craftedWeapons = (STORY_PROGRESS.craftedWeapons || [])
+            .map(id => getWeaponById(id))
+            .filter(w => w && w.tipo === archetype);
+
+        // Todos os amuletos forjados
+        const craftedAmulets = (STORY_PROGRESS.craftedAmulets || [])
+            .map(id => getAmuletById(id))
+            .filter(Boolean);
+
+        // Equipamento atual
+        const equippedWeaponId = eq.arma || null;
+        const equippedAmuletId = eq.amuleto || null;
+
+        // ---- Monta a seção de EQUIPAMENTO (cards) ----
+        const weaponCards = craftedWeapons.length > 0
+            ? craftedWeapons.map(w => renderWeaponEquipCard(w, equippedWeaponId, heroClass)).join('')
+            : `<div class="equip-empty-msg">Nenhuma arma compatível forjada. Vá à <b>Tesouraria → Forja de Armas</b>.</div>`;
+
+        const amuletCards = craftedAmulets.length > 0
+            ? craftedAmulets.map(a => renderAmuletEquipCard(a, equippedAmuletId, heroClass)).join('')
+            : `<div class="equip-empty-msg">Nenhum amuleto forjado. Vá à <b>Tesouraria → Forja de Amuletos</b>.</div>`;
+
+        const equipHTML = `
+            <div class="hero-details-section hero-details-equipment">
+                <div class="hero-details-section-title">⚔️ EQUIPAMENTO</div>
+
+                <div class="equip-subsection-title">Arma (${archetype === 'tacape' ? 'Tacape' : archetype === 'flecha' ? 'Flecha' : 'Cajado'})</div>
+                <div class="equip-cards-grid">
+                    ${weaponCards}
+                </div>
+
+                <div class="equip-subsection-title" style="margin-top:14px;">Amuleto</div>
+                <div class="equip-cards-grid">
+                    ${amuletCards}
+                </div>
+            </div>`;
+
+        // Insere antes da seção de NOTAS (último filho) ou no final
+        const notas = panel.querySelector('.hero-details-notes');
+        if (notas) {
+            notas.insertAdjacentHTML('beforebegin', equipHTML);
+        } else {
+            panel.insertAdjacentHTML('beforeend', equipHTML);
+        }
+    };
+
+    // ---- Helper: card de ARMA ----
+    function renderWeaponEquipCard(w, equippedId, heroClass) {
+        const isEquipped = equippedId === w.id;
+        const weaponIcon = (typeof getWeaponIcon === 'function')
+            ? getWeaponIcon(w.id, 'large')
+            : (w.emoji || '⚔️');
+
+        // Elemento da arma
+        const elemLabel = w.elemento === 'ANY'
+            ? '✨ Abissal'
+            : `${elemIcon(w.elemento)} ${w.elemento}`;
+        const elemClass = w.elemento === 'ANY' ? 'equip-elem-abissal' : `equip-elem-${w.elemento}`;
+
+        // Bônus
+        const bonusText = `+${w.atkBonus} ATK <span class="equip-elem-bonus">(+${w.elementoBonus} ${w.elemento === 'ANY' ? 'com elemento do herói' : 'no elemento'})</span>`;
+
+        return `
+            <div class="equip-card ${isEquipped ? 'equipped' : ''}" data-weapon-id="${w.id}">
+                <div class="equip-card-icon">${weaponIcon}</div>
+                <div class="equip-card-info">
+                    <div class="equip-card-name">${w.nome}</div>
+                    <div class="equip-card-bonus">${bonusText}</div>
+                    <div class="equip-card-elem ${elemClass}">${elemLabel}</div>
+                </div>
+                <button class="equip-card-btn ${isEquipped ? 'unequip' : 'equip'}"
+                        onclick="handleWeaponCardClick('${heroClass.replace(/'/g, "\\'")}', '${w.id}', ${isEquipped})">
+                    ${isEquipped ? '✕ Remover' : '⚔️ Equipar'}
+                </button>
+            </div>`;
+    }
+
+    // ---- Helper: card de AMULETO ----
+    function renderAmuletEquipCard(a, equippedId, heroClass) {
+        const isEquipped = equippedId === a.id;
+        const amuletIcon = (typeof getAmuletIcon === 'function')
+            ? getAmuletIcon(a.id, 'large')
+            : (a.emoji || '🧿');
+
+        // Efeitos resumidos
+        const ef = a.efeito || {};
+        const efeitos = [];
+        if (ef.elementOverride) efeitos.push(`${elemIcon(ef.elementOverride)} ${ef.elementOverride}`);
+        if (ef.hpBonus)         efeitos.push(`❤️ +${ef.hpBonus} HP`);
+        if (ef.atkBonus)        efeitos.push(`⚔️ +${ef.atkBonus} ATK`);
+        if (ef.healPerTurn)     efeitos.push(`💚 +${ef.healPerTurn} HP/turno`);
+        const efeitosText = efeitos.join(' · ') || '—';
+
+        return `
+            <div class="equip-card ${isEquipped ? 'equipped' : ''}" data-amulet-id="${a.id}">
+                <div class="equip-card-icon">${amuletIcon}</div>
+                <div class="equip-card-info">
+                    <div class="equip-card-name">${a.nome}</div>
+                    <div class="equip-card-bonus">${efeitosText}</div>
+                </div>
+                <button class="equip-card-btn ${isEquipped ? 'unequip' : 'equip'}"
+                        onclick="handleAmuletCardClick('${heroClass.replace(/'/g, "\\'")}', '${a.id}', ${isEquipped})">
+                    ${isEquipped ? '✕ Remover' : '🧿 Equipar'}
+                </button>
+            </div>`;
+    }
+
+    console.log('✅ Painel do herói agora usa CARDS visuais de equipamento.');
+})();
+
+// =================================================================
+// 2. HANDLERS dos botões dos cards
+// =================================================================
+window.handleWeaponCardClick = function(heroClass, weaponId, isEquipped) {
+    if (isEquipped) {
+        // Desequipar
+        if (typeof unequipWeapon === 'function') {
+            unequipWeapon(heroClass);
+            showToast('⚔️', 'Arma removida.', '⚔️');
+        }
+    } else {
+        // Equipar
+        if (typeof equipWeapon === 'function') {
+            const r = equipWeapon(heroClass, weaponId);
+            if (!r.ok) {
+                showToast('❌', r.error, '❌');
+                return;
+            }
+            const w = getWeaponById(weaponId);
+            showToast('⚔️ Equipado!', `${w.emoji || ''} ${w.nome}`, '⚔️');
+        }
+    }
+    // Reabre o painel pra atualizar
+    if (typeof window.openHeroDetails === 'function') {
+        setTimeout(() => {
+            // Fecha o antigo
+            if (typeof closeHeroDetails === 'function') closeHeroDetails();
+            // Reabre depois da animação
+            setTimeout(() => window.openHeroDetails(heroClass), 320);
+        }, 100);
+    }
+};
+
+window.handleAmuletCardClick = function(heroClass, amuletId, isEquipped) {
+    if (isEquipped) {
+        if (typeof unequipAmulet === 'function') {
+            unequipAmulet(heroClass);
+            showToast('🧿', 'Amuleto removido.', '🧿');
+        }
+    } else {
+        if (typeof equipAmulet === 'function') {
+            const r = equipAmulet(heroClass, amuletId);
+            if (!r.ok) {
+                showToast('❌', r.error, '❌');
+                return;
+            }
+            const a = getAmuletById(amuletId);
+            showToast('🧿 Equipado!', `${a.emoji || ''} ${a.nome}`, '🧿');
+        }
+    }
+    if (typeof window.openHeroDetails === 'function') {
+        setTimeout(() => {
+            if (typeof closeHeroDetails === 'function') closeHeroDetails();
+            setTimeout(() => window.openHeroDetails(heroClass), 320);
+        }, 100);
+    }
+};
+
+// =================================================================
+// 3. INVENTÁRIO DA TESOURARIA — nova aba "Equipamentos"
+// -----------------------------------------------------------------
+// Sobrescreve renderTesourariaInventario pra incluir os equipamentos.
+// =================================================================
+(function enhanceTesourariaInventory() {
+    if (typeof window.renderTesourariaInventario !== 'function') {
+        console.warn('[story] renderTesourariaInventario não existe, pulando.');
+        return;
+    }
+
+    // Sobrescreve a aba de Inventário pra adicionar uma seção de equipamentos
+    const _origInv = window.renderTesourariaInventario;
+
+    window.renderTesourariaInventario = function(materialIds) {
+        // Chama a versão original (que renderiza os materiais)
+        const materialHTML = _origInv.apply(this, arguments);
+
+        // Monta a seção de equipamentos
+        const weapons = (STORY_PROGRESS.craftedWeapons || [])
+            .map(id => getWeaponById(id))
+            .filter(Boolean);
+
+        const amulets = (STORY_PROGRESS.craftedAmulets || [])
+            .map(id => getAmuletById(id))
+            .filter(Boolean);
+
+        // Descobre quem está usando cada equipamento
+        const usageMap = {};
+        const eqMap = STORY_PROGRESS.heroEquipment || {};
+        for (const heroClass in eqMap) {
+            const e = eqMap[heroClass];
+            if (e.arma) usageMap[e.arma] = heroClass;
+            if (e.amuleto) usageMap[e.amuleto] = heroClass;
+        }
+
+        let weaponsHTML = '';
+        if (weapons.length === 0) {
+            weaponsHTML = `<div class="inv-empty-line">Nenhuma arma forjada ainda.</div>`;
+        } else {
+            weaponsHTML = weapons.map(w => {
+                const equippedBy = usageMap[w.id];
+                const owner = equippedBy
+                    ? (STORY_HERO_CLASSES[equippedBy]?.displayName || equippedBy)
+                    : null;
+                const icon = (typeof getWeaponIcon === 'function')
+                    ? getWeaponIcon(w.id, 'normal')
+                    : (w.emoji || '⚔️');
+                return `
+                    <div class="inv-equip-row">
+                        <div class="inv-equip-icon">${icon}</div>
+                        <div class="inv-equip-info">
+                            <div class="inv-equip-name">${w.nome}</div>
+                            <div class="inv-equip-meta">
+                                +${w.atkBonus} ATK
+                                ${w.elemento === 'ANY' ? '· ✨ Abissal' : `· ${elemIcon(w.elemento)} ${w.elemento}`}
+                            </div>
+                        </div>
+                        <div class="inv-equip-owner ${owner ? 'used' : 'free'}">
+                            ${owner ? `👤 ${owner}` : '— Livre —'}
+                        </div>
+                    </div>`;
+            }).join('');
+        }
+
+        let amuletsHTML = '';
+        if (amulets.length === 0) {
+            amuletsHTML = `<div class="inv-empty-line">Nenhum amuleto forjado ainda.</div>`;
+        } else {
+            amuletsHTML = amulets.map(a => {
+                const equippedBy = usageMap[a.id];
+                const owner = equippedBy
+                    ? (STORY_HERO_CLASSES[equippedBy]?.displayName || equippedBy)
+                    : null;
+                const icon = (typeof getAmuletIcon === 'function')
+                    ? getAmuletIcon(a.id, 'normal')
+                    : (a.emoji || '🧿');
+                const ef = a.efeito || {};
+                const efeitos = [];
+                if (ef.elementOverride) efeitos.push(`${elemIcon(ef.elementOverride)} ${ef.elementOverride}`);
+                if (ef.hpBonus)         efeitos.push(`+${ef.hpBonus} HP`);
+                if (ef.atkBonus)        efeitos.push(`+${ef.atkBonus} ATK`);
+                if (ef.healPerTurn)     efeitos.push(`+${ef.healPerTurn} HP/turno`);
+                return `
+                    <div class="inv-equip-row amulet">
+                        <div class="inv-equip-icon">${icon}</div>
+                        <div class="inv-equip-info">
+                            <div class="inv-equip-name">${a.nome}</div>
+                            <div class="inv-equip-meta">${efeitos.join(' · ') || '—'}</div>
+                        </div>
+                        <div class="inv-equip-owner ${owner ? 'used' : 'free'}">
+                            ${owner ? `👤 ${owner}` : '— Livre —'}
+                        </div>
+                    </div>`;
+            }).join('');
+        }
+
+        const equipSection = `
+            <div class="inv-equipment-section">
+                <div class="inv-equipment-title">⚔️ ARMAS FORJADAS</div>
+                <div class="inv-equip-list">${weaponsHTML}</div>
+
+                <div class="inv-equipment-title" style="margin-top:16px;">🧿 AMULETOS FORJADOS</div>
+                <div class="inv-equip-list">${amuletsHTML}</div>
+
+                <div class="inv-equipment-hint">
+                    💡 Para equipar, abra o <b>painel de um herói</b> na <b>OCA</b> (botão <b>?</b>) e escolha o item.
+                </div>
+            </div>`;
+
+        return materialHTML + equipSection;
+    };
+
+    console.log('✅ Inventário da Tesouraria enriquecido com equipamentos.');
+})();
+
+// =================================================================
+// 4. CSS DOS CARDS DE EQUIPAMENTO
+// =================================================================
+(function injectEquipCardsCSS() {
+    if (document.getElementById('equipCardsStyle')) return;
+    const style = document.createElement('style');
+    style.id = 'equipCardsStyle';
+    style.textContent = `
+        /* ============ CARDS NO PAINEL DO HERÓI ============ */
+        .equip-subsection-title {
+            font-family: 'Cinzel', serif;
+            color: #e8b923;
+            font-size: 0.75rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+            padding-bottom: 4px;
+            border-bottom: 1px solid rgba(201, 162, 39, 0.2);
+        }
+
+        .equip-cards-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .equip-card {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            background: rgba(10, 6, 2, 0.55);
+            border: 2px solid rgba(201, 162, 39, 0.25);
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+
+        .equip-card:hover {
+            border-color: rgba(201, 162, 39, 0.5);
+            background: rgba(10, 6, 2, 0.75);
+        }
+
+        .equip-card.equipped {
+            border-color: #6ba35c;
+            background:
+                linear-gradient(180deg, rgba(107, 163, 92, 0.12), transparent 60%),
+                rgba(10, 6, 2, 0.6);
+            box-shadow: 0 0 12px rgba(107, 163, 92, 0.25);
+        }
+
+        .equip-card-icon {
+            width: 44px;
+            height: 44px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle, rgba(0,0,0,0.5), transparent 70%);
+            border-radius: 4px;
+        }
+
+        .equip-card-icon img {
+            width: 40px;
+            height: 40px;
+            object-fit: contain;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.7));
+        }
+
+        .equip-card-icon .weapon-emoji,
+        .equip-card-icon .weapon-emoji-large {
+            font-size: 2rem;
+            line-height: 1;
+        }
+
+        .equip-card-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .equip-card-name {
+            font-family: 'Cinzel', serif;
+            color: #f0e2c0;
+            font-size: 0.9rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            margin-bottom: 3px;
+            line-height: 1.15;
+        }
+
+        .equip-card-bonus {
+            font-family: 'EB Garamond', serif;
+            color: #8ac070;
+            font-size: 0.78rem;
+            line-height: 1.3;
+        }
+
+        .equip-elem-bonus {
+            color: #c8b787;
+            font-style: italic;
+            font-size: 0.72rem;
+        }
+
+        .equip-card-elem {
+            font-family: 'Cinzel', serif;
+            font-size: 0.7rem;
+            letter-spacing: 1px;
+            margin-top: 4px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: rgba(10, 6, 2, 0.5);
+            border: 1px solid rgba(201, 162, 39, 0.3);
+        }
+
+        .equip-card-elem img {
+            width: 12px;
+            height: 12px;
+            object-fit: contain;
+        }
+
+        .equip-elem-FOGO   { color: #e74c3c; border-color: rgba(231, 76, 60, 0.5); }
+        .equip-elem-AGUA   { color: #3498db; border-color: rgba(52, 152, 219, 0.5); }
+        .equip-elem-TERRA  { color: #27ae60; border-color: rgba(39, 174, 96, 0.5); }
+        .equip-elem-AR     { color: #f1c40f; border-color: rgba(241, 196, 15, 0.5); }
+        .equip-elem-abissal{ color: #c39bd3; border-color: rgba(195, 155, 211, 0.6);
+                              background: linear-gradient(180deg, rgba(142, 68, 173, 0.2), transparent 70%); }
+
+        .equip-card-btn {
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: 'Cinzel', serif;
+            font-weight: 700;
+            font-size: 0.75rem;
+            letter-spacing: 1px;
+            transition: all 0.2s;
+            flex-shrink: 0;
+            white-space: nowrap;
+        }
+
+        .equip-card-btn.equip {
+            background:
+                linear-gradient(180deg, rgba(232, 185, 35, 0.2), transparent 45%),
+                linear-gradient(135deg, #8a6a2e, #4a3418);
+            color: #fff5dc;
+            border: 1.5px solid #e8b923;
+        }
+
+        .equip-card-btn.equip:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 3px 10px rgba(0,0,0,0.5), 0 0 15px rgba(232, 185, 35, 0.4);
+        }
+
+        .equip-card-btn.unequip {
+            background:
+                linear-gradient(180deg, rgba(168, 50, 50, 0.15), transparent 45%),
+                linear-gradient(135deg, #6a2020, #3a1010);
+            color: #f5c8c8;
+            border: 1.5px solid #a83232;
+        }
+
+        .equip-card-btn.unequip:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 3px 10px rgba(0,0,0,0.5), 0 0 15px rgba(168, 50, 50, 0.4);
+        }
+
+        .equip-empty-msg {
+            font-family: 'EB Garamond', serif;
+            color: #8a7a52;
+            font-size: 0.85rem;
+            font-style: italic;
+            padding: 10px;
+            background: rgba(10, 6, 2, 0.4);
+            border-left: 3px solid #6a5024;
+            border-radius: 4px;
+            line-height: 1.4;
+        }
+
+        /* ============ SEÇÃO DE EQUIPAMENTOS NO INVENTÁRIO ============ */
+        .inv-equipment-section {
+            margin-top: 24px;
+            padding-top: 20px;
+            border-top: 2px solid rgba(201, 162, 39, 0.25);
+        }
+
+        .inv-equipment-title {
+            font-family: 'Cinzel', serif;
+            color: #e8b923;
+            font-size: 0.9rem;
+            letter-spacing: 2px;
+            margin-bottom: 12px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid rgba(201, 162, 39, 0.2);
+        }
+
+        .inv-equip-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .inv-equip-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            background: rgba(10, 6, 2, 0.5);
+            border: 1px solid rgba(201, 162, 39, 0.2);
+            border-left: 3px solid #c9a227;
+            border-radius: 5px;
+            transition: all 0.2s;
+        }
+
+        .inv-equip-row:hover {
+            border-left-color: #e8b923;
+            background: rgba(10, 6, 2, 0.7);
+        }
+
+        .inv-equip-row.amulet {
+            border-left-color: #8e44ad;
+        }
+
+        .inv-equip-row.amulet:hover {
+            border-left-color: #c39bd3;
+        }
+
+        .inv-equip-icon {
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            background: radial-gradient(circle, rgba(0,0,0,0.4), transparent 70%);
+            border-radius: 4px;
+        }
+
+        .inv-equip-icon img {
+            width: 36px;
+            height: 36px;
+            object-fit: contain;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.6));
+        }
+
+        .inv-equip-icon .weapon-emoji,
+        .inv-equip-icon .weapon-emoji-large {
+            font-size: 1.8rem;
+            line-height: 1;
+        }
+
+        .inv-equip-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .inv-equip-name {
+            font-family: 'Cinzel', serif;
+            color: #f0e2c0;
+            font-size: 0.92rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            margin-bottom: 3px;
+            line-height: 1.15;
+        }
+
+        .inv-equip-meta {
+            font-family: 'EB Garamond', serif;
+            color: #b8a577;
+            font-size: 0.8rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            flex-wrap: wrap;
+        }
+
+        .inv-equip-meta img {
+            width: 14px;
+            height: 14px;
+            object-fit: contain;
+            vertical-align: middle;
+        }
+
+        .inv-equip-owner {
+            font-family: 'EB Garamond', serif;
+            font-size: 0.82rem;
+            padding: 4px 10px;
+            border-radius: 12px;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .inv-equip-owner.used {
+            background: rgba(107, 163, 92, 0.15);
+            border: 1px solid rgba(107, 163, 92, 0.4);
+            color: #8ac070;
+        }
+
+        .inv-equip-owner.free {
+            background: rgba(10, 6, 2, 0.4);
+            border: 1px dashed rgba(201, 162, 39, 0.3);
+            color: #8a7a52;
+            font-style: italic;
+        }
+
+        .inv-empty-line {
+            font-family: 'EB Garamond', serif;
+            color: #8a7a52;
+            font-size: 0.85rem;
+            font-style: italic;
+            padding: 10px;
+            background: rgba(10, 6, 2, 0.3);
+            border-radius: 4px;
+            text-align: center;
+        }
+
+        .inv-equipment-hint {
+            margin-top: 16px;
+            padding: 12px;
+            background: rgba(201, 162, 39, 0.06);
+            border-left: 3px solid #c9a227;
+            border-radius: 4px;
+            font-family: 'EB Garamond', serif;
+            color: #d9c89a;
+            font-size: 0.88rem;
+            font-style: italic;
+            line-height: 1.5;
+        }
+
+        /* Responsivo */
+        @media (max-width: 600px) {
+            .equip-card {
+                flex-wrap: wrap;
+            }
+            .equip-card-btn {
+                width: 100%;
+                margin-top: 6px;
+            }
+            .inv-equip-row {
+                flex-wrap: wrap;
+            }
+            .inv-equip-owner {
+                width: 100%;
+                text-align: center;
+                margin-top: 4px;
+            }
+        }
+    `;
+    document.head.appendChild(style);
+    console.log('✅ CSS dos cards de equipamento injetado.');
+})();
+
+// =================================================================
+// 5. EXPÕE NO WINDOW
+// =================================================================
+// (handlers já expostos no item 2)
+
+console.log('✅ BLOCO CORRETIVO 3 (V9.0 — Equipamento Visual) carregado.');
+// =================================================================
+// historia.js — BLOCO CORRETIVO 4 (V9.0 — Atmosfera Intensificada)
+// -----------------------------------------------------------------
+// Cole NO FINAL de historia.js, depois do Bloco 3.
+//
+// Contém:
+//   1. Tint por ato (tinge o tabuleiro inteiro com mix-blend-mode)
+//   2. Vinheta temática nas bordas
+//   3. Partículas intensificadas (~40% mais + maiores)
+//   4. Substitui applyBoardAtmosphere por versão mais rica
+// =================================================================
+
+// =================================================================
+// 1. TABELA DE TINT POR ATO
+// -----------------------------------------------------------------
+// Cada ato tem:
+//   • tintCor:    cor base do tint (aplicado via overlay)
+//   • tintMix:    mix-blend-mode do tint
+//   • tintOpac:   opacidade máxima do tint
+//   • vinhetaCor: cor da vinheta (radial escuro nas bordas)
+//   • vinhetaOpac: opacidade da vinheta
+// =================================================================
+const STORY_ATO_TINT = {
+    1:  { tintCor: 'rgba(74, 138, 58, 0.28)',   tintMix: 'overlay',    tintOpac: 1,    vinhetaCor: 'rgba(20, 40, 15, 0.75)',  vinhetaOpac: 1 },
+    2:  { tintCor: 'rgba(139, 100, 40, 0.32)',  tintMix: 'overlay',    tintOpac: 1,    vinhetaCor: 'rgba(40, 30, 10, 0.8)',   vinhetaOpac: 1 },
+    3:  { tintCor: 'rgba(58, 124, 165, 0.35)',  tintMix: 'overlay',    tintOpac: 1,    vinhetaCor: 'rgba(15, 35, 55, 0.8)',   vinhetaOpac: 1 },
+    4:  { tintCor: 'rgba(200, 60, 20, 0.32)',   tintMix: 'overlay',    tintOpac: 1,    vinhetaCor: 'rgba(50, 12, 5, 0.8)',    vinhetaOpac: 1 },
+    5:  { tintCor: 'rgba(230, 110, 35, 0.35)',  tintMix: 'overlay',    tintOpac: 1,    vinhetaCor: 'rgba(45, 18, 5, 0.8)',    vinhetaOpac: 1 },
+    6:  { tintCor: 'rgba(180, 140, 90, 0.35)',  tintMix: 'overlay',    tintOpac: 1,    vinhetaCor: 'rgba(45, 35, 20, 0.8)',   vinhetaOpac: 1 },
+    7:  { tintCor: 'rgba(80, 110, 150, 0.35)',  tintMix: 'overlay',    tintOpac: 1,    vinhetaCor: 'rgba(15, 25, 45, 0.85)',  vinhetaOpac: 1 },
+    8:  { tintCor: 'rgba(142, 68, 173, 0.35)',  tintMix: 'overlay',    tintOpac: 1,    vinhetaCor: 'rgba(35, 10, 55, 0.85)',  vinhetaOpac: 1 },
+    9:  { tintCor: 'rgba(232, 67, 147, 0.28)',  tintMix: 'overlay',    tintOpac: 1,    vinhetaCor: 'rgba(45, 10, 35, 0.8)',   vinhetaOpac: 1 },
+    10: { tintCor: 'rgba(44, 62, 80, 0.45)',    tintMix: 'multiply',   tintOpac: 1,    vinhetaCor: 'rgba(5, 10, 20, 0.9)',    vinhetaOpac: 1 },
+    11: { tintCor: 'rgba(241, 196, 15, 0.28)',  tintMix: 'overlay',    tintOpac: 1,    vinhetaCor: 'rgba(40, 35, 5, 0.8)',    vinhetaOpac: 1 },
+    12: { tintCor: 'rgba(255, 165, 40, 0.35)',  tintMix: 'overlay',    tintOpac: 1,    vinhetaCor: 'rgba(50, 25, 5, 0.85)',   vinhetaOpac: 1 },
+    13: { tintCor: 'rgba(80, 20, 120, 0.40)',   tintMix: 'multiply',   tintOpac: 1,    vinhetaCor: 'rgba(15, 0, 25, 0.95)',   vinhetaOpac: 1 },
+};
+
+// =================================================================
+// 2. CSS NOVO (substitui o anterior)
+// =================================================================
+(function injectIntenseAtmosphereCSS() {
+    // Remove o antigo
+    const old = document.getElementById('atmosphereStyleClean');
+    if (old) old.remove();
+
+    const style = document.createElement('style');
+    style.id = 'atmosphereStyleClean';
+    style.textContent = `
+        /* ============ BOARD ============ */
+        #board {
+            position: relative;
+        }
+
+        /* ============ CAMADAS ============ */
+        #board > .board-atmosphere {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            border-radius: 6px;
+            overflow: hidden;
+            z-index: 0;
+        }
+
+        #board > .board-tint {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            border-radius: 6px;
+            overflow: hidden;
+            z-index: 2;
+            transition: opacity 0.6s ease;
+        }
+
+        #board > .board-vignette {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            border-radius: 6px;
+            overflow: hidden;
+            z-index: 3;
+        }
+
+        #board > .board-particles {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            overflow: hidden;
+            border-radius: 6px;
+            z-index: 4;
+        }
+
+        #board > .grid {
+            position: relative;
+            z-index: 1;
+        }
+
+        #board > .token {
+            z-index: 10;
+        }
+
+        #board > .story-fx,
+        #board > [class*="fx-"] {
+            z-index: 50;
+        }
+
+        /* ============ PARTÍCULAS ============ */
+        .atm-particle {
+            position: absolute;
+            pointer-events: none;
+            opacity: 0;
+            will-change: top, bottom, left, transform, opacity;
+        }
+
+        /* 1. FOLHAS */
+        .atm-particle.pt-folha {
+            top: -30px;
+            width: var(--p-size, 12px);
+            height: var(--p-size, 12px);
+            background: linear-gradient(135deg, #6a8a4a, #3a5020);
+            border-radius: 50% 10% 50% 10%;
+            box-shadow: 0 0 6px rgba(0,0,0,0.5);
+            animation: folhaFall linear infinite;
+        }
+        @keyframes folhaFall {
+            0%   { top: -30px;             transform: translateX(0) rotate(0deg); opacity: 0; }
+            10%  { opacity: 0.95; }
+            50%  { top: 50%;               transform: translateX(30px) rotate(180deg); opacity: 1; }
+            90%  { opacity: 0.85; }
+            100% { top: calc(100% + 30px); transform: translateX(-20px) rotate(360deg); opacity: 0; }
+        }
+
+        /* 2. NÉVOA ÂMBAR */
+        .atm-particle.pt-poeira-ambar {
+            bottom: -30px;
+            width: var(--p-size, 8px);
+            height: var(--p-size, 8px);
+            background: radial-gradient(circle, #e8b923, rgba(217,184,64,0));
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(232, 185, 35, 0.7);
+            animation: poeiraFlutua ease-in-out infinite;
+        }
+        @keyframes poeiraFlutua {
+            0%   { bottom: -30px;             transform: translateX(0) scale(0.6); opacity: 0; }
+            30%  { opacity: 1; }
+            50%  { bottom: 40%;               transform: translateX(20px) scale(1.3); opacity: 0.9; }
+            80%  { opacity: 0.75; }
+            100% { bottom: calc(100% + 30px); transform: translateX(-15px) scale(0.7); opacity: 0; }
+        }
+
+        /* 3. ÁGUA (BOLHAS) */
+        .atm-particle.pt-bolha {
+            bottom: -20px;
+            width: var(--p-size, 12px);
+            height: var(--p-size, 12px);
+            background: radial-gradient(circle at 30% 30%, rgba(200,230,245,0.95), rgba(74,140,181,0.6) 60%, transparent 100%);
+            border: 1.5px solid rgba(200,230,245,0.6);
+            border-radius: 50%;
+            box-shadow: 0 0 8px rgba(74, 140, 181, 0.6);
+            animation: bolhaSobe ease-in infinite;
+        }
+        @keyframes bolhaSobe {
+            0%   { bottom: -20px;             transform: translateX(0) scale(0.5); opacity: 0; }
+            20%  { opacity: 1; }
+            80%  { opacity: 0.85; }
+            100% { bottom: calc(100% + 20px); transform: translateX(15px) scale(1.4); opacity: 0; }
+        }
+
+        /* 4. BRASAS */
+        .atm-particle.pt-brasa {
+            bottom: -20px;
+            width: var(--p-size, 8px);
+            height: var(--p-size, 8px);
+            background: radial-gradient(circle, #fff5dc 0%, #e67e22 40%, #a83232 80%, transparent 100%);
+            border-radius: 50%;
+            box-shadow: 0 0 12px rgba(232, 110, 35, 1), 0 0 20px rgba(232, 110, 35, 0.6);
+            animation: brasaSubindo ease-out infinite;
+        }
+        @keyframes brasaSubindo {
+            0%   { bottom: -20px;             transform: translateX(0) scale(0.4); opacity: 0; }
+            15%  { opacity: 1; }
+            70%  { opacity: 0.95; }
+            100% { bottom: calc(100% + 20px); transform: translateX(25px) scale(0.3); opacity: 0; }
+        }
+
+        /* 5. FAÍSCAS */
+        .atm-particle.pt-faisca {
+            bottom: -10px;
+            width: var(--p-size, 6px);
+            height: var(--p-size, 6px);
+            background: #e8b923;
+            border-radius: 50%;
+            box-shadow: 0 0 12px #e8b923, 0 0 22px rgba(232,185,35,0.8);
+            animation: faiscaPula ease-out infinite;
+        }
+        @keyframes faiscaPula {
+            0%   { bottom: -10px;             transform: translateX(0) scale(0.3); opacity: 0; }
+            20%  { opacity: 1; }
+            60%  { opacity: 0.9; }
+            100% { bottom: calc(100% + 10px); transform: translateX(35px) scale(0.2); opacity: 0; }
+        }
+
+        /* 6. POEIRA */
+        .atm-particle.pt-poeira {
+            left: -30px;
+            width: var(--p-size, 10px);
+            height: var(--p-size, 10px);
+            background: radial-gradient(circle, rgba(200, 160, 100, 0.9), rgba(139,90,43,0));
+            border-radius: 50%;
+            box-shadow: 0 0 8px rgba(200, 160, 100, 0.6);
+            animation: poeiraHorizontal linear infinite;
+        }
+        @keyframes poeiraHorizontal {
+            0%   { left: -30px;              transform: translateY(0) scale(0.6); opacity: 0; }
+            20%  { opacity: 0.9; }
+            80%  { opacity: 0.75; }
+            100% { left: calc(100% + 30px);  transform: translateY(-15px) scale(1); opacity: 0; }
+        }
+
+        /* 7. LUAR */
+        .atm-particle.pt-luar {
+            bottom: -20px;
+            width: var(--p-size, 8px);
+            height: var(--p-size, 8px);
+            background: radial-gradient(circle, #d0e0f0, rgba(168,192,216,0));
+            border-radius: 50%;
+            box-shadow: 0 0 12px rgba(168,192,216,1), 0 0 24px rgba(168,192,216,0.6);
+            animation: luarSobe ease-in-out infinite;
+        }
+        @keyframes luarSobe {
+            0%   { bottom: -20px;             transform: scale(0.5); opacity: 0; }
+            30%  { opacity: 0.95; }
+            70%  { opacity: 0.85; }
+            100% { bottom: calc(100% + 20px); transform: scale(1.2); opacity: 0; }
+        }
+
+        /* 8. FUMAÇA ROXA + COGUMELOS */
+        .atm-particle.pt-fumaca {
+            bottom: -30px;
+            width: var(--p-size, 20px);
+            height: var(--p-size, 20px);
+            background: radial-gradient(circle, rgba(142,68,173,0.85) 0%, rgba(90,42,112,0.55) 40%, transparent 75%);
+            border-radius: 50%;
+            filter: blur(4px);
+            animation: fumacaSobe ease-in-out infinite;
+        }
+        @keyframes fumacaSobe {
+            0%   { bottom: -30px;             transform: translateX(0) scale(0.5); opacity: 0; }
+            30%  { opacity: 0.75; }
+            70%  { opacity: 0.65; }
+            100% { bottom: calc(100% + 30px); transform: translateX(25px) scale(1.6); opacity: 0; }
+        }
+        .atm-particle.pt-cogumelo {
+            top: 50%;
+            width: var(--p-size, 10px);
+            height: var(--p-size, 10px);
+            background: radial-gradient(circle, #c080e0 0%, #8e44ad 60%, transparent 100%);
+            border-radius: 50%;
+            box-shadow: 0 0 15px rgba(192,128,224,1), 0 0 28px rgba(142,68,173,0.6);
+            animation: cogumeloPisca ease-in-out infinite;
+        }
+        @keyframes cogumeloPisca {
+            0%, 100% { opacity: 0.35; transform: scale(0.7); }
+            50%      { opacity: 1;   transform: scale(1.4); }
+        }
+
+        /* 9. RIO */
+        .atm-particle.pt-bolha-rio {
+            bottom: -20px;
+            width: var(--p-size, 12px);
+            height: var(--p-size, 12px);
+            background: radial-gradient(circle at 30% 30%, rgba(232,67,147,0.85), rgba(52,152,219,0.55) 60%, transparent 100%);
+            border: 1.5px solid rgba(232, 67, 147, 0.7);
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(232, 67, 147, 0.6);
+            animation: bolhaRioSobe ease-in infinite;
+        }
+        @keyframes bolhaRioSobe {
+            0%   { bottom: -20px;             transform: translateX(0) scale(0.5); opacity: 0; }
+            20%  { opacity: 1; }
+            80%  { opacity: 0.85; }
+            100% { bottom: calc(100% + 20px); transform: translateX(-15px) scale(1.5); opacity: 0; }
+        }
+
+        /* 10. GOTAS */
+        .atm-particle.pt-gota {
+            top: -20px;
+            width: 3px;
+            height: 14px;
+            background: linear-gradient(180deg, transparent, rgba(168, 192, 216, 1));
+            box-shadow: 0 0 4px rgba(168, 192, 216, 0.8);
+            animation: gotaCai linear infinite;
+        }
+        @keyframes gotaCai {
+            0%   { top: -20px;             opacity: 0; }
+            10%  { opacity: 1; }
+            100% { top: calc(100% + 20px); opacity: 0.6; }
+        }
+
+        /* 11. ESTRELAS */
+        .atm-particle.pt-estrela {
+            top: 30%;
+            width: var(--p-size, 8px);
+            height: var(--p-size, 8px);
+            background: radial-gradient(circle, #fff5dc, #f1c40f 60%, transparent 100%);
+            border-radius: 50%;
+            box-shadow: 0 0 12px #f1c40f, 0 0 24px rgba(241, 196, 15, 0.6);
+            animation: estrelaPisca ease-in-out infinite;
+        }
+        @keyframes estrelaPisca {
+            0%, 100% { opacity: 0.25; transform: scale(0.7); }
+            50%      { opacity: 1;   transform: scale(1.5); }
+        }
+
+        /* 12. SOL */
+        .atm-particle.pt-sol {
+            bottom: -20px;
+            width: var(--p-size, 10px);
+            height: var(--p-size, 10px);
+            background: radial-gradient(circle, #fff5dc 0%, #e8b923 50%, #a83232 100%);
+            border-radius: 50%;
+            box-shadow: 0 0 18px rgba(232, 185, 35, 1), 0 0 35px rgba(232, 185, 35, 0.6);
+            animation: solFaisca ease-out infinite;
+        }
+        @keyframes solFaisca {
+            0%   { bottom: -20px;             transform: translateX(0) scale(0.4); opacity: 0; }
+            20%  { opacity: 1; }
+            60%  { opacity: 0.95; }
+            100% { bottom: calc(100% + 20px); transform: translateX(30px) scale(0.3); opacity: 0; }
+        }
+
+        /* 13. ABISMO */
+        .atm-particle.pt-abismo {
+            top: 40%;
+            width: var(--p-size, 10px);
+            height: var(--p-size, 10px);
+            background: radial-gradient(circle, #c080e0, #6a1090 60%, transparent 100%);
+            border-radius: 50%;
+            box-shadow: 0 0 18px rgba(106, 16, 144, 1), 0 0 32px rgba(142, 68, 173, 0.7);
+            animation: abismoFlutua ease-in-out infinite;
+        }
+        @keyframes abismoFlutua {
+            0%, 100% { transform: translate(0, 0) scale(0.7); opacity: 0.5; }
+            50%      { transform: translate(15px, -20px) scale(1.4); opacity: 1; }
+        }
+
+        /* ============ FUNDOS POR ATO (INTENSIFICADOS) ============ */
+        .board-atmosphere.atm-folhas-bg {
+            background:
+                radial-gradient(ellipse at 30% 20%, rgba(120, 180, 90, 0.25) 0%, transparent 50%),
+                radial-gradient(ellipse at 70% 80%, rgba(74, 107, 58, 0.20) 0%, transparent 55%);
+        }
+        .board-atmosphere.atm-nevoa-ambar-bg {
+            background:
+                radial-gradient(ellipse at top, rgba(217,184,64,0.28), transparent 55%),
+                radial-gradient(ellipse at bottom, rgba(139, 100, 40, 0.30), transparent 60%);
+        }
+        .board-atmosphere.atm-agua-bg {
+            background:
+                linear-gradient(180deg, rgba(52,152,219,0.20) 0%, rgba(52,152,219,0.35) 50%, rgba(52,152,219,0.20) 100%),
+                radial-gradient(ellipse at bottom, rgba(20, 60, 100, 0.4), transparent 60%);
+        }
+        .board-atmosphere.atm-brasas-bg {
+            background:
+                radial-gradient(ellipse at bottom, rgba(232,110,35,0.45) 0%, rgba(168,50,50,0.25) 40%, transparent 75%);
+        }
+        .board-atmosphere.atm-chamas-bg {
+            background:
+                linear-gradient(90deg, rgba(232,110,35,0.35) 0%, transparent 20%, transparent 80%, rgba(232,110,35,0.35) 100%),
+                radial-gradient(ellipse at bottom, rgba(255,80,20,0.4), transparent 60%);
+        }
+        .board-atmosphere.atm-poeira-bg {
+            background:
+                radial-gradient(ellipse at top, rgba(217,184,64,0.20), transparent 55%),
+                linear-gradient(180deg, rgba(200, 160, 100, 0.25), rgba(139,90,43,0.35));
+        }
+        .board-atmosphere.atm-luar-bg {
+            background:
+                radial-gradient(ellipse at top, rgba(168,192,216,0.35), transparent 55%),
+                linear-gradient(180deg, rgba(80,110,150,0.25), rgba(20,30,50,0.40));
+        }
+        .board-atmosphere.atm-fumaca-roxa-bg {
+            background:
+                radial-gradient(circle at 25% 70%, rgba(142,68,173,0.40), transparent 45%),
+                radial-gradient(circle at 75% 30%, rgba(90,42,112,0.40), transparent 45%),
+                linear-gradient(180deg, rgba(80,20,120,0.25), rgba(35,10,55,0.40));
+        }
+        .board-atmosphere.atm-rio-bolhas-bg {
+            background:
+                linear-gradient(180deg, rgba(232,67,147,0.18) 0%, rgba(52,152,219,0.30) 50%, rgba(232,67,147,0.20) 100%),
+                radial-gradient(ellipse at top, rgba(255, 100, 180, 0.20), transparent 60%);
+        }
+        .board-atmosphere.atm-tempestade-bg {
+            background:
+                radial-gradient(ellipse at top, rgba(44,62,80,0.50), transparent 55%),
+                linear-gradient(180deg, rgba(20,30,45,0.45), rgba(5,10,20,0.55));
+        }
+        .board-atmosphere.atm-estrelas-bg {
+            background:
+                radial-gradient(ellipse at top, rgba(241,196,15,0.22), transparent 55%),
+                radial-gradient(ellipse at bottom, rgba(168,192,216,0.22), transparent 60%),
+                linear-gradient(180deg, rgba(60, 50, 15, 0.20), rgba(20, 15, 5, 0.30));
+        }
+        .board-atmosphere.atm-sol-bg {
+            background:
+                radial-gradient(ellipse at top, rgba(255, 180, 40, 0.40), transparent 60%),
+                linear-gradient(180deg, rgba(255, 140, 30, 0.30), rgba(168, 50, 30, 0.30));
+        }
+        .board-atmosphere.atm-abismo-bg {
+            background:
+                radial-gradient(ellipse at center, rgba(120, 30, 180, 0.45), transparent 60%),
+                linear-gradient(180deg, rgba(50, 10, 80, 0.45), rgba(15, 0, 25, 0.55));
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .atm-particle { animation: none !important; }
+        }
+    `;
+    document.head.appendChild(style);
+    console.log('✅ CSS intensificado da atmosfera injetado.');
+})();
+
+// =================================================================
+// 3. GERADOR DE PARTÍCULAS — versão intensificada
+// =================================================================
+function generateParticlesIntense(cid) {
+    const atmClass = STORY_ATO_ATMOSPHERE[cid];
+    if (!atmClass) return '';
+
+    const makeParticles = (count, cls, opts = {}) => {
+        let html = '';
+        for (let i = 0; i < count; i++) {
+            const left = Math.random() * 100;
+            const delay = Math.random() * 6;
+            const duration = 4 + Math.random() * 4;
+            const size = opts.sizeMin + Math.random() * (opts.sizeMax - opts.sizeMin);
+
+            html += `<div class="atm-particle ${cls}"
+                          style="left:${left}%;animation-delay:-${delay}s;animation-duration:${duration}s;--p-size:${size}px;"></div>`;
+        }
+        return html;
+    };
+
+    // Contagem +40%, tamanho +30%
+    switch (atmClass) {
+        case 'atm-folhas':      return makeParticles(20, 'pt-folha',        { sizeMin:8,  sizeMax:16 });
+        case 'atm-nevoa-ambar': return makeParticles(18, 'pt-poeira-ambar', { sizeMin:5,  sizeMax:9  });
+        case 'atm-agua':        return makeParticles(24, 'pt-bolha',        { sizeMin:6,  sizeMax:13 });
+        case 'atm-brasas':      return makeParticles(26, 'pt-brasa',        { sizeMin:4,  sizeMax:9  });
+        case 'atm-chamas':      return makeParticles(28, 'pt-faisca',       { sizeMin:3,  sizeMax:7  });
+        case 'atm-poeira':      return makeParticles(20, 'pt-poeira',       { sizeMin:6,  sizeMax:11 });
+        case 'atm-luar':        return makeParticles(18, 'pt-luar',         { sizeMin:5,  sizeMax:9  });
+        case 'atm-fumaca-roxa': return makeParticles(14, 'pt-fumaca',       { sizeMin:12, sizeMax:22 })
+                                     + makeParticles(12, 'pt-cogumelo',     { sizeMin:7,  sizeMax:12 });
+        case 'atm-rio-bolhas':  return makeParticles(28, 'pt-bolha-rio',    { sizeMin:6,  sizeMax:13 });
+        case 'atm-tempestade':  return makeParticles(32, 'pt-gota',         { sizeMin:2,  sizeMax:4  });
+        case 'atm-estrelas':    return makeParticles(28, 'pt-estrela',      { sizeMin:5,  sizeMax:10 });
+        case 'atm-sol':         return makeParticles(24, 'pt-sol',          { sizeMin:6,  sizeMax:12 });
+        case 'atm-abismo':      return makeParticles(24, 'pt-abismo',       { sizeMin:6,  sizeMax:11 });
+        default:                return '';
+    }
+}
+
+// =================================================================
+// 4. clearBoardAtmosphere — remove as novas camadas também
+// =================================================================
+function clearBoardAtmosphereIntense() {
+    const board = document.getElementById('board');
+    if (!board) return;
+
+    board.querySelectorAll(':scope > .board-atmosphere, :scope > .board-tint, :scope > .board-vignette, :scope > .board-particles').forEach(el => el.remove());
+
+    board.classList.forEach(cls => {
+        if (cls.startsWith('atm-')) board.classList.remove(cls);
+    });
+    board.classList.remove('has-atmosphere');
+}
+
+// =================================================================
+// 5. applyBoardAtmosphere — versão intensificada
+// =================================================================
+function applyBoardAtmosphereIntense(cid) {
+    const board = document.getElementById('board');
+    if (!board) return;
+    if (!window._storyMode) return;
+    if (!cid) return;
+
+    clearBoardAtmosphereIntense();
+
+    const atmClass = STORY_ATO_ATMOSPHERE[cid];
+    if (!atmClass) return;
+
+    const tintCfg = STORY_ATO_TINT[cid];
+    if (!tintCfg) return;
+
+    board.classList.add(atmClass);
+    board.classList.add('has-atmosphere');
+
+    // ---- Camada 1: fundo temático ----
+    const atmos = document.createElement('div');
+    atmos.className = 'board-atmosphere ' + atmClass + '-bg';
+    board.appendChild(atmos);
+
+    // ---- Camada 2: tint colorido (por cima do grid) ----
+    const tint = document.createElement('div');
+    tint.className = 'board-tint';
+    tint.style.background = tintCfg.tintCor;
+    tint.style.mixBlendMode = tintCfg.tintMix;
+    tint.style.opacity = tintCfg.tintOpac;
+    board.appendChild(tint);
+
+    // ---- Camada 3: vinheta ----
+    const vin = document.createElement('div');
+    vin.className = 'board-vignette';
+    vin.style.background = `radial-gradient(ellipse at center, transparent 30%, ${tintCfg.vinhetaCor} 100%)`;
+    vin.style.opacity = tintCfg.vinhetaOpac;
+    board.appendChild(vin);
+
+    // ---- Camada 4: partículas ----
+    const part = document.createElement('div');
+    part.className = 'board-particles ' + atmClass + '-pt';
+    part.innerHTML = generateParticlesIntense(cid);
+    board.appendChild(part);
+
+    // Reorganiza a ordem no DOM: grid primeiro
+    const grid = board.querySelector(':scope > .grid');
+    if (grid && grid !== board.firstElementChild) {
+        board.insertBefore(grid, board.firstElementChild);
+    }
+
+    console.log('[atmosfera] Aplicada (intensa) no Ato', cid, '→', atmClass, '| tint:', tintCfg.tintCor);
+}
+
+// =================================================================
+// 6. HOOKS — substitui applyBoardAtmosphere e clearBoardAtmosphere
+// =================================================================
+(function hookIntenseAtmosphere() {
+    // Expõe as novas funções
+    window.applyBoardAtmosphere = applyBoardAtmosphereIntense;
+    window.clearBoardAtmosphere = clearBoardAtmosphereIntense;
+
+    // Reinstala o hook do initStoryBattle (já existia, mas agora usa a versão nova)
+    const _origInit = window.initStoryBattle;
+    if (typeof _origInit === 'function') {
+        // Marca que já foi hookado por este bloco
+        if (!window._intenseAtmosphereHookInstalled) {
+            window._intenseAtmosphereHookInstalled = true;
+
+            window.initStoryBattle = async function() {
+                await _origInit.apply(this, arguments);
+                await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+                const cid = STORY_PROGRESS.currentChapter || 1;
+                applyBoardAtmosphereIntense(cid);
+            };
+        }
+    }
+
+    // Reinstala o hook de cleanup
+    const _origFinish = window.finishStoryPhase;
+    if (typeof _origFinish === 'function' && !window._intenseAtmosphereCleanupInstalled) {
+        window._intenseAtmosphereCleanupInstalled = true;
+        window.finishStoryPhase = function() {
+            clearBoardAtmosphereIntense();
+            return _origFinish.apply(this, arguments);
+        };
+    }
+
+    const _origReturn = window.returnFromStoryVictory;
+    if (typeof _origReturn === 'function' && !window._intenseAtmosphereReturnInstalled) {
+        window._intenseAtmosphereReturnInstalled = true;
+        window.returnFromStoryVictory = function() {
+            clearBoardAtmosphereIntense();
+            return _origReturn.apply(this, arguments);
+        };
+    }
+})();
+
+// =================================================================
+// 7. TESTES
+// =================================================================
+window.testAtmosphere = function(cid) {
+    cid = parseInt(cid) || 1;
+    applyBoardAtmosphereIntense(cid);
+    console.log('[atmosfera] Testando Ato', cid);
+};
+window.clearAtmosphere = function() {
+    clearBoardAtmosphereIntense();
+    console.log('[atmosfera] Limpa.');
+};
+
+console.log('✅ BLOCO CORRETIVO 4 (V9.0 — Atmosfera Intensificada) carregado.');
+// =================================================================
+// historia.js — BLOCO CORRETIVO 5 (V9.0 — Consolidação Final)
+// -----------------------------------------------------------------
+// Cole NO FINAL de historia.js, depois do Bloco 4.
+//
+// Contém:
+//   1. Ajuste do Ato 2 (Mata Fechada) — atmosfera correta
+//   2. Re-log de versão consolidada (V9.0)
+//   3. Sistema de "reconstrução de save" leve:
+//      • Garante que todos os campos novos existem
+//      • Corrige saves antigos que não têm enemiesDefeatedIds
+//   4. Estatísticas de debug úteis no console
+// =================================================================
+
+// =================================================================
+// 1. AJUSTE DO ATO 2 — Mata Fechada (era nevoa-ambar)
+// -----------------------------------------------------------------
+// Substitui a atmosfera do Ato 2:
+//   • Remove partículas de poeira amarela subindo
+//   • Adiciona folhas caindo + névoa densa escura no fundo
+//   • Tint mais escuro/verde musgo
+// =================================================================
+(function fixAto2Atmosphere() {
+    // 1.1 — Atualiza o mapa de atmosfera
+    if (typeof STORY_ATO_ATMOSPHERE !== 'undefined') {
+        STORY_ATO_ATMOSPHERE[2] = 'atm-mata-fechada';
+    }
+
+    // 1.2 — Atualiza o tint
+    if (typeof STORY_ATO_TINT !== 'undefined') {
+        STORY_ATO_TINT[2] = {
+            tintCor: 'rgba(30, 60, 25, 0.38)',   // verde musgo escuro
+            tintMix: 'multiply',                  // escurece em vez de overlay
+            tintOpac: 1,
+            vinhetaCor: 'rgba(10, 25, 8, 0.9)',   // vinheta muito escura
+            vinhetaOpac: 1
+        };
+    }
+
+    // 1.3 — Injeta o CSS da nova atmosfera do Ato 2
+    if (!document.getElementById('ato2AtmosphereStyle')) {
+        const style = document.createElement('style');
+        style.id = 'ato2AtmosphereStyle';
+        style.textContent = `
+            /* ============ FUNDO DA MATA FECHADA ============ */
+            .board-atmosphere.atm-mata-fechada-bg {
+                background:
+                    radial-gradient(ellipse at 50% 10%, rgba(80, 130, 60, 0.35) 0%, transparent 45%),
+                    radial-gradient(ellipse at 20% 90%, rgba(20, 50, 15, 0.55) 0%, transparent 55%),
+                    radial-gradient(ellipse at 80% 90%, rgba(20, 50, 15, 0.55) 0%, transparent 55%),
+                    linear-gradient(180deg, rgba(30, 60, 25, 0.40), rgba(10, 25, 8, 0.55));
+            }
+
+            /* ============ PARTÍCULAS DA MATA FECHADA ============ */
+
+            /* Folhas verdes caindo lentamente */
+            .atm-particle.pt-folha-mata {
+                top: -30px;
+                width: var(--p-size, 12px);
+                height: var(--p-size, 12px);
+                background: linear-gradient(135deg, #4a6b3a 0%, #2d4523 60%, #1a2f14 100%);
+                border-radius: 60% 20% 70% 20%;
+                box-shadow:
+                    0 0 4px rgba(0, 0, 0, 0.7),
+                    inset 0 0 3px rgba(120, 180, 90, 0.4);
+                animation: folhaMataFall linear infinite;
+            }
+            @keyframes folhaMataFall {
+                0%   { top: -30px;             transform: translateX(0) rotate(0deg) scale(0.9); opacity: 0; }
+                10%  { opacity: 1; }
+                30%  { transform: translateX(-25px) rotate(120deg) scale(1); }
+                60%  { transform: translateX(20px) rotate(280deg) scale(1); }
+                90%  { opacity: 0.9; }
+                100% { top: calc(100% + 30px); transform: translateX(-10px) rotate(420deg) scale(0.95); opacity: 0; }
+            }
+
+            /* Névoa densa subindo (mais escura que a do Ato 1) */
+            .atm-particle.pt-nevoa-mata {
+                bottom: -40px;
+                width: var(--p-size, 24px);
+                height: var(--p-size, 24px);
+                background: radial-gradient(circle, rgba(80, 110, 70, 0.7) 0%, rgba(40, 70, 30, 0.5) 40%, transparent 75%);
+                border-radius: 50%;
+                filter: blur(5px);
+                animation: nevoaMataSobe ease-in-out infinite;
+            }
+            @keyframes nevoaMataSobe {
+                0%   { bottom: -40px;             transform: translateX(0) scale(0.5); opacity: 0; }
+                25%  { opacity: 0.7; }
+                60%  { opacity: 0.55; }
+                100% { bottom: calc(100% + 40px); transform: translateX(30px) scale(1.8); opacity: 0; }
+            }
+
+            /* Esporos brilhantes (pequenos pontos verdes-claros) */
+            .atm-particle.pt-esporo {
+                top: 40%;
+                width: var(--p-size, 6px);
+                height: var(--p-size, 6px);
+                background: radial-gradient(circle, #a8e088 0%, #6ba35c 60%, transparent 100%);
+                border-radius: 50%;
+                box-shadow: 0 0 8px rgba(168, 224, 136, 0.8);
+                animation: esporoPisca ease-in-out infinite;
+            }
+            @keyframes esporoPisca {
+                0%, 100% { opacity: 0.3; transform: scale(0.8); }
+                50%      { opacity: 1;   transform: scale(1.4); }
+            }
+
+            /* Galhos/gravetos flutuando (raros) */
+            .atm-particle.pt-graveto {
+                top: -20px;
+                width: var(--p-size, 4px);
+                height: calc(var(--p-size, 4px) * 3);
+                background: linear-gradient(180deg, #6a4a20, #3a2a14);
+                border-radius: 1px;
+                box-shadow: 0 0 3px rgba(0, 0, 0, 0.6);
+                animation: gravetoFall linear infinite;
+            }
+            @keyframes gravetoFall {
+                0%   { top: -20px;             transform: translateX(0) rotate(0deg); opacity: 0; }
+                15%  { opacity: 0.85; }
+                50%  { transform: translateX(-30px) rotate(180deg); }
+                100% { top: calc(100% + 20px); transform: translateX(20px) rotate(360deg); opacity: 0; }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // 1.4 — Substitui generateParticlesIntense pra tratar o novo Ato 2
+    const _origGenerate = window.generateParticlesIntense;
+    if (typeof _origGenerate === 'function' && !window._ato2ParticlesPatched) {
+        window._ato2ParticlesPatched = true;
+
+        window.generateParticlesIntense = function(cid) {
+            if (parseInt(cid) === 2) {
+                // Ato 2 — Mata Fechada
+                const makeP = (count, cls, opts = {}) => {
+                    let html = '';
+                    for (let i = 0; i < count; i++) {
+                        const left = Math.random() * 100;
+                        const delay = Math.random() * 6;
+                        const duration = 5 + Math.random() * 4;
+                        const size = opts.sizeMin + Math.random() * (opts.sizeMax - opts.sizeMin);
+                        html += `<div class="atm-particle ${cls}"
+                                      style="left:${left}%;animation-delay:-${delay}s;animation-duration:${duration}s;--p-size:${size}px;"></div>`;
+                    }
+                    return html;
+                };
+                return makeP(16, 'pt-folha-mata', { sizeMin: 8, sizeMax: 16 })
+                     + makeP(14, 'pt-nevoa-mata', { sizeMin: 16, sizeMax: 28 })
+                     + makeP(12, 'pt-esporo',     { sizeMin: 4, sizeMax: 8 })
+                     + makeP(4,  'pt-graveto',    { sizeMin: 3, sizeMax: 6 });
+            }
+            return _origGenerate.apply(this, arguments);
+        };
+    }
+
+    console.log('✅ Ato 2 corrigido — Mata Fechada com folhas, névoa e esporos.');
+})();
+
+// =================================================================
+// 2. RECONSTRUÇÃO DE SAVE — garante todos os campos novos
+// -----------------------------------------------------------------
+// Roda uma vez ao carregar. Corrige saves antigos que possam ter
+// ficado sem campos novos introduzidos pelos blocos V9.0.
+// =================================================================
+(function rebuildSaveIntegrity() {
+    if (typeof STORY_PROGRESS === 'undefined') return;
+
+    let changed = false;
+
+    // 2.1 — Bestiário
+    if (!Array.isArray(STORY_PROGRESS.enemiesDefeatedIds)) {
+        STORY_PROGRESS.enemiesDefeatedIds = [];
+        changed = true;
+    }
+    if (Array.isArray(STORY_PROGRESS.bossesDefeated)) {
+        STORY_PROGRESS.bossesDefeated.forEach(id => {
+            if (!STORY_PROGRESS.enemiesDefeatedIds.includes(id)) {
+                STORY_PROGRESS.enemiesDefeatedIds.push(id);
+                changed = true;
+            }
+        });
+    }
+
+    // 2.2 — Equipamentos por herói
+    if (!STORY_PROGRESS.heroEquipment || typeof STORY_PROGRESS.heroEquipment !== 'object') {
+        STORY_PROGRESS.heroEquipment = {};
+        changed = true;
+    }
+
+    // 2.3 — Armas e amuletos forjados
+    if (!Array.isArray(STORY_PROGRESS.craftedWeapons)) {
+        STORY_PROGRESS.craftedWeapons = [];
+        changed = true;
+    }
+    if (!Array.isArray(STORY_PROGRESS.craftedAmulets)) {
+        STORY_PROGRESS.craftedAmulets = [];
+        changed = true;
+    }
+
+    // 2.4 — Níveis e XP de heróis
+    if (!STORY_PROGRESS.heroLevels || typeof STORY_PROGRESS.heroLevels !== 'object') {
+        STORY_PROGRESS.heroLevels = {};
+        changed = true;
+    }
+    if (!STORY_PROGRESS.heroXP || typeof STORY_PROGRESS.heroXP !== 'object') {
+        STORY_PROGRESS.heroXP = {};
+        changed = true;
+    }
+
+    // 2.5 — Estrelas
+    if (!STORY_PROGRESS.starsByPhase || typeof STORY_PROGRESS.starsByPhase !== 'object') {
+        STORY_PROGRESS.starsByPhase = {};
+        changed = true;
+    }
+
+    // 2.6 — Heróis desbloqueados na história
+    if (!Array.isArray(STORY_PROGRESS.unlockedHeroesStory)) {
+        STORY_PROGRESS.unlockedHeroesStory = ['Tupa', 'Sume', 'Caipora'];
+        changed = true;
+    }
+
+    // 2.7 — Capítulos e fases desbloqueados
+    if (!Array.isArray(STORY_PROGRESS.unlockedChapters) || STORY_PROGRESS.unlockedChapters.length === 0) {
+        STORY_PROGRESS.unlockedChapters = [1];
+        changed = true;
+    }
+    if (!STORY_PROGRESS.unlockedPhases || Object.keys(STORY_PROGRESS.unlockedPhases).length === 0) {
+        STORY_PROGRESS.unlockedPhases = { 1: ['1-1'] };
+        changed = true;
+    }
+
+    // 2.8 — Fases completadas
+    if (!Array.isArray(STORY_PROGRESS.completedPhases)) {
+        STORY_PROGRESS.completedPhases = [];
+        changed = true;
+    }
+    if (!Array.isArray(STORY_PROGRESS.phasesEverCompleted)) {
+        STORY_PROGRESS.phasesEverCompleted = [];
+        changed = true;
+    }
+
+    // 2.9 — Inventário
+    if (!STORY_PROGRESS.inventory || typeof STORY_PROGRESS.inventory !== 'object') {
+        STORY_PROGRESS.inventory = {};
+        changed = true;
+    }
+
+    // 2.10 — Seleção de heróis
+    if (!Array.isArray(STORY_PROGRESS.selectedHeroes) || STORY_PROGRESS.selectedHeroes.length === 0) {
+        STORY_PROGRESS.selectedHeroes = ['Tupa'];
+        changed = true;
+    }
+
+    if (changed && typeof saveStoryProgress === 'function') {
+        saveStoryProgress();
+        console.log('✅ Save reconstruído (campos ausentes corrigidos).');
+    }
+})();
+
+// =================================================================
+// 3. EXPÕE FERRAMENTAS DE DEBUG
+// =================================================================
+window.storyDebug = {
+    // Mostra um resumo completo do estado atual
+    dump: function() {
+        console.group('📖 STORY DEBUG');
+        console.log('Save ativo:', STORY_CURRENT_SAVE_NAME);
+        console.log('Progresso:', STORY_PROGRESS);
+        console.log('Elemento base:', getSaveElement());
+        console.log('Estrelas:', getTotalStars(), '/', getMaxTotalStars());
+        console.log('Heróis desbloqueados:', STORY_PROGRESS.unlockedHeroesStory);
+        console.log('Armas forjadas:', STORY_PROGRESS.craftedWeapons);
+        console.log('Amuletos forjados:', STORY_PROGRESS.craftedAmulets);
+        console.log('Equipamentos:', STORY_PROGRESS.heroEquipment);
+        console.log('Bestiário (IDs descobertos):', STORY_PROGRESS.enemiesDefeatedIds);
+        console.log('Estados de herói (níveis):', STORY_PROGRESS.heroLevels);
+        console.groupEnd();
+    },
+
+    // Testa uma arma específica
+    testWeapon: function(weaponId) {
+        const w = getWeaponById(weaponId);
+        if (!w) {
+            console.warn('Arma não encontrada:', weaponId);
+            return;
+        }
+        console.group(`⚔️ ${w.nome}`);
+        console.log('ID:', w.id);
+        console.log('Tipo:', w.tipo);
+        console.log('Ato:', w.ato);
+        console.log('ATK base:', w.atkBonus);
+        console.log('Elemento:', w.elemento);
+        console.log('Bônus elemental:', w.elementoBonus);
+        console.log('Custo ouro:', w.custoOuro);
+        console.log('Receita:', w.receita);
+        console.groupEnd();
+    },
+
+    // Lista todas as armas de um tipo
+    listWeapons: function(tipo) {
+        const filtered = Object.values(STORY_WEAPONS).filter(w => !tipo || w.tipo === tipo);
+        console.table(filtered.map(w => ({
+            id: w.id,
+            nome: w.nome,
+            ato: w.ato,
+            tipo: w.tipo,
+            atkBase: w.atkBonus,
+            elem: w.elemento,
+            elemBonus: w.elementoBonus,
+            ouro: w.custoOuro,
+        })));
+    },
+
+    // Simula o bônus de uma arma num tile específico
+    simulateBonus: function(weaponId, tileElement, heroElement) {
+        const w = getWeaponById(weaponId);
+        if (!w) return;
+        let weaponBonus = 0;
+        if (w.elemento === 'ANY') {
+            if (tileElement === heroElement) weaponBonus = w.elementoBonus;
+        } else if (tileElement === w.elemento) {
+            weaponBonus = w.elementoBonus;
+        }
+        const heroBonus = (tileElement === heroElement) ? 1 : 0;
+        console.log(`⚔️ Simulação — ${w.nome}`);
+        console.log(`Tile: ${tileElement} | Herói: ${heroElement} | Arma: ${w.elemento}`);
+        console.log(`ATK base da arma: +${w.atkBonus}`);
+        console.log(`Bônus elemental da arma: +${weaponBonus}`);
+        console.log(`Bônus elemental do herói: +${heroBonus}`);
+        console.log(`🎯 TOTAL extra: +${w.atkBonus + weaponBonus + heroBonus}`);
+    },
+};
+
+// =================================================================
+// 4. LOG FINAL CONSOLIDADO
+// =================================================================
+console.log('');
+console.log('═══════════════════════════════════════════════════');
+console.log('📖 historia.js — V9.0 CONSOLIDADO');
+console.log('═══════════════════════════════════════════════════');
+console.log('Blocos aplicados:');
+console.log('  ✅ V8.x — Base do Modo História (13 atos)');
+console.log('  ✅ V8.2 — Ritual, Bestiário, Filtros, Níveis');
+console.log('  ✅ V8.3 — Tesouraria (Armas, Amuletos, Forja)');
+console.log('  ✅ V8.5 — Atmosfera temática');
+console.log('  ✅ V8.6 — Fixes (sprite boss + PA continuado)');
+console.log('  ✅ V9.0-B1 — PA robusto, bestiário, purificação');
+console.log('  ✅ V9.0-B2 — Armas escaladas + elemento');
+console.log('  ✅ V9.0-B3 — Equipamento visual (cards)');
+console.log('  ✅ V9.0-B4 — Atmosfera intensificada');
+console.log('  ✅ V9.0-B5 — Consolidação final');
+console.log('');
+console.log('💡 Comandos úteis no console:');
+console.log('   window.storyDebug.dump()              → resumo do estado');
+console.log('   window.storyDebug.listWeapons()       → tabela de armas');
+console.log('   window.storyDebug.listWeapons("tacape") → só tacapes');
+console.log('   window.storyDebug.testWeapon("tacape_13") → detalhe de 1 arma');
+console.log('   window.storyDebug.simulateBonus("tacape_1", "AR", "TERRA")');
+console.log('   window.testAtmosphere(4)              → testa atmosfera do Ato 4');
+console.log('   window.resetStoryMode()               → apaga todos os saves');
+console.log('═══════════════════════════════════════════════════');
+console.log('');
+// =================================================================
+// historia.js — BLOCO CORRETIVO 6 (V9.0 — Fix Esporos Ato 2)
+// -----------------------------------------------------------------
+// Corrige os esporos do Ato 2 que estavam estáticos numa fileira.
+// Agora eles flutuam livremente pelo tabuleiro em todas as direções.
+// =================================================================
+
+(function fixEsporosAto2() {
+    // Remove o CSS anterior dos esporos (se existir)
+    const oldStyle = document.getElementById('ato2AtmosphereStyle');
+    if (oldStyle) oldStyle.remove();
+
+    // Injeta o CSS corrigido
+    const style = document.createElement('style');
+    style.id = 'ato2AtmosphereStyle';
+    style.textContent = `
+        /* ============ FUNDO DA MATA FECHADA ============ */
+        .board-atmosphere.atm-mata-fechada-bg {
+            background:
+                radial-gradient(ellipse at 50% 10%, rgba(80, 130, 60, 0.35) 0%, transparent 45%),
+                radial-gradient(ellipse at 20% 90%, rgba(20, 50, 15, 0.55) 0%, transparent 55%),
+                radial-gradient(ellipse at 80% 90%, rgba(20, 50, 15, 0.55) 0%, transparent 55%),
+                linear-gradient(180deg, rgba(30, 60, 25, 0.40), rgba(10, 25, 8, 0.55));
+        }
+
+        /* ============ PARTÍCULAS DA MATA FECHADA ============ */
+
+        /* Folhas verdes caindo lentamente */
+        .atm-particle.pt-folha-mata {
+            top: -30px;
+            width: var(--p-size, 12px);
+            height: var(--p-size, 12px);
+            background: linear-gradient(135deg, #4a6b3a 0%, #2d4523 60%, #1a2f14 100%);
+            border-radius: 60% 20% 70% 20%;
+            box-shadow:
+                0 0 4px rgba(0, 0, 0, 0.7),
+                inset 0 0 3px rgba(120, 180, 90, 0.4);
+            animation: folhaMataFall linear infinite;
+        }
+        @keyframes folhaMataFall {
+            0%   { top: -30px;             transform: translateX(0) rotate(0deg) scale(0.9); opacity: 0; }
+            10%  { opacity: 1; }
+            30%  { transform: translateX(-25px) rotate(120deg) scale(1); }
+            60%  { transform: translateX(20px) rotate(280deg) scale(1); }
+            90%  { opacity: 0.9; }
+            100% { top: calc(100% + 30px); transform: translateX(-10px) rotate(420deg) scale(0.95); opacity: 0; }
+        }
+
+        /* Névoa densa subindo */
+        .atm-particle.pt-nevoa-mata {
+            bottom: -40px;
+            width: var(--p-size, 24px);
+            height: var(--p-size, 24px);
+            background: radial-gradient(circle, rgba(80, 110, 70, 0.7) 0%, rgba(40, 70, 30, 0.5) 40%, transparent 75%);
+            border-radius: 50%;
+            filter: blur(5px);
+            animation: nevoaMataSobe ease-in-out infinite;
+        }
+        @keyframes nevoaMataSobe {
+            0%   { bottom: -40px;             transform: translateX(0) scale(0.5); opacity: 0; }
+            25%  { opacity: 0.7; }
+            60%  { opacity: 0.55; }
+            100% { bottom: calc(100% + 40px); transform: translateX(30px) scale(1.8); opacity: 0; }
+        }
+
+        /* ✨ ESPOROS — agora flutuam livremente pelo tabuleiro */
+        .atm-particle.pt-esporo {
+            /* Posição inicial vem do style inline (left + top aleatórios) */
+            width: var(--p-size, 6px);
+            height: var(--p-size, 6px);
+            background: radial-gradient(circle, #a8e088 0%, #6ba35c 60%, transparent 100%);
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(168, 224, 136, 1), 0 0 20px rgba(107, 163, 92, 0.6);
+            animation: esporoFlutua ease-in-out infinite;
+        }
+        @keyframes esporoFlutua {
+            0% {
+                opacity: 0;
+                transform: translate(0, 0) scale(0.4);
+            }
+            15% {
+                opacity: 0.4;
+            }
+            35% {
+                opacity: 1;
+                transform: translate(calc(var(--drift-x, 20px) * 0.4), calc(var(--drift-y, -20px) * 0.5)) scale(1.2);
+            }
+            65% {
+                opacity: 0.9;
+                transform: translate(calc(var(--drift-x, 20px) * 0.8), calc(var(--drift-y, -20px) * 0.85)) scale(0.9);
+            }
+            85% {
+                opacity: 0.5;
+            }
+            100% {
+                opacity: 0;
+                transform: translate(var(--drift-x, 20px), var(--drift-y, -20px)) scale(0.4);
+            }
+        }
+
+        /* Galhos/gravetos flutuando (raros) */
+        .atm-particle.pt-graveto {
+            top: -20px;
+            width: var(--p-size, 4px);
+            height: calc(var(--p-size, 4px) * 3);
+            background: linear-gradient(180deg, #6a4a20, #3a2a14);
+            border-radius: 1px;
+            box-shadow: 0 0 3px rgba(0, 0, 0, 0.6);
+            animation: gravetoFall linear infinite;
+        }
+        @keyframes gravetoFall {
+            0%   { top: -20px;             transform: translateX(0) rotate(0deg); opacity: 0; }
+            15%  { opacity: 0.85; }
+            50%  { transform: translateX(-30px) rotate(180deg); }
+            100% { top: calc(100% + 20px); transform: translateX(20px) rotate(360deg); opacity: 0; }
+        }
+    `;
+    document.head.appendChild(style);
+
+    // Sobrescreve o gerador de partículas do Ato 2
+    // pra dar posição inicial aleatória (left E top) + direção de drift aleatória.
+    const _origGen = window.generateParticlesIntense;
+    if (typeof _origGen === 'function') {
+        window.generateParticlesIntense = function(cid) {
+            if (parseInt(cid) === 2) {
+                // ---- Helper genérico ----
+                const makeP = (count, cls, opts = {}) => {
+                    let html = '';
+                    for (let i = 0; i < count; i++) {
+                        const left = Math.random() * 100;
+                        const delay = Math.random() * 6;
+                        const duration = opts.minDur + Math.random() * (opts.maxDur - opts.minDur);
+                        const size = opts.sizeMin + Math.random() * (opts.sizeMax - opts.sizeMin);
+                        html += `<div class="atm-particle ${cls}"
+                                      style="left:${left}%;animation-delay:-${delay}s;animation-duration:${duration}s;--p-size:${size}px;"></div>`;
+                    }
+                    return html;
+                };
+
+                // ---- Helper SÓ pros esporos: posição inicial 2D + drift 2D ----
+                const makeEsporos = (count) => {
+                    let html = '';
+                    for (let i = 0; i < count; i++) {
+                        const left = Math.random() * 90 + 5;      // 5% a 95%
+                        const top = Math.random() * 80 + 10;      // 10% a 90%
+                        const delay = Math.random() * 8;
+                        const duration = 6 + Math.random() * 5;   // 6s a 11s
+                        const size = 4 + Math.random() * 5;       // 4px a 9px
+                        // Direção de drift aleatória: -40px a +40px em X, -50px a +20px em Y
+                        const driftX = (Math.random() * 80 - 40).toFixed(1);
+                        const driftY = (Math.random() * 70 - 50).toFixed(1);
+                        html += `<div class="atm-particle pt-esporo"
+                                      style="left:${left}%;top:${top}%;
+                                             animation-delay:-${delay}s;
+                                             animation-duration:${duration}s;
+                                             --p-size:${size}px;
+                                             --drift-x:${driftX}px;
+                                             --drift-y:${driftY}px;"></div>`;
+                    }
+                    return html;
+                };
+
+                // ---- Monta as 4 camadas ----
+                // Folhas caem de cima pra baixo
+                let html = makeP(16, 'pt-folha-mata', { sizeMin: 8, sizeMax: 16, minDur: 5, maxDur: 9 });
+                // Névoa sobe de baixo pra cima
+                html += makeP(14, 'pt-nevoa-mata', { sizeMin: 16, sizeMax: 28, minDur: 5, maxDur: 9 });
+                // Esporos flutuam livremente (posição 2D + drift 2D)
+                html += makeEsporos(16);
+                // Gravetos caem de cima pra baixo
+                html += makeP(4, 'pt-graveto', { sizeMin: 3, sizeMax: 6, minDur: 4, maxDur: 8 });
+
+                return html;
+            }
+            return _origGen.apply(this, arguments);
+        };
+    }
+
+    console.log('✅ Esporos do Ato 2 corrigidos — flutuam livremente.');
+})();
+
+console.log('✅ BLOCO CORRETIVO 6 (V9.0 — Fix Esporos Ato 2) carregado.');
+// =================================================================
+// historia.js — BLOCO 7 (V9.1 — Configurações do Modo História)
+// -----------------------------------------------------------------
+// Cole NO FINAL de historia.js, depois do Bloco 6.
+//
+// Contém:
+//   1. Estrutura de configurações persistidas em localStorage
+//   2. Tela de Configurações do Modo História (acessível pela Aldeia)
+//   3. Slider de Intensidade da Atmosfera (aplica em tempo real)
+//   4. Sliders de Volume (Música e Efeitos)
+//   5. Toggle de Auto-Save visual
+//   6. Botão "CONFIGURAÇÕES" na Aldeia
+// =================================================================
+
+// =================================================================
+// 1. ESTRUTURA DE CONFIGURAÇÕES
+// =================================================================
+const STORY_SETTINGS_KEY = 'entity_story_settings';
+
+const STORY_DEFAULT_SETTINGS = {
+    atmosphereIntensity: 100,   // 0 a 150 (%)
+    musicVolume: 70,            // 0 a 100 (%)
+    sfxVolume: 80,              // 0 a 100 (%)
+    autoSaveNotify: true,       // mostra "💾 Salvo!"
+};
+
+let STORY_SETTINGS = { ...STORY_DEFAULT_SETTINGS };
+
+function loadStorySettings() {
+    try {
+        const raw = localStorage.getItem(STORY_SETTINGS_KEY);
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            STORY_SETTINGS = { ...STORY_DEFAULT_SETTINGS, ...parsed };
+        }
+    } catch(e) {
+        console.warn('[settings] Falha ao carregar, usando padrão:', e);
+    }
+}
+
+function saveStorySettings() {
+    try {
+        localStorage.setItem(STORY_SETTINGS_KEY, JSON.stringify(STORY_SETTINGS));
+    } catch(e) {
+        console.warn('[settings] Falha ao salvar:', e);
+    }
+}
+
+// Aplica as configurações no jogo (chamado ao iniciar e ao mudar)
+function applyStorySettings() {
+    // ---- 1. Intensidade da atmosfera ----
+    applyAtmosphereIntensity(STORY_SETTINGS.atmosphereIntensity);
+
+    // ---- 2. Volume da música ----
+    applyMusicVolume(STORY_SETTINGS.musicVolume);
+
+    // ---- 3. Volume dos efeitos ----
+    applySfxVolume(STORY_SETTINGS.sfxVolume);
+}
+
+function applyAtmosphereIntensity(pct) {
+    // Multiplica a opacidade dos elementos de atmosfera
+    // O CSS da atmosfera usa var(--atm-intensity, 1) como multiplicador
+    const root = document.documentElement;
+    const factor = Math.max(0, Math.min(1.5, pct / 100));
+    root.style.setProperty('--atm-intensity', factor.toString());
+
+    // Também aplica nas camadas diretamente (fallback, se o CSS não usar var)
+    const tints = document.querySelectorAll('#board > .board-tint');
+    const vins = document.querySelectorAll('#board > .board-vignette');
+    const parts = document.querySelectorAll('#board > .board-particles');
+    const atms = document.querySelectorAll('#board > .board-atmosphere');
+
+    tints.forEach(el => el.style.opacity = factor);
+    vins.forEach(el => el.style.opacity = factor);
+    parts.forEach(el => el.style.opacity = factor);
+    atms.forEach(el => el.style.opacity = Math.min(1, factor));
+
+    console.log(`[settings] Atmosfera: ${pct}% (fator ${factor})`);
+}
+
+function applyMusicVolume(pct) {
+    const vol = Math.max(0, Math.min(100, pct)) / 100;
+    // Aplica em TODAS as faixas de música do sfx
+    if (typeof sfx !== 'undefined') {
+        const musicTracks = [
+            'bgm', 'sacitema', 'mapinguaritema', 'boitatatema', 'iaratema',
+            'corposecotema', 'lobisomemtema', 'cucatema', 'mulatema',
+            'bototema', 'boitema', 'jacitema', 'guaracitema', 'anhangatema'
+        ];
+        musicTracks.forEach(k => {
+            if (sfx[k]) sfx[k].volume = 0.3 * vol; // 0.3 era o volume original
+        });
+    }
+    console.log(`[settings] Música: ${pct}%`);
+}
+
+function applySfxVolume(pct) {
+    // Guarda globalmente pra ser usado no playSfx
+    window._sfxVolumeMultiplier = Math.max(0, Math.min(100, pct)) / 100;
+    console.log(`[settings] Efeitos: ${pct}%`);
+}
+
+// =================================================================
+// 2. HOOK NO playSfx — respeita o volume configurado
+// =================================================================
+(function hookSfxVolume() {
+    const _origPlaySfx = window.playSfx;
+    if (typeof _origPlaySfx !== 'function') return;
+
+    window.playSfx = function(name) {
+        if (!audioUnlocked || !sfx[name]) return;
+        const sound = sfx[name].cloneNode();
+        const baseVol = 0.6;
+        const mult = (typeof window._sfxVolumeMultiplier === 'number')
+            ? window._sfxVolumeMultiplier
+            : 1;
+        sound.volume = baseVol * mult;
+        sound.play().catch(() => {});
+    };
+
+    console.log('✅ playSfx agora respeita o volume configurado.');
+})();
+
+// =================================================================
+// 3. AUTO-SAVE VISUAL
+// =================================================================
+(function installAutoSaveFeedback() {
+    const _origSave = window.saveStoryProgress;
+    if (typeof _origSave !== 'function') return;
+
+    let saveIndicatorTimeout = null;
+
+    window.saveStoryProgress = function() {
+        try {
+            _origSave.apply(this, arguments);
+
+            // Só mostra o feedback se a opção estiver ligada
+            if (!STORY_SETTINGS.autoSaveNotify) return;
+
+            // Cria/atualiza o indicador
+            let indicator = document.getElementById('storySaveIndicator');
+            if (!indicator) {
+                indicator = document.createElement('div');
+                indicator.id = 'storySaveIndicator';
+                indicator.className = 'story-save-indicator';
+                indicator.innerHTML = '💾 Salvo!';
+                document.body.appendChild(indicator);
+            }
+
+            // Reinicia a animação
+            indicator.classList.remove('show');
+            void indicator.offsetWidth; // força reflow
+            indicator.classList.add('show');
+
+            // Esconde depois de 2s
+            clearTimeout(saveIndicatorTimeout);
+            saveIndicatorTimeout = setTimeout(() => {
+                indicator.classList.remove('show');
+            }, 2000);
+
+        } catch(e) {
+            console.warn('[autosave] Erro:', e);
+        }
+    };
+
+    console.log('✅ Auto-save visual instalado.');
+})();
+
+// =================================================================
+// 4. TELA DE CONFIGURAÇÕES DO MODO HISTÓRIA
+// =================================================================
+function renderStorySettingsScreen() {
+    const screen = document.getElementById('storyScreen');
+    if (!screen) return;
+
+    // Garante que as configs estão carregadas
+    loadStorySettings();
+
+    screen.innerHTML = `
+        <div class="story-container">
+            <div class="story-header">
+                <h1 class="story-title">⚙️ CONFIGURAÇÕES</h1>
+                <p class="story-subtitle">Ajuste a experiência do Modo História</p>
+            </div>
+
+            <div class="story-settings-panel">
+
+                <!-- ATMOSFERA -->
+                <div class="story-settings-section">
+                    <div class="story-settings-section-title">🎨 ATMOSFERA DO TABULEIRO</div>
+                    <div class="story-settings-row">
+                        <label class="story-settings-label">Intensidade</label>
+                        <div class="story-settings-slider-wrap">
+                            <input type="range" id="setAtmIntensity" class="story-settings-slider"
+                                   min="0" max="150" step="5"
+                                   value="${STORY_SETTINGS.atmosphereIntensity}">
+                            <span id="setAtmIntensityVal" class="story-settings-value">${STORY_SETTINGS.atmosphereIntensity}%</span>
+                        </div>
+                    </div>
+                    <div class="story-settings-hint">
+                        Controla o tint, a vinheta e as partículas temáticas de cada ato.
+                        Reduza se o tabuleiro ficar difícil de ver em telas pequenas.
+                    </div>
+                </div>
+
+                <!-- ÁUDIO -->
+                <div class="story-settings-section">
+                    <div class="story-settings-section-title">🔊 ÁUDIO</div>
+
+                    <div class="story-settings-row">
+                        <label class="story-settings-label">Música</label>
+                        <div class="story-settings-slider-wrap">
+                            <input type="range" id="setMusicVol" class="story-settings-slider"
+                                   min="0" max="100" step="5"
+                                   value="${STORY_SETTINGS.musicVolume}">
+                            <span id="setMusicVolVal" class="story-settings-value">${STORY_SETTINGS.musicVolume}%</span>
+                        </div>
+                    </div>
+
+                    <div class="story-settings-row">
+                        <label class="story-settings-label">Efeitos</label>
+                        <div class="story-settings-slider-wrap">
+                            <input type="range" id="setSfxVol" class="story-settings-slider"
+                                   min="0" max="100" step="5"
+                                   value="${STORY_SETTINGS.sfxVolume}">
+                            <span id="setSfxVolVal" class="story-settings-value">${STORY_SETTINGS.sfxVolume}%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- FEEDBACK -->
+                <div class="story-settings-section">
+                    <div class="story-settings-section-title">💬 FEEDBACK</div>
+                    <div class="story-settings-row">
+                        <label class="story-settings-label">Notificação de Auto-Save</label>
+                        <label class="story-settings-toggle">
+                            <input type="checkbox" id="setAutoSave" ${STORY_SETTINGS.autoSaveNotify ? 'checked' : ''}>
+                            <span class="story-settings-toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="story-settings-hint">
+                        Mostra um aviso "💾 Salvo!" toda vez que o jogo salvar o progresso.
+                    </div>
+                </div>
+
+                <!-- BOTÕES -->
+                <div class="story-settings-actions">
+                    <button class="story-settings-btn primary" onclick="resetStorySettings()">
+                        ↺ RESTAURAR PADRÃO
+                    </button>
+                    <button class="story-settings-btn" onclick="renderAldeiaScreen()">
+                        ← VOLTAR À ALDEIA
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // ---- Handlers dos sliders (tempo real) ----
+    const atmSlider = document.getElementById('setAtmIntensity');
+    const atmVal = document.getElementById('setAtmIntensityVal');
+    if (atmSlider) {
+        atmSlider.addEventListener('input', function() {
+            const v = parseInt(this.value);
+            atmVal.textContent = v + '%';
+            STORY_SETTINGS.atmosphereIntensity = v;
+            applyAtmosphereIntensity(v);
+            saveStorySettings();
+        });
+    }
+
+    const musSlider = document.getElementById('setMusicVol');
+    const musVal = document.getElementById('setMusicVolVal');
+    if (musSlider) {
+        musSlider.addEventListener('input', function() {
+            const v = parseInt(this.value);
+            musVal.textContent = v + '%';
+            STORY_SETTINGS.musicVolume = v;
+            applyMusicVolume(v);
+            saveStorySettings();
+        });
+    }
+
+    const sfxSlider = document.getElementById('setSfxVol');
+    const sfxVal = document.getElementById('setSfxVolVal');
+    if (sfxSlider) {
+        sfxSlider.addEventListener('input', function() {
+            const v = parseInt(this.value);
+            sfxVal.textContent = v + '%';
+            STORY_SETTINGS.sfxVolume = v;
+            applySfxVolume(v);
+            saveStorySettings();
+
+            // Toca um som de teste pra feedback
+            if (typeof playSfx === 'function') {
+                clearTimeout(window._sfxTestTimer);
+                window._sfxTestTimer = setTimeout(() => playSfx('click'), 100);
+            }
+        });
+    }
+
+    const autosaveToggle = document.getElementById('setAutoSave');
+    if (autosaveToggle) {
+        autosaveToggle.addEventListener('change', function() {
+            STORY_SETTINGS.autoSaveNotify = this.checked;
+            saveStorySettings();
+        });
+    }
+}
+
+function resetStorySettings() {
+    STORY_SETTINGS = { ...STORY_DEFAULT_SETTINGS };
+    saveStorySettings();
+    applyStorySettings();
+    renderStorySettingsScreen();
+    showToast('⚙️', 'Configurações restauradas.', '⚙️');
+}
+
+// =================================================================
+// 5. BOTÃO NA ALDEIA
+// -----------------------------------------------------------------
+// Sobrescreve renderAldeiaScreen pra adicionar o botão de config.
+// =================================================================
+(function addSettingsButtonToAldeia() {
+    const _origRender = window.renderAldeiaScreen;
+    if (typeof _origRender !== 'function') {
+        console.warn('[settings] renderAldeiaScreen não encontrada.');
+        return;
+    }
+
+    window.renderAldeiaScreen = function() {
+        _origRender.apply(this, arguments);
+
+        // Procura o footer da Aldeia e injeta o botão
+        const footer = document.querySelector('.story-ald-footer');
+        if (!footer) return;
+
+        // Evita duplicar
+        if (footer.querySelector('.story-settings-btn-ald')) return;
+
+        const btn = document.createElement('button');
+        btn.className = 'story-back-btn story-settings-btn-ald';
+        btn.style.marginLeft = '10px';
+        btn.innerHTML = '⚙️ CONFIGURAÇÕES';
+        btn.onclick = () => {
+            if (typeof renderStorySettingsScreen === 'function') {
+                renderStorySettingsScreen();
+            }
+        };
+        footer.appendChild(btn);
+    };
+
+    console.log('✅ Botão de Configurações adicionado à Aldeia.');
+})();
+
+// =================================================================
+// 6. CSS
+// =================================================================
+(function injectSettingsCSS() {
+    if (document.getElementById('storySettingsStyle')) return;
+    const style = document.createElement('style');
+    style.id = 'storySettingsStyle';
+    style.textContent = `
+        /* ---- Painel de Configurações ---- */
+        .story-settings-panel {
+            max-width: 640px;
+            margin: 0 auto 30px;
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+
+        .story-settings-section {
+            background:
+                linear-gradient(180deg, rgba(201, 162, 39, 0.04), transparent 40%),
+                linear-gradient(180deg, rgba(42, 31, 16, 0.9), rgba(26, 18, 8, 0.9));
+            border: 2px solid #3d2d18;
+            border-radius: 8px;
+            padding: 18px 20px;
+        }
+
+        .story-settings-section-title {
+            font-family: 'Cinzel', serif;
+            color: #e8b923;
+            font-size: 0.85rem;
+            letter-spacing: 2px;
+            margin-bottom: 14px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(201, 162, 39, 0.2);
+            text-transform: uppercase;
+        }
+
+        .story-settings-row {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+
+        .story-settings-row:last-child { margin-bottom: 0; }
+
+        .story-settings-label {
+            font-family: 'EB Garamond', serif;
+            color: #d9c89a;
+            font-size: 1rem;
+            min-width: 130px;
+            flex-shrink: 0;
+        }
+
+        .story-settings-slider-wrap {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 200px;
+        }
+
+        .story-settings-slider {
+            flex: 1;
+            -webkit-appearance: none;
+            height: 8px;
+            background: #1a1208;
+            border-radius: 4px;
+            outline: none;
+            border: 1px solid #6a5024;
+            cursor: pointer;
+        }
+
+        .story-settings-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            background: radial-gradient(circle at 30% 30%, #e8b923, #8a7018);
+            border: 2px solid #1a1208;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 8px rgba(232, 185, 35, 0.5);
+        }
+
+        .story-settings-slider::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            background: radial-gradient(circle at 30% 30%, #e8b923, #8a7018);
+            border: 2px solid #1a1208;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 8px rgba(232, 185, 35, 0.5);
+        }
+
+        .story-settings-value {
+            font-family: 'Cinzel', serif;
+            color: #e8b923;
+            font-weight: 700;
+            font-size: 0.95rem;
+            min-width: 55px;
+            text-align: right;
+            letter-spacing: 1px;
+        }
+
+        .story-settings-hint {
+            font-family: 'EB Garamond', serif;
+            color: #8a7a52;
+            font-size: 0.85rem;
+            font-style: italic;
+            line-height: 1.4;
+            padding: 8px 12px;
+            background: rgba(10, 6, 2, 0.4);
+            border-left: 3px solid #6a5024;
+            border-radius: 4px;
+            margin-top: 4px;
+        }
+
+        /* ---- Toggle ---- */
+        .story-settings-toggle {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 26px;
+            cursor: pointer;
+        }
+
+        .story-settings-toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .story-settings-toggle-slider {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: #3a2a18;
+            border: 1px solid #6a5024;
+            border-radius: 34px;
+            transition: 0.3s;
+        }
+
+        .story-settings-toggle-slider:before {
+            content: "";
+            position: absolute;
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background: radial-gradient(circle at 30% 30%, #d9c89a, #8a7a52);
+            border-radius: 50%;
+            transition: 0.3s;
+        }
+
+        .story-settings-toggle input:checked + .story-settings-toggle-slider {
+            background: #3a5a2c;
+            border-color: #6ba35c;
+        }
+
+        .story-settings-toggle input:checked + .story-settings-toggle-slider:before {
+            transform: translateX(24px);
+            background: radial-gradient(circle at 30% 30%, #c8e0a8, #4a7040);
+        }
+
+        /* ---- Botões ---- */
+        .story-settings-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 20px;
+        }
+
+        .story-settings-btn {
+            padding: 12px 24px;
+            background: linear-gradient(135deg, #3d2d18, #2a1f10);
+            color: #c8b787;
+            border: 2px solid #6a5024;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: 'Cinzel', serif;
+            font-weight: 700;
+            font-size: 0.9rem;
+            letter-spacing: 1.5px;
+            transition: all 0.2s;
+        }
+
+        .story-settings-btn:hover {
+            background: linear-gradient(135deg, #5a4220, #3d2d18);
+            color: #e8dcc4;
+            border-color: #c9a227;
+        }
+
+        .story-settings-btn.primary {
+            background:
+                linear-gradient(180deg, rgba(232, 185, 35, 0.2), transparent 45%),
+                linear-gradient(135deg, #8a6a2e, #4a3418);
+            color: #fff5dc;
+            border-color: #e8b923;
+        }
+
+        /* ---- Auto-save indicator ---- */
+        .story-save-indicator {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            padding: 10px 18px;
+            background:
+                linear-gradient(180deg, rgba(107, 163, 92, 0.25), transparent 60%),
+                linear-gradient(135deg, #2a4520, #1a2f14);
+            color: #e0f0d0;
+            border: 2px solid #6ba35c;
+            border-radius: 24px;
+            font-family: 'Cinzel', serif;
+            font-weight: 700;
+            font-size: 0.85rem;
+            letter-spacing: 1.5px;
+            box-shadow:
+                0 4px 15px rgba(0, 0, 0, 0.6),
+                0 0 20px rgba(107, 163, 92, 0.3);
+            z-index: 9500;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: opacity 0.3s, transform 0.3s;
+            pointer-events: none;
+        }
+
+        .story-save-indicator.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        @media (max-width: 600px) {
+            .story-settings-row {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .story-settings-label {
+                min-width: 0;
+            }
+            .story-settings-slider-wrap {
+                width: 100%;
+            }
+            .story-save-indicator {
+                bottom: 12px;
+                right: 12px;
+                padding: 8px 14px;
+                font-size: 0.75rem;
+            }
+        }
+    `;
+    document.head.appendChild(style);
+    console.log('✅ CSS das Configurações injetado.');
+})();
+
+// =================================================================
+// 7. INICIALIZAÇÃO
+// =================================================================
+loadStorySettings();
+applyStorySettings();
+
+console.log('✅ BLOCO CORRETIVO 7 (V9.1 — Configurações) carregado.');
+// =================================================================
+// historia.js — BLOCO 8 (V9.1 — Dificuldade Progressiva)
+// -----------------------------------------------------------------
+// Cole NO FINAL de historia.js, depois do Bloco 7.
+//
+// Contém:
+//   1. Definição dos modos de dificuldade
+//   2. Desbloqueio progressivo (Normal → Difícil → Pesadelo)
+//   3. Aplicação dos multiplicadores em batalha
+//   4. Recompensas escaladas
+//   5. Seletor de dificuldade na tela de fases
+//   6. Selo de dificuldade nas fases concluídas
+// =================================================================
+
+// =================================================================
+// 1. DEFINIÇÃO DAS DIFICULDADES
+// =================================================================
+const STORY_DIFFICULTIES = {
+    'normal': {
+        id: 'normal',
+        nome: 'Normal',
+        desc: 'A jornada original.',
+        icon: '⚔️',
+        hpMult: 1.0,
+        atkMult: 1.0,
+        rewardMult: 1.0,
+        starsBonus: 0,
+        color: '#c9a227',
+        unlockedBy: null,
+    },
+    'dificil': {
+        id: 'dificil',
+        nome: 'Difícil',
+        desc: 'Inimigos mais resistentes.',
+        icon: '🔥',
+        hpMult: 1.5,
+        atkMult: 1.3,
+        rewardMult: 1.5,
+        starsBonus: 1,
+        color: '#e67e22',
+        unlockedBy: 'zerar',  // requer ter zerado o jogo no modo anterior
+    },
+    'pesadelo': {
+        id: 'pesadelo',
+        nome: 'Pesadelo',
+        desc: 'O abismo em sua forma mais pura.',
+        icon: '💀',
+        hpMult: 2.2,
+        atkMult: 1.6,
+        rewardMult: 2.5,
+        starsBonus: 2,
+        color: '#a83232',
+        unlockedBy: 'dificil',  // requer ter zerado no Difícil
+    },
+};
+
+// Dificuldade atual (carregada do save)
+let storyCurrentDifficulty = 'normal';
+
+// =================================================================
+// 2. CARREGAR / SALVAR DIFICULDADE NO SAVE
+// =================================================================
+(function initDifficultyFromSave() {
+    if (!STORY_PROGRESS) return;
+    if (!STORY_PROGRESS.difficulty) {
+        STORY_PROGRESS.difficulty = 'normal';
+    }
+    if (!STORY_PROGRESS.difficultyProgress) {
+        // Estrutura: { normal: { completed: [], stars: {} }, dificil: {...}, pesadelo: {...} }
+        STORY_PROGRESS.difficultyProgress = {
+            normal: { completed: [], stars: {} },
+            dificil: { completed: [], stars: {} },
+            pesadelo: { completed: [], stars: {} },
+        };
+    }
+    if (!STORY_PROGRESS.clearedDifficulties) {
+        // Lista de dificuldades já zeradas
+        STORY_PROGRESS.clearedDifficulties = [];
+    }
+
+    storyCurrentDifficulty = STORY_PROGRESS.difficulty || 'normal';
+    console.log('[dificuldade] Carregada:', storyCurrentDifficulty);
+})();
+
+function saveDifficultyToProgress() {
+    if (!STORY_PROGRESS) return;
+    STORY_PROGRESS.difficulty = storyCurrentDifficulty;
+    saveStoryProgress();
+}
+
+// =================================================================
+// 3. VERIFICAR SE UMA DIFICULDADE ESTÁ DESBLOQUEADA
+// =================================================================
+function isDifficultyUnlocked(diffId) {
+    if (diffId === 'normal') return true;
+
+    const diff = STORY_DIFFICULTIES[diffId];
+    if (!diff) return false;
+
+    const required = diff.unlockedBy;
+    if (!required) return true;
+
+    // 'zerar' → requer ter completado o Ato 13 em QUALQUER dificuldade
+    if (required === 'zerar') {
+        return (STORY_PROGRESS.clearedDifficulties || []).length > 0;
+    }
+
+    // 'dificil' → requer ter zerado no Difícil
+    if (required === 'dificil') {
+        return (STORY_PROGRESS.clearedDifficulties || []).includes('dificil');
+    }
+
+    return false;
+}
+
+// =================================================================
+// 4. APLICAR MULTIPLICADORES EM BATALHA
+// -----------------------------------------------------------------
+// Hook no initStoryBattle pra escalar HP/ATK do inimigo atual.
+// =================================================================
+(function hookDifficultyInBattle() {
+    const _origInit = window.initStoryBattle;
+    if (typeof _origInit !== 'function') {
+        console.warn('[dificuldade] initStoryBattle não encontrada.');
+        return;
+    }
+
+    window.initStoryBattle = async function() {
+        await _origInit.apply(this, arguments);
+
+        // Aplica multiplicadores no inimigo atual
+        applyDifficultyToCurrentEnemy();
+
+        // Aplica no header/boss card
+        if (typeof updateBossCard === 'function') updateBossCard();
+        if (typeof updateHeaderBossName === 'function') updateHeaderBossName();
+
+        // Log de aviso
+        const diff = STORY_DIFFICULTIES[storyCurrentDifficulty];
+        if (diff && storyCurrentDifficulty !== 'normal') {
+            addLog(`${diff.icon} DIFICULDADE: ${diff.nome.toUpperCase()}`);
+            addLog(`HP do inimigo ×${diff.hpMult} · ATK ×${diff.atkMult}`);
+        }
+    };
+
+    console.log('✅ Hook de dificuldade em batalha instalado.');
+})();
+
+function applyDifficultyToCurrentEnemy() {
+    if (!window._storyMode) return;
+    if (!storyEnemiesRemaining || storyEnemiesRemaining.length === 0) return;
+
+    const diff = STORY_DIFFICULTIES[storyCurrentDifficulty];
+    if (!diff || storyCurrentDifficulty === 'normal') return;
+
+    // Multiplica o HP atual (que foi setado pelo initStoryBattle)
+    if (boss && boss.maxHp) {
+        const origMaxHp = boss.maxHp;
+        const newMaxHp = Math.ceil(origMaxHp * diff.hpMult);
+        boss.maxHp = newMaxHp;
+        boss.hp = newMaxHp;
+    }
+
+    // Multiplica o ATK (aplicado quando o inimigo atacar)
+    // O ATK vem do input atk_BOSS_cfg, multiplicado pelo diff
+    const atkInput = document.getElementById('atk_BOSS_cfg');
+    if (atkInput) {
+        const origAtk = parseInt(atkInput.value) || 4;
+        // Guarda o original pra não multiplicar de novo
+        if (!atkInput.dataset.originalAtk) {
+            atkInput.dataset.originalAtk = origAtk;
+        }
+        const baseAtk = parseInt(atkInput.dataset.originalAtk);
+        atkInput.value = Math.ceil(baseAtk * diff.atkMult);
+    }
+}
+
+// Quando avança pro próximo inimigo, reaplica
+(function hookAdvanceForDifficulty() {
+    const _origAdvance = window.advanceStoryEnemy;
+    if (typeof _origAdvance !== 'function') return;
+
+    window.advanceStoryEnemy = async function() {
+        const result = await _origAdvance.apply(this, arguments);
+
+        // Reaplica multiplicadores no novo inimigo
+        if (window._storyMode && storyEnemiesRemaining.length > 0) {
+            applyDifficultyToCurrentEnemy();
+            if (typeof updateBossCard === 'function') updateBossCard();
+        }
+
+        return result;
+    };
+
+    console.log('✅ Hook de avanço de inimigo com dificuldade instalado.');
+})();
+
+// =================================================================
+// 5. RECOMPENSAS ESCALADAS POR DIFICULDADE
+// =================================================================
+(function hookRewardsForDifficulty() {
+    const _origVictory = window.handleStoryPhaseVictory;
+    if (typeof _origVictory !== 'function') {
+        console.warn('[dificuldade] handleStoryPhaseVictory não encontrada.');
+        return;
+    }
+
+    window.handleStoryPhaseVictory = function(phase, drops, finalScore, rankSnapshot) {
+        // Multiplica XP e ouro da fase pela dificuldade
+        const diff = STORY_DIFFICULTIES[storyCurrentDifficulty];
+        if (diff && storyCurrentDifficulty !== 'normal' && phase && phase.reward) {
+            phase.reward.xp = Math.ceil(phase.reward.xp * diff.rewardMult);
+            phase.reward.gold = Math.ceil(phase.reward.gold * diff.rewardMult);
+        }
+
+        // Guarda dificuldade no rankSnapshot
+        if (rankSnapshot) {
+            rankSnapshot.difficulty = storyCurrentDifficulty;
+        }
+
+        return _origVictory.apply(this, arguments);
+    };
+
+    console.log('✅ Hook de recompensas por dificuldade instalado.');
+})();
+
+// =================================================================
+// 6. REGISTRAR ZERAR DO JOGO
+// -----------------------------------------------------------------
+// Hook no showStoryVictoryScreen pra detectar quando o Ato 13 termina.
+// =================================================================
+(function hookVictoryForClear() {
+    const _origShowVictory = window.showStoryVictoryScreen;
+    if (typeof _origShowVictory !== 'function') return;
+
+    window.showStoryVictoryScreen = function(phase, drops, rewards, meta) {
+        // Detecta final boss
+        if (phase && phase.isFinalBoss) {
+            // Marca a dificuldade como zerada
+            if (!Array.isArray(STORY_PROGRESS.clearedDifficulties)) {
+                STORY_PROGRESS.clearedDifficulties = [];
+            }
+            if (!STORY_PROGRESS.clearedDifficulties.includes(storyCurrentDifficulty)) {
+                STORY_PROGRESS.clearedDifficulties.push(storyCurrentDifficulty);
+
+                // Toast de novo desbloqueio
+                const nextDiff = getNextDifficultyAfter(storyCurrentDifficulty);
+                if (nextDiff) {
+                    setTimeout(() => {
+                        showToast(
+                            `${nextDiff.icon} NOVA DIFICULDADE!`,
+                            `${nextDiff.nome} desbloqueada!`,
+                            nextDiff.icon
+                        );
+                    }, 2000);
+                }
+
+                saveStoryProgress();
+            }
+        }
+
+        return _origShowVictory.apply(this, arguments);
+    };
+
+    console.log('✅ Hook de vitória final instalado.');
+})();
+
+function getNextDifficultyAfter(current) {
+    const order = ['normal', 'dificil', 'pesadelo'];
+    const idx = order.indexOf(current);
+    if (idx === -1 || idx >= order.length - 1) return null;
+
+    const nextId = order[idx + 1];
+    const next = STORY_DIFFICULTIES[nextId];
+    if (next && isDifficultyUnlocked(nextId)) return next;
+    return null;
+}
+
+// =================================================================
+// 7. SALVAR ESTRELAS POR DIFICULDADE
+// -----------------------------------------------------------------
+// Sobrescreve saveStarsForPhase pra guardar separadamente por dificuldade.
+// =================================================================
+(function hookStarsForDifficulty() {
+    const _origSaveStars = window.saveStarsForPhase;
+    if (typeof _origSaveStars !== 'function') return;
+
+    window.saveStarsForPhase = function(phaseId, stars) {
+        const diff = STORY_DIFFICULTIES[storyCurrentDifficulty];
+
+        // Aplica bônus de estrelas por dificuldade
+        let effectiveStars = stars;
+        if (diff && diff.starsBonus > 0) {
+            effectiveStars = Math.min(3, stars + diff.starsBonus);
+        }
+
+        // Salva no progresso geral (comportamento original)
+        const result = _origSaveStars.apply(this, arguments);
+
+        // Salva também na estrutura por dificuldade
+        if (!STORY_PROGRESS.difficultyProgress) {
+            STORY_PROGRESS.difficultyProgress = {};
+        }
+        if (!STORY_PROGRESS.difficultyProgress[storyCurrentDifficulty]) {
+            STORY_PROGRESS.difficultyProgress[storyCurrentDifficulty] = {
+                completed: [],
+                stars: {},
+            };
+        }
+
+        const diffProg = STORY_PROGRESS.difficultyProgress[storyCurrentDifficulty];
+        const current = diffProg.stars[phaseId] || 0;
+        diffProg.stars[phaseId] = Math.max(current, effectiveStars);
+        saveStoryProgress();
+
+        return result;
+    };
+
+    console.log('✅ Hook de estrelas por dificuldade instalado.');
+})();
+
+// =================================================================
+// 8. UI — SELETOR DE DIFICULDADE NA TELA DE FASES
+// -----------------------------------------------------------------
+// Sobrescreve renderChapterPhases pra adicionar o seletor no topo.
+// =================================================================
+(function addDifficultySelectorToChapter() {
+    const _origRender = window.renderChapterPhases;
+    if (typeof _origRender !== 'function') {
+        console.warn('[dificuldade] renderChapterPhases não encontrada.');
+        return;
+    }
+
+    window.renderChapterPhases = function(ch) {
+        _origRender.apply(this, arguments);
+
+        // Procura o header da tela
+        const header = document.querySelector('.story-header');
+        if (!header) return;
+
+        // Evita duplicar
+        if (header.querySelector('.story-difficulty-selector')) return;
+
+        // Monta o seletor
+        const selector = document.createElement('div');
+        selector.className = 'story-difficulty-selector';
+
+        const diffs = Object.values(STORY_DIFFICULTIES);
+        const buttonsHTML = diffs.map(d => {
+            const unlocked = isDifficultyUnlocked(d.id);
+            const active = d.id === storyCurrentDifficulty;
+            return `
+                <button class="story-difficulty-btn ${active ? 'active' : ''} ${unlocked ? '' : 'locked'}"
+                        data-diff="${d.id}"
+                        ${unlocked ? '' : 'disabled'}
+                        style="--diff-color: ${d.color};">
+                    <span class="story-difficulty-icon">${d.icon}</span>
+                    <span class="story-difficulty-nome">${d.nome}</span>
+                    ${unlocked ? '' : '<span class="story-difficulty-lock">🔒</span>'}
+                </button>
+            `;
+        }).join('');
+
+        selector.innerHTML = `
+            <div class="story-difficulty-label">DIFICULDADE</div>
+            <div class="story-difficulty-buttons">${buttonsHTML}</div>
+        `;
+
+        // Insere depois do subtitle
+        header.appendChild(selector);
+
+        // Handler dos botões
+        selector.querySelectorAll('.story-difficulty-btn:not(.locked)').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const diffId = this.dataset.diff;
+                if (diffId === storyCurrentDifficulty) return;
+
+                storyCurrentDifficulty = diffId;
+                saveDifficultyToProgress();
+
+                // Re-renderiza
+                renderChapterPhases(ch);
+
+                const d = STORY_DIFFICULTIES[diffId];
+                showToast(`${d.icon}`, `Dificuldade: ${d.nome}`, d.icon);
+            });
+        });
+    };
+
+    console.log('✅ Seletor de dificuldade adicionado à tela de fases.');
+})();
+
+// =================================================================
+// 9. UI — BADGE DE DIFICULDADE NAS FASES
+// -----------------------------------------------------------------
+// Sobrescreve renderChapterPhases pra adicionar badges nas fases.
+// Como o item 8 já sobrescreveu, fazemos um segundo patch em cima.
+// =================================================================
+(function addDifficultyBadgesToPhases() {
+    const _origRender = window.renderChapterPhases;
+    if (typeof _origRender !== 'function') return;
+
+    window.renderChapterPhases = function(ch) {
+        _origRender.apply(this, arguments);
+
+        // Se estamos no modo Normal, não mostra badges
+        if (storyCurrentDifficulty === 'normal') return;
+
+        const diff = STORY_DIFFICULTIES[storyCurrentDifficulty];
+        if (!diff) return;
+
+        // Adiciona um badge global indicando a dificuldade ativa
+        const header = document.querySelector('.story-header');
+        if (header && !header.querySelector('.story-difficulty-active-badge')) {
+            const badge = document.createElement('div');
+            badge.className = 'story-difficulty-active-badge';
+            badge.style.setProperty('--diff-color', diff.color);
+            badge.innerHTML = `
+                ${diff.icon} JOGANDO EM ${diff.nome.toUpperCase()}
+                <span class="story-difficulty-active-hint">
+                    (HP ×${diff.hpMult} · ATK ×${diff.atkMult} · Recompensa ×${diff.rewardMult})
+                </span>
+            `;
+            // Insere antes do seletor
+            const selector = header.querySelector('.story-difficulty-selector');
+            if (selector) {
+                selector.parentNode.insertBefore(badge, selector);
+            } else {
+                header.appendChild(badge);
+            }
+        }
+    };
+})();
+
+// =================================================================
+// 10. PATCH EM startStoryPhase — usa a dificuldade atual
+// =================================================================
+(function hookStartPhaseForDifficulty() {
+    const _origStart = window.startStoryPhase;
+    if (typeof _origStart !== 'function') return;
+
+    window.startStoryPhase = function(cid, pid) {
+        // Garante que a dificuldade está salva
+        saveDifficultyToProgress();
+
+        return _origStart.apply(this, arguments);
+    };
+
+    console.log('✅ startStoryPhase agora respeita a dificuldade.');
+})();
+
+// =================================================================
+// 11. UI — MOSTRAR DIFICULDADE NA ALDEIA
+// -----------------------------------------------------------------
+// Pequeno badge na Aldeia mostrando a dificuldade atual.
+// =================================================================
+(function showDifficultyInAldeia() {
+    const _origRender = window.renderAldeiaScreen;
+    if (typeof _origRender !== 'function') return;
+
+    window.renderAldeiaScreen = function() {
+        _origRender.apply(this, arguments);
+
+        const saveInfo = document.querySelector('.story-ald-save-info');
+        if (!saveInfo) return;
+        if (saveInfo.querySelector('.story-ald-difficulty-badge')) return;
+
+        const diff = STORY_DIFFICULTIES[storyCurrentDifficulty];
+        if (!diff) return;
+
+        // Só mostra se for diferente de Normal
+        if (storyCurrentDifficulty === 'normal') return;
+
+        const badge = document.createElement('div');
+        badge.className = 'story-ald-difficulty-badge';
+        badge.style.setProperty('--diff-color', diff.color);
+        badge.innerHTML = `${diff.icon} ${diff.nome.toUpperCase()}`;
+        saveInfo.appendChild(badge);
+    };
+})();
+
+// =================================================================
+// 12. CSS
+// =================================================================
+(function injectDifficultyCSS() {
+    if (document.getElementById('storyDifficultyStyle')) return;
+    const style = document.createElement('style');
+    style.id = 'storyDifficultyStyle';
+    style.textContent = `
+        /* ---- Seletor de dificuldade ---- */
+        .story-difficulty-selector {
+            margin-top: 18px;
+            padding: 12px 16px;
+            background: rgba(10, 6, 2, 0.5);
+            border: 1px solid rgba(201, 162, 39, 0.25);
+            border-radius: 6px;
+        }
+
+        .story-difficulty-label {
+            font-family: 'Cinzel', serif;
+            font-size: 0.75rem;
+            color: #8a7a52;
+            letter-spacing: 2px;
+            text-align: center;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+
+        .story-difficulty-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .story-difficulty-btn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 18px;
+            background: linear-gradient(135deg, #2a1f10, #1a1208);
+            color: #c8b787;
+            border: 2px solid rgba(201, 162, 39, 0.3);
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: 'Cinzel', serif;
+            font-weight: 700;
+            font-size: 0.85rem;
+            letter-spacing: 1px;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .story-difficulty-btn:hover:not(.locked) {
+            border-color: var(--diff-color, #c9a227);
+            color: #e8dcc4;
+            transform: translateY(-2px);
+        }
+
+        .story-difficulty-btn.active {
+            background:
+                linear-gradient(180deg, rgba(232, 185, 35, 0.15), transparent 50%),
+                linear-gradient(135deg, #3d2d18, #2a1f10);
+            border-color: var(--diff-color, #c9a227);
+            border-width: 3px;
+            color: #fff5dc;
+            box-shadow: 0 0 18px color-mix(in srgb, var(--diff-color, #c9a227) 50%, transparent);
+        }
+
+        .story-difficulty-btn.locked {
+            opacity: 0.45;
+            cursor: not-allowed;
+            filter: grayscale(0.7);
+        }
+
+        .story-difficulty-icon {
+            font-size: 1.2rem;
+            line-height: 1;
+        }
+
+        .story-difficulty-lock {
+            font-size: 0.9rem;
+            opacity: 0.7;
+            margin-left: 4px;
+        }
+
+        /* ---- Badge ativo ---- */
+        .story-difficulty-active-badge {
+            margin-top: 14px;
+            padding: 10px 16px;
+            background:
+                linear-gradient(180deg, color-mix(in srgb, var(--diff-color, #c9a227) 15%, transparent), transparent 60%),
+                rgba(10, 6, 2, 0.6);
+            border: 2px solid var(--diff-color, #c9a227);
+            border-radius: 6px;
+            font-family: 'Cinzel', serif;
+            font-weight: 700;
+            font-size: 0.85rem;
+            color: var(--diff-color, #c9a227);
+            text-align: center;
+            letter-spacing: 1.5px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            align-items: center;
+        }
+
+        .story-difficulty-active-hint {
+            font-family: 'EB Garamond', serif;
+            font-size: 0.75rem;
+            font-weight: 400;
+            color: #b8a577;
+            font-style: italic;
+            letter-spacing: 0.5px;
+        }
+
+        /* ---- Badge na Aldeia ---- */
+        .story-ald-difficulty-badge {
+            padding: 6px 14px;
+            background:
+                linear-gradient(180deg, color-mix(in srgb, var(--diff-color, #c9a227) 20%, transparent), transparent 60%),
+                rgba(10, 6, 2, 0.6);
+            border: 2px solid var(--diff-color, #c9a227);
+            border-radius: 20px;
+            font-family: 'Cinzel', serif;
+            font-weight: 700;
+            font-size: 0.8rem;
+            color: var(--diff-color, #c9a227);
+            letter-spacing: 1.5px;
+            white-space: nowrap;
+        }
+
+        @media (max-width: 600px) {
+            .story-difficulty-btn {
+                padding: 8px 12px;
+                font-size: 0.75rem;
+            }
+            .story-difficulty-icon {
+                font-size: 1rem;
+            }
+            .story-difficulty-active-badge {
+                font-size: 0.75rem;
+            }
+        }
+    `;
+    document.head.appendChild(style);
+    console.log('✅ CSS de dificuldade injetado.');
+})();
+
+// =================================================================
+// 13. EXPOR NO WINDOW
+// =================================================================
+window.STORY_DIFFICULTIES = STORY_DIFFICULTIES;
+window.isDifficultyUnlocked = isDifficultyUnlocked;
+window.getCurrentStoryDifficulty = () => storyCurrentDifficulty;
+window.setStoryDifficulty = (id) => {
+    if (STORY_DIFFICULTIES[id] && isDifficultyUnlocked(id)) {
+        storyCurrentDifficulty = id;
+        saveDifficultyToProgress();
+        return true;
+    }
+    return false;
+};
+
+console.log('✅ BLOCO CORRETIVO 8 (V9.1 — Dificuldade Progressiva) carregado.');
+console.log('💡 Dificuldades:', Object.keys(STORY_DIFFICULTIES).join(', '));
+console.log('💡 Atual:', storyCurrentDifficulty);
+console.log('💡 Zeradas:', STORY_PROGRESS.clearedDifficulties || []);
