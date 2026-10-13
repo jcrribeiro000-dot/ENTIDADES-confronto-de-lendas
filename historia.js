@@ -407,8 +407,8 @@ const SPRITES_STORY = {
     'lobo_guara':'https://i.imgur.com/f7KgIRB.gif',
     // --- Ato 7 ---
     'cachorro_mato':'https://i.imgur.com/easvBrN.gif',
-    'raposa':'',
-    'guaxinim':'',
+    'raposa':'https://i.imgur.com/rwNleG8.gif',
+    'guaxinim':'https://i.imgur.com/pFcDvhd.gif',
     'jaguatirica':'',
     // --- Ato 8 ---
     'morcego':'',
@@ -10962,19 +10962,19 @@ const STORY_WEAPON_SPRITES = {
 };
 
 const STORY_AMULET_SPRITES = {
-    'amuleto_1':  '',  // ← cole o link aqui
-    'amuleto_2':  '',
-    'amuleto_3':  '',
-    'amuleto_4':  '',
-    'amuleto_5':  '',
-    'amuleto_6':  '',
-    'amuleto_7':  '',
-    'amuleto_8':  '',
-    'amuleto_9':  '',
-    'amuleto_10': '',
-    'amuleto_11': '',
-    'amuleto_12': '',
-    'amuleto_13': '',
+    'amuleto_1':  'https://i.imgur.com/wZNdnfe.png',  // ← cole o link aqui
+    'amuleto_2':  'https://i.imgur.com/grxwdL7.png',
+    'amuleto_3':  'https://i.imgur.com/1Au85vR.png',
+    'amuleto_4':  'https://i.imgur.com/cBaWgUV.png',
+    'amuleto_5':  'https://i.imgur.com/NCSB2In.png',
+    'amuleto_6':  'https://i.imgur.com/nbWin30.png',
+    'amuleto_7':  'https://i.imgur.com/SdrNTgW.png',
+    'amuleto_8':  'https://i.imgur.com/MZqecGu.png',
+    'amuleto_9':  'https://i.imgur.com/60PhZcr.png',
+    'amuleto_10': 'https://i.imgur.com/GhVUlJ8.png',
+    'amuleto_11': 'https://i.imgur.com/Ugx2s1z.png',
+    'amuleto_12': 'https://i.imgur.com/rRwaKTH.png',
+    'amuleto_13': 'https://i.imgur.com/oDtZdxA.png',
 };
 
 // Emojis de fallback (caso o sprite esteja vazio)
@@ -11774,8 +11774,8 @@ const STORY_MATERIAL_SPRITES = {
     'garra_onca':      'https://i.imgur.com/TLwSsmn.png',  // ← Garra de Onça
     'garra_lendaria':  'https://i.imgur.com/8yK7V89.png',  // ← Garra Lendária
     // Boss
-    'gorro_saci':      '',  // ← Gorro do Saci
-    'amuleto_saci':    '',  // ← Amuleto do Saci
+    'gorro_saci':      'https://i.imgur.com/5KCdWWZ.png',  // ← Gorro do Saci
+    'amuleto_saci':    'https://i.imgur.com/wZNdnfe.png',  // ← Amuleto do Saci
 
     // ============ ATO 2 — Mata Fechada ============
     'pelo_tamandua':   'https://i.imgur.com/nkvQ3EG.png',  // ← Pelo de Tamanduá
@@ -11787,8 +11787,8 @@ const STORY_MATERIAL_SPRITES = {
     'escama_sucuri':   'https://i.imgur.com/ITchbmQ.png',  // ← Escama de Sucuri
     'pele_sucuri':     '',  // ← Pele de Sucuri
     // Boss
-    'pelo_mapinguari': '',  // ← Pelo do Mapinguari
-    'amuleto_mapinguari':'',// ← Amuleto do Mapinguari
+    'pelo_mapinguari': 'https://i.imgur.com/Mgy0IG8.png',  // ← Pelo do Mapinguari
+    'amuleto_mapinguari':'https://i.imgur.com/grxwdL7.png',// ← Amuleto do Mapinguari
 
     // ============ ATO 3 — Águas Profundas ============
     'escama_piranha':  'https://i.imgur.com/kgoUTpU.png',  // ← Escama de Piranha
@@ -11800,8 +11800,8 @@ const STORY_MATERIAL_SPRITES = {
     'escama_pirarucu': 'https://i.imgur.com/XpUjh4G.png',  // ← Escama de Pirarucu
     'lingua_pirarucu': '',  // ← Língua de Pirarucu
     // Boss
-    'joia_iara':       '',  // ← Joia da Iara
-    'amuleto_iara':    '',  // ← Amuleto da Iara
+    'joia_iara':       'https://i.imgur.com/j2zjNYG.png',  // ← Joia da Iara
+    'amuleto_iara':    'https://i.imgur.com/1Au85vR.png',  // ← Amuleto da Iara
 
     // ============ ATO 4 — Chamas da Noite ============
     'pele_cascavel':    'https://i.imgur.com/l8tPijz.png',  // ← Pele de Cascavel
@@ -11813,8 +11813,8 @@ const STORY_MATERIAL_SPRITES = {
     'casco_tartaruga':  'https://i.imgur.com/O4HKJzr.png',  // ← Casco de Tartaruga
     'ovo_tartaruga':    '',  // ← Ovo de Tartaruga
     // Boss
-    'escama_boitata':   '',  // ← Escama Flamejante
-    'amuleto_boitata':  '',  // ← Amuleto do Boitatá
+    'escama_boitata':   'https://i.imgur.com/9NBxzxu.png',  // ← Escama Flamejante
+    'amuleto_boitata':  'https://i.imgur.com/cBaWgUV.png',  // ← Amuleto do Boitatá
 
     // ============ ATO 5 — Maldição do Fogo ============
     'chifre_bode':      'https://i.imgur.com/PEUng6v.png',  // ← Chifre de Bode
@@ -11826,8 +11826,8 @@ const STORY_MATERIAL_SPRITES = {
     'chifre_touro':     'https://i.imgur.com/YRtPJ8l.png',  // ← Chifre de Touro
     'couro_touro':      '',  // ← Couro de Touro
     // Boss
-    'ferradura_mula':   '',  // ← Ferradura da Mula
-    'amuleto_mula':     '',  // ← Amuleto da Mula
+    'ferradura_mula':   'https://i.imgur.com/j0KDfvl.png',  // ← Ferradura da Mula
+    'amuleto_mula':     'https://i.imgur.com/NCSB2In.png',  // ← Amuleto da Mula
 
     // ============ ATO 6 — Ossos do Sertão ============
     'pena_urubu':         'https://i.imgur.com/rXrxotX.png',  // ← Pena de Urubu
@@ -11839,8 +11839,8 @@ const STORY_MATERIAL_SPRITES = {
     'pelo_lobo_guara':    'https://i.imgur.com/SACZHLY.png',  // ← Pelo de Lobo-Guará
     'presa_lobo_guara':   '',  // ← Presa de Lobo-Guará
     // Boss
-    'osso_corpo_seco':    '',  // ← Osso Amaldiçoado
-    'amuleto_corpo_seco': '',  // ← Amuleto do Corpo Seco
+    'osso_corpo_seco':    'https://i.imgur.com/yCGLbk6.png',  // ← Osso Amaldiçoado
+    'amuleto_corpo_seco': 'https://i.imgur.com/nbWin30.png',  // ← Amuleto do Corpo Seco
 
     // ============ ATO 7 — Maldição da Lua ============
     'pelo_cachorro_mato': 'https://i.imgur.com/CzuZlmm.png',  // ← Pelo de Cachorro-do-Mato
@@ -11852,77 +11852,77 @@ const STORY_MATERIAL_SPRITES = {
     'pelo_jaguatirica':   'https://i.imgur.com/PJpgkA5.png',  // ← Pelo de Jaguatirica
     'garra_jaguatirica':  '',  // ← Garra de Jaguatirica
     // Boss
-    'pelo_lobisomem':     '',  // ← Pelo de Lobisomem
-    'amuleto_lobisomem':  '',  // ← Amuleto do Lobisomem
+    'pelo_lobisomem':     'https://i.imgur.com/Q6GTFIi.png',  // ← Pelo de Lobisomem
+    'amuleto_lobisomem':  'https://i.imgur.com/SdrNTgW.png',  // ← Amuleto do Lobisomem
 
     // ============ ATO 8 — Poções e Sombras ============
     'asa_morcego':        'https://i.imgur.com/ZGi0F9K.png',  // ← Asa de Morcego
     'presa_morcego':      '',  // ← Presa de Morcego
-    'pena_coruja':        '',  // ← Pena de Coruja
+    'pena_coruja':        'https://i.imgur.com/5vpxoKa.png',  // ← Pena de Coruja
     'olho_coruja':        '',  // ← Olho de Coruja
-    'pele_sapo':          '',  // ← Pele de Sapo
+    'pele_sapo':          'https://i.imgur.com/Oug9mNH.png',  // ← Pele de Sapo
     'veneno_sapo':        '',  // ← Veneno de Sapo
-    'pena_seriema':       '',  // ← Pena de Seriema
+    'pena_seriema':       'https://i.imgur.com/udfo4lA.png',  // ← Pena de Seriema
     'bico_seriema':       '',  // ← Bico de Seriema
     // Boss
-    'caldeirao_cuca':     '',  // ← Fragmento do Caldeirão
-    'amuleto_cuca':       '',  // ← Amuleto da Cuca
+    'caldeirao_cuca':     'https://i.imgur.com/D73xfFj.png',  // ← Fragmento do Caldeirão
+    'amuleto_cuca':       'https://i.imgur.com/MZqecGu.png',  // ← Amuleto da Cuca
 
     // ============ ATO 9 — Canto das Águas ============
-    'escama_tucunare':    '',  // ← Escama de Tucunaré
+    'escama_tucunare':    'https://i.imgur.com/ATGdiol.png',  // ← Escama de Tucunaré
     'dente_tucunare':     '',  // ← Dente de Tucunaré
-    'escama_piraiba':     '',  // ← Escama de Piraíba
+    'escama_piraiba':     'https://i.imgur.com/ow8TFQ9.png',  // ← Escama de Piraíba
     'lingua_piraiba':     '',  // ← Língua de Piraíba
-    'escama_dourada':     '',  // ← Escama Dourada
+    'escama_dourada':     'https://i.imgur.com/oJEjSCR.png',  // ← Escama Dourada
     'barbatana_dourada':  '',  // ← Barbatana Dourada
-    'couro_peixe_boi':    '',  // ← Couro de Peixe-Boi
+    'couro_peixe_boi':    'https://i.imgur.com/hMxADzR.png',  // ← Couro de Peixe-Boi
     'osso_peixe_boi':     '',  // ← Osso de Peixe-Boi
     // Boss
-    'flor_boto':          '',  // ← Flor do Boto
-    'amuleto_boto':       '',  // ← Amuleto do Boto
+    'flor_boto':          'https://i.imgur.com/VjU6qOb.png',  // ← Flor do Boto
+    'amuleto_boto':       'https://i.imgur.com/60PhZcr.png',  // ← Amuleto do Boto
 
     // ============ ATO 10 — Terror do Pasto ============
-    'chifre_bufalo':      '',  // ← Chifre de Búfalo
+    'chifre_bufalo':      'https://i.imgur.com/81JTkR3.png',  // ← Chifre de Búfalo
     'couro_bufalo':       '',  // ← Couro de Búfalo
-    'sino_vaca':          '',  // ← Sino da Vaca Louca
+    'sino_vaca':          'https://i.imgur.com/eC6RONh.png',  // ← Sino da Vaca Louca
     'chifre_vaca':        '',  // ← Chifre da Vaca Louca
-    'chifre_cabra':       '',  // ← Chifre de Cabra Preta
+    'chifre_cabra':       'https://i.imgur.com/2Ef2uzL.png',  // ← Chifre de Cabra Preta
     'pelo_cabra':         '',  // ← Pelo de Cabra Preta
-    'corcova_zebu':       '',  // ← Corcova de Zebu
+    'corcova_zebu':       'https://i.imgur.com/ricPmaF.png',  // ← Corcova de Zebu
     'chifre_zebu':        '',  // ← Chifre de Zebu
     // Boss
-    'chifre_boi':         '',  // ← Chifre do Boi da Cara Preta
-    'amuleto_boi':        '',  // ← Amuleto do Boi da Cara Preta
+    'chifre_boi':         'https://i.imgur.com/HaNOyts.png',  // ← Chifre do Boi da Cara Preta
+    'amuleto_boi':        'https://i.imgur.com/GhVUlJ8.png',  // ← Amuleto do Boi da Cara Preta
 
     // ============ ATO 11 — Luz Fria da Lua ============
-    'pelo_gato_mato':     '',  // ← Pelo de Gato-do-Mato
+    'pelo_gato_mato':     'https://i.imgur.com/KKWzAjN.png',  // ← Pelo de Gato-do-Mato
     'garra_gato_mato':    '',  // ← Garra de Gato-do-Mato
-    'asa_mariposa':       '',  // ← Asa de Mariposa Gigante
+    'asa_mariposa':       'https://i.imgur.com/tVh2HIp.png',  // ← Asa de Mariposa Gigante
     'po_mariposa':        '',  // ← Pó Lunar
-    'mascara_quati':      '',  // ← Máscara de Quati
+    'mascara_quati':      'https://i.imgur.com/u3u0t9f.png',  // ← Máscara de Quati
     'cauda_quati':        '',  // ← Cauda de Quati
-    'pelo_sucuarana':     '',  // ← Pelo de Suçuarana
+    'pelo_sucuarana':     'https://i.imgur.com/VxUQeoh.png',  // ← Pelo de Suçuarana
     'garra_sucuarana':    '',  // ← Garra de Suçuarana
     // Boss
-    'raio_lunar':         '',  // ← Raio Lunar
-    'amuleto_jaci':       '',  // ← Amuleto da Jaci
+    'raio_lunar':         'https://i.imgur.com/rRMX5zO.png',  // ← Raio Lunar
+    'amuleto_jaci':       'https://i.imgur.com/Ugx2s1z.png',  // ← Amuleto da Jaci
 
     // ============ ATO 12 — O Sol Devorador ============
-    'pena_gaviao':        '',  // ← Pena de Gavião
+    'pena_gaviao':        'https://i.imgur.com/uKsKkCO.png',  // ← Pena de Gavião
     'garra_gaviao':       '',  // ← Garra de Gavião
-    'pena_falcao':        '',  // ← Pena de Falcão
+    'pena_falcao':        'https://i.imgur.com/e0Jl4m6.png',  // ← Pena de Falcão
     'garra_falcao':       '',  // ← Garra de Falcão
-    'pena_urutau':        '',  // ← Pena de Urutau
+    'pena_urutau':        'https://i.imgur.com/RJ5R30X.png',  // ← Pena de Urutau
     'olho_urutau':        '',  // ← Olho de Urutau
-    'pena_aguia':         '',  // ← Pena de Águia
+    'pena_aguia':         'https://i.imgur.com/Voa3glg.png',  // ← Pena de Águia
     'garra_aguia':        '',  // ← Garra de Águia
     // Boss
-    'coroa_solar':        '',  // ← Coroa Solar
-    'amuleto_guaraci':    '',  // ← Amuleto do Guaraci
+    'coroa_solar':        'https://i.imgur.com/eU5rrOA.png',  // ← Coroa Solar
+    'amuleto_guaraci':    'https://i.imgur.com/rRwaKTH.png',  // ← Amuleto do Guaraci
 
     // ============ ATO 13 — O Senhor do Abismo ============
-    'fragmento_abismo':   '',  // ← Fragmento do Abismo
-    'essencia_anhanga':   '',  // ← Essência de Anhangá
+    'fragmento_abismo':   'https://i.imgur.com/mEsrwkS.png',  // ← Fragmento do Abismo
+    'essencia_anhanga':   'https://i.imgur.com/cfBkyLL.png',  // ← Essência de Anhangá
 
     // ============ Consumíveis ============
     'pocao_cura':         '',  // ← Poção de Cura
@@ -12139,3 +12139,172 @@ window.STORY_MATERIAL_SPRITES = STORY_MATERIAL_SPRITES;
 window.getMaterialIcon = getMaterialIcon;
 
 console.log('✅ Tabela de sprites dos materiais carregada.');
+// =================================================================
+// 🔧 UX — Botão flutuante "VOLTAR" nas telas longas
+// -----------------------------------------------------------------
+// Adiciona um botão fixo no topo da tela do storyScreen,
+// sempre visível independente do scroll.
+//
+// Aparece em: Bestiário, OCA, Forja, Ritual, Atos, Fases, Loja
+// Não aparece em: Aldeia (já tem botão no topo), telas de batalha
+// =================================================================
+(function addFloatingBackButton() {
+
+    // Evita duplicar
+    if (document.getElementById('floatingBackBtn')) return;
+
+    const btn = document.createElement('button');
+    btn.id = 'floatingBackBtn';
+    btn.className = 'floating-back-btn';
+    btn.innerHTML = '← VOLTAR À ALDEIA';
+    btn.style.display = 'none'; // só aparece quando faz sentido
+    document.body.appendChild(btn);
+
+    // Ação do clique: decide pra onde voltar
+    btn.onclick = function() {
+        const ss = document.getElementById('storyScreen');
+        if (!ss) return;
+
+        const titleEl = ss.querySelector('.story-title');
+        const title = titleEl ? titleEl.textContent.trim().toUpperCase() : '';
+
+        // Se estamos em sub-tela (Bestiário, OCA, Forja, etc) → volta pra Aldeia
+        if (title.includes('BESTIÁRIO') ||
+            title.includes('OCA') ||
+            title.includes('TESOURARIA') ||
+            title.includes('RITUAL') ||
+            title.includes('CURANDEIRO') ||
+            title.includes('ATOS')) {
+            if (typeof renderAldeiaScreen === 'function') {
+                renderAldeiaScreen();
+            }
+            return;
+        }
+
+        // Fases de um ato → volta pra lista de atos
+        if (title.includes('ATO ')) {
+            if (typeof renderAtosScreen === 'function') {
+                renderAtosScreen();
+            }
+            return;
+        }
+
+        // Fallback: volta pra Aldeia
+        if (typeof renderAldeiaScreen === 'function') {
+            renderAldeiaScreen();
+        }
+    };
+
+    // ============================================================
+    // Mostra/esconde o botão conforme a tela atual
+    // ============================================================
+    function updateFloatingBtnVisibility() {
+        const ss = document.getElementById('storyScreen');
+        const btn = document.getElementById('floatingBackBtn');
+        if (!ss || !btn) return;
+
+        // Só mostra se a storyScreen estiver ativa
+        const isActive = ss.classList.contains('active') &&
+                         getComputedStyle(ss).display !== 'none';
+
+        if (!isActive) {
+            btn.style.display = 'none';
+            return;
+        }
+
+        // Não mostra na Aldeia (já tem botão no rodapé e a tela é curta)
+        const titleEl = ss.querySelector('.story-title');
+        const title = titleEl ? titleEl.textContent.trim().toUpperCase() : '';
+
+        const naAldeia = title === 'ALDEIA';
+        const emBatalha = document.getElementById('gameScreen')?.classList.contains('active');
+
+        if (naAldeia || emBatalha) {
+            btn.style.display = 'none';
+        } else {
+            btn.style.display = 'flex';
+        }
+    }
+
+    // Observa mudanças no DOM pra atualizar visibilidade
+    const observer = new MutationObserver(() => {
+        updateFloatingBtnVisibility();
+    });
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
+
+    // Chama uma vez pra iniciar
+    setTimeout(updateFloatingBtnVisibility, 100);
+
+    console.log('✅ Botão flutuante "VOLTAR" instalado.');
+})();
+
+// =================================================================
+// 🎨 CSS do botão flutuante
+// =================================================================
+(function injectFloatingBackBtnCSS() {
+    if (document.getElementById('floatingBackBtnStyle')) return;
+    const style = document.createElement('style');
+    style.id = 'floatingBackBtnStyle';
+    style.textContent = `
+        .floating-back-btn {
+            position: fixed;
+            top: 16px;
+            left: 16px;
+            z-index: 9800;
+            padding: 10px 18px;
+            background:
+                linear-gradient(180deg, rgba(232, 185, 35, 0.15), transparent 45%),
+                linear-gradient(135deg, #6a5024 0%, #4a3418 60%, #2a1f10 100%);
+            color: #f0e2c0;
+            border: 2px solid #c9a227;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: 'Cinzel', serif;
+            font-weight: 700;
+            font-size: 0.85rem;
+            letter-spacing: 1.5px;
+            transition: all 0.2s;
+            box-shadow:
+                0 4px 15px rgba(0, 0, 0, 0.6),
+                0 0 20px rgba(201, 162, 39, 0.2);
+            align-items: center;
+            gap: 6px;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .floating-back-btn:hover {
+            background:
+                linear-gradient(180deg, rgba(232, 185, 35, 0.3), transparent 45%),
+                linear-gradient(135deg, #8a6a2e 0%, #6a4a20 60%, #3a2a14 100%);
+            border-color: #e8b923;
+            color: #fff5dc;
+            transform: translateY(-2px);
+            box-shadow:
+                0 6px 20px rgba(0, 0, 0, 0.7),
+                0 0 30px rgba(232, 185, 35, 0.4);
+        }
+
+        .floating-back-btn:active {
+            transform: translateY(0);
+            box-shadow:
+                0 3px 10px rgba(0, 0, 0, 0.6),
+                0 0 15px rgba(201, 162, 39, 0.3);
+        }
+
+        /* Em mobile, ajusta o tamanho pra não cobrir conteúdo importante */
+        @media (max-width: 600px) {
+            .floating-back-btn {
+                top: 10px;
+                left: 10px;
+                padding: 8px 14px;
+                font-size: 0.75rem;
+                letter-spacing: 1px;
+            }
+        }
+    `;
+    document.head.appendChild(style);
+    console.log('✅ CSS do botão flutuante injetado.');
+})();
+
+console.log('✅ Botão flutuante "VOLTAR" pronto pra uso.');
