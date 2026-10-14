@@ -10946,19 +10946,19 @@ const STORY_WEAPON_SPRITES = {
     'flecha_13': 'https://i.imgur.com/jIrYoSM.png',
 
     // ---- CAJADOS ----
-    'cajado_1':  '',
-    'cajado_2':  '',
-    'cajado_3':  '',
-    'cajado_4':  '',
-    'cajado_5':  '',
-    'cajado_6':  '',
-    'cajado_7':  '',
-    'cajado_8':  '',
-    'cajado_9':  '',
-    'cajado_10': '',
-    'cajado_11': '',
-    'cajado_12': '',
-    'cajado_13': '',
+    'cajado_1':  'https://i.imgur.com/ektoPWs.png',
+    'cajado_2':  'https://i.imgur.com/ghogsnB.png',
+    'cajado_3':  'https://i.imgur.com/mncGqpv.png',
+    'cajado_4':  'https://i.imgur.com/e8R6ily.png',
+    'cajado_5':  'https://i.imgur.com/vtgLK9Y.png',
+    'cajado_6':  'https://i.imgur.com/bfRaJq1.png',
+    'cajado_7':  'https://i.imgur.com/aE7lwvY.png',
+    'cajado_8':  'https://i.imgur.com/aKOdqRJ.png',
+    'cajado_9':  'https://i.imgur.com/IoEtQGB.png',
+    'cajado_10': 'https://i.imgur.com/0uKsLbe.png',
+    'cajado_11': 'https://i.imgur.com/xzLYPZQ.png',
+    'cajado_12': 'https://i.imgur.com/M7tBX5E.png',
+    'cajado_13': 'https://i.imgur.com/uzAOiFu.png',
 };
 
 const STORY_AMULET_SPRITES = {
