@@ -422,7 +422,7 @@ const SPRITES_STORY = {
     'peixe_boi':'https://i.imgur.com/7VtvsnP.gif',
     // --- Ato 10 ---
     'bufalo':'https://i.imgur.com/TX4UTzH.gif',
-    'vaca_louca':https://i.imgur.com/ln3g7es.gif',
+    'vaca_louca':'https://i.imgur.com/ln3g7es.gif',
     'cabra_preta':'https://i.imgur.com/hEu2mzb.gif',
     'zebu':'',
     // --- Ato 11 ---
