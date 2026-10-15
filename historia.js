@@ -494,7 +494,7 @@ const SPRITES_STORY = {
     'aldeia_tesouraria':'https://i.imgur.com/vrurP0D.png',
 
     // --- Armas ---
-    'arma_cajado':'','arma_arco':'','arma_manopla':'',
+    'arma_cajado':'https://i.imgur.com/gPTB4uf.png','arma_arco':'https://i.imgur.com/gc0JbJn.png','arma_manopla':'https://i.imgur.com/zWnVhxt.png',
 
     // --- Ícones UI ---
     'ui_gold':'https://i.imgur.com/LIfKWB8.png',
@@ -503,16 +503,16 @@ const SPRITES_STORY = {
     'ui_home':'https://i.imgur.com/ld3V2eD.png',
     'ui_play':'https://i.imgur.com/mXodqS6.png',
     'ui_gift':'https://i.imgur.com/a5t2pWl.png',
-    'ui_crown':'',
-    'ui_sparkle':'',
+    'ui_crown':'https://i.imgur.com/xmBs0jr.png',
+    'ui_sparkle':'https://i.imgur.com/ksXPDMa.png',
     'ui_skull':'https://i.imgur.com/GPSPBly.png',
     'ui_lock':'https://i.imgur.com/wGgq9l7.png',
     'ui_check':'https://i.imgur.com/Y0g5RoY.png',
     'ui_arrow':'https://i.imgur.com/mXodqS6.png',
-    'ui_warn':'',
+    'ui_warn':'https://i.imgur.com/p1w8rbr.png',
     'ui_medal':'https://i.imgur.com/ViAr1EO.png',
-    'ui_star':'',
-    'ui_star_empty':'',
+    'ui_star':'https://i.imgur.com/oCAxRkZ.png',
+    'ui_star_empty':'https://i.imgur.com/PAAn2Hk.png',
     'elem_fogo':'https://i.imgur.com/JouEZbM.png',
     'elem_agua':'https://i.imgur.com/tMRUv48.png',
     'elem_terra':'https://i.imgur.com/ZVPQ9iH.png',
@@ -11779,13 +11779,13 @@ const STORY_MATERIAL_SPRITES = {
 
     // ============ ATO 2 — Mata Fechada ============
     'pelo_tamandua':   'https://i.imgur.com/nkvQ3EG.png',  // ← Pelo de Tamanduá
-    'garra_tamandua':  '',  // ← Garra de Tamanduá
+    'garra_tamandua':  'https://i.imgur.com/g8MZYeu.png',  // ← Garra de Tamanduá
     'couro_anta':      'https://i.imgur.com/WDIf5e7.png',  // ← Couro de Anta
-    'chifre_anta':     '',  // ← Chifre de Anta
+    'chifre_anta':     'https://i.imgur.com/DUAD1UB.png',  // ← Chifre de Anta
     'cera_queixada':   'https://i.imgur.com/lp2iykt.png',  // ← Cera de Queixada
-    'presa_queixada':  '',  // ← Presa de Queixada
+    'presa_queixada':  'https://i.imgur.com/yi9oRFy.png',  // ← Presa de Queixada
     'escama_sucuri':   'https://i.imgur.com/ITchbmQ.png',  // ← Escama de Sucuri
-    'pele_sucuri':     '',  // ← Pele de Sucuri
+    'pele_sucuri':     'https://i.imgur.com/TQAUp0L.png',  // ← Pele de Sucuri
     // Boss
     'pelo_mapinguari': 'https://i.imgur.com/Mgy0IG8.png',  // ← Pelo do Mapinguari
     'amuleto_mapinguari':'https://i.imgur.com/grxwdL7.png',// ← Amuleto do Mapinguari
@@ -11794,128 +11794,128 @@ const STORY_MATERIAL_SPRITES = {
     'escama_piranha':  'https://i.imgur.com/kgoUTpU.png',  // ← Escama de Piranha
     'dente_piranha':   'https://i.imgur.com/3zk4fmC.png',  // ← Dente de Piranha
     'pelo_lontra':     'https://i.imgur.com/kI3a2zX.png',  // ← Pelo de Lontra
-    'garra_lontra':    '',  // ← Garra de Lontra
+    'garra_lontra':    'https://i.imgur.com/kNdKrkP.png',  // ← Garra de Lontra
     'pelo_ariranha':   'https://i.imgur.com/zCM98NX.png',  // ← Pelo de Ariranha
-    'dente_ariranha':  '',  // ← Dente de Ariranha
+    'dente_ariranha':  'https://i.imgur.com/EdSUqjg.png',  // ← Dente de Ariranha
     'escama_pirarucu': 'https://i.imgur.com/XpUjh4G.png',  // ← Escama de Pirarucu
-    'lingua_pirarucu': '',  // ← Língua de Pirarucu
+    'lingua_pirarucu': 'https://i.imgur.com/DRTmmiT.png',  // ← Língua de Pirarucu
     // Boss
     'joia_iara':       'https://i.imgur.com/j2zjNYG.png',  // ← Joia da Iara
     'amuleto_iara':    'https://i.imgur.com/1Au85vR.png',  // ← Amuleto da Iara
 
     // ============ ATO 4 — Chamas da Noite ============
     'pele_cascavel':    'https://i.imgur.com/l8tPijz.png',  // ← Pele de Cascavel
-    'chocalho_cascavel':'',  // ← Chocalho de Cascavel
+    'chocalho_cascavel':'https://i.imgur.com/HpZIXLn.png',  // ← Chocalho de Cascavel
     'anel_coral':       'https://i.imgur.com/ecZV4QI.png',  // ← Anel de Coral
-    'veneno_coral':     '',  // ← Veneno de Coral
+    'veneno_coral':     'https://i.imgur.com/ItUix5K.png',  // ← Veneno de Coral
     'pele_jararaca':    'https://i.imgur.com/hOJwfmd.png',  // ← Pele de Jararaca
-    'presa_jararaca':   '',  // ← Presa de Jararaca
+    'presa_jararaca':   'https://i.imgur.com/4MBzwuX.png',  // ← Presa de Jararaca
     'casco_tartaruga':  'https://i.imgur.com/O4HKJzr.png',  // ← Casco de Tartaruga
-    'ovo_tartaruga':    '',  // ← Ovo de Tartaruga
+    'ovo_tartaruga':    'https://i.imgur.com/4Rtovom.png',  // ← Ovo de Tartaruga
     // Boss
     'escama_boitata':   'https://i.imgur.com/9NBxzxu.png',  // ← Escama Flamejante
     'amuleto_boitata':  'https://i.imgur.com/cBaWgUV.png',  // ← Amuleto do Boitatá
 
     // ============ ATO 5 — Maldição do Fogo ============
     'chifre_bode':      'https://i.imgur.com/PEUng6v.png',  // ← Chifre de Bode
-    'pelo_bode':        '',  // ← Pelo de Bode
+    'pelo_bode':        'https://i.imgur.com/K1iK21s.png',  // ← Pelo de Bode
     'la_carneiro':      'https://i.imgur.com/RDgvubw.png',  // ← Lã de Carneiro
-    'chifre_carneiro':  '',  // ← Chifre de Carneiro
+    'chifre_carneiro':  'https://i.imgur.com/akmk5Rc.png',  // ← Chifre de Carneiro
     'crina_cavalo':     'https://i.imgur.com/4YV8EKn.png',  // ← Crina de Cavalo
-    'casco_cavalo':     '',  // ← Casco de Cavalo
+    'casco_cavalo':     'https://i.imgur.com/ZowdhMC.png',  // ← Casco de Cavalo
     'chifre_touro':     'https://i.imgur.com/YRtPJ8l.png',  // ← Chifre de Touro
-    'couro_touro':      '',  // ← Couro de Touro
+    'couro_touro':      'https://i.imgur.com/gZeLGoE.png',  // ← Couro de Touro
     // Boss
     'ferradura_mula':   'https://i.imgur.com/j0KDfvl.png',  // ← Ferradura da Mula
     'amuleto_mula':     'https://i.imgur.com/NCSB2In.png',  // ← Amuleto da Mula
 
     // ============ ATO 6 — Ossos do Sertão ============
     'pena_urubu':         'https://i.imgur.com/rXrxotX.png',  // ← Pena de Urubu
-    'bico_urubu':         '',  // ← Bico de Urubu
+    'bico_urubu':         'https://i.imgur.com/5taPpjh.png',  // ← Bico de Urubu
     'pena_carcara':       'https://i.imgur.com/WZ6M71Z.png',  // ← Pena de Carcará
-    'garra_carcara':      '',  // ← Garra de Carcará
+    'garra_carcara':      'https://i.imgur.com/mnVsZ8c.png',  // ← Garra de Carcará
     'placa_tatu':         'https://i.imgur.com/PWN8WJN.png',  // ← Placa de Tatu
-    'garra_tatu':         '',  // ← Garra de Tatu
+    'garra_tatu':         'https://i.imgur.com/0GVyG4N.png',  // ← Garra de Tatu
     'pelo_lobo_guara':    'https://i.imgur.com/SACZHLY.png',  // ← Pelo de Lobo-Guará
-    'presa_lobo_guara':   '',  // ← Presa de Lobo-Guará
+    'presa_lobo_guara':   'https://i.imgur.com/4xBtg0m.png',  // ← Presa de Lobo-Guará
     // Boss
     'osso_corpo_seco':    'https://i.imgur.com/yCGLbk6.png',  // ← Osso Amaldiçoado
     'amuleto_corpo_seco': 'https://i.imgur.com/nbWin30.png',  // ← Amuleto do Corpo Seco
 
     // ============ ATO 7 — Maldição da Lua ============
     'pelo_cachorro_mato': 'https://i.imgur.com/CzuZlmm.png',  // ← Pelo de Cachorro-do-Mato
-    'presa_cachorro_mato':'',  // ← Presa de Cachorro-do-Mato
+    'presa_cachorro_mato':'https://i.imgur.com/OKvf39t.png',  // ← Presa de Cachorro-do-Mato
     'cauda_raposa':       'https://i.imgur.com/VA8rW74.png',  // ← Cauda de Raposa
-    'pelo_raposa':        '',  // ← Pelo de Raposa
+    'pelo_raposa':        'https://i.imgur.com/whEu4si.png',  // ← Pelo de Raposa
     'mascara_guaxinim':   'https://i.imgur.com/hpcbhjV.png',  // ← Máscara de Guaxinim
-    'garra_guaxinim':     '',  // ← Garra de Guaxinim
+    'garra_guaxinim':     'https://i.imgur.com/vlxB7Zf.png',  // ← Garra de Guaxinim
     'pelo_jaguatirica':   'https://i.imgur.com/PJpgkA5.png',  // ← Pelo de Jaguatirica
-    'garra_jaguatirica':  '',  // ← Garra de Jaguatirica
+    'garra_jaguatirica':  'https://i.imgur.com/BJbRLkT.png',  // ← Garra de Jaguatirica
     // Boss
     'pelo_lobisomem':     'https://i.imgur.com/Q6GTFIi.png',  // ← Pelo de Lobisomem
     'amuleto_lobisomem':  'https://i.imgur.com/SdrNTgW.png',  // ← Amuleto do Lobisomem
 
     // ============ ATO 8 — Poções e Sombras ============
     'asa_morcego':        'https://i.imgur.com/ZGi0F9K.png',  // ← Asa de Morcego
-    'presa_morcego':      '',  // ← Presa de Morcego
+    'presa_morcego':      'https://i.imgur.com/rlTYIxR.png',  // ← Presa de Morcego
     'pena_coruja':        'https://i.imgur.com/5vpxoKa.png',  // ← Pena de Coruja
-    'olho_coruja':        '',  // ← Olho de Coruja
+    'olho_coruja':        'https://i.imgur.com/Y7A1wW9.png',  // ← Olho de Coruja
     'pele_sapo':          'https://i.imgur.com/Oug9mNH.png',  // ← Pele de Sapo
-    'veneno_sapo':        '',  // ← Veneno de Sapo
+    'veneno_sapo':        'https://i.imgur.com/1AZH1rO.png',  // ← Veneno de Sapo
     'pena_seriema':       'https://i.imgur.com/udfo4lA.png',  // ← Pena de Seriema
-    'bico_seriema':       '',  // ← Bico de Seriema
+    'bico_seriema':       'https://i.imgur.com/2Pu8FLf.png',  // ← Bico de Seriema
     // Boss
     'caldeirao_cuca':     'https://i.imgur.com/D73xfFj.png',  // ← Fragmento do Caldeirão
     'amuleto_cuca':       'https://i.imgur.com/MZqecGu.png',  // ← Amuleto da Cuca
 
     // ============ ATO 9 — Canto das Águas ============
     'escama_tucunare':    'https://i.imgur.com/ATGdiol.png',  // ← Escama de Tucunaré
-    'dente_tucunare':     '',  // ← Dente de Tucunaré
+    'dente_tucunare':     'https://i.imgur.com/mnVsZ8c.png',  // ← Dente de Tucunaré
     'escama_piraiba':     'https://i.imgur.com/ow8TFQ9.png',  // ← Escama de Piraíba
-    'lingua_piraiba':     '',  // ← Língua de Piraíba
+    'lingua_piraiba':     'https://i.imgur.com/TNMkNZH.png',  // ← Língua de Piraíba
     'escama_dourada':     'https://i.imgur.com/oJEjSCR.png',  // ← Escama Dourada
-    'barbatana_dourada':  '',  // ← Barbatana Dourada
+    'barbatana_dourada':  'https://i.imgur.com/M0yxEz8.png',  // ← Barbatana Dourada
     'couro_peixe_boi':    'https://i.imgur.com/hMxADzR.png',  // ← Couro de Peixe-Boi
-    'osso_peixe_boi':     '',  // ← Osso de Peixe-Boi
+    'osso_peixe_boi':     'https://i.imgur.com/wpLp3Fz.png',  // ← Osso de Peixe-Boi
     // Boss
     'flor_boto':          'https://i.imgur.com/VjU6qOb.png',  // ← Flor do Boto
     'amuleto_boto':       'https://i.imgur.com/60PhZcr.png',  // ← Amuleto do Boto
 
     // ============ ATO 10 — Terror do Pasto ============
     'chifre_bufalo':      'https://i.imgur.com/81JTkR3.png',  // ← Chifre de Búfalo
-    'couro_bufalo':       '',  // ← Couro de Búfalo
+    'couro_bufalo':       'https://i.imgur.com/ZNeUIi9.png',  // ← Couro de Búfalo
     'sino_vaca':          'https://i.imgur.com/eC6RONh.png',  // ← Sino da Vaca Louca
-    'chifre_vaca':        '',  // ← Chifre da Vaca Louca
+    'chifre_vaca':        'https://i.imgur.com/8mLj2H3.png',  // ← Chifre da Vaca Louca
     'chifre_cabra':       'https://i.imgur.com/2Ef2uzL.png',  // ← Chifre de Cabra Preta
-    'pelo_cabra':         '',  // ← Pelo de Cabra Preta
+    'pelo_cabra':         'https://i.imgur.com/jZuInjs.png',  // ← Pelo de Cabra Preta
     'corcova_zebu':       'https://i.imgur.com/ricPmaF.png',  // ← Corcova de Zebu
-    'chifre_zebu':        '',  // ← Chifre de Zebu
+    'chifre_zebu':        'https://i.imgur.com/QdR6ZbI.png',  // ← Chifre de Zebu
     // Boss
     'chifre_boi':         'https://i.imgur.com/HaNOyts.png',  // ← Chifre do Boi da Cara Preta
     'amuleto_boi':        'https://i.imgur.com/GhVUlJ8.png',  // ← Amuleto do Boi da Cara Preta
 
     // ============ ATO 11 — Luz Fria da Lua ============
     'pelo_gato_mato':     'https://i.imgur.com/KKWzAjN.png',  // ← Pelo de Gato-do-Mato
-    'garra_gato_mato':    '',  // ← Garra de Gato-do-Mato
+    'garra_gato_mato':    'https://i.imgur.com/OVzXdR7.png',  // ← Garra de Gato-do-Mato
     'asa_mariposa':       'https://i.imgur.com/tVh2HIp.png',  // ← Asa de Mariposa Gigante
-    'po_mariposa':        '',  // ← Pó Lunar
+    'po_mariposa':        'https://i.imgur.com/eHR7wl4.png',  // ← Pó Lunar
     'mascara_quati':      'https://i.imgur.com/u3u0t9f.png',  // ← Máscara de Quati
-    'cauda_quati':        '',  // ← Cauda de Quati
+    'cauda_quati':        'https://i.imgur.com/4YSOwAo.png',  // ← Cauda de Quati
     'pelo_sucuarana':     'https://i.imgur.com/VxUQeoh.png',  // ← Pelo de Suçuarana
-    'garra_sucuarana':    '',  // ← Garra de Suçuarana
+    'garra_sucuarana':    'https://i.imgur.com/baOFA8X.png',  // ← Garra de Suçuarana
     // Boss
     'raio_lunar':         'https://i.imgur.com/rRMX5zO.png',  // ← Raio Lunar
     'amuleto_jaci':       'https://i.imgur.com/Ugx2s1z.png',  // ← Amuleto da Jaci
 
     // ============ ATO 12 — O Sol Devorador ============
     'pena_gaviao':        'https://i.imgur.com/uKsKkCO.png',  // ← Pena de Gavião
-    'garra_gaviao':       '',  // ← Garra de Gavião
+    'garra_gaviao':       'https://i.imgur.com/pAcExMf.png',  // ← Garra de Gavião
     'pena_falcao':        'https://i.imgur.com/e0Jl4m6.png',  // ← Pena de Falcão
-    'garra_falcao':       '',  // ← Garra de Falcão
+    'garra_falcao':       'https://i.imgur.com/OVzXdR7.png',  // ← Garra de Falcão
     'pena_urutau':        'https://i.imgur.com/RJ5R30X.png',  // ← Pena de Urutau
-    'olho_urutau':        '',  // ← Olho de Urutau
+    'olho_urutau':        'https://i.imgur.com/MXv4iR4.png',  // ← Olho de Urutau
     'pena_aguia':         'https://i.imgur.com/Voa3glg.png',  // ← Pena de Águia
-    'garra_aguia':        '',  // ← Garra de Águia
+    'garra_aguia':        'https://i.imgur.com/mnVsZ8c.png',  // ← Garra de Águia
     // Boss
     'coroa_solar':        'https://i.imgur.com/eU5rrOA.png',  // ← Coroa Solar
     'amuleto_guaraci':    'https://i.imgur.com/rRwaKTH.png',  // ← Amuleto do Guaraci
