@@ -402,7 +402,7 @@ const SPRITES_STORY = {
     'touro_bravo':'https://i.imgur.com/YAGfZmd.gif',
     // --- Ato 6 ---
     'urubu':'https://i.imgur.com/h4N8ZzS.gif',
-    'carcara':'https://i.imgur.com/1A2lqg8.gif',
+    'carcaara':'https://i.imgur.com/1A2lqg8.gif',
     'tatu':'https://i.imgur.com/5unG9x9.gif',
     'lobo_guara':'https://i.imgur.com/f7KgIRB.gif',
     // --- Ato 7 ---
@@ -777,8 +777,8 @@ function getStoryEnemyName(id){ return STORY_ENEMIES[id]?.name || id; }
 // =================================================================
 const STORY_STARS_CONFIG = {
     MAX_STARS_PER_PHASE: 3,
-    THRESHOLD_3_STARS: 0.60,
-    THRESHOLD_2_STARS: 0.35,
+    THRESHOLD_3_STARS: 0.95,
+    THRESHOLD_2_STARS: 0.70,
     THRESHOLD_1_STAR:  0.15,
     REF_ULTIMATE_BONUS: 150,
     REF_AMULET_BONUS: 100,
@@ -838,16 +838,16 @@ function getMaxTotalStars() {
 // 🏅 DESBLOQUEIO DE HERÓIS POR ESTRELAS
 // =================================================================
 const STORY_HERO_UNLOCKS = [
-    { className: 'Kanarott',        displayName: 'Kanarott',        starsNeeded: 10  },
-    { className: 'Juruá',           displayName: 'Juruá',           starsNeeded: 20  },
-    { className: 'Bicho Folharal',  displayName: 'Bicho Folharal',  starsNeeded: 30  },
-    { className: 'Eru',             displayName: 'Eru',             starsNeeded: 45  },
-    { className: 'Teperesik',       displayName: 'Teperesik',       starsNeeded: 60  },
-    { className: 'Anduré',          displayName: 'Anduré',          starsNeeded: 75  },
-    { className: 'Pajé Anhanguera', displayName: 'Pajé Anhanguera', starsNeeded: 90  },
-    { className: 'Mãe da Mata',     displayName: 'Mãe da Mata',     starsNeeded: 110 },
-    { className: 'Araci',           displayName: 'Araci',           starsNeeded: 130 },
-    { className: "Tapyra'yawara",   displayName: "Tapyra'yawara",   starsNeeded: 150 },
+    { className: 'Kanarott',        displayName: 'Kanarott',        starsNeeded: 20  },
+    { className: 'Juruá',           displayName: 'Juruá',           starsNeeded: 30  },
+    { className: 'Bicho Folharal',  displayName: 'Bicho Folharal',  starsNeeded: 130 },
+    { className: 'Eru',             displayName: 'Eru',             starsNeeded: 60  },
+    { className: 'Teperesik',       displayName: 'Teperesik',       starsNeeded: 70  },
+    { className: 'Anduré',          displayName: 'Anduré',          starsNeeded: 85  },
+    { className: 'Pajé Anhanguera', displayName: 'Pajé Anhanguera', starsNeeded: 100 },
+    { className: 'Mãe da Mata',     displayName: 'Mãe da Mata',     starsNeeded: 120 },
+    { className: 'Araci',           displayName: 'Araci',           starsNeeded: 140 },
+    { className: "Tapyra'yawara",   displayName: "Tapyra'yawara",   starsNeeded: 170 },
 ];
 
 function checkHeroUnlocks() {
@@ -1170,52 +1170,52 @@ const STORY_HERO_CLASSES = {
     'Kanarott': {
         displayName: 'Kanarott', spriteKey: 'heroi_Kanarott', className: 'Kanarott',
         role: 'Guerreiro', hp: 14, atk: 4, range: 0,
-        element: 'TERRA', paKey: 'kanarott_cruz_empurra', starsNeeded: 10,
+        element: 'TERRA', paKey: 'kanarott_cruz_empurra', starsNeeded: 20,
     },
     'Teperesik': {
         displayName: 'Teperesik', spriteKey: 'heroi_Teperesik', className: 'Teperesik',
         role: 'Guerreiro', hp: 20, atk: 2, range: 0,
-        element: 'TERRA', paKey: 'teperesik_area2x2', starsNeeded: 60,
+        element: 'TERRA', paKey: 'teperesik_area2x2', starsNeeded: 70,
     },
     'Eru': {
         displayName: 'Eru', spriteKey: 'heroi_Eru', className: 'Eru',
         role: 'Guerreiro', hp: 12, atk: 5, range: 0,
-        element: 'FOGO', paKey: 'eru_linha_horizontal', starsNeeded: 45,
+        element: 'FOGO', paKey: 'eru_linha_horizontal', starsNeeded: 60,
     },
     'Anduré': {
         displayName: 'Anduré', spriteKey: 'heroi_Andure', className: 'Anduré',
         role: 'Mago', hp: 10, atk: 1, range: 4,
-        element: 'AGUA', paKey: 'andure_area2x2_cura', starsNeeded: 75,
+        element: 'AGUA', paKey: 'andure_area2x2_cura', starsNeeded: 85,
     },
     'Mãe da Mata': {
         displayName: 'Mãe da Mata', spriteKey: 'heroi_MaeDaMata', className: 'Mãe da Mata',
         role: 'Mago', hp: 11, atk: 1, range: 4,
-        element: 'TERRA', paKey: 'maedamata_area3x3_cura', starsNeeded: 110,
+        element: 'TERRA', paKey: 'maedamata_area3x3_cura', starsNeeded: 120,
     },
     'Pajé Anhanguera': {
         displayName: 'Pajé Anhanguera', spriteKey: 'heroi_PajeAnhanguera', className: 'Pajé Anhanguera',
         role: 'Mago', hp: 9, atk: 3, range: 4,
-        element: 'FOGO', paKey: 'paje_coluna_fogo', starsNeeded: 90,
+        element: 'FOGO', paKey: 'paje_coluna_fogo', starsNeeded: 100,
     },
     'Juruá': {
         displayName: 'Juruá', spriteKey: 'heroi_Jurua', className: 'Juruá',
         role: 'Arqueiro', hp: 11, atk: 3, range: 3,
-        element: 'TERRA', paKey: 'jurua_area_alvo_3x3', starsNeeded: 20,
+        element: 'TERRA', paKey: 'jurua_area_alvo_3x3', starsNeeded: 30,
     },
     'Araci': {
         displayName: 'Araci', spriteKey: 'heroi_Araci', className: 'Araci',
         role: 'Arqueiro', hp: 9, atk: 2, range: 3,
-        element: 'AR', paKey: 'araci_linha_horizontal', starsNeeded: 130,
+        element: 'AR', paKey: 'araci_linha_horizontal', starsNeeded: 140,
     },
     'Bicho Folharal': {
         displayName: 'Bicho Folharal', spriteKey: 'heroi_BichoFolharal', className: 'Bicho Folharal',
         role: 'Arqueiro', hp: 10, atk: 2, range: 3,
-        element: 'AR', paKey: 'bicho_cruz_completa', starsNeeded: 30,
+        element: 'AR', paKey: 'bicho_cruz_completa', starsNeeded: 130,
     },
     "Tapyra'yawara": {
         displayName: "Tapyra'yawara", spriteKey: 'heroi_Tapyrayawara', className: "Tapyra'yawara",
         role: 'Arqueiro', hp: 12, atk: 3, range: 3,
-        element: 'TERRA', paKey: 'tapyra_coluna_alvo', starsNeeded: 150,
+        element: 'TERRA', paKey: 'tapyra_coluna_alvo', starsNeeded: 170,
     },
 };
 
@@ -8550,9 +8550,9 @@ function renderOcaScreenFiltered() {
             if (card.classList.contains('locked')) return;
             if (card.querySelector('.hero-details-btn')) return;
             const onclickAttr = card.getAttribute('onclick') || '';
-            const match = onclickAttr.match(/toggleHeroSelection\('([^']+)'\)/);
+            const match = onclickAttr.match(/toggleHeroSelection\('((?:\\'|[^'])*)'\)/);
             if (!match) return;
-            const heroClass = match[1];
+            const heroClass = match[1].replace(/\\'/g, "'");
 
             const btn = document.createElement('button');
             btn.className = 'hero-details-btn';
