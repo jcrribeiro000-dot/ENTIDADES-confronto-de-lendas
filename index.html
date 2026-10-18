@@ -6,6 +6,12 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <title>ENTIDADES: Confronto de Lendas</title>
     <link rel="icon" type="image/png" href="https://i.imgur.com/LbVLpE8.png">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#c9a227">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Entidades">
+    <link rel="apple-touch-icon" href="icon-192.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@500;600;700;900&family=EB+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=IM+Fell+English:ital@0;1&display=swap" rel="stylesheet">
@@ -5369,6 +5375,15 @@
                 window.addEventListener('load', initFixes);
             }
         })();
+    </script>
+    <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js')
+          .then(() => console.log('✅ Service Worker registrado'))
+          .catch(err => console.warn('⚠️ SW falhou:', err));
+      });
+    }
     </script>
 </body>
 </html>

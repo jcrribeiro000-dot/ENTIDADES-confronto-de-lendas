@@ -472,6 +472,7 @@ const SPRITES_STORY = {
     'heroi_MaeDoOuro':   'https://i.imgur.com/SEU_LINK_AQUI.gif',
     'heroi_PajeAcu':     'https://i.imgur.com/SEU_LINK_AQUI.gif',
     'heroi_Negrinho':    'https://i.imgur.com/SEU_LINK_AQUI.gif',
+    'heroi_Ruda':        'https://i.imgur.com/fCvtKEx.gif',
 
     // --- Cenários ---
     'bg_1_1':'https://i.imgur.com/OWIsmOc.png','bg_1_2':'https://i.imgur.com/XBd9za6.png',
@@ -18672,13 +18673,13 @@ console.log('💡 Zeradas:', STORY_PROGRESS.clearedDifficulties || []);
         'teju_jagua': 'https://i.imgur.com/0atgaFe.gif',
         'mboi_tui': 'https://i.imgur.com/69aaS7o.gif',
         'monai': 'https://i.imgur.com/iJl1nlQ.gif',
-        'jasy_jatere': '',
-        'kurupi': '',
+        'jasy_jatere': 'https://i.imgur.com/sAeJs3R.gif',
+        'kurupi': 'https://i.imgur.com/gMVyzEk.gif',
         'ao_ao': 'https://i.imgur.com/CxdJ0y5.gif',
         'luison': 'https://i.imgur.com/PRdbFLR.gif',
 
         // ---- Pesadelo mensal ----
-        'pesadelo': '',
+        'pesadelo': 'https://i.imgur.com/L43Dzl2.gif',
 
         // ---- Animais (reusam SPRITES_STORY, mas podem ter sprite próprio) ----
         // Se vazio, usa SPRITES_STORY do mesmo id.
@@ -23404,4 +23405,2547 @@ console.log('💡 Zeradas:', STORY_PROGRESS.clearedDifficulties || []);
     }
 
     console.log('✅ [V12.9] Armas do evento agora podem ser equipadas.');
+})();
+// =================================================================
+// historia.js — BLOCO 51 (V13.0 — Correção de Menus e Bestiário)
+// =================================================================
+
+(function fixMenusBestiarioV130() {
+    if (window._eventoFixMenusV130) return;
+    window._eventoFixMenusV130 = true;
+
+    // ==============================================================
+    // 1. CORRIGIR O MENU "?" DOS HERÓIS (Tapyra e Rudá)
+    // ==============================================================
+    
+    // Adiciona os textos que faltavam
+    if (typeof STORY_HERO_DETAILS !== 'undefined') {
+        STORY_HERO_DETAILS["Tapyra'yawara"] = {
+            paName: 'Coluna do Caçador',
+            paDesc: "Tapyra'yawara mira o alvo e dispara uma flecha de pedra que invoca uma coluna vertical de terra, prendendo e esmagando tudo na coluna do alvo.",
+            paExtra: 'Coluna vertical inteira no alvo (8 tiles).',
+            tactical: 'Alcance: 3 (ataca à distância). 12 HP.',
+            notes: 'Um dos mais resistentes dos arqueiros.'
+        };
+        
+        STORY_HERO_DETAILS["Rudá"] = {
+            paName: 'Flecha do Amor',
+            paDesc: 'Rudá dispara uma flecha de luz pura que atravessa o campo de batalha. Ela atinge o alvo principal e o tile exatamente no meio do caminho, causando dano em cadeia.',
+            paExtra: 'Dano no alvo e no tile central entre Rudá e o alvo.',
+            tactical: 'Alcance: 3 (ataca à distância). 10 HP. 4 ATK.',
+            notes: 'Deus do amor e da guerra justa. Desbloqueado ao coletar os 7 Fragmentos Divinos.'
+        };
+    }
+
+    // Corrige a função de abrir o menu para não quebrar com apóstrofos
+    const _origOpenDetails = window.openHeroDetails;
+    if (typeof _origOpenDetails === 'function') {
+        window.openHeroDetails = function(heroClass) {
+            // Substitui o apóstrofo por uma versão segura para o HTML
+            const safeClass = String(heroClass).replace(/'/g, "\\'");
+            try {
+                return _origOpenDetails.call(this, safeClass);
+            } catch (e) {
+                console.warn('[V13.0] Erro no menu do herói:', heroClass, e);
+                // Fallback: abre o painel mesmo sem os detalhes
+                if (typeof closeHeroDetails === 'function') closeHeroDetails();
+                const ov = document.createElement('div');
+                ov.id = 'heroDetailsOverlay';
+                ov.className = 'hero-details-overlay open';
+                ov.innerHTML = `
+                    <div class="hero-details-panel">
+                        <div class="hero-details-header">
+                            <h2 class="hero-details-name">${heroClass}</h2>
+                            <button class="hero-details-close" onclick="closeHeroDetails()">✕</button>
+                        </div>
+                        <div class="hero-details-section">
+                            <div class="hero-details-section-title">📊 ATRIBUTOS</div>
+                            <div class="hero-details-note">Detalhes não encontrados para este herói.</div>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(ov);
+            }
+        };
+    }
+
+    // ==============================================================
+    // 2. CRIAR MENU DO BESTIÁRIO DO EVENTO
+    // ==============================================================
+    window.renderBestiarioEvento = function() {
+        const screen = document.getElementById('storyScreen');
+        if (!screen) return;
+
+        const bossList = (typeof EVENTO_BOSSES !== 'undefined') ? Object.values(EVENTO_BOSSES) : [];
+        
+        let cardsHTML = '';
+        bossList.forEach(boss => {
+            const prog = (typeof getEventoProgresso === 'function') ? getEventoProgresso(boss.id) : null;
+            const derrotado = prog && prog.fasesConcluidas.includes('boss');
+            
+            // Define o elemento e cor
+            const elemCor = { FOGO:'#e74c3c', AGUA:'#3498db', TERRA:'#27ae60', AR:'#f1c40f' }[boss.elemento] || '#c9a227';
+
+            cardsHTML += `
+                <div class="evento-card" style="--evento-elem-color:${elemCor};">
+                    <div class="evento-card-header">
+                        <span class="evento-dia">${boss.diaLabel}</span>
+                        ${derrotado ? '<span class="evento-badge concluido">✅ DERROTADO</span>' : '<span class="evento-badge futuro">🔒 NÃO ENFRENTADO</span>'}
+                    </div>
+                    <div class="evento-card-sprite" style="${derrotado ? '' : 'filter: grayscale(1) brightness(0.3);'}">
+                        ${derrotado ? eventoIcon(boss.id, 'large') : '❓'}
+                    </div>
+                    <div class="evento-card-name">${derrotado ? boss.nome : '???'}</div>
+                    <div class="evento-card-titulo">${derrotado ? boss.titulo : 'Desconhecido'}</div>
+                    <div class="evento-card-stats">
+                        <span>HP ${boss.hp}</span>
+                        <span>ATK ${boss.atk}</span>
+                    </div>
+                    <div class="evento-card-elem" style="color:${elemCor};">${boss.elemento}</div>
+                    ${derrotado ? `<div class="evento-lore-box" style="font-size:0.8rem; padding:10px; margin-top:5px;">${boss.lore}</div>` : ''}
+                </div>
+            `;
+        });
+
+        // Pesadelo
+        if (typeof EVENTO_PESADELO !== 'undefined') {
+            const pes = EVENTO_PESADELO;
+            const derrotadoPes = false; // O pesadelo não salva progresso, então fica como mistério
+            cardsHTML += `
+                <div class="evento-card" style="--evento-elem-color:#8e44ad; grid-column: 1 / -1; max-width: 400px; margin: 0 auto;">
+                    <div class="evento-card-header">
+                        <span class="evento-dia">EVENTO MENSAL</span>
+                        <span class="evento-badge perdido">🌑 MISTÉRIO</span>
+                    </div>
+                    <div class="evento-card-sprite" style="filter: grayscale(1) brightness(0.3);">❓</div>
+                    <div class="evento-card-name">???</div>
+                    <div class="evento-card-titulo">A Manifestação da Destruição</div>
+                    <div class="evento-lore-box" style="font-size:0.8rem; padding:10px; margin-top:5px;">Dizem que quando a lua nova se alinha com o sol, os Sete Selados se fundem. O que desperta é o fim.</div>
+                </div>
+            `;
+        }
+
+        screen.innerHTML = `
+            <div class="story-container">
+                <div class="story-header">
+                    <h1 class="story-title">📖 BESTIÁRIO DO EVENTO</h1>
+                    <p class="story-subtitle">Os Sete Selados e a manifestação do Pesadelo</p>
+                </div>
+                <div class="evento-grid">${cardsHTML}</div>
+                <div class="story-footer">
+                    <button class="story-back-btn" onclick="renderAldeiaScreen()">← VOLTAR À ALDEIA</button>
+                </div>
+            </div>
+        `;
+        screen.classList.add('active');
+        screen.style.display = 'flex';
+    };
+
+    // ==============================================================
+    // 3. CRIAR MENU DE HERÓIS DO EVENTO (Equipar e Ver Lore)
+    // ==============================================================
+    window.renderHeroisEvento = function() {
+        const screen = document.getElementById('storyScreen');
+        if (!screen) return;
+
+        const unlockedList = STORY_PROGRESS.unlockedHeroesStory || ['Tupa', 'Sume', 'Caipora'];
+        const allHeroes = Object.values(STORY_HERO_CLASSES);
+        
+        // Filtra apenas os heróis do evento/raridade alta
+        const heroesEvento = allHeroes.filter(h => h.rarity >= 4 || h.unlockReq?.type === 'special');
+
+        let cardsHTML = '';
+        heroesEvento.forEach(hero => {
+            const isUnlocked = unlockedList.includes(hero.className);
+            const isSelected = STORY_PROGRESS.selectedHeroes.includes(hero.className);
+            
+            let spriteSrc = '';
+            if (hero.spriteKey && SPRITES_STORY[hero.spriteKey]) {
+                spriteSrc = SPRITES_STORY[hero.spriteKey];
+            } else if (SPRITES[hero.className]) {
+                spriteSrc = SPRITES[hero.className];
+            }
+            
+            const spriteBlock = spriteSrc ? `<img src="${spriteSrc}" class="story-hero-sprite" style="filter: ${!isUnlocked ? 'brightness(0) invert(0.2)' : ''}">` : `<div class="story-hero-sprite" style="font-size:3rem; display:flex; align-items:center; justify-content:center;">${isUnlocked ? '❓' : '🔒'}</div>`;
+
+            const el = hero.element || 'FOGO';
+            
+            cardsHTML += `
+                <div class="story-hero-card ${isSelected ? 'selected' : ''}" style="border-color: ${isUnlocked ? '#e8b923' : '#3d2d18'};">
+                    ${spriteBlock}
+                    <div class="story-hero-name">${isUnlocked ? hero.displayName : '???'}</div>
+                    <div class="story-hero-element elem-${el}">${elemIcon(el)} ${isUnlocked ? hero.element || 'DINÂMICO' : '???'}</div>
+                    <div class="story-hero-level">${hero.role}</div>
+                    ${isUnlocked ? `
+                        <div style="margin-top:10px; font-size:0.8rem; color:#8ac070;">Desbloqueado</div>
+                        <button class="hero-details-btn" onclick="openHeroDetails('${hero.className.replace(/'/g, "\\'")}')" style="margin: 10px auto 0; position:relative; top:auto; left:auto;">?</button>
+                    ` : `
+                        <div class="story-hero-lock-info" style="margin-top:10px;">
+                            ${hero.unlockReq?.type === 'special' ? 'Junte os 7 Fragmentos' : `Zere no ${hero.unlockReq?.difficulty || 'Normal'}`}
+                        </div>
+                    `}
+                </div>
+            `;
+        });
+
+        screen.innerHTML = `
+            <div class="story-container">
+                <div class="story-header">
+                    <h1 class="story-title">🏅 HERÓIS LENDÁRIOS</h1>
+                    <p class="story-subtitle">Seres de poder ancestral despertados no evento</p>
+                </div>
+                <div class="story-heroes-grid">${cardsHTML}</div>
+                <div class="story-footer">
+                    <button class="story-back-btn" onclick="renderAldeiaScreen()">← VOLTAR À ALDEIA</button>
+                </div>
+            </div>
+        `;
+        screen.classList.add('active');
+        screen.style.display = 'flex';
+    };
+
+    // ==============================================================
+    // 4. ADICIONAR OS BOTÕES NA ALDEIA
+    // ==============================================================
+    const _origRenderAldeia = window.renderAldeiaScreen;
+    if (typeof _origRenderAldeia === 'function') {
+        window.renderAldeiaScreen = function() {
+            const r = _origRenderAldeia.apply(this, arguments);
+            
+            const gridEl = document.querySelector('.story-ald-grid');
+            if (!gridEl) return r;
+
+            // Adiciona botão "Heróis Lendários"
+            if (!gridEl.querySelector('.evento-herois-card')) {
+                const card = document.createElement('div');
+                card.className = 'story-ald-location evento-herois-card';
+                card.style.borderColor = '#e8b923'; // Dourado
+                card.onclick = () => window.renderHeroisEvento();
+                card.innerHTML = `
+                    <div class="story-ald-loc-icon">🏅</div>
+                    <div class="story-ald-loc-info">
+                        <div class="story-ald-loc-name">HERÓIS LENDÁRIOS</div>
+                        <div class="story-ald-loc-desc">Veja e equipe os heróis do evento</div>
+                    </div>
+                `;
+                gridEl.appendChild(card);
+            }
+
+            // Adiciona botão "Bestiário do Evento"
+            if (!gridEl.querySelector('.evento-bestiario-card')) {
+                const card = document.createElement('div');
+                card.className = 'story-ald-location evento-bestiario-card';
+                card.style.borderColor = '#8e44ad'; // Roxo
+                card.onclick = () => window.renderBestiarioEvento();
+                card.innerHTML = `
+                    <div class="story-ald-loc-icon">🐉</div>
+                    <div class="story-ald-loc-info">
+                        <div class="story-ald-loc-name">BESTIÁRIO DO EVENTO</div>
+                        <div class="story-ald-loc-desc">Os 7 Selados e o Pesadelo</div>
+                    </div>
+                `;
+                gridEl.appendChild(card);
+            }
+
+            return r;
+        };
+    }
+
+    console.log('✅ [V13.0] Menus de Heróis, Bestiário e Menu "?" corrigidos.');
+})();
+// =================================================================
+// historia.js — BLOCO 52 (V13.1 — Correção Definitiva da OCA e Bestiário)
+// =================================================================
+
+(function fixOcaEBestiarioV131() {
+    if (window._eventoFixV131) return;
+    window._eventoFixV131 = true;
+
+    // ==============================================================
+    // 1. CONSERTAR O BOTÃO "?" DA OCA (Apóstrofo e Detalhes)
+    // ==============================================================
+    
+    // Corrige os textos do Rudá e Tapyra
+    if (typeof STORY_HERO_DETAILS !== 'undefined') {
+        STORY_HERO_DETAILS["Tapyra'yawara"] = {
+            paName: 'Coluna do Caçador',
+            paDesc: "Tapyra'yawara dispara uma flecha de pedra que invoca uma coluna vertical de terra, prendendo e esmagando tudo na coluna do alvo.",
+            paExtra: 'Coluna vertical inteira no alvo (8 tiles).',
+            tactical: 'Alcance: 3 (ataca à distância). 12 HP.',
+            notes: 'Um dos mais resistentes dos arqueiros.'
+        };
+        
+        STORY_HERO_DETAILS["Rudá"] = {
+            paName: 'Flecha do Amor',
+            paDesc: 'Rudá dispara uma flecha de luz divina que atinge o alvo e o tile exatamente no meio do caminho, causando dano em cadeia.',
+            paExtra: 'Dano no alvo e no tile central entre Rudá e o alvo.',
+            tactical: 'Alcance: 3 (ataque à distância). 10 HP. 4 ATK.',
+            notes: 'Deus do amor e da guerra justa. Desbloqueado ao coletar os 7 Fragmentos Divinos.'
+        };
+    }
+
+    // Blinda a função de abrir o menu para aceitar apóstrofos
+    const _origOpenDetails = window.openHeroDetails;
+    if (typeof _origOpenDetails === 'function') {
+        window.openHeroDetails = function(heroClass) {
+            // Força a conversão para string segura (evita quebra de apóstrofo)
+            const safeClass = String(heroClass).replace(/'/g, "\\'");
+            return _origOpenDetails.call(this, safeClass);
+        };
+    }
+
+    // Garante que o botão "?" seja injetado corretamente na OCA
+    if (typeof window.renderOcaScreenFiltered === 'function') {
+        const _origOca = window.renderOcaScreenFiltered;
+        window.renderOcaScreenFiltered = function() {
+            const r = _origOca.apply(this, arguments);
+            setTimeout(() => {
+                const cards = document.querySelectorAll('.story-hero-card');
+                cards.forEach(card => {
+                    if (card.classList.contains('locked')) return;
+                    if (card.querySelector('.hero-details-btn')) return;
+                    
+                    // Pega o nome do herói pelo onclick
+                    const onclickAttr = card.getAttribute('onclick') || '';
+                    const match = onclickAttr.match(/toggleHeroSelection\('((?:\\'|[^'])*)'\)/);
+                    if (!match) return;
+                    
+                    const heroClass = match[1].replace(/\\'/g, "'");
+                    const btn = document.createElement('button');
+                    btn.className = 'hero-details-btn';
+                    btn.innerHTML = '?';
+                    btn.title = 'Ver detalhes';
+                    btn.onclick = (e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        window.openHeroDetails(heroClass);
+                    };
+                    card.appendChild(btn);
+                });
+            }, 50);
+            return r;
+        };
+    }
+
+    // ==============================================================
+    // 2. ADICIONAR LORE DOS BOSSES DO EVENTO NO BESTIÁRIO NORMAL
+    // ==============================================================
+    if (typeof STORY_ENEMIES !== 'undefined') {
+        // Adiciona os bosses do evento na tabela de inimigos (para ter nome e stats)
+        if (typeof EVENTO_BOSSES !== 'undefined') {
+            Object.values(EVENTO_BOSSES).forEach(boss => {
+                if (!STORY_ENEMIES[boss.id]) {
+                    STORY_ENEMIES[boss.id] = {
+                        id: boss.id,
+                        name: boss.nome,
+                        hp: boss.hp,
+                        atk: boss.atk,
+                        isBoss: true,
+                        isEvento: true,
+                        descricao: boss.descricao,
+                        lore: boss.lore
+                    };
+                }
+            });
+        }
+    }
+
+    // ==============================================================
+    // 3. PATCH NO BESTIÁRIO NORMAL PARA INCLUIR OS BOSSES DO EVENTO
+    // ==============================================================
+    const _origBestiary = window.renderBestiaryScreen;
+    if (typeof _origBestiary === 'function') {
+        window.renderBestiaryScreen = function() {
+            const r = _origBestiary.apply(this, arguments);
+            
+            // Depois que o bestiário normal renderiza, adiciona a seção do evento
+            const grid = document.querySelector('.bestiary-grid');
+            if (!grid) return r;
+
+            // Evita duplicar
+            if (grid.querySelector('.bestiary-evento-header')) return r;
+
+            const sectionHeader = document.createElement('div');
+            sectionHeader.className = 'bestiary-evento-header';
+            sectionHeader.style.cssText = 'grid-column: 1 / -1; margin-top: 30px; margin-bottom: 10px; border-bottom: 2px solid #8e44ad; padding-bottom: 10px;';
+            sectionHeader.innerHTML = `<h3 style="color: #c39bd3; font-family: 'Cinzel Decorative', serif; font-size: 1.2rem; margin: 0;">🌑 Os Sete Selados (Evento)</h3>`;
+            grid.appendChild(sectionHeader);
+
+            if (typeof EVENTO_BOSSES !== 'undefined') {
+                Object.values(EVENTO_BOSSES).forEach(boss => {
+                    const card = document.createElement('div');
+                    card.className = 'bestiary-card boss';
+                    card.innerHTML = `
+                        <div class="bestiary-card-header">
+                            <div class="bestiary-card-sprite">${eventoIcon(boss.id, 'large')}</div>
+                            <div class="bestiary-card-info">
+                                <div class="bestiary-card-name">${boss.nome}</div>
+                                <div class="bestiary-card-meta">${boss.titulo}</div>
+                            </div>
+                        </div>
+                        <div class="bestiary-card-lore">${boss.descricao}</div>
+                        <div class="bestiary-card-section">
+                            <div class="bestiary-card-section-title">📖 Lore</div>
+                            <div class="bestiary-card-lore" style="margin-top:5px;">${boss.lore}</div>
+                        </div>
+                        <div class="bestiary-card-section">
+                            <div class="bestiary-card-section-title">📊 Atributos</div>
+                            <div class="bestiary-card-stats">
+                                <span><b>HP</b> ${boss.hp}</span>
+                                <span><b>ATK</b> ${boss.atk}</span>
+                                <span><b>ELEM</b> ${boss.elemento}</span>
+                            </div>
+                        </div>
+                    `;
+                    grid.appendChild(card);
+                });
+            }
+            
+            return r;
+        };
+    }
+
+    // ==============================================================
+    // 4. REMOVER OS BOTÕES EXTRAS DA ALDEIA (que foram criados no V13.0)
+    // ==============================================================
+    // Eles serão removidos automaticamente na próxima renderização da Aldeia
+    // porque não vamos recriá-los. Mas para garantir, removemos do DOM agora.
+    document.querySelectorAll('.evento-herois-card, .evento-bestiario-card').forEach(el => el.remove());
+
+    console.log('✅ [V13.1] OCA, Menu "?" e Bestiário corrigidos.');
+})();
+// =================================================================
+// historia.js — BLOCO 53 (V13.2 — Descrições Automáticas para Todos os Heróis)
+// =================================================================
+
+(function fixDescricoesAutomaticasV132() {
+    if (window._eventoFixDescV132) return;
+    window._eventoFixDescV132 = true;
+
+    // ==============================================================
+    // 1. PREENCHER AUTOMATICAMENTE OS DETALHES DOS HERÓIS QUE FALTAM
+    // ==============================================================
+    if (typeof STORY_HERO_DETAILS !== 'undefined' && typeof STORY_HERO_CLASSES !== 'undefined') {
+        
+        Object.values(STORY_HERO_CLASSES).forEach(hero => {
+            // Se o herói ainda não tem detalhes cadastrados...
+            if (!STORY_HERO_DETAILS[hero.className]) {
+                
+                // Cria uma descrição baseada no papel (role) dele
+                let paName = '';
+                let paDesc = '';
+                let paExtra = '';
+                let tactical = '';
+                
+                if (hero.role === 'Guerreiro') {
+                    paName = 'Golpe Ancestral';
+                    paDesc = `${hero.displayName} concentra sua força e desfere um golpe devastador no chão, criando uma onda de choque que atinge todos os inimigos ao redor.`;
+                    paExtra = 'Dano em área ao redor do herói.';
+                    tactical = 'Alcance: 1 (corpo a corpo).';
+                } else if (hero.role === 'Mago') {
+                    paName = 'Chama Espiritual';
+                    paDesc = `${hero.displayName} invoca o poder dos ancestrais, lançando uma magia que atravessa o campo de batalha e atinge o alvo com precisão.`;
+                    paExtra = 'Dano mágico à distância.';
+                    tactical = 'Alcance: 3 ou 4 (ataque à distância).';
+                } else if (hero.role === 'Arqueiro') {
+                    paName = 'Flecha Certeira';
+                    paDesc = `${hero.displayName} dispara uma flecha infalível que atinge o alvo e causa dano em cadeia nos inimigos próximos.`;
+                    paExtra = 'Dano no alvo principal e nos adjacentes.';
+                    tactical = 'Alcance: 3 (ataque à distância).';
+                }
+
+                STORY_HERO_DETAILS[hero.className] = {
+                    paName: paName,
+                    paDesc: paDesc,
+                    paExtra: paExtra,
+                    tactical: tactical,
+                    notes: `Herói desbloqueado. Elemento: ${hero.element || 'Diverso'}.`
+                };
+            }
+        });
+    }
+
+    // ==============================================================
+    // 2. GARANTIR QUE O BOTÃO "?" SEJA INJETADO EM TODOS OS CARDS
+    // ==============================================================
+    // (Reforço do patch anterior, mas com um seletor mais agressivo)
+    const _origOca = window.renderOcaScreenFiltered;
+    if (typeof _origOca === 'function') {
+        window.renderOcaScreenFiltered = function() {
+            const r = _origOca.apply(this, arguments);
+            
+            // Timeout para esperar o DOM ser montado
+            setTimeout(() => {
+                const cards = document.querySelectorAll('.story-hero-card');
+                cards.forEach(card => {
+                    // Se estiver bloqueado, ignora
+                    if (card.classList.contains('locked')) return;
+                    
+                    // Se já tem o botão, ignora
+                    if (card.querySelector('.hero-details-btn')) return;
+                    
+                    // Pega o nome do herói pelo onclick
+                    const onclickAttr = card.getAttribute('onclick') || '';
+                    const match = onclickAttr.match(/toggleHeroSelection\('((?:\\'|[^'])*)'\)/);
+                    
+                    if (match) {
+                        const heroClass = match[1].replace(/\\'/g, "'");
+                        const btn = document.createElement('button');
+                        btn.className = 'hero-details-btn';
+                        btn.innerHTML = '?';
+                        btn.title = 'Ver detalhes';
+                        btn.onclick = (e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            if (typeof window.openHeroDetails === 'function') {
+                                window.openHeroDetails(heroClass);
+                            }
+                        };
+                        card.appendChild(btn);
+                    }
+                });
+            }, 50);
+
+            return r;
+        };
+    }
+
+    console.log('✅ [V13.2] Descrições automáticas e botões "?" reforçados.');
+})();
+// =================================================================
+// historia.js — BLOCO 54 (V13.3 — Descrição Visual dos Novos PAs)
+// =================================================================
+
+(function fixPAVisualV133() {
+    if (window._eventoFixPAVisV133) return;
+    window._eventoFixPAVisV133 = true;
+
+    const _origRenderPA = window.renderPAMiniGrid;
+    
+    if (typeof _origRenderPA === 'function') {
+        window.renderPAMiniGrid = function(heroClass) {
+            const heroData = STORY_HERO_CLASSES[heroClass];
+            if (!heroData) return _origRenderPA.apply(this, arguments);
+
+            const paKey = heroData.paKey;
+            
+            // Se for um dos PAs antigos, deixa a função original desenhar
+            const paAntigos = [
+                'base_coluna', 'base_linha_cura', 'base_area_alvo', 
+                'kanarott_cruz_empurra', 'teperesik_area2x2', 'eru_linha_horizontal',
+                'andure_area2x2_cura', 'maedamata_area3x3_cura', 'paje_coluna_fogo',
+                'jurua_area_alvo_3x3', 'araci_linha_horizontal', 'bicho_cruz_completa',
+                'tapyra_coluna_alvo', 'ruda_flecha_amor'
+            ];
+            
+            if (paAntigos.includes(paKey)) {
+                return _origRenderPA.apply(this, arguments);
+            }
+
+            // ==============================================================
+            // DESENHO VISUAL PARA OS NOVOS HERÓIS
+            // ==============================================================
+            const gridSize = 8;
+            const CX = 3; // Centro X no mini-grid
+            const CY = 4; // Centro Y no mini-grid
+            const afetados = Array.from({ length: gridSize }, () => Array(gridSize).fill(false));
+            const targetMock = { x: 3, y: 2 }; // Alvo simulado 2 tiles acima
+
+            const mark = (x, y) => {
+                if (x >= 0 && x < gridSize && y >= 0 && y < gridSize) afetados[y][x] = true;
+            };
+
+            // 1. Curupira — Chuva de Flechas
+            if (paKey === 'curupira_chuva_flechas') {
+                // Marca vários tiles aleatórios (simulando os 10 alvos)
+                for(let i=0; i<5; i++) mark(1 + i, 2);
+                for(let i=0; i<5; i++) mark(2 + i, 5);
+            }
+            // 2. Kianumanka-Manã — Meteoro
+            else if (paKey === 'kianumanka_meteoro') {
+                // Área 3x3 ao redor do alvo
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dy = -1; dy <= 1; dy++) mark(targetMock.x + dx, targetMock.y + dy);
+                }
+            }
+            // 3. Anhanga-Mirim — Raio na Cruz
+            else if (paKey === 'anhanga_mirim_raio') {
+                // Cruz completa no alvo
+                for (let x = 0; x < gridSize; x++) mark(x, targetMock.y);
+                for (let y = 0; y < gridSize; y++) mark(targetMock.x, y);
+            }
+            // 4. Matinta Pereira — Rajada + Empurrão
+            else if (paKey === 'matinta_rajada') {
+                // Linha horizontal do herói até o alvo
+                for (let x = 0; x < gridSize; x++) mark(x, CY);
+            }
+            // 5. Naiá — Apaga Fogo
+            else if (paKey === 'naia_apaga_fogo') {
+                // Marca uns tiles aleatórios (simulando os de fogo)
+                mark(CX, CY); // Centro
+                mark(CX+1, CY+1);
+                mark(CX-1, CY-1);
+                mark(CX+2, CY);
+                mark(CX, CY-2);
+            }
+            // 6. Kuatí — Explosão de Fogo
+            else if (paKey === 'kuati_explosao') {
+                // Área 3x3 ao redor do herói + linha horizontal
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dy = -1; dy <= 1; dy++) mark(CX + dx, CY + dy);
+                }
+                for (let x = 0; x < gridSize; x++) mark(x, CY);
+            }
+            // 7. Caboclo d'Água — Maré + Puxão
+            else if (paKey === 'caboclo_mare') {
+                // Área 3x3 ao redor do herói
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dy = -1; dy <= 1; dy++) mark(CX + dx, CY + dy);
+                }
+            }
+            // 8. Tupinambá — Avalanche
+            else if (paKey === 'tupinamba_avalanche') {
+                // Cruz no alvo
+                for (let x = 0; x < gridSize; x++) mark(x, targetMock.y);
+                for (let y = 0; y < gridSize; y++) mark(targetMock.x, y);
+            }
+            // 9. Mbaraká — Salto + Raio
+            else if (paKey === 'mbaraka_salto_raio') {
+                // Área 3x3 no alvo (onde ele salta)
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dy = -1; dy <= 1; dy++) mark(targetMock.x + dx, targetMock.y + dy);
+                }
+            }
+            // 10. Mãe-do-Ouro — Caminho até o boss
+            else if (paKey === 'maedouro_caminho') {
+                // Caminho em L (linha do herói até o alvo)
+                for (let x = CX; x <= targetMock.x; x++) mark(x, CY);
+                for (let y = targetMock.y; y <= CY; y++) mark(targetMock.x, y);
+            }
+            // 11. Pajé-Açu — Linha + Empurrão
+            else if (paKey === 'pajeacu_linha') {
+                // Linha horizontal do herói
+                for (let x = 0; x < gridSize; x++) mark(x, CY);
+            }
+            // 12. Negrinho do Pastoreio — Cruz + Cura
+            else if (paKey === 'negrinho_cruz_cura') {
+                // Cruz no alvo
+                for (let x = 0; x < gridSize; x++) mark(x, targetMock.y);
+                for (let y = 0; y < gridSize; y++) mark(targetMock.x, y);
+            }
+
+            // ==============================================================
+            // RENDERIZAÇÃO DO MINI-GRID
+            // ==============================================================
+            const heroElement = heroData.element || 'FOGO';
+            const ELEMENT_COLORS = { FOGO:'bg-FOGO', AGUA:'bg-AGUA', TERRA:'bg-TERRA', AR:'bg-AR' };
+            const baseClass = ELEMENT_COLORS[heroElement] || 'bg-FOGO';
+
+            let html = '<div class="pa-mini-grid">';
+            for (let y = 0; y < gridSize; y++) {
+                for (let x = 0; x < gridSize; x++) {
+                    const isHero = (x === CX && y === CY);
+                    const isAfetado = afetados[y][x];
+                    let cls = 'pa-mini-tile';
+                    
+                    if (isHero) cls += ' pa-mini-hero ' + baseClass;
+                    else if (isAfetado) cls += ' pa-mini-afetado ' + baseClass;
+                    else cls += ' pa-mini-vazio';
+                    
+                    html += `<div class="${cls}">${isHero ? '⭐' : ''}</div>`;
+                }
+            }
+            html += '</div>';
+            return html;
+        };
+
+        console.log('✅ [V13.3] Visual dos novos PAs corrigido.');
+    }
+})();
+// =================================================================
+// historia.js — BLOCO 55 (V13.4 — Visual das Skills no Bestiário)
+// =================================================================
+
+(function fixBestiarioSkillsV134() {
+    if (window._eventoFixBestSkillsV134) return;
+    window._eventoFixBestSkillsV134 = true;
+
+    const _origGetGrid = window.getEnemySkillGrid;
+
+    if (typeof _origGetGrid === 'function') {
+        window.getEnemySkillGrid = function(enemyId, skillKey) {
+            // Pega os dados do inimigo
+            const enemy = STORY_ENEMIES[enemyId];
+            if (!enemy) return _origGetGrid.apply(this, arguments);
+
+            // Se NÃO for um boss do evento, usa a função original
+            if (!enemy.isEvento) {
+                return _origGetGrid.apply(this, arguments);
+            }
+
+            // ==============================================================
+            // DESENHO PARA OS BOSSES DO EVENTO
+            // ==============================================================
+            const skill = enemy[skillKey];
+            if (!skill) return '';
+
+            const handler = skill.handler || '';
+            const gridSize = 8;
+            const CX = 3, CY = 4; // Centro do mini-grid
+            const afetados = Array.from({ length: gridSize }, () => Array(gridSize).fill(false));
+
+            const mark = (x, y) => {
+                if (x >= 0 && x < gridSize && y >= 0 && y < gridSize) afetados[y][x] = true;
+            };
+
+            // --- TEJU JAGUA ---
+            if (handler === 'evento_teju_sete_cabecas') {
+                // 3 colunas no centro + linha
+                [CX-1, CX, CX+1].forEach(col => { for(let y=0; y<gridSize; y++) mark(col, y); });
+                for(let x=0; x<gridSize; x++) mark(x, CY);
+            } 
+            else if (handler === 'evento_teju_ima_almas') {
+                // Dano global
+                for(let y=0; y<gridSize; y++) for(let x=0; x<gridSize; x++) mark(x, y);
+            }
+            // --- MBÓI TU'Ĩ ---
+            else if (handler === 'evento_mboi_bico_arco_iris') {
+                // 3 linhas no centro
+                [CY-1, CY, CY+1].forEach(row => { for(let x=0; x<gridSize; x++) mark(x, row); });
+            }
+            else if (handler === 'evento_mboi_inundacao') {
+                // Dano global (converte FOGO)
+                for(let y=0; y<gridSize; y++) for(let x=0; x<gridSize; x++) mark(x, y);
+            }
+            // --- MOÑÁI ---
+            else if (handler === 'evento_monai_voo_rasante') {
+                // Área 3x3 ao redor de um ponto (representado no alvo)
+                const tx = 3, ty = 2;
+                for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) mark(tx + dx, ty + dy);
+            }
+            else if (handler === 'evento_monai_sopro_tempestade') {
+                // Dano global (e empurra)
+                for(let y=0; y<gridSize; y++) for(let x=0; x<gridSize; x++) mark(x, y);
+            }
+            // --- JASY JATERÊ ---
+            else if (handler === 'evento_jasy_salto_solar') {
+                // Área 3x3 na diagonal
+                const tx = 5, ty = 2;
+                for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) mark(tx + dx, ty + dy);
+            }
+            else if (handler === 'evento_jasy_clarao_cegante') {
+                // Dano global
+                for(let y=0; y<gridSize; y++) for(let x=0; x<gridSize; x++) mark(x, y);
+            }
+            // --- KURUPÍ ---
+            else if (handler === 'evento_kurupi_raizes') {
+                // Aleatório (heróis presos)
+                mark(1, 6); mark(3, 6); mark(5, 6); mark(2, 2); mark(4, 2);
+            }
+            else if (handler === 'evento_kurupi_chamado') {
+                // Tile único (invocação)
+                mark(4, 4);
+            }
+            // --- AO AO ---
+            else if (handler === 'evento_aoao_investida') {
+                // Linha diagonal (2x2 em movimento)
+                const dirs = [{x:1,y:1}, {x:2,y:2}, {x:3,y:3}];
+                dirs.forEach(d => { mark(d.x, d.y); mark(d.x+1, d.y); mark(d.x, d.y+1); mark(d.x+1, d.y+1); });
+            }
+            else if (handler === 'evento_aoao_la') {
+                // 4 projéteis diagonais
+                for(let i=1; i<=2; i++) {
+                    mark(CX+i, CY+i); mark(CX-i, CY-i);
+                    mark(CX+i, CY-i); mark(CX-i, CY+i);
+                }
+            }
+            // --- LUISON ---
+            else if (handler === 'evento_luison_colheita') {
+                // 3 pares de colunas (representado por 3 colunas espaçadas)
+                [1, 3, 5].forEach(col => { for(let y=0; y<gridSize; y++) mark(col, y); });
+                [2, 4, 6].forEach(col => { for(let y=0; y<gridSize; y++) mark(col, y); });
+            }
+            else if (handler === 'evento_luison_legado') {
+                // Dano global (invoca skill aleatória)
+                for(let y=0; y<gridSize; y++) for(let x=0; x<gridSize; x++) mark(x, y);
+            }
+
+            // ==============================================================
+            // RENDERIZAÇÃO
+            // ==============================================================
+            // Define a cor baseada no elemento do boss
+            const ELEMENT_COLORS = { FOGO:'bg-FOGO', AGUA:'bg-AGUA', TERRA:'bg-TERRA', AR:'bg-AR', 'VARIÁVEL':'bg-AR' };
+            const baseClass = ELEMENT_COLORS[enemy.elemento || 'FOGO'] || 'bg-FOGO';
+
+            let html = '<div class="pa-mini-grid">';
+            for (let y = 0; y < gridSize; y++) {
+                for (let x = 0; x < gridSize; x++) {
+                    const isBoss = (x === CX && y === CY);
+                    const isAfetado = afetados[y][x];
+                    let cls = 'pa-mini-tile';
+                    
+                    if (isBoss) cls += ' pa-mini-hero ' + baseClass; // Herói/Boss no centro
+                    else if (isAfetado) cls += ' pa-mini-afetado ' + baseClass;
+                    else cls += ' pa-mini-vazio';
+                    
+                    html += `<div class="${cls}">${isBoss ? '👹' : ''}</div>`;
+                }
+            }
+            html += '</div>';
+            return html;
+        };
+
+        console.log('✅ [V13.4] Visual das skills dos bosses do evento no Bestiário corrigido.');
+    }
+})();
+// =================================================================
+// historia.js — BLOCO 56 (V13.5 — Bestiário do Evento Completo)
+// =================================================================
+
+(function fixBestiarioEventoV135() {
+    if (window._eventoFixBestV135) return;
+    window._eventoFixBestV135 = true;
+
+    // Sobrescreve a injeção do bestiário original (que estava no V13.1)
+    // Vamos recriar os cards com todos os dados.
+    const _origBestiary = window.renderBestiaryScreen;
+    
+    if (typeof _origBestiary === 'function') {
+        window.renderBestiaryScreen = function() {
+            // Chama o original para desenhar os animais normais
+            const r = _origBestiary.apply(this, arguments);
+
+            // Agora injetamos os bosses do evento no final
+            const grid = document.querySelector('.bestiary-grid');
+            if (!grid) return r;
+
+            // Se já injetou, não faz de novo
+            if (grid.querySelector('.bestiary-evento-header')) return r;
+
+            // Header da seção
+            const sectionHeader = document.createElement('div');
+            sectionHeader.className = 'bestiary-evento-header';
+            sectionHeader.style.cssText = 'grid-column: 1 / -1; margin-top: 30px; margin-bottom: 10px; border-bottom: 2px solid #8e44ad; padding-bottom: 10px;';
+            sectionHeader.innerHTML = `<h3 style="color: #c39bd3; font-family: 'Cinzel Decorative', serif; font-size: 1.2rem; margin: 0;">🌑 Os Sete Selados (Evento)</h3>`;
+            grid.appendChild(sectionHeader);
+
+            if (typeof EVENTO_BOSSES !== 'undefined') {
+                Object.values(EVENTO_BOSSES).forEach(boss => {
+                    // Verifica se o jogador já derrotou ele
+                    const prog = (typeof getEventoProgresso === 'function') ? getEventoProgresso(boss.id) : null;
+                    const derrotado = prog && prog.fasesConcluidas.includes('boss');
+                    
+                    const card = document.createElement('div');
+                    card.className = `bestiary-card boss ${derrotado ? 'unlocked' : 'locked'}`;
+                    card.style.borderColor = derrotado ? '#a83232' : '#4a3418';
+                    
+                    // Sprite
+                    let imgHTML = `<div style="display:flex; align-items:center; justify-content:center; font-size:3rem; height:72px;">?</div>`;
+                    if (derrotado && typeof eventoIcon === 'function') {
+                        imgHTML = eventoIcon(boss.id, 'large');
+                    }
+
+                    // Skills
+                    let skillsHTML = '';
+                    if (derrotado && boss.skills) {
+                        skillsHTML = `<div class="bestiary-skills" style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;">`;
+                        boss.skills.forEach(skill => {
+                            // Desenha o mini-grid usando a função que consertamos no V13.4
+                            const gridHTML = (typeof getEnemySkillGrid === 'function') 
+                                ? getEnemySkillGrid(boss.id, skill.id === boss.skills[0].id ? 'skill1' : 'skill2') 
+                                : '';
+                                
+                            skillsHTML += `
+                                <div class="bestiary-skill" style="flex:1; min-width:120px; background:rgba(10,6,2,0.4); padding:8px; border-radius:6px;">
+                                    <div class="bestiary-skill-header">
+                                        <span class="bestiary-skill-name" style="color:#e8b923; font-family:'Cinzel',serif; font-size:0.8rem;">${skill.nome}</span>
+                                    </div>
+                                    <div class="bestiary-skill-grid" style="display:flex; justify-content:center; margin-top:5px;">
+                                        ${gridHTML}
+                                    </div>
+                                </div>
+                            `;
+                        });
+                        skillsHTML += `</div>`;
+                    }
+
+                    // Drops
+                    let dropsHTML = '<span style="color:#8a7a52; font-style:italic;">Desconhecido.</span>';
+                    if (derrotado) {
+                        dropsHTML = `
+                            <span class="bestiary-drop" style="display:inline-flex; align-items:center; gap:4px; padding:4px 10px; background:rgba(10,6,2,0.5); border:1px solid rgba(201,162,39,0.25); border-radius:20px; font-size:0.8rem; color:#d9c89a;">
+                                🗡️ Armas do Evento (5%-20%)
+                            </span>
+                            <span class="bestiary-drop" style="display:inline-flex; align-items:center; gap:4px; padding:4px 10px; background:rgba(142,68,173,0.1); border:1px solid rgba(142,68,173,0.5); border-radius:20px; font-size:0.8rem; color:#d9c89a;">
+                                🧿 Fragmento Divino (5%-20%)
+                            </span>
+                        `;
+                    }
+
+                    // Fases onde aparece
+                    const fasesHTML = derrotado 
+                        ? `<span class="bestiary-fase" style="font-size:0.75rem; padding:3px 8px; background:rgba(201,162,39,0.1); border:1px solid rgba(201,162,39,0.3); border-radius:12px; color:#e8b923;">${boss.diaLabel}</span>`
+                        : '';
+
+                    card.innerHTML = `
+                        <div class="bestiary-card-header">
+                            <div class="bestiary-sprite" style="width:72px; height:72px; display:flex; align-items:center; justify-content:center;">
+                                ${imgHTML}
+                            </div>
+                            <div class="bestiary-card-info">
+                                <div class="bestiary-card-name">${derrotado ? boss.nome : '???'}</div>
+                                <div class="bestiary-card-meta">${derrotado ? boss.titulo : 'Desconhecido'} · ${boss.diaLabel} · Boss</div>
+                                <div class="bestiary-card-stats" style="display:flex; gap:12px; font-size:0.85rem; color:#d9c89a; margin-top:4px;">
+                                    <span><b>HP</b> ${boss.hp}</span>
+                                    <span><b>ATK</b> ${boss.atk}</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        ${derrotado ? `<div class="bestiary-card-lore" style="font-family:'EB Garamond',serif; color:#b8a577; font-size:0.9rem; font-style:italic; line-height:1.5; padding:8px 12px; background:rgba(10,6,2,0.4); border-left:3px solid #6a5024; border-radius:4px; margin-top:10px;">${boss.descricao}</div>` : ''}
+                        
+                        ${skillsHTML}
+                        
+                        <div class="bestiary-card-section" style="margin-top:10px; display:flex; flex-direction:column; gap:6px;">
+                            <div class="bestiary-card-section-title" style="font-family:'Cinzel',serif; color:#8a7a52; font-size:0.75rem; letter-spacing:2px;">💎 DROPS</div>
+                            <div class="bestiary-drops" style="display:flex; flex-wrap:wrap; gap:8px;">${dropsHTML}</div>
+                        </div>
+                        
+                        <div class="bestiary-card-section" style="margin-top:10px; display:flex; flex-direction:column; gap:6px;">
+                            <div class="bestiary-card-section-title" style="font-family:'Cinzel',serif; color:#8a7a52; font-size:0.75rem; letter-spacing:2px;">📖 APARECE EM</div>
+                            <div class="bestiary-fases" style="display:flex; flex-wrap:wrap; gap:6px;">${fasesHTML}</div>
+                        </div>
+                    `;
+                    
+                    grid.appendChild(card);
+                });
+            }
+
+            return r;
+        };
+
+        console.log('✅ [V13.5] Bestiário do Evento completo (sprite, skills, drops e lore).');
+    }
+})();
+// =================================================================
+// historia.js — BLOCO 57 (V13.6 — Bestiário do Evento Definitivo)
+// =================================================================
+
+(function fixBestiarioEventoV136() {
+    if (window._eventoFixBestV136) return;
+    window._eventoFixBestV136 = true;
+
+    // A nossa própria função de desenhar o mini-grid, independente do resto do jogo
+    function desenharMiniGrid(handler) {
+        const gridSize = 8;
+        const CX = 3, CY = 4;
+        const afetados = Array.from({ length: gridSize }, () => Array(gridSize).fill(false));
+
+        const mark = (x, y) => { if (x >= 0 && x < gridSize && y >= 0 && y < gridSize) afetados[y][x] = true; };
+
+        // Desenha os padrões baseados no handler
+        if (handler === 'evento_teju_sete_cabecas') {
+            [CX-1, CX, CX+1].forEach(col => { for(let y=0; y<8; y++) mark(col, y); });
+            for(let x=0; x<8; x++) mark(x, CY);
+        } 
+        else if (handler === 'evento_teju_ima_almas' || handler === 'evento_mboi_inundacao' || handler === 'evento_monai_sopro_tempestade' || handler === 'evento_jasy_clarao_cegante' || handler === 'evento_luison_legado') {
+            // Dano global
+            for(let y=0; y<8; y++) for(let x=0; x<8; x++) mark(x, y);
+        }
+        else if (handler === 'evento_mboi_bico_arco_iris') {
+            [CY-1, CY, CY+1].forEach(row => { for(let x=0; x<8; x++) mark(x, row); });
+        }
+        else if (handler === 'evento_monai_voo_rasante' || handler === 'evento_jasy_salto_solar') {
+            const tx = 3, ty = 2;
+            for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) mark(tx + dx, ty + dy);
+        }
+        else if (handler === 'evento_kurupi_raizes') {
+            mark(1, 6); mark(3, 6); mark(5, 6); mark(2, 2); mark(4, 2);
+        }
+        else if (handler === 'evento_kurupi_chamado') {
+            mark(4, 4);
+        }
+        else if (handler === 'evento_aoao_investida') {
+            const dirs = [{x:1,y:1}, {x:2,y:2}, {x:3,y:3}];
+            dirs.forEach(d => { mark(d.x, d.y); mark(d.x+1, d.y); mark(d.x, d.y+1); mark(d.x+1, d.y+1); });
+        }
+        else if (handler === 'evento_aoao_la') {
+            for(let i=1; i<=2; i++) { mark(CX+i, CY+i); mark(CX-i, CY-i); mark(CX+i, CY-i); mark(CX-i, CY+i); }
+        }
+        else if (handler === 'evento_luison_colheita') {
+            [1, 3, 5].forEach(col => { for(let y=0; y<8; y++) mark(col, y); });
+            [2, 4, 6].forEach(col => { for(let y=0; y<8; y++) mark(col, y); });
+        }
+
+        let html = '<div class="pa-mini-grid" style="display:grid; grid-template-columns:repeat(8, 14px); gap:1px; background:#1a1208; padding:4px; border-radius:4px;">';
+        for (let y = 0; y < 8; y++) {
+            for (let x = 0; x < 8; x++) {
+                const isBoss = (x === CX && y === CY);
+                const isAfetado = afetados[y][x];
+                let bg = '#3a2a18'; // Vazio
+                if (isBoss) bg = '#e8b923'; // Boss
+                else if (isAfetado) bg = '#a83232'; // Afetado
+                
+                html += `<div style="width:14px; height:14px; background:${bg}; border-radius:2px;"></div>`;
+            }
+        }
+        html += '</div>';
+        return html;
+    }
+
+    const _origBestiary = window.renderBestiaryScreen;
+    
+    if (typeof _origBestiary === 'function') {
+        window.renderBestiaryScreen = function() {
+            // 1. Limpa qualquer sujeira de patches antigos
+            document.querySelectorAll('.bestiary-evento-header, .bestiary-card[style*="border-color: rgb(168, 50, 50)"], .bestiary-card[style*="border-color: rgb(74, 52, 24)"]').forEach(el => el.remove());
+
+            // 2. Chama o original para desenhar os animais
+            const r = _origBestiary.apply(this, arguments);
+
+            // 3. Injeta os bosses do evento
+            const grid = document.querySelector('.bestiary-grid');
+            if (!grid) return r;
+
+            const sectionHeader = document.createElement('div');
+            sectionHeader.className = 'bestiary-evento-header';
+            sectionHeader.style.cssText = 'grid-column: 1 / -1; margin-top: 30px; margin-bottom: 10px; border-bottom: 2px solid #8e44ad; padding-bottom: 10px;';
+            sectionHeader.innerHTML = `<h3 style="color: #c39bd3; font-family: 'Cinzel Decorative', serif; font-size: 1.2rem; margin: 0;">🌑 Os Sete Selados (Evento)</h3>`;
+            grid.appendChild(sectionHeader);
+
+            if (typeof EVENTO_BOSSES !== 'undefined') {
+                Object.values(EVENTO_BOSSES).forEach(boss => {
+                    const prog = (typeof getEventoProgresso === 'function') ? getEventoProgresso(boss.id) : null;
+                    const derrotado = prog && prog.fasesConcluidas.includes('boss');
+                    
+                    const card = document.createElement('div');
+                    // Usamos as classes originais para não quebrar o CSS
+                    card.className = `bestiary-card ${derrotado ? 'unlocked boss' : 'locked'}`;
+                    
+                    // Sprite
+                    let imgHTML = `<div style="display:flex; align-items:center; justify-content:center; font-size:3rem; height:72px; color:#555;">?</div>`;
+                    if (derrotado && typeof eventoIcon === 'function') {
+                        imgHTML = `<div style="transform:scale(1.5);">${eventoIcon(boss.id, 'large')}</div>`;
+                    }
+
+                    // Skills
+                    let skillsHTML = '';
+                    if (derrotado && boss.skills) {
+                        skillsHTML = `<div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;">`;
+                        boss.skills.forEach(skill => {
+                            const gridHTML = desenharMiniGrid(skill.handler);
+                            skillsHTML += `
+                                <div style="flex:1; min-width:120px; background:rgba(10,6,2,0.4); padding:8px; border-radius:6px; border:1px solid rgba(201,162,39,0.2);">
+                                    <div style="color:#e8b923; font-family:'Cinzel',serif; font-size:0.8rem; text-align:center; margin-bottom:5px;">${skill.nome}</div>
+                                    <div style="display:flex; justify-content:center;">${gridHTML}</div>
+                                </div>
+                            `;
+                        });
+                        skillsHTML += `</div>`;
+                    }
+
+                    // Drops
+                    let dropsHTML = '<span style="color:#8a7a52; font-style:italic;">Desconhecido.</span>';
+                    if (derrotado) {
+                        dropsHTML = `
+                            <span style="display:inline-flex; align-items:center; gap:4px; padding:4px 10px; background:rgba(10,6,2,0.5); border:1px solid rgba(201,162,39,0.25); border-radius:20px; font-size:0.8rem; color:#d9c89a;">
+                                🗡️ Armas (5%-20%)
+                            </span>
+                            <span style="display:inline-flex; align-items:center; gap:4px; padding:4px 10px; background:rgba(142,68,173,0.1); border:1px solid rgba(142,68,173,0.5); border-radius:20px; font-size:0.8rem; color:#d9c89a;">
+                                🧿 Fragmento (5%-20%)
+                            </span>
+                        `;
+                    }
+
+                    const fasesHTML = derrotado 
+                        ? `<span style="font-size:0.75rem; padding:3px 8px; background:rgba(201,162,39,0.1); border:1px solid rgba(201,162,39,0.3); border-radius:12px; color:#e8b923;">${boss.diaLabel} (Evento)</span>`
+                        : '';
+
+                    card.innerHTML = `
+                        <div class="bestiary-card-header" style="display:flex; align-items:center; gap:12px;">
+                            <div style="width:72px; height:72px; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.3); border-radius:6px;">
+                                ${imgHTML}
+                            </div>
+                            <div class="bestiary-card-info" style="flex:1;">
+                                <div style="font-family:'Cinzel',serif; color:#f0e2c0; font-size:1.05rem;">${derrotado ? boss.nome : '???'}</div>
+                                <div style="font-family:'EB Garamond',serif; color:#b8a577; font-size:0.85rem; font-style:italic;">${derrotado ? boss.titulo : 'Desconhecido'} · ${boss.diaLabel}</div>
+                                <div style="display:flex; gap:12px; font-size:0.85rem; color:#d9c89a; margin-top:4px;">
+                                    <span><b>HP</b> ${boss.hp}</span>
+                                    <span><b>ATK</b> ${boss.atk}</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        ${derrotado ? `<div style="font-family:'EB Garamond',serif; color:#b8a577; font-size:0.9rem; font-style:italic; line-height:1.5; padding:8px 12px; background:rgba(10,6,2,0.4); border-left:3px solid #6a5024; border-radius:4px; margin-top:10px;">${boss.descricao}</div>` : ''}
+                        
+                        ${skillsHTML}
+                        
+                        <div style="margin-top:10px;">
+                            <div style="font-family:'Cinzel',serif; color:#8a7a52; font-size:0.75rem; letter-spacing:2px; margin-bottom:5px;">💎 DROPS</div>
+                            <div style="display:flex; flex-wrap:wrap; gap:8px;">${dropsHTML}</div>
+                        </div>
+                        
+                        <div style="margin-top:10px;">
+                            <div style="font-family:'Cinzel',serif; color:#8a7a52; font-size:0.75rem; letter-spacing:2px; margin-bottom:5px;">📖 APARECE EM</div>
+                            <div style="display:flex; flex-wrap:wrap; gap:6px;">${fasesHTML}</div>
+                        </div>
+                    `;
+                    
+                    grid.appendChild(card);
+                });
+            }
+
+            return r;
+        };
+
+        console.log('✅ [V13.6] Bestiário do Evento blindado e sem duplicatas.');
+    }
+})();
+// =================================================================
+// historia.js — BLOCO 58 (V13.7 — Remover Duplicatas e Consertar Grid)
+// =================================================================
+
+(function fixBestiarioFinalV137() {
+    if (window._eventoFixBestV137) return;
+    window._eventoFixBestV137 = true;
+
+    // ==============================================================
+    // 1. CSS PARA CONSERTAR O MINI-GRID (Não deixar esmagar)
+    // ==============================================================
+    if (!document.getElementById('bestiaryGridFixStyle')) {
+        const style = document.createElement('style');
+        style.id = 'bestiaryGridFixStyle';
+        style.textContent = `
+            /* Força o mini-grid a ter tamanho fixo e não esmagar */
+            .pa-mini-grid {
+                display: grid !important;
+                grid-template-columns: repeat(8, 14px) !important;
+                grid-template-rows: repeat(8, 14px) !important;
+                gap: 2px !important;
+                padding: 6px !important;
+                background: #1a1208 !important;
+                border-radius: 4px !important;
+                margin: 0 auto !important;
+                width: fit-content !important;
+            }
+            .pa-mini-tile, .pa-mini-grid div {
+                width: 14px !important;
+                height: 14px !important;
+                border-radius: 2px !important;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // ==============================================================
+    // 2. FUNÇÃO DE DESENHO (A mesma do V13.6)
+    // ==============================================================
+    function desenharMiniGrid(handler) {
+        const gridSize = 8;
+        const CX = 3, CY = 4;
+        const afetados = Array.from({ length: gridSize }, () => Array(gridSize).fill(false));
+
+        const mark = (x, y) => { if (x >= 0 && x < gridSize && y >= 0 && y < gridSize) afetados[y][x] = true; };
+
+        if (handler === 'evento_teju_sete_cabecas') {
+            [CX-1, CX, CX+1].forEach(col => { for(let y=0; y<8; y++) mark(col, y); });
+            for(let x=0; x<8; x++) mark(x, CY);
+        } 
+        else if (handler === 'evento_teju_ima_almas' || handler === 'evento_mboi_inundacao' || handler === 'evento_monai_sopro_tempestade' || handler === 'evento_jasy_clarao_cegante' || handler === 'evento_luison_legado') {
+            for(let y=0; y<8; y++) for(let x=0; x<8; x++) mark(x, y);
+        }
+        else if (handler === 'evento_mboi_bico_arco_iris') {
+            [CY-1, CY, CY+1].forEach(row => { for(let x=0; x<8; x++) mark(x, row); });
+        }
+        else if (handler === 'evento_monai_voo_rasante' || handler === 'evento_jasy_salto_solar') {
+            const tx = 3, ty = 2;
+            for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) mark(tx + dx, ty + dy);
+        }
+        else if (handler === 'evento_kurupi_raizes') {
+            mark(1, 6); mark(3, 6); mark(5, 6); mark(2, 2); mark(4, 2);
+        }
+        else if (handler === 'evento_kurupi_chamado') {
+            mark(4, 4);
+        }
+        else if (handler === 'evento_aoao_investida') {
+            const dirs = [{x:1,y:1}, {x:2,y:2}, {x:3,y:3}];
+            dirs.forEach(d => { mark(d.x, d.y); mark(d.x+1, d.y); mark(d.x, d.y+1); mark(d.x+1, d.y+1); });
+        }
+        else if (handler === 'evento_aoao_la') {
+            for(let i=1; i<=2; i++) { mark(CX+i, CY+i); mark(CX-i, CY-i); mark(CX+i, CY-i); mark(CX-i, CY+i); }
+        }
+        else if (handler === 'evento_luison_colheita') {
+            [1, 3, 5].forEach(col => { for(let y=0; y<8; y++) mark(col, y); });
+            [2, 4, 6].forEach(col => { for(let y=0; y<8; y++) mark(col, y); });
+        }
+
+        let html = '<div class="pa-mini-grid">';
+        for (let y = 0; y < 8; y++) {
+            for (let x = 0; x < 8; x++) {
+                const isBoss = (x === CX && y === CY);
+                const isAfetado = afetados[y][x];
+                let bg = '#3a2a18'; // Vazio
+                if (isBoss) bg = '#e8b923'; // Boss
+                else if (isAfetado) bg = '#a83232'; // Afetado
+                
+                html += `<div style="width:14px; height:14px; background:${bg}; border-radius:2px;"></div>`;
+            }
+        }
+        html += '</div>';
+        return html;
+    }
+
+    // ==============================================================
+    // 3. SUBSTITUI A RENDERIZAÇÃO (Limpando os cards velhos)
+    // ==============================================================
+    const _origBestiary = window.renderBestiaryScreen;
+    
+    if (typeof _origBestiary === 'function') {
+        window.renderBestiaryScreen = function() {
+            // 1. Limpa o lixo do V13.1 e V13.5 que ficaram na tela
+            document.querySelectorAll('.bestiary-evento-header').forEach(el => el.remove());
+            document.querySelectorAll('.bestiary-card').forEach(el => {
+                if (el.innerHTML.includes('Ato ? · Boss') || el.innerHTML.includes('Ato ? Boss')) {
+                    el.remove();
+                }
+            });
+
+            // 2. Chama o original para desenhar os animais
+            const r = _origBestiary.apply(this, arguments);
+
+            // 3. Injeta os bosses do evento
+            const grid = document.querySelector('.bestiary-grid');
+            if (!grid) return r;
+
+            const sectionHeader = document.createElement('div');
+            sectionHeader.className = 'bestiary-evento-header';
+            sectionHeader.style.cssText = 'grid-column: 1 / -1; margin-top: 30px; margin-bottom: 10px; border-bottom: 2px solid #8e44ad; padding-bottom: 10px;';
+            sectionHeader.innerHTML = `<h3 style="color: #c39bd3; font-family: 'Cinzel Decorative', serif; font-size: 1.2rem; margin: 0;">🌑 Os Sete Selados (Evento)</h3>`;
+            grid.appendChild(sectionHeader);
+
+            if (typeof EVENTO_BOSSES !== 'undefined') {
+                Object.values(EVENTO_BOSSES).forEach(boss => {
+                    const prog = (typeof getEventoProgresso === 'function') ? getEventoProgresso(boss.id) : null;
+                    const derrotado = prog && prog.fasesConcluidas.includes('boss');
+                    
+                    const card = document.createElement('div');
+                    card.className = `bestiary-card ${derrotado ? 'unlocked boss' : 'locked'}`;
+                    
+                    let imgHTML = `<div style="display:flex; align-items:center; justify-content:center; font-size:3rem; height:72px; color:#555;">?</div>`;
+                    if (derrotado && typeof eventoIcon === 'function') {
+                        imgHTML = `<div style="transform:scale(1.5);">${eventoIcon(boss.id, 'large')}</div>`;
+                    }
+
+                    let skillsHTML = '';
+                    if (derrotado && boss.skills) {
+                        skillsHTML = `<div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;">`;
+                        boss.skills.forEach(skill => {
+                            const gridHTML = desenharMiniGrid(skill.handler);
+                            skillsHTML += `
+                                <div style="flex:1; min-width:140px; background:rgba(10,6,2,0.4); padding:8px; border-radius:6px; border:1px solid rgba(201,162,39,0.2);">
+                                    <div style="color:#e8b923; font-family:'Cinzel',serif; font-size:0.8rem; text-align:center; margin-bottom:5px;">${skill.nome}</div>
+                                    <div style="display:flex; justify-content:center;">${gridHTML}</div>
+                                </div>
+                            `;
+                        });
+                        skillsHTML += `</div>`;
+                    }
+
+                    let dropsHTML = '<span style="color:#8a7a52; font-style:italic;">Desconhecido.</span>';
+                    if (derrotado) {
+                        dropsHTML = `
+                            <span style="display:inline-flex; align-items:center; gap:4px; padding:4px 10px; background:rgba(10,6,2,0.5); border:1px solid rgba(201,162,39,0.25); border-radius:20px; font-size:0.8rem; color:#d9c89a;">
+                                🗡️ Armas (5%-20%)
+                            </span>
+                            <span style="display:inline-flex; align-items:center; gap:4px; padding:4px 10px; background:rgba(142,68,173,0.1); border:1px solid rgba(142,68,173,0.5); border-radius:20px; font-size:0.8rem; color:#d9c89a;">
+                                🧿 Fragmento (5%-20%)
+                            </span>
+                        `;
+                    }
+
+                    const fasesHTML = derrotado 
+                        ? `<span style="font-size:0.75rem; padding:3px 8px; background:rgba(201,162,39,0.1); border:1px solid rgba(201,162,39,0.3); border-radius:12px; color:#e8b923;">${boss.diaLabel} (Evento)</span>`
+                        : '';
+
+                    card.innerHTML = `
+                        <div class="bestiary-card-header" style="display:flex; align-items:center; gap:12px;">
+                            <div style="width:72px; height:72px; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.3); border-radius:6px;">
+                                ${imgHTML}
+                            </div>
+                            <div class="bestiary-card-info" style="flex:1;">
+                                <div style="font-family:'Cinzel',serif; color:#f0e2c0; font-size:1.05rem;">${derrotado ? boss.nome : '???'}</div>
+                                <div style="font-family:'EB Garamond',serif; color:#b8a577; font-size:0.85rem; font-style:italic;">${derrotado ? boss.titulo : 'Desconhecido'} · ${boss.diaLabel}</div>
+                                <div style="display:flex; gap:12px; font-size:0.85rem; color:#d9c89a; margin-top:4px;">
+                                    <span><b>HP</b> ${boss.hp}</span>
+                                    <span><b>ATK</b> ${boss.atk}</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        ${derrotado ? `<div style="font-family:'EB Garamond',serif; color:#b8a577; font-size:0.9rem; font-style:italic; line-height:1.5; padding:8px 12px; background:rgba(10,6,2,0.4); border-left:3px solid #6a5024; border-radius:4px; margin-top:10px;">${boss.descricao}</div>` : ''}
+                        
+                        ${skillsHTML}
+                        
+                        <div style="margin-top:10px;">
+                            <div style="font-family:'Cinzel',serif; color:#8a7a52; font-size:0.75rem; letter-spacing:2px; margin-bottom:5px;">💎 DROPS</div>
+                            <div style="display:flex; flex-wrap:wrap; gap:8px;">${dropsHTML}</div>
+                        </div>
+                        
+                        <div style="margin-top:10px;">
+                            <div style="font-family:'Cinzel',serif; color:#8a7a52; font-size:0.75rem; letter-spacing:2px; margin-bottom:5px;">📖 APARECE EM</div>
+                            <div style="display:flex; flex-wrap:wrap; gap:6px;">${fasesHTML}</div>
+                        </div>
+                    `;
+                    
+                    grid.appendChild(card);
+                });
+            }
+
+            return r;
+        };
+
+        console.log('✅ [V13.7] Bestiário limpo, sem duplicatas e com grid consertado.');
+    }
+})();
+// =================================================================
+// historia.js — BLOCO 59 (V13.8 — Skills Múltiplas no Bestiário)
+// =================================================================
+
+(function fixBestiarioMultiSkillsV138() {
+    if (window._eventoFixBestV138) return;
+    window._eventoFixBestV138 = true;
+
+    // ==============================================================
+    // 1. FUNÇÃO DE DESENHO DO MINI-GRID (Única)
+    // ==============================================================
+    function desenharMiniGrid(handler) {
+        const gridSize = 8;
+        const CX = 3, CY = 4;
+        const afetados = Array.from({ length: gridSize }, () => Array(gridSize).fill(false));
+
+        const mark = (x, y) => { if (x >= 0 && x < gridSize && y >= 0 && y < gridSize) afetados[y][x] = true; };
+
+        if (handler === 'evento_teju_sete_cabecas') {
+            [CX-1, CX, CX+1].forEach(col => { for(let y=0; y<8; y++) mark(col, y); });
+            for(let x=0; x<8; x++) mark(x, CY);
+        } 
+        else if (handler === 'evento_teju_ima_almas' || handler === 'evento_mboi_inundacao' || handler === 'evento_monai_sopro_tempestade' || handler === 'evento_jasy_clarao_cegante') {
+            for(let y=0; y<8; y++) for(let x=0; x<8; x++) mark(x, y);
+        }
+        else if (handler === 'evento_mboi_bico_arco_iris') {
+            [CY-1, CY, CY+1].forEach(row => { for(let x=0; x<8; x++) mark(x, row); });
+        }
+        else if (handler === 'evento_monai_voo_rasante' || handler === 'evento_jasy_salto_solar') {
+            const tx = 3, ty = 2;
+            for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) mark(tx + dx, ty + dy);
+        }
+        else if (handler === 'evento_kurupi_raizes') {
+            mark(1, 6); mark(3, 6); mark(5, 6); mark(2, 2); mark(4, 2);
+        }
+        else if (handler === 'evento_kurupi_chamado') {
+            mark(4, 4);
+        }
+        else if (handler === 'evento_aoao_investida') {
+            const dirs = [{x:1,y:1}, {x:2,y:2}, {x:3,y:3}];
+            dirs.forEach(d => { mark(d.x, d.y); mark(d.x+1, d.y); mark(d.x, d.y+1); mark(d.x+1, d.y+1); });
+        }
+        else if (handler === 'evento_aoao_la') {
+            for(let i=1; i<=2; i++) { mark(CX+i, CY+i); mark(CX-i, CY-i); mark(CX+i, CY-i); mark(CX-i, CY+i); }
+        }
+        else if (handler === 'evento_luison_colheita') {
+            [1, 3, 5].forEach(col => { for(let y=0; y<8; y++) mark(col, y); });
+            [2, 4, 6].forEach(col => { for(let y=0; y<8; y++) mark(col, y); });
+        }
+        // Para o Luison e o Pesadelo que usam múltiplas, marcamos o grid todo
+        else if (handler === 'evento_luison_legado' || handler === 'evento_pesadelo_skill') {
+            for(let y=0; y<8; y++) for(let x=0; x<8; x++) mark(x, y);
+        }
+
+        let html = '<div class="pa-mini-grid">';
+        for (let y = 0; y < 8; y++) {
+            for (let x = 0; x < 8; x++) {
+                const isBoss = (x === CX && y === CY);
+                const isAfetado = afetados[y][x];
+                let bg = '#3a2a18'; // Vazio
+                if (isBoss) bg = '#e8b923'; // Boss
+                else if (isAfetado) bg = '#a83232'; // Afetado
+                
+                html += `<div style="width:14px; height:14px; background:${bg}; border-radius:2px;"></div>`;
+            }
+        }
+        html += '</div>';
+        return html;
+    }
+
+    // ==============================================================
+    // 2. RENDERIZAÇÃO
+    // ==============================================================
+    const _origBestiary = window.renderBestiaryScreen;
+    
+    if (typeof _origBestiary === 'function') {
+        window.renderBestiaryScreen = function() {
+            // Limpa sujeiras de patches antigos
+            document.querySelectorAll('.bestiary-evento-header').forEach(el => el.remove());
+            document.querySelectorAll('.bestiary-card').forEach(el => {
+                if (el.innerHTML.includes('Ato ? · Boss') || el.innerHTML.includes('Ato ? Boss')) {
+                    el.remove();
+                }
+            });
+
+            const r = _origBestiary.apply(this, arguments);
+            const grid = document.querySelector('.bestiary-grid');
+            if (!grid) return r;
+
+            const sectionHeader = document.createElement('div');
+            sectionHeader.className = 'bestiary-evento-header';
+            sectionHeader.style.cssText = 'grid-column: 1 / -1; margin-top: 30px; margin-bottom: 10px; border-bottom: 2px solid #8e44ad; padding-bottom: 10px;';
+            sectionHeader.innerHTML = `<h3 style="color: #c39bd3; font-family: 'Cinzel Decorative', serif; font-size: 1.2rem; margin: 0;">🌑 Os Sete Selados (Evento)</h3>`;
+            grid.appendChild(sectionHeader);
+
+            const todosBosses = Object.values(EVENTO_BOSSES);
+            // Adiciona o Pesadelo à lista do bestiário
+            if (typeof EVENTO_PESADELO !== 'undefined') {
+                todosBosses.push({ ...EVENTO_PESADELO, diaLabel: 'Mensal' });
+            }
+
+            todosBosses.forEach(boss => {
+                const prog = (typeof getEventoProgresso === 'function') ? getEventoProgresso(boss.id) : null;
+                const derrotado = boss.id === 'pesadelo' ? true : (prog && prog.fasesConcluidas.includes('boss')); // Pesadelo sempre liberado no bestiário
+                
+                const card = document.createElement('div');
+                card.className = `bestiary-card ${derrotado ? 'unlocked boss' : 'locked'}`;
+                
+                let imgHTML = `<div style="display:flex; align-items:center; justify-content:center; font-size:3rem; height:72px; color:#555;">?</div>`;
+                if (derrotado && typeof eventoIcon === 'function') {
+                    imgHTML = `<div style="transform:scale(1.5);">${eventoIcon(boss.id, 'large')}</div>`;
+                }
+
+                // --- LÓGICA DAS SKILLS MÚLTIPLAS ---
+                let skillsHTML = '';
+                if (derrotado && boss.skills) {
+                    skillsHTML = `<div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;">`;
+                    
+                    if (boss.id === 'pesadelo') {
+                        // O Pesadelo usa 14 skills. Vamos mostrar 4 representativas + um aviso
+                        const skillsRep = [
+                            { nome: 'Sete Cabeças', handler: 'evento_teju_sete_cabecas' },
+                            { nome: 'Inundação', handler: 'evento_mboi_inundacao' },
+                            { nome: 'Clarão Cegante', handler: 'evento_jasy_clarao_cegante' },
+                            { nome: 'Colheita Sombria', handler: 'evento_luison_colheita' }
+                        ];
+                        skillsRep.forEach(skill => {
+                            skillsHTML += `
+                                <div style="flex:1; min-width:130px; background:rgba(10,6,2,0.4); padding:8px; border-radius:6px; border:1px solid rgba(142,68,173,0.4);">
+                                    <div style="color:#c39bd3; font-family:'Cinzel',serif; font-size:0.75rem; text-align:center; margin-bottom:5px;">${skill.nome}</div>
+                                    <div style="display:flex; justify-content:center;">${desenharMiniGrid(skill.handler)}</div>
+                                </div>
+                            `;
+                        });
+                        skillsHTML += `</div>`;
+                        skillsHTML += `<div style="text-align:center; color:#8e44ad; font-family:'EB Garamond',serif; font-size:0.85rem; font-style:italic; margin-top:8px;">+ 10 outras skills dos Sete Selados</div>`;
+                    
+                    } else if (boss.id === 'luison') {
+                        // O Luison tem 2 skills: Colheita Sombria e Legado (que invoca as outras)
+                        const skillsLuison = [
+                            { nome: 'Colheita Sombria', handler: 'evento_luison_colheita' },
+                            { nome: 'Legado dos Filhos', handler: 'evento_luison_legado' }
+                        ];
+                        skillsLuison.forEach(skill => {
+                            skillsHTML += `
+                                <div style="flex:1; min-width:130px; background:rgba(10,6,2,0.4); padding:8px; border-radius:6px; border:1px solid rgba(201,162,39,0.2);">
+                                    <div style="color:#e8b923; font-family:'Cinzel',serif; font-size:0.75rem; text-align:center; margin-bottom:5px;">${skill.nome}</div>
+                                    <div style="display:flex; justify-content:center;">${desenharMiniGrid(skill.handler)}</div>
+                                </div>
+                            `;
+                        });
+                        skillsHTML += `</div>`;
+                        skillsHTML += `<div style="text-align:center; color:#b8a577; font-family:'EB Garamond',serif; font-size:0.8rem; font-style:italic; margin-top:8px;">Legado dos Filhos invoca skills dos outros bosses</div>`;
+                    
+                    } else {
+                        // Bosses normais (1 ou 2 skills)
+                        boss.skills.forEach(skill => {
+                            skillsHTML += `
+                                <div style="flex:1; min-width:130px; background:rgba(10,6,2,0.4); padding:8px; border-radius:6px; border:1px solid rgba(201,162,39,0.2);">
+                                    <div style="color:#e8b923; font-family:'Cinzel',serif; font-size:0.75rem; text-align:center; margin-bottom:5px;">${skill.nome}</div>
+                                    <div style="display:flex; justify-content:center;">${desenharMiniGrid(skill.handler)}</div>
+                                </div>
+                            `;
+                        });
+                        skillsHTML += `</div>`;
+                    }
+                }
+
+                let dropsHTML = '<span style="color:#8a7a52; font-style:italic;">Desconhecido.</span>';
+                if (derrotado) {
+                    dropsHTML = boss.id === 'pesadelo' 
+                        ? `<span style="display:inline-flex; align-items:center; gap:4px; padding:4px 10px; background:rgba(10,6,2,0.5); border:1px solid rgba(142,68,173,0.5); border-radius:20px; font-size:0.8rem; color:#d9c89a;">🧿 Núcleo do Pesadelo</span>`
+                        : `
+                            <span style="display:inline-flex; align-items:center; gap:4px; padding:4px 10px; background:rgba(10,6,2,0.5); border:1px solid rgba(201,162,39,0.25); border-radius:20px; font-size:0.8rem; color:#d9c89a;">🗡️ Armas (5%-20%)</span>
+                            <span style="display:inline-flex; align-items:center; gap:4px; padding:4px 10px; background:rgba(142,68,173,0.1); border:1px solid rgba(142,68,173,0.5); border-radius:20px; font-size:0.8rem; color:#d9c89a;">🧿 Fragmento (5%-20%)</span>
+                        `;
+                }
+
+                const fasesHTML = derrotado 
+                    ? `<span style="font-size:0.75rem; padding:3px 8px; background:rgba(201,162,39,0.1); border:1px solid rgba(201,162,39,0.3); border-radius:12px; color:#e8b923;">${boss.diaLabel}</span>`
+                    : '';
+
+                card.innerHTML = `
+                    <div class="bestiary-card-header" style="display:flex; align-items:center; gap:12px;">
+                        <div style="width:72px; height:72px; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.3); border-radius:6px;">
+                            ${imgHTML}
+                        </div>
+                        <div class="bestiary-card-info" style="flex:1;">
+                            <div style="font-family:'Cinzel',serif; color:#f0e2c0; font-size:1.05rem;">${derrotado ? boss.nome : '???'}</div>
+                            <div style="font-family:'EB Garamond',serif; color:#b8a577; font-size:0.85rem; font-style:italic;">${derrotado ? boss.titulo : 'Desconhecido'} · ${boss.diaLabel}</div>
+                            <div style="display:flex; gap:12px; font-size:0.85rem; color:#d9c89a; margin-top:4px;">
+                                <span><b>HP</b> ${boss.hp}</span>
+                                <span><b>ATK</b> ${boss.atk}</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    ${derrotado ? `<div style="font-family:'EB Garamond',serif; color:#b8a577; font-size:0.9rem; font-style:italic; line-height:1.5; padding:8px 12px; background:rgba(10,6,2,0.4); border-left:3px solid #6a5024; border-radius:4px; margin-top:10px;">${boss.descricao}</div>` : ''}
+                    
+                    ${skillsHTML}
+                    
+                    <div style="margin-top:10px;">
+                        <div style="font-family:'Cinzel',serif; color:#8a7a52; font-size:0.75rem; letter-spacing:2px; margin-bottom:5px;">💎 DROPS</div>
+                        <div style="display:flex; flex-wrap:wrap; gap:8px;">${dropsHTML}</div>
+                    </div>
+                    
+                    <div style="margin-top:10px;">
+                        <div style="font-family:'Cinzel',serif; color:#8a7a52; font-size:0.75rem; letter-spacing:2px; margin-bottom:5px;">📖 APARECE EM</div>
+                        <div style="display:flex; flex-wrap:wrap; gap:6px;">${fasesHTML}</div>
+                    </div>
+                `;
+                
+                grid.appendChild(card);
+            });
+
+            return r;
+        };
+    }
+
+    console.log('✅ [V13.8] Bestiário com suporte a múltiplas skills e Pesadelo.');
+})();
+// =================================================================
+// historia.js — BLOCO 60 (V14.0 — Restrição de Heróis no Evento)
+// =================================================================
+
+(function fixRestricaoHeroisEventoV140() {
+    if (window._eventoFixRestricaoV140) return;
+    window._eventoFixRestricaoV140 = true;
+
+    // ==============================================================
+    // 1. DEFINIR AS RESTRIÇÕES NOS BOSSES
+    // ==============================================================
+    if (typeof EVENTO_BOSSES !== 'undefined') {
+        EVENTO_BOSSES['teju_jagua'].restricao = { tipo: 'elemento', valor: 'AGUA', label: '💧 Apenas Heróis de Água' };
+        EVENTO_BOSSES['mboi_tui'].restricao = { tipo: 'classe', valor: 'Guerreiro', label: '⚔️ Apenas Guerreiros' };
+        EVENTO_BOSSES['monai'].restricao = { tipo: 'elemento', valor: 'TERRA', label: '⛰️ Apenas Heróis de Terra' };
+        EVENTO_BOSSES['jasy_jatere'].restricao = { tipo: 'classe', valor: 'Mago', label: '🔮 Apenas Magos' };
+        EVENTO_BOSSES['kurupi'].restricao = { tipo: 'classe', valor: 'Guerreiro', label: '⚔️ Apenas Guerreiros' };
+        EVENTO_BOSSES['ao_ao'].restricao = { tipo: 'elemento', valor: 'FOGO', label: '🔥 Apenas Heróis de Fogo' };
+        EVENTO_BOSSES['luison'].restricao = { tipo: 'elemento', valor: 'AR', label: '🌪️ Apenas Heróis de Ar' };
+    }
+    if (typeof EVENTO_PESADELO !== 'undefined') {
+        EVENTO_PESADELO.restricao = null; // Livre
+    }
+
+    // ==============================================================
+    // 2. FUNÇÃO DE VALIDAÇÃO
+    // ==============================================================
+    function validarHeroiRestricao(bossId) {
+        const cfg = (bossId === 'pesadelo') ? EVENTO_PESADELO : EVENTO_BOSSES[bossId];
+        if (!cfg || !cfg.restricao) return { valido: true };
+
+        // Pega o herói selecionado
+        const heroiClass = (STORY_PROGRESS.selectedHeroes || ['Tupa'])[0];
+        const heroiData = STORY_HERO_CLASSES[heroiClass];
+        if (!heroiData) return { valido: false, motivo: 'Herói inválido.' };
+
+        // Simula a aplicação do equipamento/amuleto para pegar o elemento final
+        let elementoFinal = heroiData.element || (typeof getHeroStoryElement === 'function' ? getHeroStoryElement(heroiClass) : 'FOGO');
+        if (typeof getHeroEquipment === 'function') {
+            const eq = getHeroEquipment(heroiClass);
+            if (eq && eq.amuleto) {
+                const amuleto = (typeof getAmuletById === 'function') ? getAmuletById(eq.amuleto) : null;
+                if (amuleto && amuleto.efeito && amuleto.efeito.elementOverride) {
+                    elementoFinal = amuleto.efeito.elementOverride;
+                }
+            }
+        }
+
+        // Verifica a restrição
+        if (cfg.restricao.tipo === 'elemento') {
+            if (elementoFinal !== cfg.restricao.valor) {
+                return { 
+                    valido: false, 
+                    motivo: `Este ato exige Heróis de ${cfg.restricao.valor}. Seu herói atual (${heroiData.displayName}) é de ${elementoFinal}.` 
+                };
+            }
+        } else if (cfg.restricao.tipo === 'classe') {
+            if (heroiData.role !== cfg.restricao.valor) {
+                return { 
+                    valido: false, 
+                    motivo: `Este ato exige ${cfg.restricao.valor}s. Seu herói atual (${heroiData.displayName}) é ${heroiData.role}.` 
+                };
+            }
+        }
+
+        return { valido: true };
+    }
+
+    // ==============================================================
+    // 3. VALIDAÇÃO AO INICIAR A FASE (Redundância C)
+    // ==============================================================
+    const _origIniciarFase = window.eventoIniciarFase;
+    if (typeof _origIniciarFase === 'function') {
+        window.eventoIniciarFase = function(bossId, faseId) {
+            // Valida apenas se NÃO for o Pesadelo
+            if (bossId !== 'pesadelo') {
+                const check = validarHeroiRestricao(bossId);
+                if (!check.valido) {
+                    if (typeof showToast === 'function') {
+                        showToast('🚫 Restrição', check.motivo, '🚫');
+                    } else {
+                        alert(check.motivo);
+                    }
+                    return; // Bloqueia a entrada
+                }
+            }
+            return _origIniciarFase.apply(this, arguments);
+        };
+    }
+
+    // ==============================================================
+    // 4. AVISO VISUAL NA TELA DE FASES E SEMANAL
+    // ==============================================================
+    const _origRenderFases = window.renderEventoFasesScreen;
+    if (typeof _origRenderFases === 'function') {
+        window.renderEventoFasesScreen = function(bossId) {
+            const r = _origRenderFases.apply(this, arguments);
+            
+            const cfg = EVENTO_BOSSES[bossId];
+            if (cfg && cfg.restricao) {
+                const screen = document.getElementById('storyScreen');
+                const header = screen ? screen.querySelector('.story-header') : null;
+                
+                if (header && !header.querySelector('.evento-restricao-aviso')) {
+                    const aviso = document.createElement('div');
+                    aviso.className = 'evento-restricao-aviso';
+                    aviso.style.cssText = 'margin-top:15px; padding:10px 15px; background:rgba(201,162,39,0.1); border:2px solid #c9a227; border-radius:6px; font-family:Cinzel,serif; color:#e8b923; font-size:0.9rem; font-weight:700; text-align:center; box-shadow:0 0 15px rgba(201,162,39,0.3);';
+                    aviso.innerHTML = `⚠️ RESTRIÇÃO DO DIA: ${cfg.restricao.label}`;
+                    header.appendChild(aviso);
+                }
+
+                // Verifica o herói atual do jogador e avisa se estiver inválido
+                const check = validarHeroiRestricao(bossId);
+                if (!check.valido) {
+                    const avisoErro = document.createElement('div');
+                    avisoErro.className = 'evento-restricao-erro';
+                    avisoErro.style.cssText = 'margin-top:10px; padding:10px 15px; background:rgba(168,50,50,0.2); border:1px solid #a83232; border-radius:6px; font-family:EB Garamond,serif; color:#f5c8c8; font-size:0.9rem; font-style:italic; text-align:center;';
+                    avisoErro.innerHTML = `Seu herói atual não é válido. Vá na <b>OCA</b> e mude antes de jogar.`;
+                    header.appendChild(avisoErro);
+                }
+            }
+            return r;
+        };
+    }
+
+    // Card da tela semanal
+    const _origRenderSemana = window.renderEventoSemanalScreen;
+    if (typeof _origRenderSemana === 'function') {
+        window.renderEventoSemanalScreen = function() {
+            const r = _origRenderSemana.apply(this, arguments);
+            
+            // Adiciona a restrição dentro do card de cada dia
+            const cards = document.querySelectorAll('.evento-card');
+            cards.forEach(card => {
+                const nameEl = card.querySelector('.evento-card-name');
+                if (!nameEl) return;
+                
+                const nomeBoss = nameEl.textContent.trim();
+                let bossId = null;
+                for (let id in EVENTO_BOSSES) {
+                    if (EVENTO_BOSSES[id].nome === nomeBoss) { bossId = id; break; }
+                }
+                
+                if (bossId && EVENTO_BOSSES[bossId].restricao) {
+                    if (!card.querySelector('.evento-card-restricao')) {
+                        const aviso = document.createElement('div');
+                        aviso.className = 'evento-card-restricao';
+                        aviso.style.cssText = 'text-align:center; font-family:Cinzel,serif; font-size:0.75rem; color:#e8b923; font-weight:700; margin-top:5px; padding:3px 8px; background:rgba(201,162,39,0.1); border-radius:4px;';
+                        aviso.innerHTML = EVENTO_BOSSES[bossId].restricao.label;
+                        // Insere antes dos botões
+                        const btn = card.querySelector('.evento-card-btn');
+                        if (btn) card.insertBefore(aviso, btn);
+                    }
+                }
+            });
+            
+            return r;
+        };
+    }
+
+    console.log('✅ [V14.0] Restrições de heróis no evento aplicadas.');
+})();
+// =================================================================
+// historia.js — BLOCO 61 (V14.1 — Estrelas Globais para Heróis)
+// =================================================================
+
+(function fixEstrelasGlobaisV141() {
+    if (window._eventoFixEstrelasV141) return;
+    window._eventoFixEstrelasV141 = true;
+
+    // Sobrescreve a função de pegar o total de estrelas para somar TUDO
+    window.getTotalStars = function() {
+        if (typeof STORY_PROGRESS === 'undefined') return 0;
+        
+        let total = 0;
+        
+        // Soma as estrelas do progresso global (que guarda o máximo de cada fase)
+        if (STORY_PROGRESS.starsByPhase) {
+            Object.values(STORY_PROGRESS.starsByPhase).forEach(s => {
+                total += (s || 0);
+            });
+        }
+        
+        return total;
+    };
+
+    // Força a verificação de desbloqueio de heróis logo após o jogo carregar
+    // (para o caso de o jogador já ter estrelas suficientes e não ter recebido o herói)
+    setTimeout(() => {
+        if (typeof checkHeroUnlocks === 'function') {
+            checkHeroUnlocks();
+        }
+    }, 1000);
+
+    console.log('✅ [V14.1] Estrelas globais e desbloqueio de heróis corrigidos.');
+})();
+// =================================================================
+// historia.js — BLOCO 64 (V14.4 — Fix Definitivo das Estrelas Globais)
+// =================================================================
+
+(function fixEstrelasDefinitivoV144() {
+    if (window._eventoFixEstrelasV144) return;
+    window._eventoFixEstrelasV144 = true;
+
+    // 1. Define as funções corretas de contagem
+    window.getTotalStars = function() {
+        if (typeof STORY_PROGRESS === 'undefined' || !STORY_PROGRESS.starsByPhase) return 0;
+        let total = 0;
+        Object.values(STORY_PROGRESS.starsByPhase).forEach(s => { total += (s || 0); });
+        return total;
+    };
+
+    window.getMaxTotalStars = function() {
+        if (typeof STORY_CHAPTERS === 'undefined') return 576;
+        let totalFases = 0;
+        Object.values(STORY_CHAPTERS).forEach(ch => {
+            totalFases += ch.phases.length;
+        });
+        return totalFases * 3;
+    };
+
+    // 2. Intercepta o render da Aldeia e substitui o HTML final
+    const _origRenderAldeia = window.renderAldeiaScreen;
+    if (typeof _origRenderAldeia === 'function') {
+        window.renderAldeiaScreen = function() {
+            const r = _origRenderAldeia.apply(this, arguments);
+            
+            setTimeout(() => {
+                const screen = document.getElementById('storyScreen');
+                if (!screen) return;
+                
+                const total = window.getTotalStars();
+                const max = window.getMaxTotalStars();
+                const novosTextos = `${total} / ${max}`;
+
+                // Procura qualquer elemento que tenha "⭐ X / Y"
+                const counters = screen.querySelectorAll('.story-stars-counter');
+                counters.forEach(counter => {
+                    // Substitui qualquer número/número por total/max
+                    counter.innerHTML = counter.innerHTML.replace(/\d+\s*\/\s*\d+/, novosTextos);
+                });
+            }, 50);
+            
+            return r;
+        };
+    }
+
+    // 3. Intercepta o render da OCA e substitui o HTML final
+    const _origRenderOca = window.renderOcaScreenFiltered;
+    if (typeof _origRenderOca === 'function') {
+        window.renderOcaScreenFiltered = function() {
+            const r = _origRenderOca.apply(this, arguments);
+            
+            setTimeout(() => {
+                const screen = document.getElementById('storyScreen');
+                if (!screen) return;
+                
+                const total = window.getTotalStars();
+                const max = window.getMaxTotalStars();
+                const novosTextos = `${total} / ${max}`;
+
+                const counters = screen.querySelectorAll('.story-stars-counter');
+                counters.forEach(counter => {
+                    counter.innerHTML = counter.innerHTML.replace(/\d+\s*\/\s*\d+/, novosTextos);
+                });
+            }, 50);
+            
+            return r;
+        };
+    }
+
+    // 4. Força a liberação de heróis com base no total global
+    setTimeout(() => {
+        if (typeof checkHeroUnlocks === 'function') {
+            checkHeroUnlocks();
+        }
+    }, 1000);
+
+    console.log('✅ [V14.4] Estrelas globais (X/576) e Heróis corrigidos de forma definitiva.');
+})();
+// =================================================================
+// historia.js — BLOCO 65 (V14.5 — Forçar Texto das Estrelas na Tela)
+// =================================================================
+
+(function fixEstrelasMutationV145() {
+    if (window._eventoFixEstrelasV145) return;
+    window._eventoFixEstrelasV145 = true;
+
+    // Funções de cálculo
+    window.getTotalStars = function() {
+        if (typeof STORY_PROGRESS === 'undefined' || !STORY_PROGRESS.starsByPhase) return 0;
+        let total = 0;
+        Object.values(STORY_PROGRESS.starsByPhase).forEach(s => { total += (s || 0); });
+        return total;
+    };
+
+    window.getMaxTotalStars = function() {
+        if (typeof STORY_CHAPTERS === 'undefined') return 576;
+        let totalFases = 0;
+        Object.values(STORY_CHAPTERS).forEach(ch => { totalFases += ch.phases.length; });
+        return totalFases * 3;
+    };
+
+    // Função que atualiza o texto
+    function atualizarTextosEstrelas() {
+        const screen = document.getElementById('storyScreen');
+        if (!screen) return;
+
+        const total = window.getTotalStars();
+        const max = window.getMaxTotalStars();
+        const textoCorreto = `⭐ ${total} / ${max}`;
+
+        // Procura qualquer elemento que tenha o ícone de estrela
+        const counters = screen.querySelectorAll('.story-stars-counter');
+        counters.forEach(counter => {
+            // Substitui todo o conteúdo interno pelo texto correto
+            // Verifica se já está correto para não ficar reescrevendo à toa
+            if (counter.innerHTML.trim() !== textoCorreto && counter.innerHTML.trim() !== `<span class="story-stars-icon">${textoCorreto}</span>`) {
+                counter.innerHTML = textoCorreto;
+            }
+        });
+    }
+
+    // 1. Roda quando o jogo carrega
+    setTimeout(atualizarTextosEstrelas, 500);
+
+    // 2. MutationObserver para pegar sempre que a tela da Aldeia ou OCA forem montadas
+    const observer = new MutationObserver((mutations) => {
+        // Só age se a tela do storyScreen estiver ativa
+        const screen = document.getElementById('storyScreen');
+        if (screen && screen.classList.contains('active')) {
+            atualizarTextosEstrelas();
+        }
+    });
+
+    // Começa a observar o documento inteiro em busca de mudanças
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    // 3. Força a liberação de heróis
+    setTimeout(() => {
+        if (typeof checkHeroUnlocks === 'function') {
+            checkHeroUnlocks();
+        }
+    }, 1000);
+
+    console.log('✅ [V14.5] Estrelas forçadas via MutationObserver (192/576).');
+})();
+// =================================================================
+// historia.js — BLOCO 66 (V14.6 — Fix Criterioso do HTML das Estrelas)
+// =================================================================
+
+(function fixEstrelasHTMLV146() {
+    if (window._eventoFixEstrelasV146) return;
+    window._eventoFixEstrelasV146 = true;
+
+    // 1. Função correta de máximo (192 fases * 3 = 576)
+    window.getMaxTotalStars = function() {
+        if (typeof STORY_CHAPTERS === 'undefined') return 576;
+        let totalFases = 0;
+        Object.values(STORY_CHAPTERS).forEach(ch => {
+            totalFases += ch.phases.length;
+        });
+        return totalFases * 3;
+    };
+
+    // 2. Função correta de total (soma tudo)
+    window.getTotalStars = function() {
+        if (typeof STORY_PROGRESS === 'undefined' || !STORY_PROGRESS.starsByPhase) return 0;
+        let total = 0;
+        Object.values(STORY_PROGRESS.starsByPhase).forEach(s => {
+            total += (s || 0);
+        });
+        return total;
+    };
+
+    // 3. Função para substituir o HTML na tela da Aldeia
+    const _origRenderAldeia = window.renderAldeiaScreen;
+    if (typeof _origRenderAldeia === 'function') {
+        window.renderAldeiaScreen = function() {
+            const r = _origRenderAldeia.apply(this, arguments);
+            
+            const screen = document.getElementById('storyScreen');
+            if (!screen) return r;
+
+            // Na força, procura o span específico do contador da Aldeia
+            // (o que fica no topo da tela, dentro do header)
+            const counter = screen.querySelector('.story-ald-header-stats .story-stars-counter');
+            if (counter) {
+                const total = window.getTotalStars();
+                const max = window.getMaxTotalStars();
+                counter.innerHTML = `<span class="story-stars-icon">⭐</span>${total} / ${max}`;
+            }
+            
+            return r;
+        };
+    }
+
+    // 4. Função para substituir o HTML na tela da OCA
+    const _origRenderOca = window.renderOcaScreenFiltered;
+    if (typeof _origRenderOca === 'function') {
+        window.renderOcaScreenFiltered = function() {
+            const r = _origRenderOca.apply(this, arguments);
+            
+            const screen = document.getElementById('storyScreen');
+            if (!screen) return r;
+
+            // Na OCA, o contador fica no centro, dentro do header
+            const counter = screen.querySelector('.story-header .story-stars-counter');
+            if (counter) {
+                const total = window.getTotalStars();
+                const max = window.getMaxTotalStars();
+                counter.innerHTML = `<span class="story-stars-icon">⭐</span>${total} / ${max}`;
+            }
+            
+            return r;
+        };
+    }
+
+    // 5. Força a verificação de desbloqueio de heróis
+    setTimeout(() => {
+        if (typeof checkHeroUnlocks === 'function') {
+            checkHeroUnlocks();
+        }
+    }, 1000);
+
+    console.log('✅ [V14.6] HTML das estrelas corrigido diretamente na raiz.');
+})();
+// =================================================================
+// historia.js — BLOCO 67 (V15.0 — Estrelas Globais Consolidadas)
+// -----------------------------------------------------------------
+// Cole NO FINAL de historia.js, depois do Bloco 66.
+//
+// PROBLEMA:
+//   • getTotalStars() estava somando starsByPhase (que é o MÁXIMO
+//     por fase entre dificuldades, não a soma real).
+//   • Resultado: mostrava 192/192 ao zerar uma dificuldade, e o
+//     desbloqueio de heróis por estrelas usava esse número errado.
+//
+// SOLUÇÃO:
+//   • getTotalStars() soma difficultyProgress[normal].stars +
+//     difficultyProgress[dificil].stars + difficultyProgress[pesadelo].stars
+//   • getMaxTotalStars() = totalFases * 3 * 3 = 576
+//   • checkHeroUnlocks() usa o total global
+//   • MutationObservers antigos são neutralizados
+// =================================================================
+
+(function consolidarEstrelasV150() {
+    if (window._estrelasV150) return;
+    window._estrelasV150 = true;
+
+    // ==============================================================
+    // 1. GARANTIR ESTRUTURA difficultyProgress
+    // ==============================================================
+    function garantirEstrutura() {
+        if (typeof STORY_PROGRESS === 'undefined') return;
+        if (!STORY_PROGRESS.difficultyProgress || typeof STORY_PROGRESS.difficultyProgress !== 'object') {
+            STORY_PROGRESS.difficultyProgress = {};
+        }
+        ['normal', 'dificil', 'pesadelo'].forEach(id => {
+            if (!STORY_PROGRESS.difficultyProgress[id]) {
+                STORY_PROGRESS.difficultyProgress[id] = {
+                    unlockedChapters: [],
+                    unlockedPhases: {},
+                    completedPhases: [],
+                    stars: {},
+                };
+            }
+            const d = STORY_PROGRESS.difficultyProgress[id];
+            if (!d.stars || typeof d.stars !== 'object') d.stars = {};
+        });
+    }
+
+    // ==============================================================
+    // 2. getTotalStars — soma real entre as 3 dificuldades
+    // ==============================================================
+    window.getTotalStars = function() {
+        garantirEstrutura();
+        if (typeof STORY_PROGRESS === 'undefined' || !STORY_PROGRESS.difficultyProgress) return 0;
+
+        let total = 0;
+        ['normal', 'dificil', 'pesadelo'].forEach(diffId => {
+            const d = STORY_PROGRESS.difficultyProgress[diffId];
+            if (!d || !d.stars) return;
+            Object.values(d.stars).forEach(s => {
+                total += (s || 0);
+            });
+        });
+
+        return total;
+    };
+
+    // ==============================================================
+    // 3. getMaxTotalStars — fases × 3 × 3 dificuldades = 576
+    // ==============================================================
+    window.getMaxTotalStars = function() {
+        if (typeof STORY_CHAPTERS === 'undefined') return 576;
+        let totalFases = 0;
+        Object.values(STORY_CHAPTERS).forEach(ch => {
+            totalFases += ch.phases.length;
+        });
+        // 3 estrelas por fase × 3 dificuldades
+        return totalFases * 3 * 3;
+    };
+
+    // ==============================================================
+    // 4. checkHeroUnlocks — usa o total global (soma das 3)
+    // ==============================================================
+    window.checkHeroUnlocks = function() {
+        if (!Array.isArray(STORY_PROGRESS.unlockedHeroesStory)) {
+            STORY_PROGRESS.unlockedHeroesStory = ['Tupa', 'Sume', 'Caipora'];
+        }
+
+        const totalStars = window.getTotalStars();
+        const unlocked = [];
+
+        // STORY_HERO_UNLOCKS é a tabela de heróis por estrelas
+        const tabela = (typeof STORY_HERO_UNLOCKS !== 'undefined')
+            ? STORY_HERO_UNLOCKS
+            : [];
+
+        tabela.forEach(entry => {
+            if (totalStars >= entry.starsNeeded &&
+                !STORY_PROGRESS.unlockedHeroesStory.includes(entry.className)) {
+                STORY_PROGRESS.unlockedHeroesStory.push(entry.className);
+                unlocked.push(entry);
+            }
+        });
+
+        // Heróis com unlockReq.stars (Bloco 12 V9.4)
+        if (typeof STORY_HERO_CLASSES !== 'undefined') {
+            Object.values(STORY_HERO_CLASSES).forEach(hero => {
+                if (!hero.unlockReq || hero.unlockReq.type !== 'stars') return;
+                if (STORY_PROGRESS.unlockedHeroesStory.includes(hero.className)) return;
+                if (totalStars >= hero.starsNeeded) {
+                    STORY_PROGRESS.unlockedHeroesStory.push(hero.className);
+                    unlocked.push({ className: hero.className, displayName: hero.displayName });
+                }
+            });
+        }
+
+        if (unlocked.length > 0) {
+            if (typeof saveStoryProgress === 'function') saveStoryProgress();
+            unlocked.forEach(entry => {
+                if (typeof showToast === 'function') {
+                    showToast('🏅 HERÓI DESBLOQUEADO!', entry.displayName || entry.className, '🏅');
+                }
+                try { if (typeof playSfx === 'function') playSfx('win'); } catch(e) {}
+            });
+        }
+
+        return unlocked;
+    };
+
+    // ==============================================================
+    // 5. Neutralizar patches antigos que forçavam HTML via regex
+    // --------------------------------------------------------------
+    // Os MutationObservers do Bloco 65/66 tentavam reescrever o
+    // innerHTML do contador. Como agora getTotalStars está correto,
+    // o HTML já sai certo do render — mas os observers podem
+    // reescrever de forma errada (regex antigo). Vamos flagá-los.
+    // ==============================================================
+    // Não tem como "desligar" um MutationObserver já criado sem a
+    // referência. Então a gente garante que ele NÃO vai encontrar
+    // o texto errado: sobrescrevemos renderAldeiaScreen e
+    // renderOcaScreenFiltered para RE-ESCREVER o contador DEPOIS
+    // de qualquer observer rodar (com setTimeout grande).
+
+    function forcarTextoEstrelasNaTela() {
+        const screen = document.getElementById('storyScreen');
+        if (!screen) return;
+        const total = window.getTotalStars();
+        const max = window.getMaxTotalStars();
+        const textoCorreto = `${total} / ${max}`;
+
+        // Todos os contadores da tela
+        screen.querySelectorAll('.story-stars-counter').forEach(counter => {
+            // Mantém o ícone se existir, substitui só o número
+            const iconEl = counter.querySelector('.story-stars-icon');
+            if (iconEl) {
+                counter.innerHTML = `<span class="story-stars-icon">⭐</span>${textoCorreto}`;
+            } else {
+                counter.innerHTML = `⭐ ${textoCorreto}`;
+            }
+        });
+
+        // Também corrige textos "Progresso geral: X/Y fases · ⭐ A/B"
+        screen.querySelectorAll('.story-ald-progress-label').forEach(label => {
+            label.textContent = label.textContent.replace(
+                /⭐\s*\d+\s*\/\s*\d+/,
+                `⭐ ${textoCorreto}`
+            );
+        });
+
+        // E "X / Y ESTRELAS TOTAIS" (tela de vitória, se aparecer)
+        screen.querySelectorAll('div').forEach(div => {
+            if (div.children.length === 0 &&
+                div.textContent.includes('ESTRELAS TOTAIS')) {
+                div.textContent = `⭐ ${textoCorreto} ESTRELAS TOTAIS`;
+            }
+        });
+    }
+
+    // Aplica depois de qualquer render
+    const _origRenderAldeia = window.renderAldeiaScreen;
+    if (typeof _origRenderAldeia === 'function') {
+        window.renderAldeiaScreen = function() {
+            const r = _origRenderAldeia.apply(this, arguments);
+            // Roda SÍNCRONO + depois dos observers antigos (500ms)
+            setTimeout(forcarTextoEstrelasNaTela, 0);
+            setTimeout(forcarTextoEstrelasNaTela, 600);
+            setTimeout(forcarTextoEstrelasNaTela, 1200);
+            return r;
+        };
+    }
+
+    const _origRenderOca = window.renderOcaScreenFiltered;
+    if (typeof _origRenderOca === 'function') {
+        window.renderOcaScreenFiltered = function() {
+            const r = _origRenderOca.apply(this, arguments);
+            setTimeout(forcarTextoEstrelasNaTela, 0);
+            setTimeout(forcarTextoEstrelasNaTela, 600);
+            setTimeout(forcarTextoEstrelasNaTela, 1200);
+            return r;
+        };
+    }
+
+    // ==============================================================
+    // 6. Verifica desbloqueios ao carregar (retroativo)
+    // ==============================================================
+    setTimeout(() => {
+        garantirEstrutura();
+        if (typeof window.checkHeroUnlocks === 'function') {
+            window.checkHeroUnlocks();
+        }
+    }, 1200);
+
+    // ==============================================================
+    // 7. Log de diagnóstico
+    // ==============================================================
+    setTimeout(() => {
+        garantirEstrutura();
+        const t = window.getTotalStars();
+        const m = window.getMaxTotalStars();
+        const dp = STORY_PROGRESS?.difficultyProgress || {};
+        const porDiff = {};
+        ['normal', 'dificil', 'pesadelo'].forEach(id => {
+            const d = dp[id];
+            porDiff[id] = d?.stars
+                ? Object.values(d.stars).reduce((a, b) => a + b, 0)
+                : 0;
+        });
+        console.log('');
+        console.log('═══════════════════════════════════════════════════');
+        console.log('⭐ [V15.0] Estrelas consolidadas');
+        console.log('═══════════════════════════════════════════════════');
+        console.log('Estrelas por dificuldade:');
+        console.log('  Normal:  ', porDiff.normal);
+        console.log('  Difícil: ', porDiff.dificil);
+        console.log('  Pesadelo:', porDiff.pesadelo);
+        console.log('  ─────────────');
+        console.log('  TOTAL:   ', t, '/', m);
+        console.log('═══════════════════════════════════════════════════');
+    }, 1500);
+
+    console.log('✅ [V15.0] Estrelas globais consolidadas (soma das 3 dificuldades).');
+})();
+// =================================================================
+// historia.js — BLOCO 68 (V15.1 — Correções P0/P1)
+// -----------------------------------------------------------------
+// Cole NO FINAL de historia.js, depois do Bloco 67.
+//
+// Corrige:
+//   BUG 6 (P0) — phase.reward sendo mutado permanentemente
+//   BUG 1 (P0) — saveStarsForPhase aplicando bônus de estrela 2×
+//   BUG 2 (P1) — checkHeroUnlocks perdendo heróis por "zerar dificuldade"
+//   BUG 7 (P1) — _eventoBossSnapshot não resetado entre partidas
+//   BUG 5 (P1) — storyCurrentEnemyIndex desincronizado no Coop
+//                (via patch no coopAplicarEstadoDoRoom)
+// =================================================================
+
+(function correcoesV151() {
+    if (window._correcoesV151) return;
+    window._correcoesV151 = true;
+
+    // ==============================================================
+    // BUG 6 — Snapshot estático das recompensas originais
+    // --------------------------------------------------------------
+    // Capturamos os valores originais ANTES de qualquer mutação.
+    // Se o save já está corrompido, restauramos no load.
+    // ==============================================================
+    const RECOMPENSAS_ORIGINAIS = {};
+
+    function capturarRecompensasOriginais() {
+        if (typeof STORY_CHAPTERS === 'undefined') return;
+        Object.keys(STORY_CHAPTERS).forEach(cid => {
+            STORY_CHAPTERS[cid].phases.forEach(phase => {
+                if (phase.reward) {
+                    RECOMPENSAS_ORIGINAIS[phase.id] = {
+                        xp: phase.reward.xp,
+                        gold: phase.reward.gold,
+                        chapterComplete: phase.reward.chapterComplete,
+                    };
+                }
+            });
+        });
+        console.log('[V15.1] Snapshot de recompensas capturado:', Object.keys(RECOMPENSAS_ORIGINAIS).length, 'fases');
+    }
+
+    function restaurarRecompensasOriginais() {
+        if (typeof STORY_CHAPTERS === 'undefined') return 0;
+        let restaurados = 0;
+        Object.keys(STORY_CHAPTERS).forEach(cid => {
+            STORY_CHAPTERS[cid].phases.forEach(phase => {
+                const orig = RECOMPENSAS_ORIGINAIS[phase.id];
+                if (!orig || !phase.reward) return;
+                if (phase.reward.xp !== orig.xp || phase.reward.gold !== orig.gold) {
+                    phase.reward.xp = orig.xp;
+                    phase.reward.gold = orig.gold;
+                    restaurados++;
+                }
+            });
+        });
+        if (restaurados > 0) {
+            console.log(`[V15.1] ${restaurados} recompensas restauradas ao valor original.`);
+        }
+        return restaurados;
+    }
+
+    capturarRecompensasOriginais();
+    setTimeout(restaurarRecompensasOriginais, 100);
+    setTimeout(restaurarRecompensasOriginais, 1000);
+
+    // ==============================================================
+    // Sobrescreve handleStoryPhaseVictory SEM MUTAR phase.reward
+    // ==============================================================
+    const _origVictory = window.handleStoryPhaseVictory;
+
+    window.handleStoryPhaseVictory = function(phase, drops, finalScore, rankSnapshot) {
+        if (!phase || !phase.reward) {
+            if (typeof _origVictory === 'function') return _origVictory.apply(this, arguments);
+            return;
+        }
+
+        // Garante que phase.reward está nos valores originais ANTES de calcular
+        restaurarRecompensasOriginais();
+
+        const diff = (typeof STORY_DIFFICULTIES !== 'undefined')
+            ? STORY_DIFFICULTIES[storyCurrentDifficulty]
+            : null;
+
+        // Cálculo local SEM mutar phase.reward
+        const xpBase = phase.reward.xp;
+        const goldBase = phase.reward.gold;
+        const xpFinal = (diff && storyCurrentDifficulty !== 'normal')
+            ? Math.ceil(xpBase * diff.rewardMult)
+            : xpBase;
+        const goldFinal = (diff && storyCurrentDifficulty !== 'normal')
+            ? Math.ceil(goldBase * diff.rewardMult)
+            : goldBase;
+
+        // Cria uma "cópia fantasma" só para a função original usar
+        const phaseParaOriginal = Object.assign({}, phase, {
+            reward: Object.assign({}, phase.reward, { xp: xpFinal, gold: goldFinal })
+        });
+
+        return _origVictory.call(this, phaseParaOriginal, drops, finalScore, rankSnapshot);
+    };
+
+    // ==============================================================
+    // BUG 1 — saveStarsForPhase NÃO reaplica bônus
+    // --------------------------------------------------------------
+    // O bônus de dificuldade deve ser aplicado UMA VEZ, em
+    // handleStoryPhaseVictory, antes de chamar saveStarsForPhase.
+    // Aqui só salvamos o valor que já vem calculado.
+    // ==============================================================
+    window.saveStarsForPhase = function(phaseId, stars) {
+        // stars já vem com o bônus aplicado (ver abaixo em handleStoryPhaseVictory)
+        // Aqui só persistimos na dificuldade atual + global como máximo
+
+        // Garante estrutura
+        if (!STORY_PROGRESS.difficultyProgress) {
+            STORY_PROGRESS.difficultyProgress = {};
+        }
+        const diffId = (typeof storyCurrentDifficulty !== 'undefined')
+            ? storyCurrentDifficulty : 'normal';
+        if (!STORY_PROGRESS.difficultyProgress[diffId]) {
+            STORY_PROGRESS.difficultyProgress[diffId] = {
+                unlockedChapters: [], unlockedPhases: {}, completedPhases: [], stars: {}
+            };
+        }
+        const d = STORY_PROGRESS.difficultyProgress[diffId];
+        if (!d.stars) d.stars = {};
+
+        const current = d.stars[phaseId] || 0;
+        const final = Math.max(current, Math.min(3, stars));
+        d.stars[phaseId] = final;
+
+        // Global (compatibilidade, guarda o máximo entre dificuldades)
+        if (!STORY_PROGRESS.starsByPhase) STORY_PROGRESS.starsByPhase = {};
+        const curGlobal = STORY_PROGRESS.starsByPhase[phaseId] || 0;
+        STORY_PROGRESS.starsByPhase[phaseId] = Math.max(curGlobal, final);
+
+        if (typeof saveStoryProgress === 'function') saveStoryProgress();
+        return final;
+    };
+
+    // ==============================================================
+    // Ajuste em handleStoryPhaseVictory: bônus de estrela aplicado
+    // UMA VEZ, antes do saveStarsForPhase
+    // ==============================================================
+    const _origSaveStarsHook = window.handleStoryPhaseVictory;
+    // (já hookamos acima — o hook faz a chamada correta de saveStarsForPhase
+    //  via _origVictory, que internamente chama saveStarsForPhase.
+    //  Mas precisamos garantir que o bônus de estrela seja aplicado ANTES.)
+    //
+    // Solução: interceptar calcularEstrelas + saveStarsForPhase juntos.
+    // Como calcularEstrelas retorna raw e saveStarsForPhase agora NÃO
+    // adiciona bônus, precisamos adicionar o bônus no meio.
+    //
+    // Melhor: sobrescrever calcularEstrelas para incluir o bônus de
+    // dificuldade. Assim o valor retornado já está "final".
+
+    const _origCalcularEstrelas = window.calcularEstrelas;
+
+    window.calcularEstrelas = function(score, maxScore) {
+        let stars = 1;
+        if (typeof _origCalcularEstrelas === 'function') {
+            stars = _origCalcularEstrelas(score, maxScore);
+        } else {
+            if (!maxScore || maxScore <= 0) return 1;
+            const ratio = score / maxScore;
+            if (ratio >= 0.60) stars = 3;
+            else if (ratio >= 0.35) stars = 2;
+            else stars = 1;
+        }
+
+        // Aplica bônus de dificuldade AQUI (uma vez só)
+        const diff = (typeof STORY_DIFFICULTIES !== 'undefined' && typeof storyCurrentDifficulty !== 'undefined')
+            ? STORY_DIFFICULTIES[storyCurrentDifficulty]
+            : null;
+        if (diff && diff.starsBonus > 0) {
+            stars = Math.min(3, stars + diff.starsBonus);
+        }
+
+        return stars;
+    };
+
+    // ==============================================================
+    // BUG 2 — checkHeroUnlocks com heróis por "zerar dificuldade"
+    // ==============================================================
+    window.checkHeroUnlocks = function() {
+        if (!Array.isArray(STORY_PROGRESS.unlockedHeroesStory)) {
+            STORY_PROGRESS.unlockedHeroesStory = ['Tupa', 'Sume', 'Caipora'];
+        }
+
+        const totalStars = (typeof getTotalStars === 'function')
+            ? getTotalStars() : 0;
+
+        const unlocked = [];
+
+        // --- Heróis por estrelas (STORY_HERO_UNLOCKS) ---
+        const tabela = (typeof STORY_HERO_UNLOCKS !== 'undefined')
+            ? STORY_HERO_UNLOCKS : [];
+
+        tabela.forEach(entry => {
+            if (totalStars >= entry.starsNeeded &&
+                !STORY_PROGRESS.unlockedHeroesStory.includes(entry.className)) {
+                STORY_PROGRESS.unlockedHeroesStory.push(entry.className);
+                unlocked.push(entry);
+            }
+        });
+
+        // --- Heróis com unlockReq.stars ---
+        if (typeof STORY_HERO_CLASSES !== 'undefined') {
+            Object.values(STORY_HERO_CLASSES).forEach(hero => {
+                if (!hero.unlockReq || hero.unlockReq.type !== 'stars') return;
+                if (STORY_PROGRESS.unlockedHeroesStory.includes(hero.className)) return;
+                if (totalStars >= hero.starsNeeded) {
+                    STORY_PROGRESS.unlockedHeroesStory.push(hero.className);
+                    unlocked.push({ className: hero.className, displayName: hero.displayName });
+                }
+            });
+        }
+
+        // --- ⭐ Heróis por ZERAR DIFICULDADE ---
+        // Esta é a parte que estava faltando no Bloco 67
+        const HEROIS_POR_ZERAR = {
+            'Curupira': { difficulty: 'normal', label: 'Zerar o Normal' },
+            'Kianumanka-Manã': { difficulty: 'dificil', label: 'Zerar o Difícil' },
+            'Anhanga-Mirim': { difficulty: 'pesadelo', label: 'Zerar o Pesadelo' },
+        };
+        const cleared = STORY_PROGRESS.clearedDifficulties || [];
+
+        Object.keys(HEROIS_POR_ZERAR).forEach(heroClass => {
+            const req = HEROIS_POR_ZERAR[heroClass];
+            if (cleared.includes(req.difficulty) &&
+                !STORY_PROGRESS.unlockedHeroesStory.includes(heroClass)) {
+                STORY_PROGRESS.unlockedHeroesStory.push(heroClass);
+                unlocked.push({
+                    className: heroClass,
+                    displayName: heroClass,
+                    motivo: req.label,
+                });
+            }
+        });
+
+        // --- Salva e notifica ---
+        if (unlocked.length > 0) {
+            if (typeof saveStoryProgress === 'function') saveStoryProgress();
+            unlocked.forEach(entry => {
+                const nome = entry.displayName || entry.className;
+                const sufixo = entry.motivo ? ` (${entry.motivo})` : '';
+                if (typeof showToast === 'function') {
+                    showToast('🏅 HERÓI DESBLOQUEADO!', nome + sufixo, '🏅');
+                }
+                try { if (typeof playSfx === 'function') playSfx('win'); } catch(e) {}
+            });
+        }
+
+        return unlocked;
+    };
+
+    // ==============================================================
+    // BUG 7 — Reset de _eventoBossSnapshot
+    // --------------------------------------------------------------
+    // Wrappea eventoVoltarAldeia e eventoVoltarSemana para limpar
+    // o snapshot no final.
+    // ==============================================================
+    const _origVoltarAldeia = window.eventoVoltarAldeia;
+    if (typeof _origVoltarAldeia === 'function') {
+        window.eventoVoltarAldeia = function() {
+            window._eventoBossSnapshot = null;
+            return _origVoltarAldeia.apply(this, arguments);
+        };
+    }
+
+    const _origVoltarSemana = window.eventoVoltarSemana;
+    if (typeof _origVoltarSemana === 'function') {
+        window.eventoVoltarSemana = function() {
+            window._eventoBossSnapshot = null;
+            return _origVoltarSemana.apply(this, arguments);
+        };
+    }
+
+    // Também reseta em eventoFinalizarPartida (por garantia)
+    const _origFinalizar = window.eventoFinalizarPartida;
+    if (typeof _origFinalizar === 'function') {
+        window.eventoFinalizarPartida = async function() {
+            window._eventoBossSnapshot = null;
+            return _origFinalizar.apply(this, arguments);
+        };
+    }
+
+    // ==============================================================
+    // BUG 5 — Sincronização de storyCurrentEnemyIndex no Coop
+    // --------------------------------------------------------------
+    // Quando o P1 recebe via Firestore um boss diferente do local,
+    // além de trocar o [0], precisa avançar o índice se o próximo
+    // da fila local bate com o novo boss.
+    // ==============================================================
+    const _origAplicarCoop = window.coopAplicarEstadoDoRoom;
+    if (typeof _origAplicarCoop === 'function') {
+        window.coopAplicarEstadoDoRoom = function(room) {
+            // Antes de aplicar, checa se o boss mudou
+            if (room?.estadoJogo?.boss?.type) {
+                const bt = (typeof coopBossTypeNormalize === 'function')
+                    ? coopBossTypeNormalize(room.estadoJogo.boss.type)
+                    : room.estadoJogo.boss.type;
+
+                const idFromBoss = (typeof coopBossTypeToEnemyId === 'function')
+                    ? coopBossTypeToEnemyId(bt)
+                    : String(bt).toLowerCase();
+
+                if (Array.isArray(window.storyEnemiesRemaining) &&
+                    window.storyEnemiesRemaining.length > 0 &&
+                    window.storyEnemiesRemaining[0] !== idFromBoss) {
+
+                    // Se o próximo da fila é o novo boss → avançou
+                    if (window.storyEnemiesRemaining.length > 1 &&
+                        window.storyEnemiesRemaining[1] === idFromBoss) {
+                        window.storyEnemiesRemaining.shift();
+                        if (typeof window.storyCurrentEnemyIndex !== 'undefined') {
+                            window.storyCurrentEnemyIndex++;
+                        }
+                        console.log('[V15.1] Fila sincronizada: avançou para', idFromBoss);
+                    } else {
+                        // Só troca o [0] (não avançou, é outro estado)
+                        window.storyEnemiesRemaining[0] = idFromBoss;
+                    }
+                }
+            }
+
+            return _origAplicarCoop.apply(this, arguments);
+        };
+    }
+
+    // ==============================================================
+    // Log de confirmação
+    // ==============================================================
+    setTimeout(() => {
+        const total = (typeof getTotalStars === 'function') ? getTotalStars() : 0;
+        const max = (typeof getMaxTotalStars === 'function') ? getMaxTotalStars() : 0;
+        const cleared = STORY_PROGRESS?.clearedDifficulties || [];
+        const herois = STORY_PROGRESS?.unlockedHeroesStory || [];
+
+        console.log('');
+        console.log('═══════════════════════════════════════════════════');
+        console.log('✅ [V15.1] Correções P0/P1 aplicadas');
+        console.log('═══════════════════════════════════════════════════');
+        console.log('⭐ Estrelas:', total, '/', max);
+        console.log('🏆 Dificuldades zeradas:', cleared.length > 0 ? cleared.join(', ') : '(nenhuma)');
+        console.log('🦸 Heróis desbloqueados:', herois.length);
+        console.log('📋 Recompensas originais:', Object.keys(RECOMPENSAS_ORIGINAIS).length, 'fases');
+        console.log('');
+        console.log('💡 Para checar se phase.reward está correto:');
+        console.log('   STORY_CHAPTERS[1].phases[0].reward  →  deve ser {xp:10, gold:15}');
+        console.log('═══════════════════════════════════════════════════');
+    }, 2000);
+
+    console.log('✅ [V15.1] Bloco de correções P0/P1 instalado.');
 })();
