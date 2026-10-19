@@ -1580,16 +1580,16 @@ const STORY_FX_SPRITES = {
     fin_slash:'https://i.imgur.com/HbejI8O.png',
     tentacle_glow:'',
     ground_crack:'https://i.imgur.com/vKBQ0EW.png',
-    shockwave:'https://i.imgur.com/9cKQQ07.png',
+    shockwave:'https://i.imgur.com/UfjAlRZ.png',
     fog_cloud:'https://i.imgur.com/DJIefCf.png',
     swarm_cloud:'https://i.imgur.com/9btzF9A.png',
     spectral_veil:'',
     push_arrow:'',
     pull_chain:'',
-    heal_orb:'',
+    heal_orb:'https://i.imgur.com/bD8E4Z2.png',
     tile_flip:'',
     element_pulse:'https://i.imgur.com/9Zxsavx.png',
-    flame_short:'https://i.imgur.com/taNG7Pw.png',
+    flame_short:'https://i.imgur.com/V1MTCcM.png',
     impact:'https://i.imgur.com/sOtm43e.png',
     heavy_slash:'',
 };
@@ -16877,7 +16877,7 @@ console.log('💡 Zeradas:', STORY_PROGRESS.clearedDifficulties || []);
             spriteKey: 'heroi_Naia',
             className: 'Naiá',
             role: 'Arqueiro',
-            hp: 12, atk: 2, range: 4,
+            hp: 12, atk: 2, range: 3,
             element: 'AGUA',
             paKey: 'naia_apaga_fogo',
             starsNeeded: 220,
@@ -29084,96 +29084,3014 @@ console.log('💡 Zeradas:', STORY_PROGRESS.clearedDifficulties || []);
     console.log('✅ [V19.0] Fix phase = null instalado.');
 })();
 // =================================================================
-// historia.js — BLOCO 85 (V21.0 — Atrasar tela de derrota)
+// historia.js — BLOCO 88 (V23.2 — PA roda COMPLETO com boss real)
 // -----------------------------------------------------------------
 // Cole NO FINAL do historia.js (último bloco).
 //
-// Abordagem:
-//   1. Marca o timestamp da última morte de herói (via players)
-//   2. Atrasa a criação de QUALQUER tela de derrota em 3s
-//      (showStoryDefeatScreen, showEndGame, _mostrarTelaFinalEvento)
-//   3. Durante o atraso, a aura (se existir) aparece
-//   4. Se a aura não existir, o jogador só vê um "delay" de 3s
-//      (não é ideal, mas não duplica)
+// Abordagem 2 (boss real, sem fake):
+//   1. triggerBravelyChain passa o BOSS REAL (com dead: true) pro
+//      paFn.execute, em vez de null ou fake.
+//   2. Os 12 paFn.execute são reescritos SEM o guard `dead`.
+//   3. Onde move o alvo (empurrar/puxar), verifica `dead` internamente.
+//   4. Onde aplica dano, o applyDmg barra o morto (não duplica).
+//   5. Tiles são convertidos SEMPRE (mesmo com alvo morto).
+//
+// ⚠️ NÃO mexe em:
+//   • triggerBravelyChain dos heróis base (Tupã/Sumé/Caipora)
+//   • showBravelyAnimation (V16.5)
+//   • handleStoryBossDefeat (V9.0-B1)
+//   • applyDmg (V9.0-B1)
 // =================================================================
 
-(function atrasarTelaDerrotaV210() {
-    if (window._atrasarTelaV210) return;
-    window._atrasarTelaV210 = true;
+(function PAcompletoAbordagem2V232() {
+    if (window._PAcompletoAbordagem2V232) return;
+    window._PAcompletoAbordagem2V232 = true;
 
-    console.log('[V21.0] Instalando atraso de tela de derrota...');
+    console.log('[V23.2] Instalando Abordagem 2 (boss real, sem fake)...');
 
     // ==============================================================
-    // HELPER: há herói morto?
+    // FONTE DE VERDADE: elemento do herói
     // ==============================================================
-    function temHeroiMorto() {
-        if (typeof players === 'undefined' || !Array.isArray(players)) return false;
-        return players.some(p => p && p.dead);
+    function getElementoReal(heroClass) {
+        if (!heroClass) return 'FOGO';
+        if (typeof STORY_HERO_CLASSES !== 'undefined' && STORY_HERO_CLASSES[heroClass]) {
+            const h = STORY_HERO_CLASSES[heroClass];
+            if (h.element) return h.element;
+        }
+        if (typeof getHeroStoryElement === 'function') return getHeroStoryElement(heroClass);
+        return 'FOGO';
     }
 
     // ==============================================================
-    // 1. Hook em showStoryDefeatScreen
+    // Tiles afetados (com snapshot, como V9.0-B1)
     // --------------------------------------------------------------
-    // Se há herói morto E estamos em batalha, atrasa 3s.
+    // Mesmo que o alvo morra, o snapshot preserva x/y original.
     // ==============================================================
-    const _origShowDefeat = window.showStoryDefeatScreen;
-    if (typeof _origShowDefeat === 'function') {
-        window.showStoryDefeatScreen = async function(phase, drops) {
-            // Se há herói morto, atrasa
-            if (temHeroiMorto() && (window._storyMode || window._eventoAtivo)) {
-                console.log('[V21.0] Atrasando showStoryDefeatScreen (3s)...');
-                await new Promise(r => setTimeout(r, 3000));
+    function getPAaffectedTilesSnapshot(active, paKey, targetSnapshot) {
+        const tiles = [];
+        const cx = active.x;
+        const cy = active.y;
+
+        const hasTarget = targetSnapshot
+            && typeof targetSnapshot.x === 'number'
+            && typeof targetSnapshot.y === 'number';
+
+        if (paKey === 'kanarott_cruz_empurra') {
+            for (let i = -2; i <= 2; i++) {
+                const ny = cy + i;
+                if (ny >= 0 && ny < 8) tiles.push(ny * 8 + cx);
             }
-            // phase = null safe
-            const phaseSafe = phase || { id: 'evento', name: 'Evento Semanal', enemies: [] };
-            return _origShowDefeat.call(this, phaseSafe, drops);
+            for (let i = -2; i <= 2; i++) {
+                if (i === 0) continue;
+                const nx = cx + i;
+                if (nx >= 0 && nx < 8) tiles.push(cy * 8 + nx);
+            }
+        }
+        else if (paKey === 'teperesik_area2x2') {
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dy = -1; dy <= 1; dy++) {
+                    if (dx === 0 && dy === 0) continue;
+                    const nx = cx + dx, ny = cy + dy;
+                    if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) tiles.push(ny * 8 + nx);
+                }
+            }
+        }
+        else if (paKey === 'eru_linha_horizontal') {
+            for (let x = 0; x < 8; x++) tiles.push(cy * 8 + x);
+        }
+        else if (paKey === 'andure_area2x2_cura') {
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dy = -1; dy <= 1; dy++) {
+                    const nx = cx + dx, ny = cy + dy;
+                    if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) tiles.push(ny * 8 + nx);
+                }
+            }
+        }
+        else if (paKey === 'maedamata_area3x3_cura') {
+            for (let dx = -2; dx <= 2; dx++) {
+                for (let dy = -2; dy <= 2; dy++) {
+                    const nx = cx + dx, ny = cy + dy;
+                    if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) tiles.push(ny * 8 + nx);
+                }
+            }
+        }
+        else if (paKey === 'paje_coluna_fogo') {
+            for (let y = 0; y < 8; y++) tiles.push(y * 8 + cx);
+        }
+        else if (paKey === 'jurua_area_alvo_3x3') {
+            if (hasTarget) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dy = -1; dy <= 1; dy++) {
+                        const nx = targetSnapshot.x + dx, ny = targetSnapshot.y + dy;
+                        if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) tiles.push(ny * 8 + nx);
+                    }
+                }
+            }
+        }
+        else if (paKey === 'araci_linha_horizontal') {
+            for (let x = 0; x < 8; x++) tiles.push(cy * 8 + x);
+        }
+        else if (paKey === 'bicho_cruz_completa') {
+            if (hasTarget) {
+                for (let x = 0; x < 8; x++) tiles.push(targetSnapshot.y * 8 + x);
+                for (let y = 0; y < 8; y++) {
+                    if (y !== targetSnapshot.y) tiles.push(y * 8 + targetSnapshot.x);
+                }
+            }
+        }
+        else if (paKey === 'tapyra_coluna_alvo') {
+            if (hasTarget) {
+                for (let y = 0; y < 8; y++) tiles.push(y * 8 + targetSnapshot.x);
+            }
+        }
+        // ---- Heróis novos ----
+        else if (paKey === 'curupira_chuva_flechas') {
+            grid.forEach((el, idx) => { if (el === 'AR') tiles.push(idx); });
+        }
+        else if (paKey === 'kianumanka_meteoro') {
+            if (hasTarget) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dy = -1; dy <= 1; dy++) {
+                        const nx = targetSnapshot.x + dx, ny = targetSnapshot.y + dy;
+                        if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) tiles.push(ny * 8 + nx);
+                    }
+                }
+            }
+        }
+        else if (paKey === 'anhanga_mirim_raio') {
+            if (hasTarget) {
+                for (let i = 0; i < 8; i++) {
+                    if (!tiles.includes(i * 8 + targetSnapshot.x)) tiles.push(i * 8 + targetSnapshot.x);
+                    if (!tiles.includes(targetSnapshot.y * 8 + i)) tiles.push(targetSnapshot.y * 8 + i);
+                }
+            }
+        }
+        else if (paKey === 'matinta_rajada') {
+            for (let x = 0; x < 8; x++) tiles.push(cy * 8 + x);
+        }
+        else if (paKey === 'naia_apaga_fogo') {
+            grid.forEach((el, idx) => { if (el === 'FOGO') tiles.push(idx); });
+        }
+        else if (paKey === 'kuati_explosao') {
+            const area = [];
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dy = -1; dy <= 1; dy++) {
+                    const nx = cx + dx, ny = cy + dy;
+                    if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) area.push(ny * 8 + nx);
+                }
+            }
+            const linha = [];
+            for (let x = 0; x < 8; x++) linha.push(cy * 8 + x);
+            [...new Set([...area, ...linha])].forEach(idx => tiles.push(idx));
+        }
+        else if (paKey === 'caboclo_mare') {
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dy = -1; dy <= 1; dy++) {
+                    const nx = cx + dx, ny = cy + dy;
+                    if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) tiles.push(ny * 8 + nx);
+                }
+            }
+        }
+        else if (paKey === 'tupinamba_avalanche') {
+            if (hasTarget) {
+                for (let i = 0; i < 8; i++) {
+                    if (!tiles.includes(i * 8 + targetSnapshot.x)) tiles.push(i * 8 + targetSnapshot.x);
+                    if (!tiles.includes(targetSnapshot.y * 8 + i)) tiles.push(targetSnapshot.y * 8 + i);
+                }
+            }
+        }
+        else if (paKey === 'mbaraka_salto_raio') {
+            if (hasTarget) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dy = -1; dy <= 1; dy++) {
+                        const nx = targetSnapshot.x + dx, ny = targetSnapshot.y + dy;
+                        if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) tiles.push(ny * 8 + nx);
+                    }
+                }
+            }
+        }
+        else if (paKey === 'maedouro_caminho') {
+            if (hasTarget) {
+                const stepX = Math.sign(targetSnapshot.x - cx);
+                for (let x = cx; x !== targetSnapshot.x + stepX; x += (stepX || 1)) {
+                    const nx = Math.max(0, Math.min(7, x));
+                    const idx = cy * 8 + nx;
+                    if (!tiles.includes(idx)) tiles.push(idx);
+                    if (stepX === 0) break;
+                }
+                const stepY = Math.sign(targetSnapshot.y - cy);
+                for (let y = cy; y !== targetSnapshot.y + stepY; y += (stepY || 1)) {
+                    const ny = Math.max(0, Math.min(7, y));
+                    const idx = ny * 8 + targetSnapshot.x;
+                    if (!tiles.includes(idx)) tiles.push(idx);
+                    if (stepY === 0) break;
+                }
+                const bossIdx = targetSnapshot.y * 8 + targetSnapshot.x;
+                if (!tiles.includes(bossIdx)) tiles.push(bossIdx);
+            }
+        }
+        else if (paKey === 'pajeacu_linha') {
+            for (let x = 0; x < 8; x++) tiles.push(cy * 8 + x);
+        }
+        else if (paKey === 'negrinho_cruz_cura') {
+            if (hasTarget) {
+                for (let i = 0; i < 8; i++) {
+                    if (!tiles.includes(i * 8 + targetSnapshot.x)) tiles.push(i * 8 + targetSnapshot.x);
+                    if (!tiles.includes(targetSnapshot.y * 8 + i)) tiles.push(targetSnapshot.y * 8 + i);
+                }
+            }
+        }
+
+        return tiles;
+    }
+
+    // ==============================================================
+    // TRIGGER BRAVELY CHAIN — passa o BOSS REAL (com dead)
+    // --------------------------------------------------------------
+    // Diferente do V8.1 (que passa null se alvo morreu), aqui
+    // passa o boss real. O paFn.execute (sem guard dead) roda tudo.
+    // ==============================================================
+    window.triggerBravelyChain = async function(active, target, totalAtk) {
+        if (!window._storyMode && !window._eventoAtivo) return;
+
+        const heroData = (typeof STORY_HERO_CLASSES !== 'undefined')
+            ? STORY_HERO_CLASSES[active.class]
+            : null;
+
+        if (!heroData || !heroData.paKey) return;
+
+        const paKey = heroData.paKey;
+
+        // Heróis base → lógica própria (NÃO MEXER)
+        if (paKey.startsWith('base_')) {
+            return await _triggerBaseBravely(active, target, totalAtk, paKey);
+        }
+
+        // ============================================================
+        // HERÓIS NOVOS
+        // ============================================================
+        const element = getElementoReal(active.class);
+
+        // Snapshot do alvo (posição original, mesmo se morreu)
+        const targetSnapshot = target ? {
+            x: target.x,
+            y: target.y,
+            dead: target.dead,
+            id: target.id,
+        } : null;
+
+        // Overlay "PODER ANCESTRAL"
+        if (typeof showPoderAncestralEffect === 'function') {
+            try { showPoderAncestralEffect(); } catch(e) {}
+        }
+        await sleep(300);
+
+        try { if (typeof playSfx === 'function') playSfx('skill1'); } catch(e) {}
+
+        // Calcula tiles com snapshot
+        const paTiles = getPAaffectedTilesSnapshot(active, paKey, targetSnapshot);
+
+        // FX elemental em cada tile
+        paTiles.forEach((idx) => {
+            const tx = idx % 8;
+            const ty = Math.floor(idx / 8);
+            const dist = Math.abs(tx - active.x) + Math.abs(ty - active.y);
+            setTimeout(() => {
+                if (typeof triggerElementalFX === 'function') {
+                    let fxType = 'COL';
+                    if (paKey.includes('linha')) fxType = 'ROW';
+                    triggerElementalFX(element, fxType === 'ROW' ? ty : tx, fxType, active.x, active.y);
+                }
+            }, dist * 60);
+        });
+
+        await sleep(400);
+
+        // ============================================================
+        // Dano no alvo (só se vivo) — o applyDmg também barra o morto
+        // ============================================================
+        if (target && !target.dead) {
+            const targetIdx = target.y * 8 + target.x;
+            if (paTiles.includes(targetIdx)) {
+                if (typeof applyDmg === 'function') applyDmg(target, totalAtk);
+            }
+        }
+
+        // ============================================================
+        // ⭐ PASSA O BOSS REAL PRO paFn.execute
+        // ------------------------------------------------------------
+        // Mesmo com dead: true, o paFn.execute (reescrito abaixo sem
+        // guard dead) vai rodar tudo. O applyDmg barra o morto.
+        // ============================================================
+        const paFn = STORY_HERO_PA[paKey];
+        if (paFn && typeof paFn.execute === 'function') {
+            try {
+                await paFn.execute(active, target, totalAtk);
+            } catch(e) {
+                console.warn('[V23.2] Erro no paFn:', e);
+            }
+        }
+
+        // ============================================================
+        // CONVERTE TILES (SEMPRE)
+        // ============================================================
+        paTiles.forEach(idx => {
+            grid[idx] = element;
+            const tile = document.querySelectorAll('#grid .tile')[idx];
+            if (tile) tile.className = `tile bg-${element}`;
+            if (element === 'TERRA' && typeof updateTitleStats === 'function') updateTitleStats('earth_tile');
+            else if (element === 'AR' && typeof updateTitleStats === 'function') updateTitleStats('air_tile');
+        });
+
+        if (typeof updateTitleStats === 'function') updateTitleStats('bravely_chain');
+
+        console.log(`[V23.2] PA ${paKey} — tiles: ${paTiles.length}, alvo: ${target ? (target.dead ? 'morto' : 'vivo') : 'sem alvo'}`);
+    };
+
+    // ==============================================================
+    // TRIGGER BASE (Tupã/Sumé/Caipora) — MANTIDO DO V8.1
+    // ==============================================================
+    async function _triggerBaseBravely(active, target, totalAtk, paKey) {
+        if (typeof showPoderAncestralEffect === 'function') {
+            try { showPoderAncestralEffect(); } catch(e) {}
+        }
+        await sleep(300);
+
+        const element = getElementoReal(active.class);
+        const affectedIndices = [];
+
+        if (paKey === 'base_coluna') {
+            triggerElementalFX(element, active.x, 'COL', active.x, active.y);
+            for (let row = 0; row < 8; row++) affectedIndices.push(row * 8 + active.x);
+            if (target && !target.dead && target.x === active.x) {
+                if (typeof applyDmg === 'function') applyDmg(target, totalAtk);
+            }
+        }
+        else if (paKey === 'base_linha_cura') {
+            triggerElementalFX(element, active.y, 'ROW', active.x, active.y);
+            for (let col = 0; col < 8; col++) affectedIndices.push(active.y * 8 + col);
+            if (target && !target.dead && target.y === active.y) {
+                if (typeof applyDmg === 'function') applyDmg(target, totalAtk);
+            }
+            players.forEach(p => {
+                if (!p.dead && p.y === active.y) {
+                    p.hp = Math.min(p.maxHp, p.hp + 2);
+                    if (typeof showHealEffect === 'function') showHealEffect(p.x, p.y, 2);
+                    if (typeof updateTitleStats === 'function') updateTitleStats('healing', 2);
+                }
+            });
+        }
+        else if (paKey === 'base_area_alvo') {
+            if (target && !target.dead) {
+                const c = { x: target.x, y: target.y };
+                for (let dy = -1; dy <= 1; dy++) {
+                    for (let dx = -1; dx <= 1; dx++) {
+                        const nx = c.x + dx, ny = c.y + dy;
+                        if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) {
+                            affectedIndices.push(ny * 8 + nx);
+                            if (typeof spawnArrowProjectile === 'function') {
+                                spawnArrowProjectile({ x: nx, y: -1 }, { x: nx, y: ny });
+                            }
+                        }
+                    }
+                }
+                await sleep(400);
+                if (typeof applyDmg === 'function') applyDmg(target, totalAtk);
+            }
+        }
+
+        affectedIndices.forEach(idx => {
+            grid[idx] = element;
+            const tile = document.querySelectorAll('#grid .tile')[idx];
+            if (tile) tile.className = `tile bg-${element}`;
+        });
+    }
+
+    // ==============================================================
+    // REESCREVER OS 12 paFn.execute (SEM guard dead)
+    // --------------------------------------------------------------
+    // Cada um é o mesmo do V9.4, mas sem `if (!target || target.dead) return`.
+    // Onde move o alvo (empurrar/puxar), adiciona `if (!target.dead)`.
+    // Onde aplica dano, o applyDmg barra o morto.
+    // ==============================================================
+    if (typeof STORY_HERO_PA !== 'undefined') {
+
+        // ---- 1. Curupira — Chuva de Flechas ----
+        STORY_HERO_PA['curupira_chuva_flechas'] = {
+            desc: 'Escolhe até 10 tiles AR → viram TERRA. Flecha cai em cada. Boss neles toma dano PA ×2.',
+            execute: async (active, target, totalAtk) => {
+                const arTiles = [];
+                grid.forEach((el, idx) => {
+                    if (el === 'AR') arTiles.push({ x: idx % 8, y: Math.floor(idx / 8), idx });
+                });
+
+                let selected = [];
+                if (arTiles.length <= 10) {
+                    selected = arTiles;
+                    addLog(`🏹 Curupira: ${selected.length} tiles AR selecionados automaticamente!`);
+                } else {
+                    selected = arTiles.slice(0, 10);
+                    addLog(`🏹 Curupira: selecionando 10 tiles AR...`);
+                }
+
+                selected.forEach(t => {
+                    grid[t.idx] = 'TERRA';
+                    const el = document.querySelectorAll('#grid .tile')[t.idx];
+                    if (el) el.className = 'tile bg-TERRA';
+                });
+
+                selected.forEach((t, i) => {
+                    setTimeout(() => {
+                        if (typeof spawnFxAt === 'function') {
+                            spawnFxAt('impact', 'fx-impact', t.x, t.y, { duration: 500, scale: 0.7 });
+                        }
+                    }, i * 60);
+                });
+
+                await sleep(600);
+
+                if (target) {
+                    const bossIdx = target.y * 8 + target.x;
+                    if (selected.some(t => t.idx === bossIdx)) {
+                        const dmg = Math.floor(totalAtk * 2);
+                        if (typeof applyDmg === 'function') applyDmg(target, dmg);
+                        addLog(`🏹 Curupira: dano crítico ×2 no boss! (${dmg})`);
+                    }
+                }
+            }
+        };
+
+        // ---- 2. Kianumanka — Meteoro ----
+        STORY_HERO_PA['kianumanka_meteoro'] = {
+            desc: 'Meteoro cai no tile do boss, área 3×3, converte pra FOGO, dano PA.',
+            execute: async (active, target, totalAtk) => {
+                if (!target) return;
+                const tiles = [];
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dy = -1; dy <= 1; dy++) {
+                        const nx = target.x + dx, ny = target.y + dy;
+                        if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) {
+                            tiles.push({ x: nx, y: ny, idx: ny * 8 + nx });
+                        }
+                    }
+                }
+
+                if (typeof spawnFxAt === 'function') {
+                    spawnFxAt('fireball', 'fireball-fx', target.x, target.y, { duration: 800, scale: 2 });
+                }
+                await sleep(400);
+
+                tiles.forEach(t => {
+                    grid[t.idx] = 'FOGO';
+                    const el = document.querySelectorAll('#grid .tile')[t.idx];
+                    if (el) el.className = 'tile bg-FOGO';
+                });
+                await sleep(300);
+
+                if (typeof applyDmg === 'function') applyDmg(target, totalAtk);
+                addLog(`☄️ Kianumanka: meteoro caiu! (${totalAtk} dano em área 3×3)`);
+            }
+        };
+
+        // ---- 3. Anhanga-Mirim — Raio na cruz ----
+        STORY_HERO_PA['anhanga_mirim_raio'] = {
+            desc: 'Escolhe 1 tile AR → raio na linha + coluna (150% dano PA).',
+            execute: async (active, target, totalAtk) => {
+                const arTiles = [];
+                grid.forEach((el, idx) => {
+                    if (el === 'AR') arTiles.push({ x: idx % 8, y: Math.floor(idx / 8), idx });
+                });
+
+                if (arTiles.length === 0) {
+                    addLog(`⚡ Anhanga-Mirim: nenhum tile AR! PA falhou.`);
+                    return;
+                }
+
+                const chosen = arTiles[0];
+                const tiles = [];
+                for (let i = 0; i < 8; i++) {
+                    if (!tiles.includes(i * 8 + chosen.x)) tiles.push(i * 8 + chosen.x);
+                    if (!tiles.includes(chosen.y * 8 + i)) tiles.push(chosen.y * 8 + i);
+                }
+
+                if (typeof spawnFxAt === 'function') {
+                    spawnFxAt('impact', 'fx-impact', chosen.x, chosen.y, { duration: 800, scale: 1.5 });
+                }
+                await sleep(400);
+
+                tiles.forEach(idx => {
+                    grid[idx] = 'AR';
+                    const e = document.querySelectorAll('#grid .tile')[idx];
+                    if (e) e.className = 'tile bg-AR';
+                });
+
+                const dmg = Math.floor(totalAtk * 1.5);
+                if (target) {
+                    if (typeof applyDmg === 'function') applyDmg(target, dmg);
+                }
+                addLog(`⚡ Anhanga-Mirim: raio na cruz! (${dmg} dano = 150%)`);
+            }
+        };
+
+        // ---- 4. Matinta — Rajada + empurrão ----
+        STORY_HERO_PA['matinta_rajada'] = {
+            desc: 'Boss é empurrado pra uma borda, depois pra outra. Dano PA em cada colisão.',
+            execute: async (active, target, totalAtk) => {
+                if (!target) return;
+
+                const linha = target.y;
+                for (let x = 0; x < 8; x++) {
+                    const idx = linha * 8 + x;
+                    grid[idx] = 'AR';
+                    const el = document.querySelectorAll('#grid .tile')[idx];
+                    if (el) el.className = 'tile bg-AR';
+                }
+
+                if (!target.dead) {
+                    // Primeiro empurrão: pra borda esquerda
+                    if (typeof spawnFxAt === 'function') {
+                        spawnFxAt('vortex', 'vortex-fx', target.x, target.y, { duration: 600 });
+                    }
+                    target.x = 0;
+                    if (typeof updateVisuals === 'function') updateVisuals();
+                    await sleep(400);
+                }
+
+                if (typeof applyDmg === 'function') applyDmg(target, totalAtk);
+                addLog(`🌪️ Matinta: boss empurrado! (${totalAtk} dano)`);
+
+                if (target.dead) return;
+
+                if (!target.dead) {
+                    // Segundo empurrão: pra borda direita
+                    if (typeof spawnFxAt === 'function') {
+                        spawnFxAt('vortex', 'vortex-fx', target.x, target.y, { duration: 600 });
+                    }
+                    target.x = 7;
+                    if (typeof updateVisuals === 'function') updateVisuals();
+                    await sleep(400);
+                }
+
+                if (typeof applyDmg === 'function') applyDmg(target, totalAtk);
+                addLog(`🌪️ Matinta: boss empurrado pra direita! (${totalAtk} dano)`);
+            }
+        };
+
+        // ---- 5. Naiá — Apaga fogo ----
+        STORY_HERO_PA['naia_apaga_fogo'] = {
+            desc: 'Todos os tiles FOGO viram AGUA. Cada um = 1 dano no boss.',
+            execute: async (active, target, totalAtk) => {
+                const fogoTiles = [];
+                grid.forEach((el, idx) => {
+                    if (el === 'FOGO') fogoTiles.push({ x: idx % 8, y: Math.floor(idx / 8), idx });
+                });
+
+                if (fogoTiles.length === 0) {
+                    addLog(`💧 Naiá: nenhum tile FOGO! PA fraco.`);
+                }
+
+                fogoTiles.forEach((t, i) => {
+                    setTimeout(() => {
+                        if (typeof spawnFxAt === 'function') {
+                            spawnFxAt('splash', 'fx-splash-wave', t.x, t.y, { duration: 500 });
+                        }
+                    }, i * 40);
+                });
+
+                fogoTiles.forEach(t => {
+                    grid[t.idx] = 'AGUA';
+                    const el = document.querySelectorAll('#grid .tile')[t.idx];
+                    if (el) el.className = 'tile bg-AGUA';
+                });
+                await sleep(600);
+
+                const dmg = fogoTiles.length;
+                if (target && dmg > 0) {
+                    if (typeof applyDmg === 'function') applyDmg(target, dmg);
+                }
+                addLog(`💧 Naiá: ${dmg} tiles FOGO apagados! (${dmg} dano)`);
+            }
+        };
+
+        // ---- 6. Kuatí — Explosão de fogo ----
+        STORY_HERO_PA['kuati_explosao'] = {
+            desc: 'Área 3×3 ao redor do herói + linha do herói. Explosão de FOGO.',
+            execute: async (active, target, totalAtk) => {
+                const area = [];
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dy = -1; dy <= 1; dy++) {
+                        const nx = active.x + dx, ny = active.y + dy;
+                        if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) area.push({ x: nx, y: ny, idx: ny * 8 + nx });
+                    }
+                }
+                const linha = [];
+                for (let x = 0; x < 8; x++) {
+                    linha.push({ x, y: active.y, idx: active.y * 8 + x });
+                }
+
+                const allTiles = [...area];
+                const seen = new Set(area.map(t => t.idx));
+                linha.forEach(t => { if (!seen.has(t.idx)) allTiles.push(t); });
+
+                if (typeof spawnFxAt === 'function') {
+                    spawnFxAt('impact', 'fx-impact', active.x, active.y, { duration: 800, scale: 2 });
+                }
+                allTiles.forEach((t, i) => {
+                    setTimeout(() => {
+                        if (typeof spawnFxAt === 'function') {
+                            spawnFxAt('impact', 'fx-impact', t.x, t.y, { duration: 400, scale: 0.6 });
+                        }
+                    }, i * 40);
+                });
+
+                await sleep(500);
+                allTiles.forEach(t => {
+                    grid[t.idx] = 'FOGO';
+                    const el = document.querySelectorAll('#grid .tile')[t.idx];
+                    if (el) el.className = 'tile bg-FOGO';
+                });
+
+                if (target) {
+                    if (typeof applyDmg === 'function') applyDmg(target, totalAtk);
+                }
+                addLog(`🔥 Kuatí: explosão de fogo! (${totalAtk} dano em ${allTiles.length} tiles)`);
+            }
+        };
+
+        // ---- 7. Caboclo d'Água — Maré + puxão ----
+        STORY_HERO_PA['caboclo_mare'] = {
+            desc: 'Maré 3×3 ao redor do herói. Boss é puxado 3 tiles. Dano se estiver na área.',
+            execute: async (active, target, totalAtk) => {
+                const tiles = [];
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dy = -1; dy <= 1; dy++) {
+                        const nx = active.x + dx, ny = active.y + dy;
+                        if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) {
+                            tiles.push({ x: nx, y: ny, idx: ny * 8 + nx });
+                        }
+                    }
+                }
+
+                tiles.forEach((t, i) => {
+                    setTimeout(() => {
+                        if (typeof spawnFxAt === 'function') {
+                            spawnFxAt('splash', 'fx-splash-wave', t.x, t.y, { duration: 500 });
+                        }
+                    }, i * 40);
+                });
+
+                tiles.forEach(t => {
+                    grid[t.idx] = 'AGUA';
+                    const el = document.querySelectorAll('#grid .tile')[t.idx];
+                    if (el) el.className = 'tile bg-AGUA';
+                });
+                await sleep(500);
+
+                if (target) {
+                    if (!target.dead) {
+                        const dx = Math.sign(active.x - target.x);
+                        const dy = Math.sign(active.y - target.y);
+                        for (let i = 0; i < 3; i++) {
+                            const nx = target.x + dx;
+                            const ny = target.y + dy;
+                            if (nx < 0 || nx >= 8 || ny < 0 || ny >= 8) break;
+                            if (typeof isOccupied === 'function' && isOccupied(nx, ny, -1)) break;
+                            target.x = nx; target.y = ny;
+                        }
+                        if (typeof updateVisuals === 'function') updateVisuals();
+                    }
+
+                    const bossIdx = target.y * 8 + target.x;
+                    if (tiles.some(t => t.idx === bossIdx)) {
+                        if (typeof applyDmg === 'function') applyDmg(target, totalAtk);
+                        addLog(`🌊 Caboclo: boss puxado e atingido! (${totalAtk} dano)`);
+                    } else {
+                        addLog(`🌊 Caboclo: boss puxado mas fora da área.`);
+                    }
+                }
+            }
+        };
+
+        // ---- 8. Tupinambá — Avalanche ----
+        STORY_HERO_PA['tupinamba_avalanche'] = {
+            desc: 'Cruz (linha + coluna do boss). Empurra boss. Dano PA.',
+            execute: async (active, target, totalAtk) => {
+                if (!target) return;
+
+                const tiles = [];
+                for (let i = 0; i < 8; i++) {
+                    if (!tiles.includes(i * 8 + target.x)) tiles.push(i * 8 + target.x);
+                    if (!tiles.includes(target.y * 8 + i)) tiles.push(target.y * 8 + i);
+                }
+
+                tiles.forEach((idx, i) => {
+                    setTimeout(() => {
+                        if (typeof spawnFxAt === 'function') {
+                            const tx = idx % 8, ty = Math.floor(idx / 8);
+                            spawnFxAt('rock', 'rock-projectile', tx, ty, { duration: 500, scale: 0.8 });
+                        }
+                    }, i * 30);
+                });
+
+                tiles.forEach(idx => {
+                    grid[idx] = 'TERRA';
+                    const el = document.querySelectorAll('#grid .tile')[idx];
+                    if (el) el.className = 'tile bg-TERRA';
+                });
+                await sleep(600);
+
+                if (!target.dead) {
+                    const dx = Math.sign(target.x - active.x) || 1;
+                    const dy = Math.sign(target.y - active.y) || 0;
+                    for (let i = 0; i < 2; i++) {
+                        const nx = target.x + dx;
+                        const ny = target.y + dy;
+                        if (nx < 0 || nx >= 8 || ny < 0 || ny >= 8) break;
+                        target.x = nx; target.y = ny;
+                    }
+                    if (typeof updateVisuals === 'function') updateVisuals();
+                }
+
+                if (typeof applyDmg === 'function') applyDmg(target, totalAtk);
+                addLog(`🪨 Tupinambá: avalanche + empurrão! (${totalAtk} dano)`);
+            }
+        };
+
+        // ---- 9. Mbaraká — Salto + raio ----
+        STORY_HERO_PA['mbaraka_salto_raio'] = {
+            desc: 'Salta no boss. Raio 3×3. Empurra pra borda mais próxima.',
+            execute: async (active, target, totalAtk) => {
+                if (!target) return;
+
+                if (typeof spawnFxAt === 'function') {
+                    spawnFxAt('impact', 'fx-impact', active.x, active.y, { duration: 400 });
+                }
+                await sleep(200);
+
+                active.x = target.x;
+                active.y = Math.max(0, target.y - 1);
+                if (typeof updateVisuals === 'function') updateVisuals();
+
+                const tiles = [];
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dy = -1; dy <= 1; dy++) {
+                        const nx = target.x + dx, ny = target.y + dy;
+                        if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) {
+                            tiles.push({ x: nx, y: ny, idx: ny * 8 + nx });
+                        }
+                    }
+                }
+
+                if (typeof spawnFxAt === 'function') {
+                    spawnFxAt('impact', 'fx-impact', target.x, target.y, { duration: 800, scale: 2 });
+                }
+                await sleep(400);
+
+                tiles.forEach(t => {
+                    grid[t.idx] = 'AR';
+                    const el = document.querySelectorAll('#grid .tile')[t.idx];
+                    if (el) el.className = 'tile bg-AR';
+                });
+
+                if (!target.dead) {
+                    if (target.x <= 1) {
+                        target.x = 7;
+                    } else if (target.x >= 6) {
+                        target.x = 0;
+                    } else {
+                        target.x = target.x < 4 ? 0 : 7;
+                    }
+                    if (typeof updateVisuals === 'function') updateVisuals();
+                }
+
+                if (typeof applyDmg === 'function') applyDmg(target, totalAtk);
+                addLog(`⚡ Mbaraká: raio + empurrão! (${totalAtk} dano)`);
+            }
+        };
+
+        // ---- 10. Mãe-do-Ouro — Caminho até o boss ----
+        STORY_HERO_PA['maedouro_caminho'] = {
+            desc: 'Traça caminho até o boss. Tiles do caminho + boss = área. Dano em toda a área.',
+            execute: async (active, target, totalAtk) => {
+                if (!target) return;
+
+                const tiles = [];
+                const seen = new Set();
+
+                const stepX = Math.sign(target.x - active.x);
+                for (let x = active.x; x !== target.x + stepX; x += (stepX || 1)) {
+                    const nx = Math.max(0, Math.min(7, x));
+                    const idx = active.y * 8 + nx;
+                    if (!seen.has(idx)) { tiles.push({ x: nx, y: active.y, idx }); seen.add(idx); }
+                    if (stepX === 0) break;
+                }
+                const stepY = Math.sign(target.y - active.y);
+                for (let y = active.y; y !== target.y + stepY; y += (stepY || 1)) {
+                    const ny = Math.max(0, Math.min(7, y));
+                    const idx = ny * 8 + target.x;
+                    if (!seen.has(idx)) { tiles.push({ x: target.x, y: ny, idx }); seen.add(idx); }
+                    if (stepY === 0) break;
+                }
+
+                const bossIdx = target.y * 8 + target.x;
+                if (!seen.has(bossIdx)) tiles.push({ x: target.x, y: target.y, idx: bossIdx });
+
+                tiles.forEach((t, i) => {
+                    setTimeout(() => {
+                        if (typeof spawnFxAt === 'function') {
+                            spawnFxAt('rock', 'rock-projectile', t.x, t.y, { duration: 500, scale: 0.6 });
+                        }
+                    }, i * 40);
+                });
+
+                tiles.forEach(t => {
+                    grid[t.idx] = 'TERRA';
+                    const el = document.querySelectorAll('#grid .tile')[t.idx];
+                    if (el) el.className = 'tile bg-TERRA';
+                });
+                await sleep(600);
+
+                if (typeof applyDmg === 'function') applyDmg(target, totalAtk);
+                addLog(`🌍 Mãe-do-Ouro: caminho explodiu! (${totalAtk} dano em ${tiles.length} tiles)`);
+            }
+        };
+
+        // ---- 11. Pajé-Açu — Linha + empurrão ----
+        STORY_HERO_PA['pajeacu_linha'] = {
+            desc: 'Dano em linha do herói. Empurra boss pra borda. Colisão = +50% dano.',
+            execute: async (active, target, totalAtk) => {
+                const tiles = [];
+                for (let x = 0; x < 8; x++) tiles.push({ x, y: active.y, idx: active.y * 8 + x });
+
+                tiles.forEach((t, i) => {
+                    setTimeout(() => {
+                        if (typeof spawnFxAt === 'function') {
+                            spawnFxAt('impact', 'fx-impact', t.x, t.y, { duration: 500, scale: 0.6 });
+                        }
+                    }, i * 40);
+                });
+
+                tiles.forEach(t => {
+                    grid[t.idx] = 'FOGO';
+                    const el = document.querySelectorAll('#grid .tile')[t.idx];
+                    if (el) el.className = 'tile bg-FOGO';
+                });
+                await sleep(500);
+
+                if (target) {
+                    if (!target.dead) {
+                        const targetX = target.x < 4 ? 0 : 7;
+                        target.x = targetX;
+                        if (typeof updateVisuals === 'function') updateVisuals();
+                        await sleep(300);
+                    }
+
+                    const dmg = Math.floor(totalAtk * 1.5);
+                    if (typeof applyDmg === 'function') applyDmg(target, dmg);
+                    addLog(`🔥 Pajé-Açu: empurrão + colisão! (${dmg} dano = +50%)`);
+                }
+            }
+        };
+
+        // ---- 12. Negrinho — Cruz + cura ----
+        STORY_HERO_PA['negrinho_cruz_cura'] = {
+            desc: 'Cruz a partir do boss. Dano PA. Cura 5 HP em aliados + em si.',
+            execute: async (active, target, totalAtk) => {
+                if (!target) return;
+
+                const tiles = [];
+                for (let i = 0; i < 8; i++) {
+                    if (!tiles.includes(i * 8 + target.x)) tiles.push(i * 8 + target.x);
+                    if (!tiles.includes(target.y * 8 + i)) tiles.push(target.y * 8 + i);
+                }
+
+                tiles.forEach((idx, i) => {
+                    setTimeout(() => {
+                        if (typeof spawnFxAt === 'function') {
+                            const tx = idx % 8, ty = Math.floor(idx / 8);
+                            spawnFxAt('impact', 'fx-impact', tx, ty, { duration: 500, scale: 0.7 });
+                        }
+                    }, i * 30);
+                });
+
+                tiles.forEach(idx => {
+                    grid[idx] = 'AGUA';
+                    const el = document.querySelectorAll('#grid .tile')[idx];
+                    if (el) el.className = 'tile bg-AGUA';
+                });
+                await sleep(500);
+
+                if (typeof applyDmg === 'function') applyDmg(target, totalAtk);
+
+                const allPlayers = (typeof players !== 'undefined') ? players : [active];
+                allPlayers.forEach(p => {
+                    if (p.dead) return;
+                    const idx = p.y * 8 + p.x;
+                    if (tiles.includes(idx)) {
+                        p.hp = Math.min(p.maxHp, p.hp + 5);
+                        if (typeof showHealEffect === 'function') showHealEffect(p.x, p.y, 5);
+                    }
+                });
+                addLog(`💧 Negrinho: cruz + cura 5 HP! (${totalAtk} dano)`);
+            }
+        };
+
+        console.log('[V23.2] 12 paFn.execute reescritos (sem guard dead).');
+    }
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V23.2] Abordagem 2 instalada (boss real, sem fake)');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• triggerBravelyChain passa o BOSS REAL pro paFn.execute');
+    console.log('• 12 paFn.execute reescritos sem guard dead');
+    console.log('• Empurrar/puxar: só se boss vivo');
+    console.log('• Dano: applyDmg barra o morto (não duplica)');
+    console.log('• Tiles: convertidos SEMPRE');
+    console.log('• Heróis base: NÃO MEXIDOS');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — BLOCO 86 (V22.0 — Falas dos Bosses) — PARTE 1/3
+// -----------------------------------------------------------------
+// TABELA DE FALAS (só dados, sem hooks)
+//
+// Cole NO FINAL do historia.js. Depois cole a PARTE 2/3 e a 3/3.
+// =================================================================
+
+const FALAS_MODO_HISTORIA = {
+    'saci': {
+        aoTomarDano: ['Ai! Você me acertou!', 'Isso é tudo que tem?', 'Meu redemoinho não cai assim!'],
+        aoDarDano: ['Sinta o vendaval!', 'Gira, gira!', 'Você é fraco como os outros!'],
+        aoUsarPA: ['Impossível!', 'O que é esse poder?!', 'O Senhor do Abismo me protege!'],
+        aoMorrer: ['Anhangá... me vingue...', 'Livre... enfim livre...', 'O redemoinho... para...'],
+    },
+    'mapinguari': {
+        aoTomarDano: ['Você acha que pode me ferir?', 'A mata chora por você.', 'Minha pele é mais dura que sua lâmina.'],
+        aoDarDano: ['Eu devoro tudo!', 'Sinta o peso da floresta!', 'Você não passa!'],
+        aoUsarPA: ['Como ousa?!', 'Meu poder... tremendo?', 'A mata... me abandonou?'],
+        aoMorrer: ['A floresta... precisa de mim...', 'Eu só queria proteger...', 'Perdoe-me, mata...'],
+    },
+    'iara': {
+        aoTomarDano: ['Minhas águas... sangram?', 'Você é corajoso, herói...', 'Não se aproxime do rio.'],
+        aoDarDano: ['Afogue-se em meu canto!', 'Dance com as águas!', 'O rio reclama por você.'],
+        aoUsarPA: ['Impossível...', 'Minhas águas... não obedecem?', 'Você é digno, afinal.'],
+        aoMorrer: ['As águas... me chamam...', 'Livre do canto...', 'O rio... volta a fluir...'],
+    },
+    'boitata': {
+        aoTomarDano: ['Você resiste ao fogo?', 'Minhas chamas não te queimam?', 'Interessante...'],
+        aoDarDano: ['Queime!', 'Sinta o inferno!', 'Minhas chamas consomem tudo!'],
+        aoUsarPA: ['O fogo... recua?', 'Como você apagou...?', 'Você é a água que me teme?'],
+        aoMorrer: ['O fogo... se apaga...', 'A mata... vai respirar...', 'Livre das chamas...'],
+    },
+    'mula': {
+        aoTomarDano: ['Relincho de dor...', 'Minha maldição... é minha força!', 'Você não me derruba!'],
+        aoDarDano: ['Queime na maldição!', 'Relincho de morte!', 'A noite me pertence!'],
+        aoUsarPA: ['A maldição... quebra?', 'Como você...?', 'Minha dor... some?'],
+        aoMorrer: ['A maldição... acaba...', 'Livre... finalmente...', 'Obrigada, herói...'],
+    },
+    'corpo_seco': {
+        aoTomarDano: ['Fome... tanta fome...', 'Você não me satisfaz...', 'Preciso de mais!'],
+        aoDarDano: ['Sua alma é minha!', 'Devorar... devorar!', 'Fome eterna!'],
+        aoUsarPA: ['Como... como?!', 'Minha fome... para?', 'Você é a morte...?'],
+        aoMorrer: ['A fome... termina...', 'Descanso... enfim...', 'Obrigado, herói...'],
+    },
+    'lobisomem': {
+        aoTomarDano: ['Minha fera... sangra?', 'Você é mais forte que a lua?', 'Uivo de dor!'],
+        aoDarDano: ['Uivo para a lua!', 'A fera está solta!', 'Sinta minhas garras!'],
+        aoUsarPA: ['A lua... me abandona?', 'Minha fera... recua?', 'Como você...?'],
+        aoMorrer: ['A lua... volta a ser lua...', 'Livre da maldição...', 'Obrigado, herói...'],
+    },
+    'cuca': {
+        aoTomarDano: ['Minhas poções... falham?', 'Você é mais forte que a bruxa?', 'Interessante...'],
+        aoDarDano: ['Beba minha poção!', 'Veneno puro!', 'A bruxa sempre vence!'],
+        aoUsarPA: ['Meu caldeirão...!', 'Como você quebrou...?', 'Você é digno...'],
+        aoMorrer: ['Meu caldeirão... esfria...', 'A bruxa... descansa...', 'Obrigada, herói...'],
+    },
+    'boto': {
+        aoTomarDano: ['Meu encanto... quebra?', 'Você resiste ao meu canto?', 'Interessante...'],
+        aoDarDano: ['Dance comigo!', 'Sinta o encanto!', 'As águas te chamam!'],
+        aoUsarPA: ['Meu canto... falha?', 'Como você...?', 'Você é digno...'],
+        aoMorrer: ['As águas... me chamam...', 'Livre do encanto...', 'Obrigado, herói...'],
+    },
+    'boi': {
+        aoTomarDano: ['Minha face... treme?', 'Você não teme o terror?', 'Interessante...'],
+        aoDarDano: ['Sinta o terror!', 'Minha face escura!', 'Ninguém escapa!'],
+        aoUsarPA: ['Meu terror... quebra?', 'Como você...?', 'Você é digno...'],
+        aoMorrer: ['O terror... acaba...', 'Livre da face...', 'Obrigado, herói...'],
+    },
+    'jaci': {
+        aoTomarDano: ['Minha luz... treme?', 'Você resiste à lua?', 'Interessante...'],
+        aoDarDano: ['Sinta a lua fria!', 'Meus raios queimam!', 'A noite é minha!'],
+        aoUsarPA: ['Minha lua... recua?', 'Como você...?', 'Você é digno...'],
+        aoMorrer: ['A lua... volta a brilhar...', 'Livre da melancolia...', 'Obrigada, herói...'],
+    },
+    'guaraci': {
+        aoTomarDano: ['Meu sol... treme?', 'Você resiste ao calor?', 'Interessante...'],
+        aoDarDano: ['Queime no sol!', 'Sinta o inferno solar!', 'Ninguém escapa do sol!'],
+        aoUsarPA: ['Meu sol... recua?', 'Como você...?', 'Você é digno...'],
+        aoMorrer: ['O sol... volta a aquecer...', 'Livre da arrogância...', 'Obrigado, herói...'],
+    },
+    'anhanga': {
+        aoTomarDano: ['Você me fere?', 'Minha escuridão... treme?', 'Interessante...'],
+        aoDarDano: ['Sinta o abismo!', 'Minha escuridão consome!', 'Ninguém escapa!'],
+        aoUsarPA: ['Impossível!', 'Como você...?', 'Meu poder... recua?'],
+        aoMorrer: ['A escuridão... se dissolve...', 'O equilíbrio... retorna...', 'Obrigado, herói...'],
+    },
+};
+
+const FALAS_EVENTO = {
+    'teju_jagua': {
+        aoTomarDano: ['Minhas sete cabeças...', 'Você me acerta?', 'Interessante...'],
+        aoDarDano: ['Minhas chamas te consomem!', 'Sinta o fogo do Teju!', 'Sete cabeças, sete mortes!'],
+        aoUsarPA: ['Impossível!', 'Como você...?', 'Minhas cabeças... recuam?'],
+        aoMorrer: ['Minhas cabeças... caem...', 'O fogo... se apaga...', 'Anhangá... me vingue...'],
+        aoServoAtingido: ['Meus servos!', 'Você ousa tocar neles?', 'Eles são meus!'],
+        aoServoMorto: ['Você vai pagar!', 'Meus servos!', 'Sinta minha fúria!'],
+    },
+    'mboi_tui': {
+        aoTomarDano: ['Meu bico... treme?', 'Você resiste ao veneno?', 'Interessante...'],
+        aoDarDano: ['Sinta o veneno do arco-íris!', 'Minhas escamas brilham!', 'O rio te afoga!'],
+        aoUsarPA: ['Meu veneno... falha?', 'Como você...?', 'Você é digno...'],
+        aoMorrer: ['O rio... volta a fluir...', 'Livre do veneno...', 'Obrigado, herói...'],
+        aoServoAtingido: ['Meus peixes!', 'Você toca nos meus?', 'O rio reclama!'],
+        aoServoMorto: ['Você vai se afogar!', 'Meus servos!', 'Sinta a correnteza!'],
+    },
+    'monai': {
+        aoTomarDano: ['Minhas asas... tremem?', 'Você me acerta no ar?', 'Interessante...'],
+        aoDarDano: ['Sinta o voo rasante!', 'Minhas asas te cobrem!', 'O céu é meu!'],
+        aoUsarPA: ['Meu voo... falha?', 'Como você...?', 'Você é digno...'],
+        aoMorrer: ['O céu... me chama...', 'Livre das asas...', 'Obrigado, herói...'],
+        aoServoAtingido: ['Minhas criaturas!', 'Você toca nos meus?', 'O céu reclama!'],
+        aoServoMorto: ['Você vai cair!', 'Minhas criaturas!', 'Sinta o vento!'],
+    },
+    'jasy_jatere': {
+        aoTomarDano: ['Meu sol... treme?', 'Você resiste ao clarão?', 'Interessante...'],
+        aoDarDano: ['Sinta o clarão!', 'Meu salto solar!', 'Ninguém escapa da luz!'],
+        aoUsarPA: ['Meu sol... recua?', 'Como você...?', 'Você é digno...'],
+        aoMorrer: ['O sol... se apaga...', 'Livre do clarão...', 'Obrigado, herói...'],
+        aoServoAtingido: ['Minhas criaturas!', 'Você toca nos meus?', 'A luz reclama!'],
+        aoServoMorto: ['Você vai cegar!', 'Minhas criaturas!', 'Sinta o calor!'],
+    },
+    'kurupi': {
+        aoTomarDano: ['Minhas raízes... tremem?', 'Você me acerta?', 'Interessante...'],
+        aoDarDano: ['Minhas raízes te prendem!', 'A mata te engole!', 'Você não escapa!'],
+        aoUsarPA: ['Minhas raízes... soltam?', 'Como você...?', 'Você é digno...'],
+        aoMorrer: ['A mata... me chama...', 'Livre das raízes...', 'Obrigado, herói...'],
+        aoServoAtingido: ['Minhas criaturas!', 'Você toca nos meus?', 'A mata reclama!'],
+        aoServoMorto: ['Você vai ser engolido!', 'Minhas criaturas!', 'Sinta a terra!'],
+    },
+    'ao_ao': {
+        aoTomarDano: ['Minha lã... treme?', 'Você me acerta?', 'Interessante...'],
+        aoDarDano: ['Minha lã te enrola!', 'A ovelha devora!', 'Você não escapa!'],
+        aoUsarPA: ['Minha fome... falha?', 'Como você...?', 'Você é digno...'],
+        aoMorrer: ['A fome... acaba...', 'Livre da maldição...', 'Obrigado, herói...'],
+        aoServoAtingido: ['Meus rebanhos!', 'Você toca nos meus?', 'A fome reclama!'],
+        aoServoMorto: ['Você vai ser devorado!', 'Meus rebanhos!', 'Sinta a fome!'],
+    },
+    'luison': {
+        aoTomarDano: ['Minha sombra... treme?', 'Você me acerta?', 'Interessante...'],
+        aoDarDano: ['Sinta a colheita sombria!', 'Minha sombra te engole!', 'Você não escapa!'],
+        aoUsarPA: ['Minha sombra... recua?', 'Como você...?', 'Você é digno...'],
+        aoMorrer: ['A sombra... se dissolve...', 'Livre da escuridão...', 'Obrigado, herói...'],
+        aoServoAtingido: ['Meus filhos!', 'Você toca nos meus?', 'A noite reclama!'],
+        aoServoMorto: ['Você vai morrer!', 'Meus filhos!', 'Sinta a escuridão!'],
+    },
+    'pesadelo': {
+        aoTomarDano: ['A dor... é minha?', 'Você me acerta?', 'Interessante...'],
+        aoDarDano: ['Sinta o pesadelo!', 'A fusão te devora!', 'Você não escapa!'],
+        aoUsarPA: ['Meu poder... recua?', 'Como você...?', 'Você é digno...'],
+        aoMorrer: ['O pesadelo... acaba...', 'O equilíbrio... retorna...', 'Obrigado, herói...'],
+        aoServoAtingido: ['Minha criação!', 'Você toca nela?', 'O abismo reclama!'],
+        aoServoMorto: ['Você vai sonhar para sempre!', 'Minha criação!', 'Sinta o pesadelo!'],
+    },
+};
+
+const FALAS_ATO = {
+    1: {
+        aoServoAtingido: ['Meu servo!', 'Você ousa tocar no meu?', 'O redemoinho te observa...'],
+        aoServoMorto: ['Você matou meu servo! Vai pagar!', 'Sinta a fúria do redemoinho!', 'Ele era meu!'],
+    },
+    2: {
+        aoServoAtingido: ['A mata chora...', 'Você fere meus servos...', 'A floresta te observa...'],
+        aoServoMorto: ['Você vai pagar com sangue!', 'A mata exige vingança!', 'Ele era meu!'],
+    },
+    3: {
+        aoServoAtingido: ['Meus peixes!', 'Você fere minhas criaturas...', 'O rio te observa...'],
+        aoServoMorto: ['Você vai se afogar!', 'As águas exigem vingança!', 'Ele era meu!'],
+    },
+    4: {
+        aoServoAtingido: ['Minhas serpentes!', 'Você fere meus servos...', 'O fogo te observa...'],
+        aoServoMorto: ['Você vai queimar!', 'As chamas exigem vingança!', 'Ele era meu!'],
+    },
+    5: {
+        aoServoAtingido: ['Meus animais!', 'Você fere meus servos...', 'A noite te observa...'],
+        aoServoMorto: ['Você vai queimar na maldição!', 'A noite exige vingança!', 'Ele era meu!'],
+    },
+    6: {
+        aoServoAtingido: ['Minhas criaturas!', 'Você fere meus servos...', 'A fome te observa...'],
+        aoServoMorto: ['Você vai ser devorado!', 'A fome exige vingança!', 'Ele era meu!'],
+    },
+    7: {
+        aoServoAtingido: ['Minha matilha!', 'Você fere meus servos...', 'A lua te observa...'],
+        aoServoMorto: ['Você vai uivar de dor!', 'A lua exige vingança!', 'Ele era meu!'],
+    },
+    8: {
+        aoServoAtingido: ['Minhas criaturas!', 'Você fere meus servos...', 'O caldeirão te observa...'],
+        aoServoMorto: ['Você vai beber veneno!', 'O caldeirão exige vingança!', 'Ele era meu!'],
+    },
+    9: {
+        aoServoAtingido: ['Meus peixes!', 'Você fere meus servos...', 'O rio te observa...'],
+        aoServoMorto: ['Você vai se afogar no encanto!', 'As águas exigem vingança!', 'Ele era meu!'],
+    },
+    10: {
+        aoServoAtingido: ['Meus rebanhos!', 'Você fere meus servos...', 'O terror te observa...'],
+        aoServoMorto: ['Você vai sentir o terror!', 'A noite exige vingança!', 'Ele era meu!'],
+    },
+    11: {
+        aoServoAtingido: ['Minhas criaturas!', 'Você fere meus servos...', 'A lua te observa...'],
+        aoServoMorto: ['Você vai queimar na lua!', 'A lua exige vingança!', 'Ele era meu!'],
+    },
+    12: {
+        aoServoAtingido: ['Minhas aves!', 'Você fere meus servos...', 'O sol te observa...'],
+        aoServoMorto: ['Você vai queimar no sol!', 'O sol exige vingança!', 'Ele era meu!'],
+    },
+    13: {
+        aoServoAtingido: ['Minhas criaturas!', 'Você fere meus servos...', 'O abismo te observa...'],
+        aoServoMorto: ['Você vai ser consumido!', 'O abismo exige vingança!', 'Ele era meu!'],
+    },
+};
+
+console.log('✅ [V22.0-P1] Tabelas de falas carregadas:');
+console.log('   • Modo história:', Object.keys(FALAS_MODO_HISTORIA).length, 'bosses');
+console.log('   • Evento:', Object.keys(FALAS_EVENTO).length, 'bosses');
+console.log('   • Ato (servos):', Object.keys(FALAS_ATO).length, 'atos');
+// =================================================================
+// historia.js — BLOCO 86 (V22.0 — Falas dos Bosses) — PARTE 2/3
+// -----------------------------------------------------------------
+// LÓGICA (helpers, sem hooks)
+//
+// Cole DEPOIS da PARTE 1/3.
+// =================================================================
+
+const FALAS_CONFIG = {
+    COOLDOWN_MS: 5000,
+    DURACAO_BALAO_MS: 2500,
+    CHANCE_TOMAR_DANO: 0.30,
+    CHANCE_DAR_DANO: 0.20,
+    CHANCE_SERVO: 0.40,
+};
+
+let _falasUltimaTs = 0;
+let _falasUltimoTexto = '';
+
+function _falasGetInimigoAtual() {
+    if (window._eventoAtivo) {
+        return window._eventoInimigoAtual || null;
+    }
+    if (typeof storyEnemiesRemaining !== 'undefined' && storyEnemiesRemaining.length > 0) {
+        return storyEnemiesRemaining[0];
+    }
+    return null;
+}
+
+function _falasIsAnimal(enemyId) {
+    if (!enemyId) return false;
+    if (typeof STORY_ENEMIES === 'undefined') return false;
+    const e = STORY_ENEMIES[enemyId];
+    if (!e) return false;
+    return !e.isBoss && !e.isMiniBoss && !e.isFinalBoss && !e.isSpectral;
+}
+
+function _falasGetBossDoAto() {
+    if (typeof STORY_PROGRESS === 'undefined' || typeof STORY_CHAPTERS === 'undefined') return null;
+    const cid = STORY_PROGRESS.currentChapter || 1;
+    const ch = STORY_CHAPTERS[cid];
+    if (!ch) return null;
+    const bossPhase = ch.phases.find(p => p.isBoss);
+    if (!bossPhase || !bossPhase.enemies || bossPhase.enemies.length === 0) return null;
+    return bossPhase.enemies[bossPhase.enemies.length - 1];
+}
+
+function _falasGetBossDoEvento() {
+    if (window._eventoBatalha && window._eventoBatalha.bossId) {
+        return window._eventoBatalha.bossId;
+    }
+    return window._eventoInimigoAtual || null;
+}
+
+function _falasSortear(lista) {
+    if (!lista || lista.length === 0) return null;
+    if (lista.length === 1) return lista[0];
+
+    let fala;
+    let tentativas = 0;
+    do {
+        fala = lista[Math.floor(Math.random() * lista.length)];
+        tentativas++;
+    } while (fala === _falasUltimoTexto && tentativas < 5);
+
+    _falasUltimoTexto = fala;
+    return fala;
+}
+
+function _falasMostrarBalao(texto) {
+    if (!texto) return;
+
+    const antigo = document.getElementById('bossFalaBalao');
+    if (antigo) antigo.remove();
+
+    const board = document.getElementById('board');
+    if (!board) return;
+
+    const balao = document.createElement('div');
+    balao.id = 'bossFalaBalao';
+    balao.className = 'boss-fala-balao';
+    balao.textContent = texto;
+    board.appendChild(balao);
+
+    requestAnimationFrame(() => balao.classList.add('show'));
+
+    setTimeout(() => {
+        balao.classList.remove('show');
+        setTimeout(() => {
+            if (balao.parentNode) balao.parentNode.removeChild(balao);
+        }, 400);
+    }, FALAS_CONFIG.DURACAO_BALAO_MS);
+}
+
+function _falasDisparar(gatilho, forcar) {
+    if (!window._storyMode && !window._eventoAtivo) return;
+    if (window._pvpMode) return;
+
+    const agora = Date.now();
+    if (!forcar && (agora - _falasUltimaTs) < FALAS_CONFIG.COOLDOWN_MS) return;
+
+    const inimigoAtual = _falasGetInimigoAtual();
+    if (!inimigoAtual) return;
+
+    let falas = null;
+    let origem = '';
+
+    if (window._eventoAtivo) {
+        const bossEvt = _falasGetBossDoEvento();
+        if (bossEvt && FALAS_EVENTO[bossEvt]) {
+            if (inimigoAtual === bossEvt) {
+                falas = FALAS_EVENTO[bossEvt][gatilho];
+                origem = `evento/boss/${bossEvt}`;
+            }
+            else if (_falasIsAnimal(inimigoAtual)) {
+                const gatilhoServo = (gatilho === 'aoTomarDano') ? 'aoServoAtingido'
+                                   : (gatilho === 'aoMorrer') ? 'aoServoMorto'
+                                   : null;
+                if (gatilhoServo) {
+                    falas = FALAS_EVENTO[bossEvt][gatilhoServo];
+                    origem = `evento/servo/${bossEvt}`;
+                }
+            }
+        }
+    }
+    else {
+        if (_falasIsAnimal(inimigoAtual)) {
+            const cid = (typeof STORY_PROGRESS !== 'undefined') ? (STORY_PROGRESS.currentChapter || 1) : 1;
+            const falasAto = FALAS_ATO[cid];
+            if (falasAto) {
+                const gatilhoServo = (gatilho === 'aoTomarDano') ? 'aoServoAtingido'
+                                   : (gatilho === 'aoMorrer') ? 'aoServoMorto'
+                                   : null;
+                if (gatilhoServo) {
+                    falas = falasAto[gatilhoServo];
+                    origem = `ato/${cid}/servo`;
+                }
+            }
+        }
+        else {
+            const idNorm = inimigoAtual === 'corposeco' ? 'corpo_seco' : inimigoAtual;
+            if (FALAS_MODO_HISTORIA[idNorm]) {
+                falas = FALAS_MODO_HISTORIA[idNorm][gatilho];
+                origem = `historia/boss/${idNorm}`;
+            }
+        }
+    }
+
+    if (!falas || falas.length === 0) return;
+
+    if (!forcar) {
+        let chance = 0;
+        if (gatilho === 'aoTomarDano') chance = FALAS_CONFIG.CHANCE_TOMAR_DANO;
+        else if (gatilho === 'aoDarDano') chance = FALAS_CONFIG.CHANCE_DAR_DANO;
+        else chance = FALAS_CONFIG.CHANCE_SERVO;
+        if (Math.random() > chance) return;
+    }
+
+    const texto = _falasSortear(falas);
+    if (!texto) return;
+
+    _falasUltimaTs = agora;
+    _falasMostrarBalao(texto);
+
+    console.log(`[V22.0] Fala (${origem}/${gatilho}): ${texto}`);
+}
+
+console.log('✅ [V22.0-P2] Lógica de falas carregada.');
+// =================================================================
+// historia.js — BLOCO 86 (V22.0 — Falas dos Bosses) — PARTE 3/3
+// -----------------------------------------------------------------
+// HOOKS + CSS
+//
+// Cole DEPOIS da PARTE 2/3.
+// =================================================================
+
+(function falasBossesHooksV220() {
+    if (window._falasHooksV220) return;
+    window._falasHooksV220 = true;
+
+    console.log('[V22.0-P3] Instalando hooks...');
+
+    // Hook 1: applyDmg
+    const _applyDmgAtual = window.applyDmg;
+    if (typeof _applyDmgAtual === 'function') {
+        window.applyDmg = function(target, amount) {
+            const result = _applyDmgAtual.apply(this, arguments);
+
+            if (!window._storyMode && !window._eventoAtivo) return result;
+            if (window._pvpMode) return result;
+            if (!target) return result;
+
+            if (target === boss && !target.dead) {
+                _falasDisparar('aoTomarDano', false);
+            }
+            else if (typeof players !== 'undefined' && Array.isArray(players)
+                     && players.includes(target) && !target.dead) {
+                _falasDisparar('aoDarDano', false);
+            }
+
+            return result;
+        };
+    }
+
+    // Hook 2: triggerBravelyChain
+    const _bravelyAtual = window.triggerBravelyChain;
+    if (typeof _bravelyAtual === 'function') {
+        window.triggerBravelyChain = async function() {
+            const result = await _bravelyAtual.apply(this, arguments);
+            if ((window._storyMode || window._eventoAtivo) && !window._pvpMode) {
+                _falasDisparar('aoUsarPA', true);
+            }
+            return result;
+        };
+    }
+
+    // Hook 3: handleStoryBossDefeat
+    const _bossDefeatAtual = window.handleStoryBossDefeat;
+    if (typeof _bossDefeatAtual === 'function') {
+        window.handleStoryBossDefeat = async function() {
+            if ((window._storyMode || window._eventoAtivo) && !window._pvpMode) {
+                _falasDisparar('aoMorrer', true);
+                await new Promise(r => setTimeout(r, 500));
+            }
+            return _bossDefeatAtual.apply(this, arguments);
+        };
+    }
+
+    // CSS
+    if (!document.getElementById('bossFalaCSS')) {
+        const style = document.createElement('style');
+        style.id = 'bossFalaCSS';
+        style.textContent = `
+            .boss-fala-balao {
+                position: absolute;
+                top: 12px;
+                left: 50%;
+                transform: translateX(-50%) translateY(-10px);
+                max-width: 80%;
+                padding: 10px 18px;
+                background: linear-gradient(180deg, rgba(42, 20, 20, 0.95), rgba(20, 8, 8, 0.95));
+                border: 2px solid #a83232;
+                border-radius: 12px;
+                color: #f5c8c8;
+                font-family: 'EB Garamond', serif;
+                font-size: 1rem;
+                font-style: italic;
+                text-align: center;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.7), 0 0 20px rgba(168, 50, 50, 0.3);
+                z-index: 1600;
+                pointer-events: none;
+                opacity: 0;
+                transition: opacity 0.4s ease, transform 0.4s ease;
+                text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+            }
+            .boss-fala-balao::before {
+                content: '';
+                position: absolute;
+                bottom: -8px;
+                left: 50%;
+                transform: translateX(-50%);
+                width: 0; height: 0;
+                border-left: 8px solid transparent;
+                border-right: 8px solid transparent;
+                border-top: 8px solid #a83232;
+            }
+            .boss-fala-balao::after {
+                content: '';
+                position: absolute;
+                bottom: -6px;
+                left: 50%;
+                transform: translateX(-50%);
+                width: 0; height: 0;
+                border-left: 6px solid transparent;
+                border-right: 6px solid transparent;
+                border-top: 6px solid rgba(20, 8, 8, 0.95);
+            }
+            .boss-fala-balao.show {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0);
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    console.log('✅ [V22.0-P3] Hooks de falas instalados.');
+    console.log('   • applyDmg (aoTomarDano / aoDarDano)');
+    console.log('   • triggerBravelyChain (aoUsarPA)');
+    console.log('   • handleStoryBossDefeat (aoMorrer)');
+})();
+// =================================================================
+// historia.js — BLOCO 89 (V24.0 — Falas Contextuais com Lore)
+// -----------------------------------------------------------------
+// Cole NO FINAL do historia.js (depois do V22.0-P3).
+//
+// Adiciona:
+//   • Gatilhos contextuais (aoHpBaixo, aoHpCritico, aoPrimeiroDano, aoAnhangáSussurra)
+//   • Lore reescrita (ponto de vista deturpado de cada boss)
+//   • O Anhangá sussurrando nos ouvidos dos bosses
+// =================================================================
+
+(function falasContextuaisV240() {
+    if (window._falasContextuaisV240) return;
+    window._falasContextuaisV240 = true;
+
+    console.log('[V24.0] Adicionando falas contextuais e lore...');
+
+    // ==============================================================
+    // PARTE 1: SOBRESCREVER AS TABELAS COM LORE ENRIQUECIDA
+    // --------------------------------------------------------------
+    // Usa Object.assign pra substituir as propriedades das tabelas
+    // existentes (não reatribui o const).
+    // ==============================================================
+
+    const LORE_MODO_HISTORIA = {
+        // ============================================================
+        // ATO 1 — SACI
+        // Mentira do Anhangá: "Você é uma piada, ninguém te leva a sério"
+        // Dor real: Ele só queria rir e ser amado
+        // ============================================================
+        'saci': {
+            aoPrimeiroDano: [
+                '"Você me acertou... você realmente me acertou? Ninguém nunca me acerta. Ninguém nunca me leva a sério o suficiente pra tentar."',
+                '"Dor... eu sinto dor? Anhangá me disse que eu era feito de riso e vento. Que nada podia me ferir."',
+                '"Ele riu de mim. O Sussurrador riu. Disse que eu era só uma piada que gira. Mas você... você me vê como inimigo. É quase... respeito."',
+            ],
+            aoTomarDano: [
+                '"Isso não dói! Anhangá disse que eu não sinto dor! Ele disse que eu sou o vento!"',
+                '"Pare de me acertar! Eu só queria brincar! Por que todos me odeiam?!"',
+                '"Você é como os outros! Rindo de mim por dentro! Eu mostro pra vocês! Eu SOU o redemoinho!"',
+                '"O Sussurrador disse que se eu girasse mais forte, vocês parariam de rir. Por que você não para de rir?!"',
+            ],
+            aoHpBaixo: [
+                '"Estou... fraco? Não! Eu sou o redemoinho! Anhangá disse que eu sou o vento! Vento não cansa!"',
+                '"Ele mentiu... o Sussurrador mentiu... eu não sou o vento. Eu sou só... um Saci. Um Saci cansado."',
+            ],
+            aoHpCritico: [
+                '"Anhangá... você prometeu que eu seria temido... você prometeu... por que dói tanto...?"',
+                '"Eu só queria que alguém risse COMIGO... não DE mim... o Sussurrador disse que era a mesma coisa..."',
+            ],
+            aoDarDano: [
+                '"Sinta o vendaval! O Sussurrador disse que vocês só entendem a força!"',
+                '"Gira! Gira! Anhangá disse que se eu girar o suficiente, o riso para!"',
+                '"Vocês riem de mim, mas agora quem ri sou eu! O Sussurrador me ensinou!"',
+            ],
+            aoUsarPA: [
+                '"Impossível! Anhangá disse que ninguém podia me vencer! Ele disse que eu era o vento!"',
+                '"O Sussurrador mentiu... ele mentiu pra mim... eu não sou o vento. Eu sou só... o Saci."',
+            ],
+            aoMorrer: [
+                '"Livre... enfim livre do Sussurrador... ele me disse que eu era uma piada... mas eu só queria rir... eu só queria... rir..."',
+                '"Anhangá... eu vejo agora... você me usou. Meu redemoinho não era meu... era seu... livre... enfim..."',
+                '"O vento... para... e o silêncio... o silêncio é doce. Obrigado... por me devolver o silêncio."',
+            ],
+        },
+
+        // ============================================================
+        // ATO 2 — MAPINGUARI
+        // Mentira do Anhangá: "Você é fraco, a floresta morre e você não pode impedir"
+        // Dor real: Ele só queria proteger a mata
+        // ============================================================
+        'mapinguari': {
+            aoPrimeiroDano: [
+                '"Você... me fere? Eu sou o Pilar da Mata! Anhangá disse que eu era o mais forte! Ele disse que nada podia me derrubar!"',
+                '"Dor... eu não sentia dor há séculos. A mata me curava. Mas a mata... a mata está morrendo. O Sussurrador disse que era minha culpa."',
+                '"Anhangá sussurrou que eu era fraco. Que a floresta morria por minha causa. Eu acreditei. E agora... agora você me fere, e eu sinto... alívio?"',
+            ],
+            aoTomarDano: [
+                '"Você acha que pode me ferir? Eu devorei montanhas! Anhangá me disse que eu podia devorar tudo!"',
+                '"Pare! Eu sou o protetor! Eu sou o Pilar! O Sussurrador disse que eu era o Pilar!"',
+                '"A mata chora por você... ela chora por MIM. O Sussurrador disse que eu era a ruína. Ele mentiu... ele mentiu..."',
+                '"Minha pele é mais dura que sua lâmina! Foi o que Anhangá disse! Ele disse que eu era invencível!"',
+            ],
+            aoHpBaixo: [
+                '"Estou... fraco? O Pilar não pode ser fraco! Anhangá disse que eu era a força da mata!"',
+                '"A mata... a mata está morrendo de verdade... e eu... eu não posso impedir... o Sussurrador estava certo... eu sou fraco..."',
+            ],
+            aoHpCritico: [
+                '"Anhangá... você me prometeu que se eu devorasse tudo, a dor pararia... mas a dor... a dor é sua, não minha..."',
+                '"Eu só queria proteger a mata... o Sussurrador disse que devorar era proteger... por que a mata chora...?"',
+            ],
+            aoDarDano: [
+                '"Eu devoro tudo! O Sussurrador disse que devorar é a única forma de proteger!"',
+                '"Sinta o peso da floresta! A mata me deu essa força! O Sussurrador disse que era minha!"',
+                '"Você não passa! Anhangá disse que ninguém passaria por mim!"',
+            ],
+            aoUsarPA: [
+                '"Como ousa?! Eu sou o Pilar! Anhangá disse que eu era o Pilar!"',
+                '"Meu poder... tremendo? O Sussurrador disse que meu poder era eterno... ele... ele mentiu?"',
+            ],
+            aoMorrer: [
+                '"A floresta... precisa de mim... eu só queria proteger... o Sussurrador me disse que devorar era proteger... por que ele mentiu...?"',
+                '"Anhangá... eu vejo agora... a ruína era você... não eu... a mata... perdoe-me..."',
+                '"Perdoe-me, mata... eu falhei... mas agora... agora eu volto pra você... livre... enfim..."',
+            ],
+        },
+
+        // ============================================================
+        // ATO 3 — IARA
+        // Mentira do Anhangá: "Os humanos poluem seu reino e riem de você"
+        // Dor real: Ela só queria ser amada
+        // ============================================================
+        'iara': {
+            aoPrimeiroDano: [
+                '"Minhas águas... sangram? Anhangá disse que as águas não podiam ser feridas. Ele disse que eu era o rio."',
+                '"Dor... eu sentia dor quando os humanos poluíam o rio... mas era dor da alma. Essa... essa é diferente. O Sussurrador disse que eu era forte."',
+                '"Você é corajoso, herói... o Sussurrador disse que ninguém teria coragem de me enfrentar. Ele... ele mentiu?"',
+            ],
+            aoTomarDano: [
+                '"Pare! Minhas águas são sagradas! O Sussurrador disse que eram sagradas!"',
+                '"Você não me ama... você me odeia como os outros! Anhangá disse que todos me odiariam!"',
+                '"Não se aproxime do rio! O Sussurrador disse que perto do rio eu era invencível!"',
+                '"Minhas águas... sangram... e eu... eu não queria sangrar. Eu só queria... ser amada."',
+            ],
+            aoHpBaixo: [
+                '"Estou... fraca? O rio não pode ser fraco! Anhangá disse que o rio era eterno!"',
+                '"Ele disse que os humanos me odiavam... mas você... você não me odeia, odeia? Você só... está me enfrentando. O Sussurrador mentiu."',
+            ],
+            aoHpCritico: [
+                '"Anhangá... você prometeu que o rio seria meu de novo... que os humanos parariam... por que a dor não para...?"',
+                '"Eu só queria que alguém me amasse... o Sussurrador disse que o medo era o mesmo que amor... ele mentiu..."',
+            ],
+            aoDarDano: [
+                '"Afogue-se em meu canto! O Sussurrador disse que o canto era minha arma!"',
+                '"Dance com as águas! Anhangá disse que quem dançasse comigo me amaria!"',
+                '"O rio reclama por você! O Sussurrador disse que o rio reclamava por todos!"',
+            ],
+            aoUsarPA: [
+                '"Impossível... Anhangá disse que o canto era invencível!"',
+                '"Minhas águas... não obedecem? O Sussurrador disse que eu era o rio... ele mentiu?"',
+                '"Você é digno, afinal... o Sussurrador disse que ninguém era digno... ele mentiu."',
+            ],
+            aoMorrer: [
+                '"As águas... me chamam... eu vou voltar pro rio... o Sussurrador não pode me seguir lá... livre... enfim livre..."',
+                '"Anhangá... eu vejo agora... a raiva era sua... a dor era sua... eu só queria amar... obrigada, herói..."',
+                '"O rio... volta a fluir... e eu... eu volto a ser só... o rio. Obrigada... por me devolver a paz."',
+            ],
+        },
+
+        // ============================================================
+        // ATO 4 — BOITATÁ
+        // Mentira do Anhangá: "Seu fogo é fraco, apenas luzinhas na noite"
+        // Dor real: Ele só queria iluminar
+        // ============================================================
+        'boitata': {
+            aoPrimeiroDano: [
+                '"Você resiste ao fogo? Anhangá disse que meu fogo era o mais forte! Ele disse que eu era o inferno!"',
+                '"Minhas chamas não te queimam? O Sussurrador disse que ninguém resistiria!"',
+                '"Interessante... você não foge. Anhangá disse que todos fugiriam. Ele... ele mentiu?"',
+            ],
+            aoTomarDano: [
+                '"Pare! Meu fogo é sagrado! O Sussurrador disse que era sagrado!"',
+                '"Você me fere? Fogo não sente dor! Anhangá disse que fogo não sentia dor!"',
+                '"Não! Minhas chamas... tremem? O Sussurrador disse que eram eternas!"',
+            ],
+            aoHpBaixo: [
+                '"Meu fogo... fraco? Anhangá disse que meu fogo era o inferno! Ele disse que nunca se apagaria!"',
+                '"Ele mentiu... o Sussurrador mentiu... eu não sou o inferno. Eu era só... uma luz na noite. Uma luz fraca. Uma luz que ele apagou."',
+            ],
+            aoHpCritico: [
+                '"Anhangá... você prometeu poder... você prometeu que eu seria temido... mas o fogo... o fogo está apagando..."',
+                '"Eu só queria iluminar a noite... o Sussurrador disse que iluminar era fraqueza... por que a escuridão dói tanto...?"',
+            ],
+            aoDarDano: [
+                '"Queime! Anhangá disse que queimar era poder!"',
+                '"Sinta o inferno! O Sussurrador disse que eu era o inferno!"',
+                '"Minhas chamas consomem tudo! Foi o que Anhangá prometeu!"',
+            ],
+            aoUsarPA: [
+                '"O fogo... recua? Anhangá disse que meu fogo era invencível!"',
+                '"Como você apagou...? O Sussurrador disse que ninguém podia apagar meu fogo!"',
+                '"Você é a água que me teme? O Sussurrador disse que todos me temiam... ele mentiu."',
+            ],
+            aoMorrer: [
+                '"O fogo... se apaga... e eu... eu vejo a noite de novo... a noite que eu iluminava... o Sussurrador não pode me seguir aqui... livre... enfim..."',
+                '"Anhangá... eu vejo agora... a escuridão era sua... não minha... eu era luz... eu era só luz... obrigado, herói..."',
+                '"Livre das chamas... eu volto a ser... só uma luz. Obrigado... por me devolver a noite."',
+            ],
+        },
+
+        // ============================================================
+        // ATO 5 — MULA SEM CABEÇA
+        // Mentira do Anhangá: "Sua maldição é sua força"
+        // Dor real: Ela só queria ser perdoada
+        // ============================================================
+        'mula': {
+            aoPrimeiroDano: [
+                '"Relincho de dor... eu não sentia dor há séculos. A maldição me curava. O Sussurrador disse que a maldição era minha força."',
+                '"Você me acertou... Anhangá disse que ninguém me acertaria. Ele disse que a maldição me protegia."',
+                '"A dor... a dor é real. O Sussurrador disse que a maldição era minha força... mas a dor... a dor é minha fraqueza."',
+            ],
+            aoTomarDano: [
+                '"Pare! Minha maldição é minha força! Foi o que Anhangá disse!"',
+                '"Você não me derruba! O Sussurrador disse que eu era invencível!"',
+                '"Relincho de dor... o Sussurrador disse que a dor era força... por que dói tanto...?"',
+            ],
+            aoHpBaixo: [
+                '"Estou... fraca? A maldição não pode ser fraca! Anhangá disse que ela era eterna!"',
+                '"Ele mentiu... o Sussurrador mentiu... a maldição não é minha força. É meu castigo. E ele... ele me fez acreditar que era força."',
+            ],
+            aoHpCritico: [
+                '"Anhangá... você prometeu que a maldição seria minha força... por que ela dói tanto agora...?"',
+                '"Eu só queria ser perdoada... o Sussurrador disse que o fogo me purificaria... por que a dor não passa...?"',
+            ],
+            aoDarDano: [
+                '"Queime na maldição! O Sussurrador disse que o fogo era meu aliado!"',
+                '"Relincho de morte! Anhangá disse que a morte era minha aliada!"',
+                '"A noite me pertence! Foi o que o Sussurrador prometeu!"',
+            ],
+            aoUsarPA: [
+                '"A maldição... quebra? Anhangá disse que ela era eterna!"',
+                '"Como você...? O Sussurrador disse que ninguém podia quebrar a maldição!"',
+                '"Minha dor... some? O Sussurrador disse que a dor era minha força... ele mentiu."',
+            ],
+            aoMorrer: [
+                '"A maldição... acaba... e eu... eu vejo a forma que eu era antes... o Sussurrador não pode me seguir aqui... livre... finalmente..."',
+                '"Anhangá... eu vejo agora... o fogo era seu... a dor era sua... eu só queria ser perdoada... obrigada, herói..."',
+                '"Livre... finalmente... a noite... a noite é doce de novo. Obrigada... por me devolver a noite."',
+            ],
+        },
+
+        // ============================================================
+        // ATO 6 — CORPO SECO
+        // Mentira do Anhangá: "Se devorar tudo, sua fome será saciada"
+        // Dor real: Ele só queria descansar
+        // ============================================================
+        'corpo_seco': {
+            aoPrimeiroDano: [
+                '"Fome... tanta fome... você não me satisfaz. O Sussurrador disse que me satisfaria. Ele disse que se eu devorasse tudo, a fome pararia."',
+                '"Dor... eu não sentia dor... só fome. Anhangá disse que a dor era a fome. Ele mentiu?"',
+                '"Você me acertou... o Sussurrador disse que nada me acertaria. Ele disse que a fome me protegia."',
+            ],
+            aoTomarDano: [
+                '"Pare! Minha fome é minha força! Foi o que Anhangá disse!"',
+                '"Você não me satisfaz... preciso de mais! O Sussurrador disse que eu sempre precisaria de mais!"',
+                '"A dor... a dor não passa... o Sussurrador disse que passaria se eu devorasse tudo... por que não passa...?"',
+            ],
+            aoHpBaixo: [
+                '"Estou... fraco? A fome não pode ser fraca! Anhangá disse que a fome era eterna!"',
+                '"Ele mentiu... o Sussurrador mentiu... a fome não é minha força. É meu castigo. E ele... ele me fez acreditar que era fome."',
+            ],
+            aoHpCritico: [
+                '"Anhangá... você prometeu que a fome pararia... por que ela dói tanto agora...?"',
+                '"Eu só queria descansar... o Sussurrador disse que o descanso era fraqueza... por que a fome não me deixa descansar...?"',
+            ],
+            aoDarDano: [
+                '"Sua alma é minha! O Sussurrador disse que as almas me satisfariam!"',
+                '"Devorar... devorar! Foi o que Anhangá prometeu!"',
+                '"Fome eterna! O Sussurrador disse que a fome era minha aliada!"',
+            ],
+            aoUsarPA: [
+                '"Como... como?! Minha fome não pode ser saciada! Anhangá disse que ela era insaciável!"',
+                '"Minha fome... para? O Sussurrador disse que a fome nunca pararia... ele mentiu."',
+                '"Você é a morte...? O Sussurrador disse que a morte era minha aliada... ele mentiu."',
+            ],
+            aoMorrer: [
+                '"A fome... termina... e eu... eu sinto o silêncio da saciedade... o Sussurrador não pode me seguir aqui... descanso... enfim..."',
+                '"Anhangá... eu vejo agora... a fome era sua... não minha... eu só queria descansar... obrigado, herói..."',
+                '"Descanso... enfim... a terra... a terra me acolhe... obrigado... por me devolver o descanso."',
+            ],
+        },
+
+        // ============================================================
+        // ATO 7 — LOBISOMEM
+        // Mentira do Anhangá: "A forma bestial é sua verdadeira natureza"
+        // Dor real: Ele só queria ser humano
+        // ============================================================
+        'lobisomem': {
+            aoPrimeiroDano: [
+                '"Minha fera... sangra? O Sussurrador disse que a fera era invencível. Ele disse que a fera era minha verdadeira natureza."',
+                '"Você me acertou... Anhangá disse que ninguém acertaria a fera. Ele disse que a fera era eterna."',
+                '"Uivo de dor! O Sussurrador disse que a fera não sentia dor... ele mentiu."',
+            ],
+            aoTomarDano: [
+                '"Pare! A fera é minha força! Foi o que Anhangá disse!"',
+                '"Você não me derruba! O Sussurrador disse que a fera era invencível!"',
+                '"A dor... a dor é real... o Sussurrador disse que a dor era da fera... por que dói em mim...?"',
+            ],
+            aoHpBaixo: [
+                '"Estou... fraco? A fera não pode ser fraca! Anhangá disse que a fera era eterna!"',
+                '"Ele mentiu... o Sussurrador mentiu... a fera não é minha natureza. É minha maldição. E ele... ele me fez acreditar que era eu."',
+            ],
+            aoHpCritico: [
+                '"Anhangá... você prometeu que a fera seria minha força... por que ela dói tanto agora...?"',
+                '"Eu só queria ser humano... o Sussurrador disse que a humanidade era fraqueza... por que a humanidade... por que ela me chama de volta...?"',
+            ],
+            aoDarDano: [
+                '"Uivo para a lua! O Sussurrador disse que a lua me ouvia!"',
+                '"A fera está solta! Foi o que Anhangá prometeu!"',
+                '"Sinta minhas garras! O Sussurrador disse que as garras eram minhas!"',
+            ],
+            aoUsarPA: [
+                '"A lua... me abandona? Anhangá disse que a lua me obedecia!"',
+                '"Minha fera... recua? O Sussurrador disse que a fera nunca recuaria... ele mentiu."',
+                '"Como você...? O Sussurrador disse que ninguém podia domar a fera... ele mentiu."',
+            ],
+            aoMorrer: [
+                '"A lua... volta a ser lua... e eu... eu vejo minha forma humana de novo... o Sussurrador não pode me seguir aqui... livre... da maldição..."',
+                '"Anhangá... eu vejo agora... a fera era sua... não minha... eu só queria ser humano... obrigado, herói..."',
+                '"Livre da maldição... a lua... a lua é só lua de novo... obrigado... por me devolver a humanidade."',
+            ],
+        },
+
+        // ============================================================
+        // ATO 8 — CUCA
+        // Mentira do Anhangá: "Apenas a destruição traz poder real"
+        // Dor real: Ela só queria curar
+        // ============================================================
+        'cuca': {
+            aoPrimeiroDano: [
+                '"Minhas poções... falham? O Sussurrador disse que minhas poções eram invencíveis. Ele disse que a destruição era poder real."',
+                '"Você me acertou... Anhangá disse que ninguém me acertaria. Ele disse que o caldeirão me protegia."',
+                '"Interessante... você resiste. O Sussurrador disse que ninguém resistiria. Ele... ele mentiu?"',
+            ],
+            aoTomarDano: [
+                '"Pare! Minhas poções são minha força! Foi o que Anhangá disse!"',
+                '"Você não me derruba! O Sussurrador disse que a bruxa era invencível!"',
+                '"A dor... a dor é real... o Sussurrador disse que a dor era fraqueza... por que a sinto...?"',
+            ],
+            aoHpBaixo: [
+                '"Estou... fraca? A bruxa não pode ser fraca! Anhangá disse que eu era eterna!"',
+                '"Ele mentiu... o Sussurrador mentiu... a destruição não é poder. É vazio. E ele... ele me fez acreditar que era poder."',
+            ],
+            aoHpCritico: [
+                '"Anhangá... você prometeu que a destruição me daria poder... por que o vazio... por que ele é tão grande...?"',
+                '"Eu só queria curar... o Sussurrador disse que curar era fraqueza... por que a cura... por que ela me chama de volta...?"',
+            ],
+            aoDarDano: [
+                '"Beba minha poção! O Sussurrador disse que o veneno era poder!"',
+                '"Veneno puro! Foi o que Anhangá prometeu!"',
+                '"A bruxa sempre vence! O Sussurrador disse que eu era invencível!"',
+            ],
+            aoUsarPA: [
+                '"Meu caldeirão...! Anhangá disse que ele era invencível!"',
+                '"Como você quebrou...? O Sussurrador disse que ninguém quebraria meu caldeirão... ele mentiu."',
+                '"Você é digno... o Sussurrador disse que ninguém era digno... ele mentiu."',
+            ],
+            aoMorrer: [
+                '"Meu caldeirão... esfria... e eu... eu vejo as ervas de cura de novo... o Sussurrador não pode me seguir aqui... descanso... enfim..."',
+                '"Anhangá... eu vejo agora... a destruição era sua... não minha... eu só queria curar... obrigada, herói..."',
+                '"A bruxa... descansa... e as poções... as poções voltam a curar... obrigada... por me devolver a cura."',
+            ],
+        },
+
+        // ============================================================
+        // ATO 9 — BOTO ROSA
+        // Mentira do Anhangá: "Sua beleza pode ser arma de destruição"
+        // Dor real: Ele só queria ser amado de verdade
+        // ============================================================
+        'boto': {
+            aoPrimeiroDano: [
+                '"Meu encanto... quebra? O Sussurrador disse que o encanto era invencível. Ele disse que a sedução era poder."',
+                '"Você resiste ao meu canto? Anhangá disse que ninguém resistiria. Ele disse que o canto era eterno."',
+                '"Interessante... você não se encanta. O Sussurrador disse que todos se encantariam... ele mentiu?"',
+            ],
+            aoTomarDano: [
+                '"Pare! Meu canto é minha arma! Foi o que Anhangá disse!"',
+                '"Você não me derruba! O Sussurrador disse que o sedutor era invencível!"',
+                '"A dor... a dor é real... o Sussurrador disse que o amor era dor... por que a dor... por que ela é tão diferente...?"',
+            ],
+            aoHpBaixo: [
+                '"Estou... fraco? O sedutor não pode ser fraco! Anhangá disse que eu era eterno!"',
+                '"Ele mentiu... o Sussurrador mentiu... a sedução não é amor. É vazio. E ele... ele me fez acreditar que era amor."',
+            ],
+            aoHpCritico: [
+                '"Anhangá... você prometeu que o encanto me daria amor... por que o vazio... por que ele é tão grande...?"',
+                '"Eu só queria ser amado de verdade... o Sussurrador disse que a sedução era amor... por que a solidão... por que ela me chama de volta...?"',
+            ],
+            aoDarDano: [
+                '"Dance comigo! O Sussurrador disse que a dança era amor!"',
+                '"Sinta o encanto! Foi o que Anhangá prometeu!"',
+                '"As águas te chamam! O Sussurrador disse que as águas chamavam por mim!"',
+            ],
+            aoUsarPA: [
+                '"Meu canto... falha? Anhangá disse que o canto era invencível!"',
+                '"Como você...? O Sussurrador disse que ninguém resistiria ao meu canto... ele mentiu."',
+                '"Você é digno... o Sussurrador disse que ninguém era digno... ele mentiu."',
+            ],
+            aoMorrer: [
+                '"As águas... me chamam... eu vou voltar pro rio... o Sussurrador não pode me seguir aqui... livre... do encanto..."',
+                '"Anhangá... eu vejo agora... a sedução era sua... não minha... eu só queria ser amado... obrigado, herói..."',
+                '"Livre do encanto... as águas... as águas voltam a ser lar... obrigado... por me devolver a paz."',
+            ],
+        },
+
+        // ============================================================
+        // ATO 10 — BOI DA CARA PRETA
+        // Mentira do Anhangá: "O terror é o poder real"
+        // Dor real: Ele só queria proteger as noites
+        // ============================================================
+        'boi': {
+            aoPrimeiroDano: [
+                '"Minha face... treme? O Sussurrador disse que a face era invencível. Ele disse que o terror era poder real."',
+                '"Você não teme o terror? Anhangá disse que todos temeriam. Ele disse que o terror era eterno."',
+                '"Interessante... você não foge. O Sussurrador disse que todos fugiriam... ele mentiu?"',
+            ],
+            aoTomarDano: [
+                '"Pare! Minha face é minha arma! Foi o que Anhangá disse!"',
+                '"Você não me derruba! O Sussurrador disse que o terror era invencível!"',
+                '"A dor... a dor é real... o Sussurrador disse que o terror não sentia dor... por que a sinto...?"',
+            ],
+            aoHpBaixo: [
+                '"Estou... fraco? O terror não pode ser fraco! Anhangá disse que eu era eterno!"',
+                '"Ele mentiu... o Sussurrador mentiu... o terror não é poder. É medo. E ele... ele me fez acreditar que era poder."',
+            ],
+            aoHpCritico: [
+                '"Anhangá... você prometeu que o terror me daria poder... por que o medo... por que ele é tão grande...?"',
+                '"Eu só queria proteger as noites... o Sussurrador disse que o terror protegia... por que a escuridão... por que ela me chama de volta...?"',
+            ],
+            aoDarDano: [
+                '"Sinta o terror! O Sussurrador disse que o terror era poder!"',
+                '"Minha face escura! Foi o que Anhangá prometeu!"',
+                '"Ninguém escapa! O Sussurrador disse que ninguém escaparia de mim!"',
+            ],
+            aoUsarPA: [
+                '"Meu terror... quebra? Anhangá disse que o terror era invencível!"',
+                '"Como você...? O Sussurrador disse que ninguém resistiria ao terror... ele mentiu."',
+                '"Você é digno... o Sussurrador disse que ninguém era digno... ele mentiu."',
+            ],
+            aoMorrer: [
+                '"O terror... acaba... e eu... eu vejo a noite de novo... a noite que eu protegia... o Sussurrador não pode me seguir aqui... livre... da face..."',
+                '"Anhangá... eu vejo agora... o terror era seu... não meu... eu só queria proteger as noites... obrigado, herói..."',
+                '"Livre da face... a noite... a noite é doce de novo... obrigado... por me devolver a paz."',
+            ],
+        },
+
+        // ============================================================
+        // ATO 11 — JACI
+        // Mentira do Anhangá: "Sua luz pode queimar em vez de iluminar"
+        // Dor real: Ela só queria acalmar a noite
+        // ============================================================
+        'jaci': {
+            aoPrimeiroDano: [
+                '"Minha luz... treme? O Sussurrador disse que a luz era invencível. Ele disse que a lua era eterna."',
+                '"Você resiste à lua? Anhangá disse que ninguém resistiria. Ele disse que a lua era poder."',
+                '"Interessante... você não foge da luz. O Sussurrador disse que todos fugiriam... ele mentiu?"',
+            ],
+            aoTomarDano: [
+                '"Pare! Minha luz é minha arma! Foi o que Anhangá disse!"',
+                '"Você não me derruba! O Sussurrador disse que a lua era invencível!"',
+                '"A dor... a dor é real... o Sussurrador disse que a lua não sentia dor... por que a sinto...?"',
+            ],
+            aoHpBaixo: [
+                '"Estou... fraca? A lua não pode ser fraca! Anhangá disse que eu era eterna!"',
+                '"Ele mentiu... o Sussurrador mentiu... a luz não é poder. É solidão. E ele... ele me fez acreditar que era poder."',
+            ],
+            aoHpCritico: [
+                '"Anhangá... você prometeu que a luz me daria poder... por que a solidão... por que ela é tão grande...?"',
+                '"Eu só queria acalmar a noite... o Sussurrador disse que a luz queimava... por que a noite... por que ela me chama de volta...?"',
+            ],
+            aoDarDano: [
+                '"Sinta a lua fria! O Sussurrador disse que a lua era fria!"',
+                '"Meus raios queimam! Foi o que Anhangá prometeu!"',
+                '"A noite é minha! O Sussurrador disse que a noite era minha!"',
+            ],
+            aoUsarPA: [
+                '"Minha lua... recua? Anhangá disse que a lua era invencível!"',
+                '"Como você...? O Sussurrador disse que ninguém resistiria à lua... ele mentiu."',
+                '"Você é digno... o Sussurrador disse que ninguém era digno... ele mentiu."',
+            ],
+            aoMorrer: [
+                '"A lua... volta a brilhar... e eu... eu vejo a noite de novo... a noite que eu acalmava... o Sussurrador não pode me seguir aqui... livre... da melancolia..."',
+                '"Anhangá... eu vejo agora... a solidão era sua... não minha... eu só queria acalmar a noite... obrigada, herói..."',
+                '"Livre da melancolia... a lua... a lua é só lua de novo... obrigada... por me devolver a paz."',
+            ],
+        },
+
+        // ============================================================
+        // ATO 12 — GUARACI
+        // Mentira do Anhangá: "Seu poder é queimar, não aquecer"
+        // Dor real: Ele só queria dar vida
+        // ============================================================
+        'guaraci': {
+            aoPrimeiroDano: [
+                '"Meu sol... treme? O Sussurrador disse que o sol era invencível. Ele disse que o calor era poder."',
+                '"Você resiste ao calor? Anhangá disse que ninguém resistiria. Ele disse que o calor era eterno."',
+                '"Interessante... você não foge do sol. O Sussurrador disse que todos fugiriam... ele mentiu?"',
+            ],
+            aoTomarDano: [
+                '"Pare! Meu sol é minha arma! Foi o que Anhangá disse!"',
+                '"Você não me derruba! O Sussurrador disse que o sol era invencível!"',
+                '"A dor... a dor é real... o Sussurrador disse que o sol não sentia dor... por que a sinto...?"',
+            ],
+            aoHpBaixo: [
+                '"Estou... fraco? O sol não pode ser fraco! Anhangá disse que eu era eterno!"',
+                '"Ele mentiu... o Sussurrador mentiu... o calor não é poder. É destruição. E ele... ele me fez acreditar que era poder."',
+            ],
+            aoHpCritico: [
+                '"Anhangá... você prometeu que o calor me daria poder... por que a destruição... por que ela é tão grande...?"',
+                '"Eu só queria dar vida... o Sussurrador disse que a vida era fraqueza... por que a vida... por que ela me chama de volta...?"',
+            ],
+            aoDarDano: [
+                '"Queime no sol! O Sussurrador disse que o fogo era poder!"',
+                '"Sinta o inferno solar! Foi o que Anhangá prometeu!"',
+                '"Ninguém escapa do sol! O Sussurrador disse que ninguém escaparia!"',
+            ],
+            aoUsarPA: [
+                '"Meu sol... recua? Anhangá disse que o sol era invencível!"',
+                '"Como você...? O Sussurrador disse que ninguém resistiria ao sol... ele mentiu."',
+                '"Você é digno... o Sussurrador disse que ninguém era digno... ele mentiu."',
+            ],
+            aoMorrer: [
+                '"O sol... volta a aquecer... e eu... eu vejo o amanhecer de novo... o amanhecer que eu dava... o Sussurrador não pode me seguir aqui... livre... da arrogância..."',
+                '"Anhangá... eu vejo agora... a destruição era sua... não minha... eu só queria dar vida... obrigado, herói..."',
+                '"Livre da arrogância... o sol... o sol é só sol de novo... obrigado... por me devolver a vida."',
+            ],
+        },
+
+        // ============================================================
+        // ATO 13 — ANHANGÁ
+        // Mentira do Anhangá: "A natureza grita por vingança, eu sou a voz dela"
+        // Dor real: Ele é o próprio abismo, e o abismo só sabe destruir
+        // ============================================================
+        'anhanga': {
+            aoPrimeiroDano: [
+                '"Você me fere... você realmente me fere? Ninguém nunca me feriu. Eu sou o Sussurrador. Eu sou a voz do abismo."',
+                '"Dor... eu não sentia dor há milênios. Eu era a dor. Eu era o vazio. E agora... agora você me faz sentir."',
+                '"Interessante... você não teme o abismo. Eu ensinei todos a temer. Por que você não teme?"',
+            ],
+            aoTomarDano: [
+                '"Pare! Eu sou o Abismo! Eu sou a escuridão! Você não pode me ferir!"',
+                '"Minha escuridão... treme? Eu sou a escuridão! Eu sou o vazio! Por que você resiste?"',
+                '"Você me acerta... mas eu sou a dor. Eu sou a mentira. Eu sou o que corrompe. Por que você não se corrompe?"',
+            ],
+            aoHpBaixo: [
+                '"Estou... fraco? O Abismo não pode ser fraco! Eu sou o vazio! Eu sou a mentira!"',
+                '"Você... você não acredita em mim? Eu sou o Sussurrador! Eu sou a voz que todos ouvem! Por que você não me ouve?"',
+            ],
+            aoHpCritico: [
+                '"As doze entidades... você as libertou... de mim... e agora... agora elas não voltam pra mim... por que elas não voltam...?"',
+                '"Eu só queria... eu só queria que a dor parasse... a dor do abismo... a dor de ser vazio... por que a dor não para...?"',
+            ],
+            aoDarDano: [
+                '"Sinta o abismo! Eu sou o abismo!"',
+                '"Minha escuridão consome! Eu sou a escuridão!"',
+                '"Ninguém escapa! Eu sou o vazio! Eu sou a mentira!"',
+            ],
+            aoUsarPA: [
+                '"Impossível! Eu sou o Abismo! Ninguém me vence!"',
+                '"Como você...? Eu sou o Sussurrador! Eu sussurro a mentira! Por que você não acredita...?"',
+                '"Meu poder... recua? Eu sou o poder! Eu sou o vazio! Por que o vazio... por que ele dói...?"',
+            ],
+            aoMorrer: [
+                '"A escuridão... se dissolve... e eu... eu vejo a luz de novo... a luz que eu apaguei em mim mesmo há milênios... o equilíbrio... retorna..."',
+                '"Eu vejo agora... a dor era minha... a mentira era minha... eu só queria que a dor parasse... eu só queria... o silêncio... obrigado, herói..."',
+                '"O equilíbrio... retorna... e eu... eu volto ao silêncio de onde nunca deveria ter saído... obrigado... por me devolver o silêncio."',
+            ],
+        },
+    };
+
+    // ============================================================
+    // SOBRESCREVER AS TABELAS EXISTENTES (via Object.assign)
+    // ------------------------------------------------------------
+    // Não reatribui o const, mas substitui as propriedades.
+    // ============================================================
+    if (typeof window.FALAS_MODO_HISTORIA === 'undefined' && typeof FALAS_MODO_HISTORIA !== 'undefined') {
+        window.FALAS_MODO_HISTORIA = FALAS_MODO_HISTORIA;
+    }
+
+    // Sobrescreve cada boss do modo história
+    if (typeof FALAS_MODO_HISTORIA !== 'undefined') {
+        Object.keys(LORE_MODO_HISTORIA).forEach(bossId => {
+            FALAS_MODO_HISTORIA[bossId] = LORE_MODO_HISTORIA[bossId];
+        });
+        console.log('[V24.0] Lore do modo história sobrescrita (13 bosses).');
+    } else {
+        console.warn('[V24.0] FALAS_MODO_HISTORIA não existe. Rode o V22.0-P1 antes.');
+    }
+
+    // ============================================================
+    // EVENTO — sobrescrever com lore
+    // ============================================================
+    const LORE_EVENTO = {
+        'teju_jagua': {
+            aoPrimeiroDano: ['"Minhas sete cabeças... uivam de dor? O Sussurrador disse que o fogo me protegeria."'],
+            aoTomarDano: ['"Você me acerta? Eu sou o filho favorito do Sussurrador! Ele disse que eu era o favorito!"'],
+            aoHpBaixo: ['"Estou... fraco? O Sussurrador disse que eu era o favorito... por que ele não me cura...?"'],
+            aoHpCritico: ['"Anhangá... você prometeu que eu seria o favorito... por que o fogo... por que ele não me protege...?"'],
+            aoDarDano: ['"Minhas chamas te consomem! O Sussurrador disse que o fogo era meu!"'],
+            aoUsarPA: ['"Impossível! Eu sou o favorito! O Sussurrador disse que ninguém podia me vencer!"'],
+            aoMorrer: ['"Anhangá... você me usou... como usou os outros... eu só queria ser o favorito... livre... enfim..."'],
+            aoServoAtingido: ['"Meus servos! O Sussurrador disse que eles eram meus! Não toque neles!"'],
+            aoServoMorto: ['"Você matou meu servo! O Sussurrador disse que eu vingaria! Sinta minha fúria!"'],
+            aoAnhangáSussurra: ['"Anhangá... eu sinto seu sussurro... ' + 'o herói é fraco... devore-o...' + '... sim... sim, Sussurrador..."'],
+        },
+        'mboi_tui': {
+            aoPrimeiroDano: ['"Meu bico... treme? O Sussurrador disse que o veneno me protegeria."'],
+            aoTomarDano: ['"Você resiste ao veneno? O Sussurrador disse que ninguém resistiria!"'],
+            aoHpBaixo: ['"Estou... fraco? O veneno não pode ser fraco! O Sussurrador disse que era eterno!"'],
+            aoHpCritico: ['"Anhangá... você prometeu que o veneno me daria poder... por que ele dói tanto...?"'],
+            aoDarDano: ['"Sinta o veneno do arco-íris! O Sussurrador disse que o veneno era meu!"'],
+            aoUsarPA: ['"Meu veneno... falha? O Sussurrador disse que era invencível!"'],
+            aoMorrer: ['"O rio... volta a fluir... e eu... eu vejo o arco-íris de novo... o Sussurrador não pode me seguir aqui... livre..."'],
+            aoServoAtingido: ['"Meus peixes! O Sussurrador disse que eles eram meus!"'],
+            aoServoMorto: ['"Você vai se afogar! O Sussurrador disse que o rio vingaria!"'],
+            aoAnhangáSussurra: ['"Sussurrador... o rio sussurra junto com você... \'afogue-o... afogue-o...\'... sim... eu ouço..."'],
+        },
+        'monai': {
+            aoPrimeiroDano: ['"Minhas asas... tremem? O Sussurrador disse que o céu me protegeria."'],
+            aoTomarDano: ['"Você me acerta no ar? O Sussurrador disse que ninguém me acertaria!"'],
+            aoHpBaixo: ['"Estou... fraco? O céu não pode ser fraco! O Sussurrador disse que eu era eterno!"'],
+            aoHpCritico: ['"Anhangá... você prometeu que o voo me daria poder... por que as asas... por que elas cansam...?"'],
+            aoDarDano: ['"Sinta o voo rasante! O Sussurrador disse que o voo era meu!"'],
+            aoUsarPA: ['"Meu voo... falha? O Sussurrador disse que era invencível!"'],
+            aoMorrer: ['"O céu... me chama... e eu... eu vejo o sol de novo... o Sussurrador não pode me seguir aqui... livre..."'],
+            aoServoAtingido: ['"Minhas criaturas! O Sussurrador disse que elas eram minhas!"'],
+            aoServoMorto: ['"Você vai cair! O Sussurrador disse que o céu vingaria!"'],
+            aoAnhangáSussurra: ['"O vento... o vento sussurra com você... \'derrube-o... derrube-o...\'... sim... eu ouço..."'],
+        },
+        'jasy_jatere': {
+            aoPrimeiroDano: ['"Meu sol... treme? O Sussurrador disse que o clarão me protegeria."'],
+            aoTomarDano: ['"Você resiste ao clarão? O Sussurrador disse que ninguém resistiria!"'],
+            aoHpBaixo: ['"Estou... fraco? O sol não pode ser fraco! O Sussurrador disse que era eterno!"'],
+            aoHpCritico: ['"Anhangá... você prometeu que o clarão me daria poder... por que a luz... por que ela dói...?"'],
+            aoDarDano: ['"Sinta o clarão! O Sussurrador disse que o clarão era meu!"'],
+            aoUsarPA: ['"Meu sol... recua? O Sussurrador disse que era invencível!"'],
+            aoMorrer: ['"O sol... se apaga... e eu... eu vejo o amanhecer de novo... o Sussurrador não pode me seguir aqui... livre..."'],
+            aoServoAtingido: ['"Minhas criaturas! O Sussurrador disse que elas eram minhas!"'],
+            aoServoMorto: ['"Você vai cegar! O Sussurrador disse que a luz vingaria!"'],
+            aoAnhangáSussurra: ['"A luz... a luz sussurra com você... \'cegue-o... cegue-o...\'... sim... eu ouço..."'],
+        },
+        'kurupi': {
+            aoPrimeiroDano: ['"Minhas raízes... tremem? O Sussurrador disse que a mata me protegeria."'],
+            aoTomarDano: ['"Você me acerta? O Sussurrador disse que a mata era invencível!"'],
+            aoHpBaixo: ['"Estou... fraco? A mata não pode ser fraca! O Sussurrador disse que era eterna!"'],
+            aoHpCritico: ['"Anhangá... você prometeu que a mata me daria poder... por que as raízes... por que elas soltam...?"'],
+            aoDarDano: ['"Minhas raízes te prendem! O Sussurrador disse que a mata me obedecia!"'],
+            aoUsarPA: ['"Minhas raízes... soltam? O Sussurrador disse que eram invencíveis!"'],
+            aoMorrer: ['"A mata... me chama... e eu... eu vejo a floresta de novo... o Sussurrador não pode me seguir aqui... livre..."'],
+            aoServoAtingido: ['"Minhas criaturas! O Sussurrador disse que elas eram minhas!"'],
+            aoServoMorto: ['"Você vai ser engolido! O Sussurrador disse que a mata vingaria!"'],
+            aoAnhangáSussurra: ['"As folhas... as folhas sussurram com você... \'engula-o... engula-o...\'... sim... eu ouço..."'],
+        },
+        'ao_ao': {
+            aoPrimeiroDano: ['"Minha lã... treme? O Sussurrador disse que a fome me protegeria."'],
+            aoTomarDano: ['"Você me acerta? O Sussurrador disse que a fome era invencível!"'],
+            aoHpBaixo: ['"Estou... fraco? A fome não pode ser fraca! O Sussurrador disse que era eterna!"'],
+            aoHpCritico: ['"Anhangá... você prometeu que a fome me daria poder... por que a fome... por que ela não me sacia...?"'],
+            aoDarDano: ['"Minha lã te enrola! O Sussurrador disse que a fome era meu!"'],
+            aoUsarPA: ['"Minha fome... falha? O Sussurrador disse que era invencível!"'],
+            aoMorrer: ['"A fome... acaba... e eu... eu vejo o rebanho de novo... o Sussurrador não pode me seguir aqui... livre..."'],
+            aoServoAtingido: ['"Meus rebanhos! O Sussurrador disse que eles eram meus!"'],
+            aoServoMorto: ['"Você vai ser devorado! O Sussurrador disse que a fome vingaria!"'],
+            aoAnhangáSussurra: ['"A fome... a fome sussurra com você... \'devore-o... devore-o...\'... sim... eu ouço..."'],
+        },
+        'luison': {
+            aoPrimeiroDano: ['"Minha sombra... treme? O Sussurrador disse que a escuridão me protegeria."'],
+            aoTomarDano: ['"Você me acerta? O Sussurrador disse que a escuridão era invencível!"'],
+            aoHpBaixo: ['"Estou... fraco? A escuridão não pode ser fraca! O Sussurrador disse que era eterna!"'],
+            aoHpCritico: ['"Anhangá... você prometeu que a sombra me daria poder... por que a escuridão... por que ela me engole...?"'],
+            aoDarDano: ['"Sinta a colheita sombria! O Sussurrador disse que a sombra era meu!"'],
+            aoUsarPA: ['"Minha sombra... recua? O Sussurrador disse que era invencível!"'],
+            aoMorrer: ['"A sombra... se dissolve... e eu... eu vejo a luz de novo... o Sussurrador não pode me seguir aqui... livre..."'],
+            aoServoAtingido: ['"Meus filhos! O Sussurrador disse que eles eram meus!"'],
+            aoServoMorto: ['"Você vai morrer! O Sussurrador disse que a escuridão vingaria!"'],
+            aoAnhangáSussurra: ['"A noite... a noite sussurra com você... \'mate-o... mate-o...\'... sim... eu ouço..."'],
+        },
+        'pesadelo': {
+            aoPrimeiroDano: ['"A dor... é minha? Eu sou a dor. Eu sou a fusão. O Sussurrador disse que eu era invencível."'],
+            aoTomarDano: ['"Você me acerta? O Sussurrador disse que a fusão era eterna!"'],
+            aoHpBaixo: ['"Estou... fraco? A fusão não pode ser fraca! O Sussurrador disse que era eterna!"'],
+            aoHpCritico: ['"Anhangá... você prometeu que a fusão me daria poder... por que a dor... por que ela é tão grande...?"'],
+            aoDarDano: ['"Sinta o pesadelo! O Sussurrador disse que o pesadelo era meu!"'],
+            aoUsarPA: ['"Meu poder... recua? O Sussurrador disse que era invencível!"'],
+            aoMorrer: ['"O pesadelo... acaba... e eu... eu vejo o equilíbrio de novo... o Sussurrador não pode me seguir aqui... livre..."'],
+            aoServoAtingido: ['"Minha criação! O Sussurrador disse que ela era minha!"'],
+            aoServoMorto: ['"Você vai sonhar para sempre! O Sussurrador disse que a criação vingaria!"'],
+            aoAnhangáSussurra: ['"O abismo... o abismo sussurra com você... \'sonhe-o... sonhe-o...\'... sim... eu ouço..."'],
+        },
+    };
+
+    // Sobrescreve cada boss do evento (mantém os que não têm lore nova)
+    if (typeof FALAS_EVENTO !== 'undefined') {
+        Object.keys(LORE_EVENTO).forEach(bossId => {
+            FALAS_EVENTO[bossId] = Object.assign(
+                FALAS_EVENTO[bossId] || {},
+                LORE_EVENTO[bossId]
+            );
+        });
+        console.log('[V24.0] Lore do evento sobrescrita (8 bosses).');
+    } else {
+        console.warn('[V24.0] FALAS_EVENTO não existe. Rode o V22.0-P1 antes.');
+    }
+
+    // ============================================================
+    // ATO — sobrescrever com lore (fala do boss quando acerta/mata servo)
+    // ============================================================
+    const LORE_ATO = {
+        1: {
+            aoServoAtingido: ['"Meu servo! O Sussurrador disse que ele era meu! Não toque nele!"', '"O redemoinho te observa... o Sussurrador disse que ele te puniria..."'],
+            aoServoMorto: ['"Você matou meu servo! O Sussurrador disse que eu vingaria!"', '"Sinta a fúria do redemoinho! O Sussurrador disse que ela era minha!"'],
+        },
+        2: {
+            aoServoAtingido: ['"A mata chora... o Sussurrador disse que ela chorava por mim..."', '"Você fere meus servos... o Sussurrador disse que eles eram meus..."'],
+            aoServoMorto: ['"Você vai pagar com sangue! O Sussurrador disse que a mata exigia vingança!"', '"A mata exige vingança! Foi o que o Sussurrador prometeu!"'],
+        },
+        3: {
+            aoServoAtingido: ['"Meus peixes! O Sussurrador disse que o rio era meu!"', '"Você fere minhas criaturas... o Sussurrador disse que elas eram minhas..."'],
+            aoServoMorto: ['"Você vai se afogar! O Sussurrador disse que as águas vingariam!"', '"As águas exigem vingança! Foi o que o Sussurrador prometeu!"'],
+        },
+        4: {
+            aoServoAtingido: ['"Minhas serpentes! O Sussurrador disse que o fogo era meu!"', '"Você fere meus servos... o Sussurrador disse que eles eram meus..."'],
+            aoServoMorto: ['"Você vai queimar! O Sussurrador disse que as chamas vingariam!"', '"As chamas exigem vingança! Foi o que o Sussurrador prometeu!"'],
+        },
+        5: {
+            aoServoAtingido: ['"Meus animais! O Sussurrador disse que a noite era minha!"', '"Você fere meus servos... o Sussurrador disse que eles eram meus..."'],
+            aoServoMorto: ['"Você vai queimar na maldição! O Sussurrador disse que a noite vingaria!"', '"A noite exige vingança! Foi o que o Sussurrador prometeu!"'],
+        },
+        6: {
+            aoServoAtingido: ['"Minhas criaturas! O Sussurrador disse que a fome era minha!"', '"Você fere meus servos... o Sussurrador disse que eles eram meus..."'],
+            aoServoMorto: ['"Você vai ser devorado! O Sussurrador disse que a fome vingaria!"', '"A fome exige vingança! Foi o que o Sussurrador prometeu!"'],
+        },
+        7: {
+            aoServoAtingido: ['"Minha matilha! O Sussurrador disse que a lua era minha!"', '"Você fere meus servos... o Sussurrador disse que eles eram meus..."'],
+            aoServoMorto: ['"Você vai uivar de dor! O Sussurrador disse que a lua vingaria!"', '"A lua exige vingança! Foi o que o Sussurrador prometeu!"'],
+        },
+        8: {
+            aoServoAtingido: ['"Minhas criaturas! O Sussurrador disse que o caldeirão era meu!"', '"Você fere meus servos... o Sussurrador disse que eles eram meus..."'],
+            aoServoMorto: ['"Você vai beber veneno! O Sussurrador disse que o caldeirão vingaria!"', '"O caldeirão exige vingança! Foi o que o Sussurrador prometeu!"'],
+        },
+        9: {
+            aoServoAtingido: ['"Meus peixes! O Sussurrador disse que o rio era meu!"', '"Você fere meus servos... o Sussurrador disse que eles eram meus..."'],
+            aoServoMorto: ['"Você vai se afogar no encanto! O Sussurrador disse que as águas vingariam!"', '"As águas exigem vingança! Foi o que o Sussurrador prometeu!"'],
+        },
+        10: {
+            aoServoAtingido: ['"Meus rebanhos! O Sussurrador disse que o terror era meu!"', '"Você fere meus servos... o Sussurrador disse que eles eram meus..."'],
+            aoServoMorto: ['"Você vai sentir o terror! O Sussurrador disse que a noite vingaria!"', '"A noite exige vingança! Foi o que o Sussurrador prometeu!"'],
+        },
+        11: {
+            aoServoAtingido: ['"Minhas criaturas! O Sussurrador disse que a lua era minha!"', '"Você fere meus servos... o Sussurrador disse que eles eram meus..."'],
+            aoServoMorto: ['"Você vai queimar na lua! O Sussurrador disse que a lua vingaria!"', '"A lua exige vingança! Foi o que o Sussurrador prometeu!"'],
+        },
+        12: {
+            aoServoAtingido: ['"Minhas aves! O Sussurrador disse que o sol era meu!"', '"Você fere meus servos... o Sussurrador disse que eles eram meus..."'],
+            aoServoMorto: ['"Você vai queimar no sol! O Sussurrador disse que o sol vingaria!"', '"O sol exige vingança! Foi o que o Sussurrador prometeu!"'],
+        },
+        13: {
+            aoServoAtingido: ['"Minhas criaturas! O Sussurrador disse que o abismo era meu!"', '"Você fere meus servos... o Sussurrador disse que eles eram meus..."'],
+            aoServoMorto: ['"Você vai ser consumido! O Sussurrador disse que o abismo vingaria!"', '"O abismo exige vingança! Foi o que o Sussurrador prometeu!"'],
+        },
+    };
+
+    if (typeof FALAS_ATO !== 'undefined') {
+        Object.keys(LORE_ATO).forEach(atoId => {
+            FALAS_ATO[atoId] = Object.assign(FALAS_ATO[atoId] || {}, LORE_ATO[atoId]);
+        });
+        console.log('[V24.0] Lore do ato sobrescrita (13 atos).');
+    } else {
+        console.warn('[V24.0] FALAS_ATO não existe. Rode o V22.0-P1 antes.');
+    }
+
+    // ==============================================================
+    // PARTE 2: LÓGICA DOS NOVOS GATILHOS CONTEXTUAIS
+    // ==============================================================
+    // Estado por batalha
+    window._falasCtx = {
+        primeiroDanoBoss: false,
+        hpBaixoAvisado: false,
+        hpCriticoAvisado: false,
+        turnosBoss: 0,
+    };
+
+    // Reset ao iniciar batalha
+    const _origInitBattle = window.initStoryBattle;
+    if (typeof _origInitBattle === 'function') {
+        window.initStoryBattle = async function() {
+            window._falasCtx = {
+                primeiroDanoBoss: false,
+                hpBaixoAvisado: false,
+                hpCriticoAvisado: false,
+                turnosBoss: 0,
+            };
+            return _origInitBattle.apply(this, arguments);
+        };
+    }
+
+    const _origEventoIniciar = window.eventoIniciarBatalha;
+    if (typeof _origEventoIniciar === 'function') {
+        window.eventoIniciarBatalha = async function() {
+            window._falasCtx = {
+                primeiroDanoBoss: false,
+                hpBaixoAvisado: false,
+                hpCriticoAvisado: false,
+                turnosBoss: 0,
+            };
+            return _origEventoIniciar.apply(this, arguments);
+        };
+    }
+
+    // Hook no applyDmg — detecta primeiro dano, HP baixo, HP crítico
+    const _origApplyDmg = window.applyDmg;
+    if (typeof _origApplyDmg === 'function') {
+        window.applyDmg = function(target, amount) {
+            const result = _origApplyDmg.apply(this, arguments);
+
+            if (!window._storyMode && !window._eventoAtivo) return result;
+            if (window._pvpMode) return result;
+            if (!target) return result;
+
+            const ctx = window._falasCtx;
+
+            // ⭐ Boss tomou dano → verifica contextuais
+            if (target === boss && !target.dead) {
+                // Primeiro dano
+                if (!ctx.primeiroDanoBoss) {
+                    ctx.primeiroDanoBoss = true;
+                    setTimeout(() => _falasDisparar('aoPrimeiroDano', true), 100);
+                }
+
+                // HP baixo (< 35%)
+                if (!ctx.hpBaixoAvisado && target.hp <= target.maxHp * 0.35) {
+                    ctx.hpBaixoAvisado = true;
+                    setTimeout(() => _falasDisparar('aoHpBaixo', true), 200);
+                }
+
+                // HP crítico (< 12%)
+                if (!ctx.hpCriticoAvisado && target.hp <= target.maxHp * 0.12) {
+                    ctx.hpCriticoAvisado = true;
+                    setTimeout(() => _falasDisparar('aoHpCritico', true), 300);
+                }
+            }
+
+            return result;
+        };
+    }
+
+    // Hook no manageTurns — conta turnos do boss (sussurro do Anhangá)
+    const _origManageTurns = window.manageTurns;
+    if (typeof _origManageTurns === 'function') {
+        window.manageTurns = function() {
+            const result = _origManageTurns.apply(this, arguments);
+
+            if (!window._storyMode && !window._eventoAtivo) return result;
+            if (window._pvpMode) return result;
+
+            // Detecta turno do boss (currentPlayerIdx === -1)
+            if (typeof currentPlayerIdx !== 'undefined' && currentPlayerIdx === -1) {
+                window._falasCtx.turnosBoss++;
+                // A cada 6 turnos do boss, o Anhangá sussurra
+                if (window._falasCtx.turnosBoss % 6 === 0) {
+                    setTimeout(() => _falasDisparar('aoAnhangáSussurra', true), 500);
+                }
+            }
+
+            return result;
         };
     }
 
     // ==============================================================
-    // 2. Hook em showEndGame
-    // --------------------------------------------------------------
-    // Se é derrota E há herói morto, atrasa 3s.
+    // PARTE 3: LOG FINAL
     // ==============================================================
-    const _origShowEndGame = window.showEndGame;
-    if (typeof _origShowEndGame === 'function') {
-        window.showEndGame = async function(msg, isWin) {
-            if (!isWin && temHeroiMorto() && (window._storyMode || window._eventoAtivo)) {
-                console.log('[V21.0] Atrasando showEndGame (3s)...');
-                await new Promise(r => setTimeout(r, 3000));
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V24.0] Falas Contextuais + Lore');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('Novos gatilhos:');
+    console.log('  • aoPrimeiroDano (uma vez por fase)');
+    console.log('  • aoHpBaixo (< 35% HP)');
+    console.log('  • aoHpCritico (< 12% HP)');
+    console.log('  • aoAnhangáSussurra (a cada 6 turnos do boss)');
+    console.log('');
+    console.log('Lore:');
+    console.log('  • 13 bosses do modo história com lore reescrita');
+    console.log('  • 8 bosses do evento com lore + sussurro do Anhangá');
+    console.log('  • 13 atos com lore dos servos');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — BLOCO 90 (V25.0 — Fix dano em TODOS os handlers
+// que movem o boss)
+// -----------------------------------------------------------------
+// Cole NO FINAL do historia.js (último bloco).
+//
+// Corrige 12 handlers:
+//   1. porco_espinho_bote     — move 2 tiles, dano no caminho + fallback
+//   2. cervo_investida        — move 3 tiles, dano no caminho + fallback
+//   3. anta_atropelamento     — move 3 tiles, dano no caminho + fallback
+//   4. lontra_nado            — move 3 tiles, dano no caminho + fallback
+//   5. raposa_bote            — move 2 tiles, dano no caminho + fallback
+//   6. onca_salto             — salto 2 tiles, dano em área 3×3 no HERÓI
+//   7. jaguatirica_salto      — salto 2 tiles, dano em área 3×3 no HERÓI
+//   8. gato_mato_salto        — salto 2 tiles, dano em área 3×3 no HERÓI
+//   9. sucuarana_salto        — salto 2 tiles, dano em área 3×3 no HERÓI
+//  10. urutau_voo             — move 3 tiles, dano em área 3×3 no HERÓI
+//  11. falcao_mergulho        — teleporte, dano no HERÓI (não sobrepõe)
+//  12. aguia_mergulho         — teleporte, dano no HERÓI (não sobrepõe)
+// =================================================================
+
+(function fixDanoHandlersV250() {
+    if (window._fixDanoHandlersV250) return;
+    window._fixDanoHandlersV250 = true;
+
+    console.log('[V25.0] Corrigindo dano de 12 handlers...');
+
+    // ==============================================================
+    // HELPERS
+    // ==============================================================
+    function _getDirToward(fromX, fromY, toX, toY) {
+        if (typeof dirToward === 'function') {
+            return dirToward(fromX, fromY, toX, toY);
+        }
+        const dx = toX - fromX;
+        const dy = toY - fromY;
+        if (Math.abs(dx) >= Math.abs(dy)) {
+            return { dx: Math.sign(dx), dy: 0, name: dx > 0 ? 'right' : 'left' };
+        }
+        return { dx: 0, dy: Math.sign(dy), name: dy > 0 ? 'down' : 'up' };
+    }
+
+    function _getNearestPlayer(fromX, fromY) {
+        const alive = players.filter(p => !p.dead);
+        if (alive.length === 0) return null;
+        let nearest = alive[0];
+        let minDist = Math.abs(alive[0].x - fromX) + Math.abs(alive[0].y - fromY);
+        alive.forEach(p => {
+            const d = Math.abs(p.x - fromX) + Math.abs(p.y - fromY);
+            if (d < minDist) { minDist = d; nearest = p; }
+        });
+        return nearest;
+    }
+
+    function _buildArea3x3(cx, cy) {
+        const tiles = [];
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dy = -1; dy <= 1; dy++) {
+                const nx = cx + dx, ny = cy + dy;
+                if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) {
+                    tiles.push({ x: nx, y: ny });
+                }
             }
-            return _origShowEndGame.apply(this, arguments);
-        };
+        }
+        return tiles;
+    }
+
+    function _buildLine(fromX, fromY, dir, length) {
+        const tiles = [];
+        for (let i = 0; i < length; i++) {
+            const nx = fromX + dir.dx * i;
+            const ny = fromY + dir.dy * i;
+            if (nx < 0 || nx >= 8 || ny < 0 || ny >= 8) break;
+            tiles.push({ x: nx, y: ny });
+        }
+        return tiles;
+    }
+
+    function _aplicarDanoEmTiles(tiles, atk, descricao, pushDir) {
+        let danoAplicado = 0;
+        players.forEach(p => {
+            if (p.dead) return;
+            if (tiles.some(t => t.x === p.x && t.y === p.y)) {
+                if (typeof applyDmg === 'function') applyDmg(p, atk);
+                if (pushDir && typeof tryPushPlayer === 'function') {
+                    tryPushPlayer(p, pushDir.dx, pushDir.dy, 1);
+                }
+                danoAplicado++;
+            }
+        });
+        if (danoAplicado > 0) {
+            console.log(`[V25.0] ${descricao}: ${danoAplicado} herói(s) atingido(s)`);
+        } else {
+            console.log(`[V25.0] ${descricao}: nenhum herói atingido`);
+        }
+        return danoAplicado;
     }
 
     // ==============================================================
-    // 3. Hook em _mostrarTelaFinalEvento (Evento)
+    // PADRÃO 1 — MOVE ATÉ O HERÓI (dano no caminho + fallback adjacente)
     // --------------------------------------------------------------
-    // Essa função é interna, mas pode estar exposta em window.
-    // Se estiver, atrasa.
+    // Usado por: porco_espinho_bote, cervo_investida, anta_atropelamento,
+    //             lontra_nado, raposa_bote
     // ==============================================================
-    const _origTelaFinal = window._mostrarTelaFinalEvento;
-    if (typeof _origTelaFinal === 'function') {
-        window._mostrarTelaFinalEvento = async function(vitoria, drops, dropsResult) {
-            if (!vitoria && temHeroiMorto() && window._eventoAtivo) {
-                console.log('[V21.0] Atrasando _mostrarTelaFinalEvento (3s)...');
-                await new Promise(r => setTimeout(r, 3000));
+    async function _skillMoveAteHeroi(enemy, opts) {
+        const atk = enemy.atk;
+        const logMsg = opts.logMsg;
+        const numSteps = opts.numSteps || 2;
+        const fxKey = opts.fxKey;
+        const fxClass = opts.fxClass;
+        const finalFxKey = opts.finalFxKey || fxKey;
+        const finalFxClass = opts.finalFxClass || fxClass;
+        const pushOnHit = opts.pushOnHit || false;
+
+        if (typeof addLog === 'function') addLog(logMsg);
+
+        const nearest = _getNearestPlayer(boss.x, boss.y);
+        if (!nearest) return;
+
+        const dir = _getDirToward(boss.x, boss.y, nearest.x, nearest.y);
+
+        // Tiles que o boss vai passar (incluindo o tile do herói, se chegar)
+        const tilesPercorridos = [];
+        let lastX = boss.x, lastY = boss.y;
+
+        for (let i = 0; i < numSteps; i++) {
+            const nx = boss.x + dir.dx;
+            const ny = boss.y + dir.dy;
+            if (nx < 0 || nx >= 8 || ny < 0 || ny >= 8) break;
+
+            // ⭐ Permite passar pelo herói (não bloqueia o movimento)
+            const heroiNoTile = players.find(p => !p.dead && p.x === nx && p.y === ny);
+            if (heroiNoTile) {
+                // move o boss pra cima do herói
+                if (typeof spawnFxAt === 'function') spawnFxAt(fxKey, fxClass, nx, ny, { duration: 500 });
+                tilesPercorridos.push({ x: nx, y: ny });
+                boss.x = nx;
+                boss.y = ny;
+                lastX = nx;
+                lastY = ny;
+                if (typeof updateVisuals === 'function') updateVisuals();
+                await sleep(180);
+                break; // para no herói
             }
-            return _origTelaFinal.apply(this, arguments);
-        };
+
+            // Se tem outro player/amuleto, bloqueia
+            if (typeof isOccupied === 'function' && isOccupied(nx, ny, -1)) break;
+
+            if (typeof spawnFxAt === 'function') spawnFxAt(fxKey, fxClass, nx, ny, { duration: 500 });
+            tilesPercorridos.push({ x: nx, y: ny });
+            boss.x = nx;
+            boss.y = ny;
+            lastX = nx;
+            lastY = ny;
+            if (typeof updateVisuals === 'function') updateVisuals();
+            await sleep(180);
+        }
+
+        await sleep(200);
+
+        // FX final (explosão)
+        if (typeof spawnFxAt === 'function') {
+            spawnFxAt(finalFxKey, finalFxClass, lastX, lastY, { duration: 700, scale: 1.3 });
+        }
+
+        // ⭐ Aplica dano em TODOS os tiles que o boss passou
+        let danoAplicado = _aplicarDanoEmTiles(tilesPercorridos, atk, opts.descricao, pushOnHit ? dir : null);
+
+        // ⭐ Fallback: se o herói mais próximo não foi atingido, mas está adjacente
+        if (nearest && !nearest.dead) {
+            const foiAtingido = tilesPercorridos.some(t => t.x === nearest.x && t.y === nearest.y);
+            if (!foiAtingido) {
+                const adjacente = Math.abs(nearest.x - boss.x) + Math.abs(nearest.y - boss.y) <= 1;
+                if (adjacente) {
+                    if (typeof applyDmg === 'function') applyDmg(nearest, atk);
+                    danoAplicado++;
+                    console.log(`[V25.0] ${opts.descricao}: fallback adjacente`);
+                }
+            }
+        }
+
+        await sleep(300);
+        return danoAplicado;
     }
 
     // ==============================================================
-    // 4. Aura (se existir, roda durante o atraso)
+    // PADRÃO 2 — SALTO + ÁREA 3×3 NO HERÓI
     // --------------------------------------------------------------
-    // Se `mostrarAuraDeMorte` existir, roda durante os 3s de espera.
-    // Se não existir, o jogador só vê um "delay" (não é ideal, mas
-    // não duplica).
+    // Usado por: onca_salto, jaguatirica_salto, gato_mato_salto,
+    //             sucuarana_salto, urutau_voo
     // ==============================================================
-    // (nada a fazer — a aura já roda por conta própria, se existir)
+    async function _skillSaltoAreaHeroi(enemy, opts) {
+        const atk = enemy.atk;
+        const logMsg = opts.logMsg;
+        const numSteps = opts.numSteps || 2;
+        const pounceFx = opts.pounceFx;
+        const pounceClass = opts.pounceClass;
 
-    console.log('✅ [V21.0] Atraso de tela de derrota instalado.');
-    console.log('   • showStoryDefeatScreen: +3s se herói morto');
-    console.log('   • showEndGame: +3s se herói morto');
-    console.log('   • _mostrarTelaFinalEvento: +3s se herói morto');
+        if (typeof addLog === 'function') addLog(logMsg);
+
+        const nearest = _getNearestPlayer(boss.x, boss.y);
+        if (!nearest) return;
+
+        const dir = _getDirToward(boss.x, boss.y, nearest.x, nearest.y);
+
+        // FX do salto
+        if (typeof spawnFxAt === 'function') {
+            spawnFxAt(pounceFx, pounceClass, boss.x, boss.y, { duration: 700, scale: 1.3 });
+        }
+
+        await sleep(300);
+
+        // ⭐ Move o boss ATÉ o herói (para no herói, não em cima)
+        let lastX = boss.x, lastY = boss.y;
+        for (let i = 0; i < numSteps; i++) {
+            const nx = boss.x + dir.dx;
+            const ny = boss.y + dir.dy;
+            if (nx < 0 || nx >= 8 || ny < 0 || ny >= 8) break;
+
+            const heroiNoTile = players.find(p => !p.dead && p.x === nx && p.y === ny);
+            if (heroiNoTile) {
+                // ⭐ NÃO move o boss pra cima do herói
+                lastX = boss.x;
+                lastY = boss.y;
+                break;
+            }
+
+            if (typeof isOccupied === 'function' && isOccupied(nx, ny, -1)) break;
+
+            boss.x = nx;
+            boss.y = ny;
+            lastX = nx;
+            lastY = ny;
+            if (typeof updateVisuals === 'function') updateVisuals();
+            await sleep(150);
+        }
+
+        await sleep(200);
+
+        // FX do impacto
+        if (typeof spawnFxAt === 'function') {
+            spawnFxAt('impact', 'fx-impact', lastX, lastY, { duration: 500, scale: 1.2 });
+        }
+
+        // ⭐ Área 3×3 NO HERÓI (não no tile do boss)
+        const areaNoHeroi = _buildArea3x3(nearest.x, nearest.y);
+        let danoAplicado = _aplicarDanoEmTiles(areaNoHeroi, atk, opts.descricao, null);
+
+        // ⭐ Fallback: se o herói não foi atingido (caso raro), aplica dano direto
+        if (nearest && !nearest.dead && !areaNoHeroi.some(t => t.x === nearest.x && t.y === nearest.y)) {
+            if (typeof applyDmg === 'function') applyDmg(nearest, atk);
+            danoAplicado++;
+        }
+        // ⭐ Fallback 2: se nem assim, e o boss está adjacente ao herói
+        if (danoAplicado === 0 && nearest && !nearest.dead) {
+            const adjacente = Math.abs(nearest.x - boss.x) + Math.abs(nearest.y - boss.y) <= 1;
+            if (adjacente) {
+                if (typeof applyDmg === 'function') applyDmg(nearest, atk);
+                danoAplicado++;
+            }
+        }
+
+        await sleep(300);
+        return danoAplicado;
+    }
+
+    // ==============================================================
+    // PADRÃO 3 — TELEPORTE + DANO NO HERÓI (não sobrepõe)
+    // --------------------------------------------------------------
+    // Usado por: falcao_mergulho, aguia_mergulho
+    // ==============================================================
+    async function _skillTeleporteDanoHeroi(enemy, opts) {
+        const atk = enemy.atk;
+        const logMsg = opts.logMsg;
+        const fxKey = opts.fxKey;
+        const fxClass = opts.fxClass;
+
+        if (typeof addLog === 'function') addLog(logMsg);
+
+        const nearest = _getNearestPlayer(boss.x, boss.y);
+        if (!nearest) return;
+
+        // FX do voo (do boss até o herói)
+        if (typeof spawnFxAt === 'function') {
+            spawnFxAt(fxKey, fxClass, boss.x, boss.y, { duration: 400 });
+        }
+        await sleep(300);
+
+        // ⭐ Move o boss pra um tile ADJACENTE ao herói (não em cima)
+        const tileAdjacente = _acharTileAdjacenteLivre(nearest.x, nearest.y);
+        if (tileAdjacente) {
+            boss.x = tileAdjacente.x;
+            boss.y = tileAdjacente.y;
+        }
+        if (typeof updateVisuals === 'function') updateVisuals();
+
+        // FX do impacto
+        if (typeof spawnFxAt === 'function') {
+            spawnFxAt('impact', 'fx-impact', nearest.x, nearest.y, { duration: 500, scale: 1.3 });
+        }
+
+        // ⭐ Dano no herói (direto)
+        if (typeof applyDmg === 'function') applyDmg(nearest, atk);
+        console.log(`[V25.0] ${opts.descricao}: dano no herói ${nearest.name}`);
+
+        await sleep(300);
+    }
+
+    // Helper: acha um tile adjacente livre ao redor do herói
+    function _acharTileAdjacenteLivre(cx, cy) {
+        const dirs = [
+            { dx: 0, dy: -1 }, { dx: 0, dy: 1 },
+            { dx: -1, dy: 0 }, { dx: 1, dy: 0 },
+        ];
+        for (const d of dirs) {
+            const nx = cx + d.dx;
+            const ny = cy + d.dy;
+            if (nx < 0 || nx >= 8 || ny < 0 || ny >= 8) continue;
+            if (typeof isOccupied === 'function' && isOccupied(nx, ny, -1)) continue;
+            return { x: nx, y: ny };
+        }
+        return null;
+    }
+
+    // ==============================================================
+    // SUBSTITUIR OS 12 HANDLERS
+    // ==============================================================
+
+    // ---- 1. PORCO-ESPINHO (Ato 1) ----
+    STORY_ANIMAL_SKILLS['porco_espinho_bote'] = async (enemy) => {
+        return _skillMoveAteHeroi(enemy, {
+            logMsg: `🦔 ${enemy.name} rola em bola de espinhos!`,
+            numSteps: 2,
+            fxKey: 'spike_roll',
+            fxClass: 'fx-spike-roll',
+            finalFxKey: 'spike_burst',
+            finalFxClass: 'fx-spike-burst',
+            pushOnHit: true,
+            descricao: 'Porco-espinho bote',
+        });
+    };
+
+    // ---- 2. CERVO (Ato 1) ----
+    STORY_ANIMAL_SKILLS['cervo_investida'] = async (enemy) => {
+        return _skillMoveAteHeroi(enemy, {
+            logMsg: `🦌 ${enemy.name} baixa os chifres e investe!`,
+            numSteps: 3,
+            fxKey: 'antler_charge',
+            fxClass: 'fx-antler-charge',
+            finalFxKey: 'shockwave',
+            finalFxClass: 'fx-shockwave',
+            descricao: 'Cervo investida',
+        });
+    };
+
+    // ---- 3. ANTA (Ato 2) ----
+    STORY_ANIMAL_SKILLS['anta_atropelamento'] = async (enemy) => {
+        return _skillMoveAteHeroi(enemy, {
+            logMsg: `🦛 ${enemy.name} atropela!`,
+            numSteps: 3,
+            fxKey: 'hoof_stomp',
+            fxClass: 'fx-hoof-stomp',
+            finalFxKey: 'shockwave',
+            finalFxClass: 'fx-shockwave',
+            descricao: 'Anta atropelamento',
+        });
+    };
+
+    // ---- 4. LONTRA (Ato 3) ----
+    STORY_ANIMAL_SKILLS['lontra_nado'] = async (enemy) => {
+        return _skillMoveAteHeroi(enemy, {
+            logMsg: `🦦 ${enemy.name} nada rapidamente!`,
+            numSteps: 3,
+            fxKey: 'splash_wave',
+            fxClass: 'fx-splash-wave',
+            finalFxKey: 'splash_wave',
+            finalFxClass: 'fx-splash-wave',
+            descricao: 'Lontra nado',
+        });
+    };
+
+    // ---- 5. RAPOSA (Ato 7) ----
+    STORY_ANIMAL_SKILLS['raposa_bote'] = async (enemy) => {
+        return _skillMoveAteHeroi(enemy, {
+            logMsg: `🦊 ${enemy.name} dá um bote ágil!`,
+            numSteps: 2,
+            fxKey: 'pounce_arc',
+            fxClass: 'fx-pounce-arc',
+            finalFxKey: 'fang_bite',
+            finalFxClass: 'fx-fang-bite',
+            descricao: 'Raposa bote',
+        });
+    };
+
+    // ---- 6. ONÇA-PARDA (Ato 1) ----
+    STORY_ANIMAL_SKILLS['onca_salto'] = async (enemy) => {
+        return _skillSaltoAreaHeroi(enemy, {
+            logMsg: `🐆 ${enemy.name} salta mortalmente!`,
+            numSteps: 2,
+            pounceFx: 'pounce_arc',
+            pounceClass: 'fx-pounce-arc',
+            descricao: 'Onça salto',
+        });
+    };
+
+    // ---- 7. JAGUATIRICA (Ato 7) ----
+    STORY_ANIMAL_SKILLS['jaguatirica_salto'] = async (enemy) => {
+        return _skillSaltoAreaHeroi(enemy, {
+            logMsg: `🐆 ${enemy.name} dá um salto mortal!`,
+            numSteps: 2,
+            pounceFx: 'pounce_arc',
+            pounceClass: 'fx-pounce-arc',
+            descricao: 'Jaguatirica salto',
+        });
+    };
+
+    // ---- 8. GATO-DO-MATO (Ato 11) ----
+    STORY_ANIMAL_SKILLS['gato_mato_salto'] = async (enemy) => {
+        return _skillSaltoAreaHeroi(enemy, {
+            logMsg: `🐈 ${enemy.name} dá um salto silencioso!`,
+            numSteps: 2,
+            pounceFx: 'pounce_arc',
+            pounceClass: 'fx-pounce-arc',
+            descricao: 'Gato-do-mato salto',
+        });
+    };
+
+    // ---- 9. SUÇUARANA (Ato 11) ----
+    STORY_ANIMAL_SKILLS['sucuarana_salto'] = async (enemy) => {
+        return _skillSaltoAreaHeroi(enemy, {
+            logMsg: `🐆 ${enemy.name} dá um salto mortal!`,
+            numSteps: 2,
+            pounceFx: 'pounce_arc',
+            pounceClass: 'fx-pounce-arc',
+            descricao: 'Suçuarana salto',
+        });
+    };
+
+    // ---- 10. URUTAU (Ato 12) ----
+    STORY_ANIMAL_SKILLS['urutau_voo'] = async (enemy) => {
+        return _skillSaltoAreaHeroi(enemy, {
+            logMsg: `🦉 ${enemy.name} faz voo fantasma!`,
+            numSteps: 3,
+            pounceFx: 'spectral_veil',
+            pounceClass: 'fx-spectral-veil',
+            descricao: 'Urutau voo',
+        });
+    };
+
+    // ---- 11. FALCÃO (Ato 12) ----
+    STORY_ANIMAL_SKILLS['falcao_mergulho'] = async (enemy) => {
+        return _skillTeleporteDanoHeroi(enemy, {
+            logMsg: `🦅 ${enemy.name} faz mergulho mortal!`,
+            fxKey: 'wing_gust',
+            fxClass: 'fx-wing-gust',
+            descricao: 'Falcão mergulho',
+        });
+    };
+
+    // ---- 12. ÁGUIA-CINZENTA (Ato 12) ----
+    STORY_ANIMAL_SKILLS['aguia_mergulho'] = async (enemy) => {
+        return _skillTeleporteDanoHeroi(enemy, {
+            logMsg: `🦅 ${enemy.name} faz mergulho solar!`,
+            fxKey: 'wing_gust',
+            fxClass: 'fx-wing-gust',
+            descricao: 'Águia mergulho',
+        });
+    };
+
+    // ==============================================================
+    // LOG FINAL
+    // ==============================================================
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V25.0] 12 handlers corrigidos');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('Bug confirmado (dano no caminho + fallback):');
+    console.log('  • porco_espinho_bote');
+    console.log('  • cervo_investida');
+    console.log('  • anta_atropelamento');
+    console.log('  • lontra_nado');
+    console.log('  • raposa_bote');
+    console.log('');
+    console.log('Parciais (área 3×3 no herói):');
+    console.log('  • onca_salto');
+    console.log('  • jaguatirica_salto');
+    console.log('  • gato_mato_salto');
+    console.log('  • sucuarana_salto');
+    console.log('  • urutau_voo');
+    console.log('');
+    console.log('Teleporte (dano no herói, sem sobrepor):');
+    console.log('  • falcao_mergulho');
+    console.log('  • aguia_mergulho');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — BLOCO 91 (V25.1 — Fix salto: dano no boss, não no herói)
+// -----------------------------------------------------------------
+// Cole NO FINAL do historia.js (último bloco).
+//
+// Corrige o V25.0:
+//   • onca_salto, jaguatirica_salto, gato_mato_salto,
+//     sucuarana_salto, urutau_voo
+//   • O dano agora é em área 3×3 NO TILE DO BOSS (não no herói)
+//   • Se o boss não chegou adjacente ao herói → não aplica dano
+//     (a fera "errou o salto")
+// =================================================================
+
+(function fixSaltoAreaBossV251() {
+    if (window._fixSaltoAreaBossV251) return;
+    window._fixSaltoAreaBossV251 = true;
+
+    console.log('[V25.1] Corrigindo salto: dano no tile do boss (não no herói)...');
+
+    // ==============================================================
+    // HELPERS
+    // ==============================================================
+    function _getDirToward(fromX, fromY, toX, toY) {
+        if (typeof dirToward === 'function') return dirToward(fromX, fromY, toX, toY);
+        const dx = toX - fromX;
+        const dy = toY - fromY;
+        if (Math.abs(dx) >= Math.abs(dy)) {
+            return { dx: Math.sign(dx), dy: 0, name: dx > 0 ? 'right' : 'left' };
+        }
+        return { dx: 0, dy: Math.sign(dy), name: dy > 0 ? 'down' : 'up' };
+    }
+
+    function _getNearestPlayer(fromX, fromY) {
+        const alive = players.filter(p => !p.dead);
+        if (alive.length === 0) return null;
+        let nearest = alive[0];
+        let minDist = Math.abs(alive[0].x - fromX) + Math.abs(alive[0].y - fromY);
+        alive.forEach(p => {
+            const d = Math.abs(p.x - fromX) + Math.abs(p.y - fromY);
+            if (d < minDist) { minDist = d; nearest = p; }
+        });
+        return nearest;
+    }
+
+    function _buildArea3x3(cx, cy) {
+        const tiles = [];
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dy = -1; dy <= 1; dy++) {
+                const nx = cx + dx, ny = cy + dy;
+                if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) {
+                    tiles.push({ x: nx, y: ny });
+                }
+            }
+        }
+        return tiles;
+    }
+
+    // ==============================================================
+    // NOVO _skillSaltoAreaHeroi
+    // --------------------------------------------------------------
+    // 1. Move o boss em direção ao herói (até 3 tiles)
+    // 2. Se o boss chegou ADJACENTE ao herói (dist <= 1) → dano em
+    //    área 3×3 NO TILE DO BOSS
+    // 3. Se o boss NÃO chegou adjacente → não aplica dano (a fera errou)
+    // ==============================================================
+    async function _skillSaltoAreaHeroi(enemy, opts) {
+        const atk = enemy.atk;
+        const logMsg = opts.logMsg;
+        const numSteps = opts.numSteps || 2;
+        const pounceFx = opts.pounceFx;
+        const pounceClass = opts.pounceClass;
+
+        if (typeof addLog === 'function') addLog(logMsg);
+
+        const nearest = _getNearestPlayer(boss.x, boss.y);
+        if (!nearest) return 0;
+
+        const dir = _getDirToward(boss.x, boss.y, nearest.x, nearest.y);
+
+        // FX do salto
+        if (typeof spawnFxAt === 'function') {
+            spawnFxAt(pounceFx, pounceClass, boss.x, boss.y, { duration: 700, scale: 1.3 });
+        }
+        await sleep(300);
+
+        // Move o boss em direção ao herói
+        let lastX = boss.x, lastY = boss.y;
+        for (let i = 0; i < numSteps; i++) {
+            const nx = boss.x + dir.dx;
+            const ny = boss.y + dir.dy;
+            if (nx < 0 || nx >= 8 || ny < 0 || ny >= 8) break;
+
+            // Se tem herói no tile, para antes (não sobrepõe)
+            const heroiNoTile = players.find(p => !p.dead && p.x === nx && p.y === ny);
+            if (heroiNoTile) {
+                // ⭐ NÃO move pra cima do herói
+                break;
+            }
+
+            // Se tem outro player/obstáculo, bloqueia
+            if (typeof isOccupied === 'function' && isOccupied(nx, ny, -1)) break;
+
+            boss.x = nx;
+            boss.y = ny;
+            lastX = nx;
+            lastY = ny;
+            if (typeof updateVisuals === 'function') updateVisuals();
+            await sleep(150);
+        }
+
+        await sleep(200);
+
+        // FX do impacto no tile do boss (não no herói)
+        if (typeof spawnFxAt === 'function') {
+            spawnFxAt('impact', 'fx-impact', lastX, lastY, { duration: 500, scale: 1.2 });
+        }
+
+        // ⭐ Calcula a distância do boss ao herói
+        const distFinal = Math.abs(boss.x - nearest.x) + Math.abs(boss.y - nearest.y);
+
+        // ⭐ Só aplica dano se o boss chegou ADJACENTE (dist <= 1)
+        if (distFinal > 1) {
+            console.log(`[V25.1] ${opts.descricao}: boss parou longe (dist ${distFinal}) — salto errou, sem dano`);
+            return 0;
+        }
+
+        // ⭐ Área 3×3 NO TILE DO BOSS
+        const areaNoBoss = _buildArea3x3(boss.x, boss.y);
+
+        let danoAplicado = 0;
+        players.forEach(p => {
+            if (p.dead) return;
+            if (areaNoBoss.some(t => t.x === p.x && t.y === p.y)) {
+                if (typeof applyDmg === 'function') applyDmg(p, atk);
+                danoAplicado++;
+            }
+        });
+
+        console.log(`[V25.1] ${opts.descricao}: ${danoAplicado} herói(s) atingido(s) (boss em ${boss.x},${boss.y}, herói em ${nearest.x},${nearest.y})`);
+
+        await sleep(300);
+        return danoAplicado;
+    }
+
+    // ==============================================================
+    // SUBSTITUIR OS 5 HANDLERS DE SALTO
+    // ==============================================================
+
+    // ---- Onça-parda (Ato 1) ----
+    STORY_ANIMAL_SKILLS['onca_salto'] = async (enemy) => {
+        return _skillSaltoAreaHeroi(enemy, {
+            logMsg: `🐆 ${enemy.name} salta mortalmente!`,
+            numSteps: 3,
+            pounceFx: 'pounce_arc',
+            pounceClass: 'fx-pounce-arc',
+            descricao: 'Onça salto',
+        });
+    };
+
+    // ---- Jaguatirica (Ato 7) ----
+    STORY_ANIMAL_SKILLS['jaguatirica_salto'] = async (enemy) => {
+        return _skillSaltoAreaHeroi(enemy, {
+            logMsg: `🐆 ${enemy.name} dá um salto mortal!`,
+            numSteps: 3,
+            pounceFx: 'pounce_arc',
+            pounceClass: 'fx-pounce-arc',
+            descricao: 'Jaguatirica salto',
+        });
+    };
+
+    // ---- Gato-do-mato (Ato 11) ----
+    STORY_ANIMAL_SKILLS['gato_mato_salto'] = async (enemy) => {
+        return _skillSaltoAreaHeroi(enemy, {
+            logMsg: `🐈 ${enemy.name} dá um salto silencioso!`,
+            numSteps: 3,
+            pounceFx: 'pounce_arc',
+            pounceClass: 'fx-pounce-arc',
+            descricao: 'Gato-do-mato salto',
+        });
+    };
+
+    // ---- Suçuarana (Ato 11) ----
+    STORY_ANIMAL_SKILLS['sucuarana_salto'] = async (enemy) => {
+        return _skillSaltoAreaHeroi(enemy, {
+            logMsg: `🐆 ${enemy.name} dá um salto mortal!`,
+            numSteps: 3,
+            pounceFx: 'pounce_arc',
+            pounceClass: 'fx-pounce-arc',
+            descricao: 'Suçuarana salto',
+        });
+    };
+
+    // ---- Urutau (Ato 12) ----
+    STORY_ANIMAL_SKILLS['urutau_voo'] = async (enemy) => {
+        return _skillSaltoAreaHeroi(enemy, {
+            logMsg: `🦉 ${enemy.name} faz voo fantasma!`,
+            numSteps: 3,
+            pounceFx: 'spectral_veil',
+            pounceClass: 'fx-spectral-veil',
+            descricao: 'Urutau voo',
+        });
+    };
+
+    console.log('✅ [V25.1] 5 handlers de salto corrigidos.');
+    console.log('   • Dano em área 3×3 no tile do BOSS (não no herói)');
+    console.log('   • Se o boss não chegou adjacente → salto errou, sem dano');
 })();
