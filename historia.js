@@ -20315,7 +20315,7 @@ console.log('💡 Zeradas:', STORY_PROGRESS.clearedDifficulties || []);
         _spawnFx('shockwave', 'fx-shockwave', c.x, c.y, { duration: 700, scale: 1.8 });
 
         await _sleep(400);
-        _dmgGlobal(skill.dano || enemy.atk);
+        _dmgGlobal(Math.max(1, Math.floor(enemy.atk / 2)));
         await _sleep(200);
 
         players.forEach(p => {
@@ -26141,4 +26141,3039 @@ console.log('💡 Zeradas:', STORY_PROGRESS.clearedDifficulties || []);
     };
 
     console.log('✅ [FIX] Seletor de dificuldade reinjetado em renderChapterPhases.');
+})();
+// =================================================================
+// historia.js — BLOCO 69 (V16.0 — Correções de UX e Bug Fix)
+// -----------------------------------------------------------------
+// Cole NO FINAL do historia.js.
+//
+// Corrige:
+//   • Item 1 — Boss nasce sobre herói → empurra herói pra baixo + 1 dano
+//   • Item 2 — Cancelar Solo Sagrado (clicar de novo) sem consumir
+//   • Item 4 — Remove pocao_cura da loja
+//   • Item 5 — Mercador: Vender padrão, Comprar vazia com aviso
+//   • Item 6 — Toggle "Pular animações PA" nas Configurações do Modo História
+//              + skip por clique durante animação
+// =================================================================
+
+(function correcoesV160() {
+    if (window._correcoesV160) return;
+    window._correcoesV160 = true;
+
+    // ==============================================================
+    // ITEM 1 — BOSS NUNCA NASCE SOBRE HERÓI
+    // --------------------------------------------------------------
+    // Se o herói estiver em (4,0) quando o boss spawna, empurra o
+    // herói pra baixo (4,1), (4,2)... até achar livre. Se a coluna
+    // inteira estiver ocupada, tenta colunas adjacentes (3,5).
+    // Cada empurrão causa 1 de dano (a "pancada" do boss caindo).
+    // ==============================================================
+    function resolverSpawnBossSobreHeroi() {
+        if (typeof boss === 'undefined' || !boss) return;
+        if (typeof players === 'undefined' || !players) return;
+
+        const bx = boss.x;
+        const by = boss.y;
+
+        players.forEach(p => {
+            if (p.dead) return;
+            if (p.x !== bx || p.y !== by) return;
+
+            // Herói está no tile do boss → empurrar
+            let novoX = bx;
+            let novoY = by;
+
+            // Tenta empurrar pra baixo (mesma coluna)
+            for (let dy = 1; dy < 8; dy++) {
+                const ty = by + dy;
+                if (ty >= 8) break;
+                const ocupado = players.some(o =>
+                    o.id !== p.id && !o.dead && o.x === bx && o.y === ty
+                );
+                if (!ocupado) {
+                    novoX = bx;
+                    novoY = ty;
+                    break;
+                }
+            }
+
+            // Se não achou pra baixo, tenta colunas adjacentes
+            if (novoX === bx && novoY === by) {
+                const colsAdj = [bx - 1, bx + 1, bx - 2, bx + 2];
+                for (const cx of colsAdj) {
+                    if (cx < 0 || cx >= 8) continue;
+                    for (let dy = 0; dy < 8; dy++) {
+                        const ty = by + dy;
+                        if (ty >= 8) break;
+                        const ocupado = players.some(o =>
+                            o.id !== p.id && !o.dead && o.x === cx && o.y === ty
+                        );
+                        if (!ocupado) {
+                            novoX = cx;
+                            novoY = ty;
+                            break;
+                        }
+                    }
+                    if (novoX !== bx || novoY !== by) break;
+                }
+            }
+
+            // Aplica o empurrão
+            if (novoX !== bx || novoY !== by) {
+                p.x = novoX;
+                p.y = novoY;
+                p.hp = Math.max(0, p.hp - 1);
+
+                if (typeof showDmgEffect === 'function') {
+                    showDmgEffect(p.x, p.y, 1);
+                }
+                if (typeof addLog === 'function') {
+                    addLog(`⚡ ${p.name} foi empurrado pelo impacto do inimigo! (-1 HP)`);
+                }
+                if (p.hp <= 0) {
+                    p.dead = true;
+                    const tok = document.getElementById(`tokenP${p.id}`);
+                    if (tok) tok.classList.add('dead');
+                }
+
+                console.log(`[V16.0] Herói ${p.name} empurrado: (${bx},${by}) → (${novoX},${novoY})`);
+            }
+        });
+    }
+
+    // Hook 1: aplicar após initStoryBattle (boss spawna)
+    const _origInitBattle = window.initStoryBattle;
+    if (typeof _origInitBattle === 'function') {
+        window.initStoryBattle = async function() {
+            const r = await _origInitBattle.apply(this, arguments);
+            // Espera 2 frames pro DOM e updateVisuals assentarem
+            await new Promise(res => requestAnimationFrame(() => requestAnimationFrame(res)));
+            resolverSpawnBossSobreHeroi();
+            if (typeof updateVisuals === 'function') updateVisuals();
+            if (typeof updateHeroCard === 'function') updateHeroCard();
+            if (typeof updateBossCard === 'function') updateBossCard();
+            return r;
+        };
+    }
+
+    // Hook 2: aplicar após advanceStoryEnemy (próximo boss spawna)
+    const _origAdvance = window.advanceStoryEnemy;
+    if (typeof _origAdvance === 'function') {
+        window.advanceStoryEnemy = async function() {
+            const r = await _origAdvance.apply(this, arguments);
+            await new Promise(res => requestAnimationFrame(() => requestAnimationFrame(res)));
+            resolverSpawnBossSobreHeroi();
+            if (typeof updateVisuals === 'function') updateVisuals();
+            return r;
+        };
+    }
+
+    console.log('✅ [V16.0] Item 1 — Spawn do boss não sobrepõe mais herói.');
+
+    // ==============================================================
+    // ITEM 2 — CANCELAR SOLO SAGRADO (clicar de novo)
+    // --------------------------------------------------------------
+    // Se skillActive === true e o jogador clica em btnSkill de novo,
+    // cancela sem consumir. Se clicar num tile, usa normalmente.
+    // ==============================================================
+    const _origActivateSkill = window.activateSkill;
+    if (typeof _origActivateSkill === 'function') {
+        window.activateSkill = function() {
+            // Só age no modo história (fora dele, comportamento original)
+            if (!window._storyMode) {
+                return _origActivateSkill.apply(this, arguments);
+            }
+
+            const active = players[currentPlayerIdx];
+            if (!active) return _origActivateSkill.apply(this, arguments);
+
+            // Se já está ativo → CANCELA
+            if (skillActive === true) {
+                skillActive = false;
+                document.querySelectorAll('#grid .tile').forEach(t => t.classList.remove('skill-mode'));
+
+                // Restaura texto do botão
+                const btn = document.getElementById('btnSkill');
+                if (btn) {
+                    btn.classList.remove('skill-cancel-mode');
+                    btn.innerHTML = '✨ SOLO SAGRADO';
+                }
+
+                if (typeof addLog === 'function') addLog('✨ Solo Sagrado cancelado.');
+                if (typeof playSfx === 'function') { try { playSfx('click'); } catch(e) {} }
+                return;
+            }
+
+            // Senão, ativa normalmente (chama o original)
+            const r = _origActivateSkill.apply(this, arguments);
+
+            // Se ativou com sucesso, muda o texto do botão
+            if (skillActive === true) {
+                const btn = document.getElementById('btnSkill');
+                if (btn) {
+                    btn.classList.add('skill-cancel-mode');
+                    btn.innerHTML = '✕ CANCELAR';
+                }
+            }
+
+            return r;
+        };
+    }
+
+    // Hook no handleSelect: se o jogador clicar num tile com skillActive,
+    // consome normalmente (o original já faz). Se cancelou no botão,
+    // não chega aqui. Nada a mudar.
+
+    console.log('✅ [V16.0] Item 2 — Cancelar Solo Sagrado implementado.');
+
+    // ==============================================================
+    // ITEM 4 — REMOVER POCAO_CURA DA LOJA
+    // ==============================================================
+    // A loja não deve vender poção de cura. O design é "cura só por
+    // formas e skills". Mantemos a estrutura, mas esvaziamos o array.
+    // ==============================================================
+    if (typeof STORY_SHOP_ITEMS !== 'undefined' && Array.isArray(STORY_SHOP_ITEMS)) {
+        // Remove qualquer item de cura
+        const itensAntigos = STORY_SHOP_ITEMS.length;
+        for (let i = STORY_SHOP_ITEMS.length - 1; i >= 0; i--) {
+            const it = STORY_SHOP_ITEMS[i];
+            if (it.id === 'pocao_cura') {
+                STORY_SHOP_ITEMS.splice(i, 1);
+            }
+        }
+
+        // ✅ ITEM 5 — Esvazia a loja inteira (mantém estrutura pra futuro)
+        // O jogador vai ver "Sem estoque" na aba Comprar.
+        STORY_SHOP_ITEMS.length = 0;
+
+        console.log(`[V16.0] Item 4/5 — Loja esvaziada: ${itensAntigos} → 0 itens.`);
+    }
+
+    // ==============================================================
+    // ITEM 5 — MERCADOR: VENDER PADRÃO, COMPRAR VAZIA
+    // --------------------------------------------------------------
+    // Sobrescreve renderLojaScreenCompleta pra:
+    //   • Aba padrão = "vender"
+    //   • Título "MERCADOR"
+    //   • Aba "comprar" mostra "Sem estoque" se STORY_SHOP_ITEMS vazio
+    // ==============================================================
+    window.renderLojaScreenCompleta = function() {
+        const screen = document.getElementById('storyScreen');
+        if (!screen) return;
+        const gold = STORY_PROGRESS.gold || 0;
+
+        // Garante que a aba padrão seja 'vender'
+        if (typeof curandeiroTab === 'undefined' || curandeiroTab === 'comprar') {
+            window.curandeiroTab = 'vender';
+        }
+
+        // ============ COMPRA ============
+        let buyHTML = '';
+        if (!STORY_SHOP_ITEMS || STORY_SHOP_ITEMS.length === 0) {
+            buyHTML = `
+                <div class="tesouraria-empty" style="margin:0; padding:40px 20px;">
+                    <div class="tesouraria-empty-icon">🏪</div>
+                    <div class="tesouraria-empty-text">O mercador está sem estoque.</div>
+                    <div class="tesouraria-empty-hint">Volte depois — ele pode ter novidades.</div>
+                </div>
+            `;
+        } else {
+            buyHTML = '<div class="story-shop-grid">' + STORY_SHOP_ITEMS.map(it => {
+                const m = STORY_MATERIALS[it.id];
+                const emoji = m ? m.emoji : (it.emoji || '❓');
+                const can = gold >= it.price;
+                return `<div class="story-shop-item ${can?'':'disabled'}">
+                    <div class="story-shop-emoji">${emoji}</div>
+                    <div class="story-shop-name">${it.name}</div>
+                    <div class="story-shop-desc">${it.description || ''}</div>
+                    <div class="story-shop-price">${uiIcon('gold')} ${it.price}</div>
+                    <button class="story-shop-btn" ${can?'':'disabled'} onclick="buyShopItem('${it.id}',${it.price})">COMPRAR</button>
+                </div>`;
+            }).join('') + '</div>';
+        }
+
+        // ============ VENDA ============
+        const inv = STORY_PROGRESS.inventory || {};
+        const sellIds = Object.keys(inv).filter(id => inv[id] > 0);
+        let sellHTML = '';
+
+        if (sellIds.length === 0) {
+            sellHTML = `<div class="tesouraria-empty" style="margin:0; padding:40px 20px;">
+                <div class="tesouraria-empty-icon">💰</div>
+                <div class="tesouraria-empty-text">Nenhum material para vender.</div>
+                <div class="tesouraria-empty-hint">Derrote inimigos para coletar materiais.</div>
+            </div>`;
+        } else {
+            sellIds.sort((a, b) => getMaterialPrice(b) - getMaterialPrice(a));
+            sellHTML = '<div class="sell-grid">' + sellIds.map(id => {
+                const m = STORY_MATERIALS[id];
+                if (!m) return '';
+                const qty = inv[id];
+                const price = getMaterialPrice(id);
+                return `<div class="sell-card">
+                    <div class="sell-icon">${m.emoji}</div>
+                    <div class="sell-info">
+                        <div class="sell-name">${m.name}</div>
+                        <div class="sell-qty">×${qty}</div>
+                        <div class="sell-price">${uiIcon('gold')} ${price} cada</div>
+                    </div>
+                    <button class="sell-btn" onclick="handleSellMaterial('${id}', 1)">Vender 1</button>
+                    <button class="sell-btn sell-all" onclick="handleSellMaterial('${id}', ${qty})">Vender tudo (${price * qty})</button>
+                </div>`;
+            }).join('') + '</div>';
+        }
+
+        const abaAtual = (typeof curandeiroTab !== 'undefined') ? curandeiroTab : 'vender';
+
+        screen.innerHTML = `
+            <div class="story-container">
+                <div class="story-header">
+                    <h1 class="story-title">🧙 MERCADOR</h1>
+                    <p class="story-subtitle">"Compro o que você trouxer." (${gold} ${uiIcon('gold')})</p>
+                </div>
+
+                <div class="curandeiro-tabs">
+                    <button class="curandeiro-tab ${abaAtual === 'vender' ? 'active' : ''}" onclick="curandeiroTab='vender'; renderLojaScreenCompleta();">💰 Vender</button>
+                    <button class="curandeiro-tab ${abaAtual === 'comprar' ? 'active' : ''}" onclick="curandeiroTab='comprar'; renderLojaScreenCompleta();">🛒 Comprar</button>
+                </div>
+
+                <div class="curandeiro-content">
+                    ${abaAtual === 'vender' ? sellHTML : buyHTML}
+                </div>
+
+                <div class="story-footer"><button class="story-back-btn" onclick="renderAldeiaScreen()">← VOLTAR À ALDEIA</button></div>
+            </div>
+        `;
+    };
+
+    // Garante que a aba inicial seja 'vender' na primeira vez
+    if (typeof window.curandeiroTab === 'undefined') {
+        window.curandeiroTab = 'vender';
+    }
+
+    console.log('✅ [V16.0] Item 5 — Mercador reestruturado (Vender padrão).');
+
+    // ==============================================================
+    // ITEM 6 — TOGGLE "PULAR ANIMAÇÕES PA" NAS CONFIGURAÇÕES
+    // --------------------------------------------------------------
+    // 1. Adiciona STORY_SETTINGS.skipBravelyAnimations
+    // 2. Modifica showBravelyAnimation e showPoderAncestralEffect
+    //    pra pular quando ligado
+    // 3. Adiciona toggle na tela de configurações do modo história
+    // 4. Adiciona skip por clique durante animação
+    // ==============================================================
+
+    // ---- 6.1: Adicionar config ----
+    if (typeof STORY_DEFAULT_SETTINGS !== 'undefined') {
+        if (typeof STORY_DEFAULT_SETTINGS.skipBravelyAnimations === 'undefined') {
+            STORY_DEFAULT_SETTINGS.skipBravelyAnimations = false;
+        }
+    }
+    if (typeof STORY_SETTINGS !== 'undefined') {
+        if (typeof STORY_SETTINGS.skipBravelyAnimations === 'undefined') {
+            STORY_SETTINGS.skipBravelyAnimations = false;
+        }
+    }
+
+    // ---- 6.2: Flag global de cinematográfica em andamento ----
+    window._cinematograficaEmAndamento = false;
+    window._skipCinematografica = false;
+
+    // ---- 6.3: Modificar showPoderAncestralEffect ----
+    const _origPoderAncestral = window.showPoderAncestralEffect;
+    if (typeof _origPoderAncestral === 'function') {
+        window.showPoderAncestralEffect = function() {
+            if (window._storyMode && STORY_SETTINGS.skipBravelyAnimations) {
+                // Pula completamente
+                return;
+            }
+            window._cinematograficaEmAndamento = true;
+            const r = _origPoderAncestral.apply(this, arguments);
+            // O efeito tem ~2.4s
+            setTimeout(() => { window._cinematograficaEmAndamento = false; }, 2400);
+            return r;
+        };
+    }
+
+    // ---- 6.4: Modificar showBravelyAnimation ----
+    const _origBravelyAnim = window.showBravelyAnimation;
+    if (typeof _origBravelyAnim === 'function') {
+        window.showBravelyAnimation = function(playerClass) {
+            // Fora do modo história → original
+            if (!window._storyMode) {
+                return _origBravelyAnim.apply(this, arguments);
+            }
+
+            // Se toggle ligado OU skip solicitado → resolve imediato
+            if (STORY_SETTINGS.skipBravelyAnimations || window._skipCinematografica) {
+                if (window._skipCinematografica) {
+                    window._skipCinematografica = false;
+                }
+                return Promise.resolve();
+            }
+
+            // Senão, original, mas com flag de controle
+            window._cinematograficaEmAndamento = true;
+
+            // Adiciona listener de clique pra skip
+            const skipHandler = () => {
+                window._skipCinematografica = true;
+                // Remove overlay atual, se houver
+                const ov = document.getElementById('bravelyAnimationOverlay');
+                if (ov) ov.remove();
+            };
+            document.addEventListener('click', skipHandler, { once: true, capture: true });
+
+            return new Promise(resolve => {
+                Promise.resolve(_origBravelyAnim.call(this, playerClass)).then(() => {
+                    window._cinematograficaEmAndamento = false;
+                    window._skipCinematografica = false;
+                    document.removeEventListener('click', skipHandler, { capture: true });
+                    resolve();
+                });
+            });
+        };
+    }
+
+    // ---- 6.5: Modificar showPurificacao (reduz se toggle ligado) ----
+    const _origPurif = window.showPurificacao;
+    if (typeof _origPurif === 'function') {
+        window.showPurificacao = function(bossType, tileX, tileY, isFinalBoss) {
+            if (window._storyMode && STORY_SETTINGS.skipBravelyAnimations) {
+                // Reduz para ~800ms
+                return new Promise(resolve => {
+                    const board = document.getElementById('board');
+                    if (!board) { resolve(); return; }
+
+                    const overlay = document.createElement('div');
+                    overlay.className = 'purificacao-overlay active';
+                    overlay.style.zIndex = '300';
+                    overlay.innerHTML = `<div class="purificacao-darken"></div>`;
+                    board.appendChild(overlay);
+
+                    if (typeof playSfx === 'function') { try { playSfx('skill1'); } catch(e) {} }
+
+                    setTimeout(() => {
+                        if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+                        resolve();
+                    }, 800);
+                });
+            }
+            return _origPurif.apply(this, arguments);
+        };
+    }
+
+    // ---- 6.6: Adicionar toggle na tela de configurações do modo história ----
+    const _origRenderSettings = window.renderStorySettingsScreen;
+    if (typeof _origRenderSettings === 'function') {
+        window.renderStorySettingsScreen = function() {
+            const r = _origRenderSettings.apply(this, arguments);
+
+            // Injeta a nova seção antes dos botões de ação
+            const screen = document.getElementById('storyScreen');
+            if (!screen) return r;
+
+            const actions = screen.querySelector('.story-settings-actions');
+            if (!actions || screen.querySelector('.story-settings-section-anim')) return r;
+
+            const skipOn = STORY_SETTINGS.skipBravelyAnimations ? 'checked' : '';
+
+            const secao = document.createElement('div');
+            secao.className = 'story-settings-section story-settings-section-anim';
+            secao.innerHTML = `
+                <div class="story-settings-section-title">🎬 ANIMAÇÕES</div>
+                <div class="story-settings-row">
+                    <label class="story-settings-label">Pular animações de Poder Ancestral</label>
+                    <label class="story-settings-toggle">
+                        <input type="checkbox" id="setSkipBravely" ${skipOn}>
+                        <span class="story-settings-toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="story-settings-hint">
+                    Quando ligado, o GIF do Poder Ancestral e o efeito "PODER ANCESTRAL" são pulados.
+                    A purificação do boss também fica mais rápida. Deixe desligado pra ver a experiência completa.
+                </div>
+            `;
+            actions.parentNode.insertBefore(secao, actions);
+
+            // Handler do toggle
+            const toggle = document.getElementById('setSkipBravely');
+            if (toggle) {
+                toggle.addEventListener('change', function() {
+                    STORY_SETTINGS.skipBravelyAnimations = this.checked;
+                    if (typeof saveStorySettings === 'function') saveStorySettings();
+                });
+            }
+
+            return r;
+        };
+    }
+
+    console.log('✅ [V16.0] Item 6 — Toggle "Pular animações PA" + skip por clique.');
+
+    // ==============================================================
+    // CSS ADICIONAL
+    // ==============================================================
+    if (!document.getElementById('v160CSS')) {
+        const style = document.createElement('style');
+        style.id = 'v160CSS';
+        style.textContent = `
+            /* Botão "CANCELAR" do Solo Sagrado */
+            #btnSkill.skill-cancel-mode {
+                background: linear-gradient(180deg, rgba(168,50,50,0.25), transparent 45%),
+                            linear-gradient(135deg, #6a2020, #3a1010) !important;
+                color: #f5c8c8 !important;
+                border-color: #a83232 !important;
+                box-shadow: 0 0 20px rgba(168, 50, 50, 0.5) !important;
+                animation: pulseCancel 1.2s ease-in-out infinite alternate;
+            }
+
+            @keyframes pulseCancel {
+                from { box-shadow: 0 0 10px rgba(168, 50, 50, 0.4); }
+                to   { box-shadow: 0 0 25px rgba(168, 50, 50, 0.8); }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // ==============================================================
+    // RELOGA STORY_SETTINGS SE JÁ CARREGADO
+    // --------------------------------------------------------------
+    // Garante que o toggle persiste entre sessões (loadStorySettings
+    // já foi chamado no V9.1; aqui só garantimos que a flag nova exista)
+    // ==============================================================
+    try {
+        if (typeof loadStorySettings === 'function') {
+            loadStorySettings();
+            // Aplica caso já tenha sido ligado antes
+            if (typeof STORY_SETTINGS !== 'undefined' && STORY_SETTINGS.skipBravelyAnimations) {
+                console.log('[V16.0] Toggle "Pular animações" está LIGADO (persistido).');
+            }
+        }
+    } catch(e) {
+        console.warn('[V16.0] Erro ao recarregar settings:', e);
+    }
+
+    // ==============================================================
+    // LOG FINAL
+    // ==============================================================
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V16.0] Correções de UX e Bug Fix');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Item 1 — Boss empurra herói + 1 dano ao spawnar');
+    console.log('• Item 2 — Clicar Solo Sagrado de novo = cancelar');
+    console.log('• Item 4 — pocao_cura removida da loja');
+    console.log('• Item 5 — Mercador: Vender padrão, Comprar vazia');
+    console.log('• Item 6 — Toggle "Pular animações PA" nas Configurações');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — BLOCO 69 (V16.1 — Correções UX + Bug Fix)
+// -----------------------------------------------------------------
+// Cole NO FINAL do historia.js, DEPOIS do V16.0 (ou substitua).
+//
+// Corrige os problemas do V16.0:
+//   • Curandeiro não abria (conflito de variável curandeiroTab)
+//   • Nome "Mercador" → "Regatão" (lore amazônica)
+//   • Fila de cinematográficas (GIF antes de purificação)
+//   • Símbolo do elemento travado (não muda no turno do adversário)
+// =================================================================
+
+(function correcoesV161() {
+    // Remove o bloco anterior, se existir
+    if (window._correcoesV160) {
+        console.log('[V16.1] Substituindo V16.0...');
+        window._correcoesV160 = false;
+    }
+    if (window._correcoesV161) return;
+    window._correcoesV161 = true;
+
+    // ==============================================================
+    // ITEM 1 — BOSS NUNCA NASCE SOBRE HERÓI
+    // ==============================================================
+    function resolverSpawnBossSobreHeroi() {
+        if (typeof boss === 'undefined' || !boss) return;
+        if (typeof players === 'undefined' || !players) return;
+
+        const bx = boss.x, by = boss.y;
+
+        players.forEach(p => {
+            if (p.dead) return;
+            if (p.x !== bx || p.y !== by) return;
+
+            let novoX = bx, novoY = by;
+
+            // Tenta empurrar pra baixo
+            for (let dy = 1; dy < 8; dy++) {
+                const ty = by + dy;
+                if (ty >= 8) break;
+                const ocupado = players.some(o =>
+                    o.id !== p.id && !o.dead && o.x === bx && o.y === ty
+                );
+                if (!ocupado) { novoX = bx; novoY = ty; break; }
+            }
+
+            // Se não achou, tenta colunas adjacentes
+            if (novoX === bx && novoY === by) {
+                const colsAdj = [bx - 1, bx + 1, bx - 2, bx + 2];
+                for (const cx of colsAdj) {
+                    if (cx < 0 || cx >= 8) continue;
+                    for (let dy = 0; dy < 8; dy++) {
+                        const ty = by + dy;
+                        if (ty >= 8) break;
+                        const ocupado = players.some(o =>
+                            o.id !== p.id && !o.dead && o.x === cx && o.y === ty
+                        );
+                        if (!ocupado) { novoX = cx; novoY = ty; break; }
+                    }
+                    if (novoX !== bx || novoY !== by) break;
+                }
+            }
+
+            if (novoX !== bx || novoY !== by) {
+                p.x = novoX;
+                p.y = novoY;
+                p.hp = Math.max(0, p.hp - 1);
+
+                if (typeof showDmgEffect === 'function') showDmgEffect(p.x, p.y, 1);
+                if (typeof addLog === 'function') addLog(`⚡ ${p.name} foi empurrado pelo impacto! (-1 HP)`);
+                if (p.hp <= 0) {
+                    p.dead = true;
+                    const tok = document.getElementById(`tokenP${p.id}`);
+                    if (tok) tok.classList.add('dead');
+                }
+                console.log(`[V16.1] Herói ${p.name} empurrado: (${bx},${by}) → (${novoX},${novoY})`);
+            }
+        });
+    }
+
+    const _origInitBattle = window.initStoryBattle;
+    if (typeof _origInitBattle === 'function') {
+        window.initStoryBattle = async function() {
+            const r = await _origInitBattle.apply(this, arguments);
+            await new Promise(res => requestAnimationFrame(() => requestAnimationFrame(res)));
+            resolverSpawnBossSobreHeroi();
+            if (typeof updateVisuals === 'function') updateVisuals();
+            if (typeof updateHeroCard === 'function') updateHeroCard();
+            if (typeof updateBossCard === 'function') updateBossCard();
+            return r;
+        };
+    }
+
+    const _origAdvance = window.advanceStoryEnemy;
+    if (typeof _origAdvance === 'function') {
+        window.advanceStoryEnemy = async function() {
+            const r = await _origAdvance.apply(this, arguments);
+            await new Promise(res => requestAnimationFrame(() => requestAnimationFrame(res)));
+            resolverSpawnBossSobreHeroi();
+            if (typeof updateVisuals === 'function') updateVisuals();
+            return r;
+        };
+    }
+
+    console.log('✅ [V16.1] Item 1 — Spawn do boss OK.');
+
+    // ==============================================================
+    // ITEM 2 — CANCELAR SOLO SAGRADO
+    // ==============================================================
+    const _origActivateSkill = window.activateSkill;
+    if (typeof _origActivateSkill === 'function') {
+        window.activateSkill = function() {
+            if (!window._storyMode) return _origActivateSkill.apply(this, arguments);
+
+            const active = players[currentPlayerIdx];
+            if (!active) return _origActivateSkill.apply(this, arguments);
+
+            if (skillActive === true) {
+                skillActive = false;
+                document.querySelectorAll('#grid .tile').forEach(t => t.classList.remove('skill-mode'));
+                const btn = document.getElementById('btnSkill');
+                if (btn) {
+                    btn.classList.remove('skill-cancel-mode');
+                    btn.innerHTML = '✨ SOLO SAGRADO';
+                }
+                if (typeof addLog === 'function') addLog('✨ Solo Sagrado cancelado.');
+                if (typeof playSfx === 'function') { try { playSfx('click'); } catch(e) {} }
+                return;
+            }
+
+            const r = _origActivateSkill.apply(this, arguments);
+            if (skillActive === true) {
+                const btn = document.getElementById('btnSkill');
+                if (btn) {
+                    btn.classList.add('skill-cancel-mode');
+                    btn.innerHTML = '✕ CANCELAR';
+                }
+            }
+            return r;
+        };
+    }
+
+    console.log('✅ [V16.1] Item 2 — Cancelar Solo Sagrado OK.');
+
+    // ==============================================================
+    // ITEM 4 — REMOVER POCAO_CURA DA LOJA
+    // ==============================================================
+    if (typeof STORY_SHOP_ITEMS !== 'undefined' && Array.isArray(STORY_SHOP_ITEMS)) {
+        STORY_SHOP_ITEMS.length = 0;
+        console.log('[V16.1] Item 4/5 — Loja esvaziada.');
+    }
+
+    // ==============================================================
+    // ITEM 5 — REGATÃO (Vender padrão, Comprar vazia)
+    // --------------------------------------------------------------
+    // CORREÇÃO: usar a variável global `curandeiroTab` (não window.*)
+    // ==============================================================
+    window.renderLojaScreenCompleta = function() {
+        const screen = document.getElementById('storyScreen');
+        if (!screen) return;
+        const gold = STORY_PROGRESS.gold || 0;
+
+        // ⚠️ Usa a variável global `curandeiroTab` (declarada com `let` no V8.3)
+        // Se não existir, inicializa como 'vender'
+        if (typeof curandeiroTab === 'undefined' || curandeiroTab === 'comprar') {
+            try { curandeiroTab = 'vender'; } catch(e) {}
+        }
+
+        // ============ COMPRA ============
+        let buyHTML = '';
+        if (!STORY_SHOP_ITEMS || STORY_SHOP_ITEMS.length === 0) {
+            buyHTML = `
+                <div class="tesouraria-empty" style="margin:0; padding:40px 20px;">
+                    <div class="tesouraria-empty-icon">🏪</div>
+                    <div class="tesouraria-empty-text">O Regatão está sem estoque.</div>
+                    <div class="tesouraria-empty-hint">Volte depois — ele pode ter novidades.</div>
+                </div>
+            `;
+        } else {
+            buyHTML = '<div class="story-shop-grid">' + STORY_SHOP_ITEMS.map(it => {
+                const m = STORY_MATERIALS[it.id];
+                const emoji = m ? m.emoji : (it.emoji || '❓');
+                const can = gold >= it.price;
+                return `<div class="story-shop-item ${can?'':'disabled'}">
+                    <div class="story-shop-emoji">${emoji}</div>
+                    <div class="story-shop-name">${it.name}</div>
+                    <div class="story-shop-desc">${it.description || ''}</div>
+                    <div class="story-shop-price">${uiIcon('gold')} ${it.price}</div>
+                    <button class="story-shop-btn" ${can?'':'disabled'} onclick="buyShopItem('${it.id}',${it.price})">COMPRAR</button>
+                </div>`;
+            }).join('') + '</div>';
+        }
+
+        // ============ VENDA ============
+        const inv = STORY_PROGRESS.inventory || {};
+        const sellIds = Object.keys(inv).filter(id => inv[id] > 0);
+        let sellHTML = '';
+
+        if (sellIds.length === 0) {
+            sellHTML = `<div class="tesouraria-empty" style="margin:0; padding:40px 20px;">
+                <div class="tesouraria-empty-icon">💰</div>
+                <div class="tesouraria-empty-text">Nenhum material para vender.</div>
+                <div class="tesouraria-empty-hint">Derrote inimigos para coletar materiais.</div>
+            </div>`;
+        } else {
+            sellIds.sort((a, b) => getMaterialPrice(b) - getMaterialPrice(a));
+            sellHTML = '<div class="sell-grid">' + sellIds.map(id => {
+                const m = STORY_MATERIALS[id];
+                if (!m) return '';
+                const qty = inv[id];
+                const price = getMaterialPrice(id);
+                return `<div class="sell-card">
+                    <div class="sell-icon">${m.emoji}</div>
+                    <div class="sell-info">
+                        <div class="sell-name">${m.name}</div>
+                        <div class="sell-qty">×${qty}</div>
+                        <div class="sell-price">${uiIcon('gold')} ${price} cada</div>
+                    </div>
+                    <button class="sell-btn" onclick="handleSellMaterial('${id}', 1)">Vender 1</button>
+                    <button class="sell-btn sell-all" onclick="handleSellMaterial('${id}', ${qty})">Vender tudo (${price * qty})</button>
+                </div>`;
+            }).join('') + '</div>';
+        }
+
+        const abaAtual = (typeof curandeiroTab !== 'undefined') ? curandeiroTab : 'vender';
+
+        screen.innerHTML = `
+            <div class="story-container">
+                <div class="story-header">
+                    <h1 class="story-title">🧙 REGATÃO</h1>
+                    <p class="story-subtitle">"Compro o que você trouxer. Levo histórias e deixo ouro." (${gold} ${uiIcon('gold')})</p>
+                </div>
+
+                <div class="curandeiro-tabs">
+                    <button class="curandeiro-tab ${abaAtual === 'vender' ? 'active' : ''}" onclick="curandeiroTab='vender'; renderLojaScreenCompleta();">💰 Vender</button>
+                    <button class="curandeiro-tab ${abaAtual === 'comprar' ? 'active' : ''}" onclick="curandeiroTab='comprar'; renderLojaScreenCompleta();">🛒 Comprar</button>
+                </div>
+
+                <div class="curandeiro-content">
+                    ${abaAtual === 'vender' ? sellHTML : buyHTML}
+                </div>
+
+                <div class="story-footer"><button class="story-back-btn" onclick="renderAldeiaScreen()">← VOLTAR À ALDEIA</button></div>
+            </div>
+        `;
+    };
+
+    // Garante que a variável global existe
+    try {
+        if (typeof curandeiroTab === 'undefined') {
+            // curandeiroTab é `let` no escopo do módulo. Não conseguimos
+            // criar do lado de fora, mas o render acima já faz fallback.
+        }
+    } catch(e) {}
+
+    // Também força a Aldeia a chamar o novo render (o botão da Aldeia
+    // chama enterAldeiaLocation('loja') → renderLojaScreenCompleta)
+    console.log('✅ [V16.1] Item 5 — Regatão reestruturado.');
+
+    // ==============================================================
+    // ITEM 6 — FILA DE CINEMATOGRÁFICAS (GIF antes de purificação)
+    // --------------------------------------------------------------
+    // Sistema: só uma cinematográfica roda por vez.
+    // O showPurificacao espera o GIF terminar antes de tocar.
+    // ==============================================================
+    if (typeof STORY_DEFAULT_SETTINGS !== 'undefined' && typeof STORY_DEFAULT_SETTINGS.skipBravelyAnimations === 'undefined') {
+        STORY_DEFAULT_SETTINGS.skipBravelyAnimations = false;
+    }
+    if (typeof STORY_SETTINGS !== 'undefined' && typeof STORY_SETTINGS.skipBravelyAnimations === 'undefined') {
+        STORY_SETTINGS.skipBravelyAnimations = false;
+    }
+
+    // Fila de cinematográficas (promise chain)
+    window._cinematograficaFila = Promise.resolve();
+    window._skipCinematografica = false;
+
+    function enfileirarCinematografica(fn) {
+        const anterior = window._cinematograficaFila || Promise.resolve();
+        const proxima = anterior.then(() => fn());
+        window._cinematograficaFila = proxima.catch(() => {});
+        return proxima;
+    }
+    window.enfileirarCinematografica = enfileirarCinematografica;
+
+    // ---- showPoderAncestralEffect: pula se toggle ----
+    const _origPoderAncestral = window.showPoderAncestralEffect;
+    if (typeof _origPoderAncestral === 'function') {
+        window.showPoderAncestralEffect = function() {
+            if (window._storyMode && STORY_SETTINGS.skipBravelyAnimations) return;
+            return _origPoderAncestral.apply(this, arguments);
+        };
+    }
+
+    // ---- showBravelyAnimation: skip por clique + fila ----
+    const _origBravelyAnim = window.showBravelyAnimation;
+    if (typeof _origBravelyAnim === 'function') {
+        window.showBravelyAnimation = function(playerClass) {
+            if (!window._storyMode) {
+                return _origBravelyAnim.apply(this, arguments);
+            }
+
+            // Toggle ligado → pula
+            if (STORY_SETTINGS.skipBravelyAnimations || window._skipCinematografica) {
+                window._skipCinematografica = false;
+                return Promise.resolve();
+            }
+
+            return enfileirarCinematografica(() => {
+                return new Promise(resolve => {
+                    const skipHandler = () => {
+                        window._skipCinematografica = true;
+                        const ov = document.getElementById('bravelyAnimationOverlay');
+                        if (ov) ov.parentNode && ov.parentNode.removeChild(ov);
+                    };
+                    document.addEventListener('click', skipHandler, { once: true, capture: true });
+
+                    Promise.resolve(_origBravelyAnim.call(this, playerClass)).then(() => {
+                        document.removeEventListener('click', skipHandler, { capture: true });
+                        window._skipCinematografica = false;
+                        resolve();
+                    });
+                });
+            });
+        };
+    }
+
+    // ---- showPurificacao: enfileirada (espera GIF anterior) ----
+    const _origPurif = window.showPurificacao;
+    if (typeof _origPurif === 'function') {
+        window.showPurificacao = function(bossType, tileX, tileY, isFinalBoss) {
+            if (!window._storyMode) {
+                return _origPurif.apply(this, arguments);
+            }
+
+            // Toggle ligado → versão curta
+            if (STORY_SETTINGS.skipBravelyAnimations) {
+                return enfileirarCinematografica(() => {
+                    return new Promise(resolve => {
+                        const board = document.getElementById('board');
+                        if (!board) { resolve(); return; }
+
+                        const overlay = document.createElement('div');
+                        overlay.className = 'purificacao-overlay active';
+                        overlay.style.zIndex = '300';
+                        overlay.innerHTML = `<div class="purificacao-darken"></div>`;
+                        board.appendChild(overlay);
+
+                        if (typeof playSfx === 'function') { try { playSfx('skill1'); } catch(e) {} }
+
+                        setTimeout(() => {
+                            if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+                            resolve();
+                        }, 800);
+                    });
+                });
+            }
+
+            // Toggle desligado → purificação completa, mas ENFILEIRADA
+            // (espera o GIF anterior terminar)
+            return enfileirarCinematografica(() => {
+                return _origPurif.call(this, bossType, tileX, tileY, isFinalBoss);
+            });
+        };
+    }
+
+    // ---- Toggle nas Configurações do Modo História ----
+    const _origRenderSettings = window.renderStorySettingsScreen;
+    if (typeof _origRenderSettings === 'function') {
+        window.renderStorySettingsScreen = function() {
+            const r = _origRenderSettings.apply(this, arguments);
+
+            const screen = document.getElementById('storyScreen');
+            if (!screen) return r;
+
+            const actions = screen.querySelector('.story-settings-actions');
+            if (!actions || screen.querySelector('.story-settings-section-anim')) return r;
+
+            const skipOn = STORY_SETTINGS.skipBravelyAnimations ? 'checked' : '';
+
+            const secao = document.createElement('div');
+            secao.className = 'story-settings-section story-settings-section-anim';
+            secao.innerHTML = `
+                <div class="story-settings-section-title">🎬 ANIMAÇÕES</div>
+                <div class="story-settings-row">
+                    <label class="story-settings-label">Pular animações de Poder Ancestral</label>
+                    <label class="story-settings-toggle">
+                        <input type="checkbox" id="setSkipBravely" ${skipOn}>
+                        <span class="story-settings-toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="story-settings-hint">
+                    Quando ligado, o GIF do Poder Ancestral e o efeito "PODER ANCESTRAL" são pulados.
+                    A purificação do boss também fica mais rápida. Deixe desligado pra ver a experiência completa.
+                </div>
+            `;
+            actions.parentNode.insertBefore(secao, actions);
+
+            const toggle = document.getElementById('setSkipBravely');
+            if (toggle) {
+                toggle.addEventListener('change', function() {
+                    STORY_SETTINGS.skipBravelyAnimations = this.checked;
+                    if (typeof saveStorySettings === 'function') saveStorySettings();
+                });
+            }
+
+            return r;
+        };
+    }
+
+    console.log('✅ [V16.1] Item 6 — Fila de cinematográficas + toggle.');
+
+    // ==============================================================
+    // BUG ADICIONAL — SÍMBOLO DO ELEMENTO MUDA NO TURNO DO ADVERSÁRIO
+    // --------------------------------------------------------------
+    // Causa: `saveAndRefresh` (entidades.js) recalcula p.element a
+    // partir do NOME do herói (charCodeAt), sobrescrevendo o elemento
+    // fixo. No coop/PVP/história, isso faz o elemento "mudar" quando
+    // o turno passa.
+    //
+    // Correção: travar o elemento na primeira definição. Sobrescreve
+    // saveAndRefresh pra NÃO mudar p.element se já foi travado.
+    // ==============================================================
+    if (typeof window.saveAndRefresh === 'function' && !window._elementoTravadoHook) {
+        window._elementoTravadoHook = true;
+        const _origSaveAndRefresh = window.saveAndRefresh;
+
+        window.saveAndRefresh = function() {
+            // Antes de chamar o original, trava o elemento de todos os players
+            // que já têm um elemento definido
+            if (typeof players !== 'undefined' && Array.isArray(players)) {
+                players.forEach(p => {
+                    if (p && p.element && !p._elementoTravado) {
+                        p._elementoTravado = true;
+                    }
+                });
+            }
+
+            // Chama o original
+            const r = _origSaveAndRefresh.apply(this, arguments);
+
+            // Depois, restaura o elemento travado (o original pode ter
+            // sobrescrito via charCodeAt)
+            if (typeof players !== 'undefined' && Array.isArray(players)) {
+                players.forEach(p => {
+                    if (p && p._elementoTravado && p._elementoOriginal) {
+                        p.element = p._elementoOriginal;
+                    }
+                    // Primeira vez: salva o elemento original
+                    if (p && p.element && !p._elementoOriginal) {
+                        p._elementoOriginal = p.element;
+                    }
+                });
+            }
+
+            return r;
+        };
+
+        // Também hook no initStoryBattle pra salvar o elemento original
+        // antes do saveAndRefresh rodar
+        const _origInitBattle2 = window.initStoryBattle;
+        if (typeof _origInitBattle2 === 'function') {
+            window.initStoryBattle = async function() {
+                const r = await _origInitBattle2.apply(this, arguments);
+                // Após initStoryBattle, salva o elemento de cada player
+                if (typeof players !== 'undefined' && Array.isArray(players)) {
+                    players.forEach(p => {
+                        if (p && p.element) {
+                            p._elementoOriginal = p.element;
+                            p._elementoTravado = true;
+                        }
+                    });
+                }
+                return r;
+            };
+        }
+
+        console.log('✅ [V16.1] Bug do símbolo do elemento travado.');
+    }
+
+    // ==============================================================
+    // CSS
+    // ==============================================================
+    if (!document.getElementById('v160CSS')) {
+        const style = document.createElement('style');
+        style.id = 'v160CSS';
+        style.textContent = `
+            #btnSkill.skill-cancel-mode {
+                background: linear-gradient(180deg, rgba(168,50,50,0.25), transparent 45%),
+                            linear-gradient(135deg, #6a2020, #3a1010) !important;
+                color: #f5c8c8 !important;
+                border-color: #a83232 !important;
+                box-shadow: 0 0 20px rgba(168, 50, 50, 0.5) !important;
+                animation: pulseCancel 1.2s ease-in-out infinite alternate;
+            }
+            @keyframes pulseCancel {
+                from { box-shadow: 0 0 10px rgba(168, 50, 50, 0.4); }
+                to   { box-shadow: 0 0 25px rgba(168, 50, 50, 0.8); }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // ==============================================================
+    // LOG FINAL
+    // ==============================================================
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V16.1] Correções de UX + Bug Fix (revisto)');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Item 1 — Boss empurra herói + 1 dano');
+    console.log('• Item 2 — Cancelar Solo Sagrado');
+    console.log('• Item 4 — pocao_cura removida');
+    console.log('• Item 5 — REGATÃO (lore amazônica), Vender padrão');
+    console.log('• Item 6 — Fila de cinematográficas + toggle');
+    console.log('• BÔNUS — Elemento travado (não muda no turno do adversário)');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — BLOCO 69 (V16.2 — Fix Escambo + GIF + Card Aldeia)
+// -----------------------------------------------------------------
+// Cole NO FINAL do historia.js, DEPOIS do V16.1 (ou substitua).
+//
+// Corrige:
+//   • Card "CURANDEIRO" na Aldeia → "ESCAMBO"
+//   • Card não entrava (enterAldeiaLocation)
+//   • GIF do PA não aparecia (remove fila, chama direto)
+//   • Nome "Regatão" → "Escambo"
+// =================================================================
+
+(function correcoesV162() {
+    // Remove o V16.1 anterior
+    if (window._correcoesV161) {
+        console.log('[V16.2] Substituindo V16.1...');
+        window._correcoesV161 = false;
+    }
+    if (window._correcoesV162) return;
+    window._correcoesV162 = true;
+
+    // ==============================================================
+    // ITEM 1 — BOSS NUNCA NASCE SOBRE HERÓI (mantido do V16.1)
+    // ==============================================================
+    function resolverSpawnBossSobreHeroi() {
+        if (typeof boss === 'undefined' || !boss) return;
+        if (typeof players === 'undefined' || !players) return;
+
+        const bx = boss.x, by = boss.y;
+
+        players.forEach(p => {
+            if (p.dead) return;
+            if (p.x !== bx || p.y !== by) return;
+
+            let novoX = bx, novoY = by;
+
+            for (let dy = 1; dy < 8; dy++) {
+                const ty = by + dy;
+                if (ty >= 8) break;
+                const ocupado = players.some(o =>
+                    o.id !== p.id && !o.dead && o.x === bx && o.y === ty
+                );
+                if (!ocupado) { novoX = bx; novoY = ty; break; }
+            }
+
+            if (novoX === bx && novoY === by) {
+                const colsAdj = [bx - 1, bx + 1, bx - 2, bx + 2];
+                for (const cx of colsAdj) {
+                    if (cx < 0 || cx >= 8) continue;
+                    for (let dy = 0; dy < 8; dy++) {
+                        const ty = by + dy;
+                        if (ty >= 8) break;
+                        const ocupado = players.some(o =>
+                            o.id !== p.id && !o.dead && o.x === cx && o.y === ty
+                        );
+                        if (!ocupado) { novoX = cx; novoY = ty; break; }
+                    }
+                    if (novoX !== bx || novoY !== by) break;
+                }
+            }
+
+            if (novoX !== bx || novoY !== by) {
+                p.x = novoX;
+                p.y = novoY;
+                p.hp = Math.max(0, p.hp - 1);
+                if (typeof showDmgEffect === 'function') showDmgEffect(p.x, p.y, 1);
+                if (typeof addLog === 'function') addLog(`⚡ ${p.name} foi empurrado pelo impacto! (-1 HP)`);
+                if (p.hp <= 0) {
+                    p.dead = true;
+                    const tok = document.getElementById(`tokenP${p.id}`);
+                    if (tok) tok.classList.add('dead');
+                }
+            }
+        });
+    }
+
+    const _origInitBattle = window.initStoryBattle;
+    if (typeof _origInitBattle === 'function') {
+        window.initStoryBattle = async function() {
+            const r = await _origInitBattle.apply(this, arguments);
+            await new Promise(res => requestAnimationFrame(() => requestAnimationFrame(res)));
+            resolverSpawnBossSobreHeroi();
+            if (typeof updateVisuals === 'function') updateVisuals();
+            if (typeof updateHeroCard === 'function') updateHeroCard();
+            if (typeof updateBossCard === 'function') updateBossCard();
+            return r;
+        };
+    }
+
+    const _origAdvance = window.advanceStoryEnemy;
+    if (typeof _origAdvance === 'function') {
+        window.advanceStoryEnemy = async function() {
+            const r = await _origAdvance.apply(this, arguments);
+            await new Promise(res => requestAnimationFrame(() => requestAnimationFrame(res)));
+            resolverSpawnBossSobreHeroi();
+            if (typeof updateVisuals === 'function') updateVisuals();
+            return r;
+        };
+    }
+
+    // ==============================================================
+    // ITEM 2 — CANCELAR SOLO SAGRADO (mantido)
+    // ==============================================================
+    const _origActivateSkill = window.activateSkill;
+    if (typeof _origActivateSkill === 'function') {
+        window.activateSkill = function() {
+            if (!window._storyMode) return _origActivateSkill.apply(this, arguments);
+            const active = players[currentPlayerIdx];
+            if (!active) return _origActivateSkill.apply(this, arguments);
+
+            if (skillActive === true) {
+                skillActive = false;
+                document.querySelectorAll('#grid .tile').forEach(t => t.classList.remove('skill-mode'));
+                const btn = document.getElementById('btnSkill');
+                if (btn) {
+                    btn.classList.remove('skill-cancel-mode');
+                    btn.innerHTML = '✨ SOLO SAGRADO';
+                }
+                if (typeof addLog === 'function') addLog('✨ Solo Sagrado cancelado.');
+                if (typeof playSfx === 'function') { try { playSfx('click'); } catch(e) {} }
+                return;
+            }
+
+            const r = _origActivateSkill.apply(this, arguments);
+            if (skillActive === true) {
+                const btn = document.getElementById('btnSkill');
+                if (btn) {
+                    btn.classList.add('skill-cancel-mode');
+                    btn.innerHTML = '✕ CANCELAR';
+                }
+            }
+            return r;
+        };
+    }
+
+    // ==============================================================
+    // ITEM 4/5 — ESCAMBO (Vender padrão, Comprar vazia)
+    // ==============================================================
+    if (typeof STORY_SHOP_ITEMS !== 'undefined' && Array.isArray(STORY_SHOP_ITEMS)) {
+        STORY_SHOP_ITEMS.length = 0;
+    }
+
+    window.renderLojaScreenCompleta = function() {
+        const screen = document.getElementById('storyScreen');
+        if (!screen) return;
+        const gold = STORY_PROGRESS.gold || 0;
+
+        if (typeof curandeiroTab === 'undefined' || curandeiroTab === 'comprar') {
+            try { curandeiroTab = 'vender'; } catch(e) {}
+        }
+
+        let buyHTML = '';
+        if (!STORY_SHOP_ITEMS || STORY_SHOP_ITEMS.length === 0) {
+            buyHTML = `
+                <div class="tesouraria-empty" style="margin:0; padding:40px 20px;">
+                    <div class="tesouraria-empty-icon">🏪</div>
+                    <div class="tesouraria-empty-text">O Escambo está sem estoque.</div>
+                    <div class="tesouraria-empty-hint">Volte depois — ele pode ter novidades.</div>
+                </div>
+            `;
+        } else {
+            buyHTML = '<div class="story-shop-grid">' + STORY_SHOP_ITEMS.map(it => {
+                const m = STORY_MATERIALS[it.id];
+                const emoji = m ? m.emoji : (it.emoji || '❓');
+                const can = gold >= it.price;
+                return `<div class="story-shop-item ${can?'':'disabled'}">
+                    <div class="story-shop-emoji">${emoji}</div>
+                    <div class="story-shop-name">${it.name}</div>
+                    <div class="story-shop-desc">${it.description || ''}</div>
+                    <div class="story-shop-price">${uiIcon('gold')} ${it.price}</div>
+                    <button class="story-shop-btn" ${can?'':'disabled'} onclick="buyShopItem('${it.id}',${it.price})">COMPRAR</button>
+                </div>`;
+            }).join('') + '</div>';
+        }
+
+        const inv = STORY_PROGRESS.inventory || {};
+        const sellIds = Object.keys(inv).filter(id => inv[id] > 0);
+        let sellHTML = '';
+
+        if (sellIds.length === 0) {
+            sellHTML = `<div class="tesouraria-empty" style="margin:0; padding:40px 20px;">
+                <div class="tesouraria-empty-icon">💰</div>
+                <div class="tesouraria-empty-text">Nenhum material para vender.</div>
+                <div class="tesouraria-empty-hint">Derrote inimigos para coletar materiais.</div>
+            </div>`;
+        } else {
+            sellIds.sort((a, b) => getMaterialPrice(b) - getMaterialPrice(a));
+            sellHTML = '<div class="sell-grid">' + sellIds.map(id => {
+                const m = STORY_MATERIALS[id];
+                if (!m) return '';
+                const qty = inv[id];
+                const price = getMaterialPrice(id);
+                return `<div class="sell-card">
+                    <div class="sell-icon">${m.emoji}</div>
+                    <div class="sell-info">
+                        <div class="sell-name">${m.name}</div>
+                        <div class="sell-qty">×${qty}</div>
+                        <div class="sell-price">${uiIcon('gold')} ${price} cada</div>
+                    </div>
+                    <button class="sell-btn" onclick="handleSellMaterial('${id}', 1)">Vender 1</button>
+                    <button class="sell-btn sell-all" onclick="handleSellMaterial('${id}', ${qty})">Vender tudo (${price * qty})</button>
+                </div>`;
+            }).join('') + '</div>';
+        }
+
+        const abaAtual = (typeof curandeiroTab !== 'undefined') ? curandeiroTab : 'vender';
+
+        screen.innerHTML = `
+            <div class="story-container">
+                <div class="story-header">
+                    <h1 class="story-title">🧙 ESCAMBO</h1>
+                    <p class="story-subtitle">"Compro o que você trouxer. Levo histórias e deixo ouro." (${gold} ${uiIcon('gold')})</p>
+                </div>
+
+                <div class="curandeiro-tabs">
+                    <button class="curandeiro-tab ${abaAtual === 'vender' ? 'active' : ''}" onclick="curandeiroTab='vender'; renderLojaScreenCompleta();">💰 Vender</button>
+                    <button class="curandeiro-tab ${abaAtual === 'comprar' ? 'active' : ''}" onclick="curandeiroTab='comprar'; renderLojaScreenCompleta();">🛒 Comprar</button>
+                </div>
+
+                <div class="curandeiro-content">
+                    ${abaAtual === 'vender' ? sellHTML : buyHTML}
+                </div>
+
+                <div class="story-footer"><button class="story-back-btn" onclick="renderAldeiaScreen()">← VOLTAR À ALDEIA</button></div>
+            </div>
+        `;
+    };
+
+    // ==============================================================
+    // FIX — CARD "CURANDEIRO" NA ALDEIA + ENTRAR
+    // --------------------------------------------------------------
+    // Sobrescreve renderAldeiaScreen pra trocar o texto do card e
+    // garantir que o clique chame renderLojaScreenCompleta.
+    // ==============================================================
+    const _origRenderAldeia = window.renderAldeiaScreen;
+    if (typeof _origRenderAldeia === 'function') {
+        window.renderAldeiaScreen = function() {
+            const r = _origRenderAldeia.apply(this, arguments);
+
+            // Após o render, corrige o card "CURANDEIRO"
+            const screen = document.getElementById('storyScreen');
+            if (!screen) return r;
+
+            const cards = screen.querySelectorAll('.story-ald-location');
+            cards.forEach(card => {
+                const nameEl = card.querySelector('.story-ald-loc-name');
+                if (!nameEl) return;
+                const nome = nameEl.textContent.trim().toUpperCase();
+                if (nome === 'CURANDEIRO' || nome === 'MERCADOR' || nome === 'REGATÃO') {
+                    nameEl.textContent = 'ESCAMBO';
+                    const descEl = card.querySelector('.story-ald-loc-desc');
+                    if (descEl) descEl.textContent = 'Venda seus materiais';
+
+                    // Garante o onclick correto
+                    card.setAttribute('onclick', "enterAldeiaLocation('loja')");
+                    card.classList.remove('locked');
+                    const lockedEl = card.querySelector('.story-ald-loc-locked');
+                    if (lockedEl) lockedEl.remove();
+                }
+            });
+
+            return r;
+        };
+    }
+
+    // Garante que enterAldeiaLocation('loja') chama o novo render
+    const _origEnterAldeia = window.enterAldeiaLocation;
+    if (typeof _origEnterAldeia === 'function') {
+        window.enterAldeiaLocation = function(key) {
+            if (key === 'loja') {
+                return window.renderLojaScreenCompleta();
+            }
+            return _origEnterAldeia.apply(this, arguments);
+        };
+    }
+
+    // ==============================================================
+    // ITEM 6 — GIF DO PA (corrigido: sem fila, chama direto)
+    // --------------------------------------------------------------
+    // O problema do V16.1: a fila com `enfileirarCinematografica`
+    // causava deadlock se a promise anterior não resolvesse.
+    // Solução: chamar o original DIRETO, sem fila.
+    // A fila de purificação vs GIF é resolvida pelo próprio
+    // `triggerBravelyChain` (que chama um depois do outro).
+    // ==============================================================
+    if (typeof STORY_DEFAULT_SETTINGS !== 'undefined' && typeof STORY_DEFAULT_SETTINGS.skipBravelyAnimations === 'undefined') {
+        STORY_DEFAULT_SETTINGS.skipBravelyAnimations = false;
+    }
+    if (typeof STORY_SETTINGS !== 'undefined' && typeof STORY_SETTINGS.skipBravelyAnimations === 'undefined') {
+        STORY_SETTINGS.skipBravelyAnimations = false;
+    }
+
+    window._skipCinematografica = false;
+
+    // ---- showPoderAncestralEffect: pula se toggle ----
+    const _origPoderAncestral = window.showPoderAncestralEffect;
+    if (typeof _origPoderAncestral === 'function') {
+        window.showPoderAncestralEffect = function() {
+            if (window._storyMode && STORY_SETTINGS.skipBravelyAnimations) return;
+            return _origPoderAncestral.apply(this, arguments);
+        };
+    }
+
+    // ---- showBravelyAnimation: DIRETO, sem fila ----
+    const _origBravelyAnim = window.showBravelyAnimation;
+    if (typeof _origBravelyAnim === 'function') {
+        window.showBravelyAnimation = function(playerClass) {
+            // Fora do modo história → original
+            if (!window._storyMode) {
+                return _origBravelyAnim.apply(this, arguments);
+            }
+
+            // Toggle ligado → pula
+            if (STORY_SETTINGS.skipBravelyAnimations || window._skipCinematografica) {
+                window._skipCinematografica = false;
+                return Promise.resolve();
+            }
+
+            // Chama o original DIRETO
+            return Promise.resolve(_origBravelyAnim.call(this, playerClass));
+        };
+    }
+
+    // ---- showPurificacao: toggle → versão curta; senão, original ----
+    const _origPurif = window.showPurificacao;
+    if (typeof _origPurif === 'function') {
+        window.showPurificacao = function(bossType, tileX, tileY, isFinalBoss) {
+            if (!window._storyMode) {
+                return _origPurif.apply(this, arguments);
+            }
+
+            if (STORY_SETTINGS.skipBravelyAnimations) {
+                return new Promise(resolve => {
+                    const board = document.getElementById('board');
+                    if (!board) { resolve(); return; }
+
+                    const overlay = document.createElement('div');
+                    overlay.className = 'purificacao-overlay active';
+                    overlay.style.zIndex = '300';
+                    overlay.innerHTML = `<div class="purificacao-darken"></div>`;
+                    board.appendChild(overlay);
+
+                    if (typeof playSfx === 'function') { try { playSfx('skill1'); } catch(e) {} }
+
+                    setTimeout(() => {
+                        if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+                        resolve();
+                    }, 800);
+                });
+            }
+            return _origPurif.call(this, bossType, tileX, tileY, isFinalBoss);
+        };
+    }
+
+    // ---- Toggle nas Configurações do Modo História ----
+    const _origRenderSettings = window.renderStorySettingsScreen;
+    if (typeof _origRenderSettings === 'function') {
+        window.renderStorySettingsScreen = function() {
+            const r = _origRenderSettings.apply(this, arguments);
+            const screen = document.getElementById('storyScreen');
+            if (!screen) return r;
+            const actions = screen.querySelector('.story-settings-actions');
+            if (!actions || screen.querySelector('.story-settings-section-anim')) return r;
+
+            const skipOn = STORY_SETTINGS.skipBravelyAnimations ? 'checked' : '';
+            const secao = document.createElement('div');
+            secao.className = 'story-settings-section story-settings-section-anim';
+            secao.innerHTML = `
+                <div class="story-settings-section-title">🎬 ANIMAÇÕES</div>
+                <div class="story-settings-row">
+                    <label class="story-settings-label">Pular animações de Poder Ancestral</label>
+                    <label class="story-settings-toggle">
+                        <input type="checkbox" id="setSkipBravely" ${skipOn}>
+                        <span class="story-settings-toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="story-settings-hint">
+                    Quando ligado, o GIF do Poder Ancestral e o efeito "PODER ANCESTRAL" são pulados.
+                    A purificação do boss também fica mais rápida.
+                </div>
+            `;
+            actions.parentNode.insertBefore(secao, actions);
+
+            const toggle = document.getElementById('setSkipBravely');
+            if (toggle) {
+                toggle.addEventListener('change', function() {
+                    STORY_SETTINGS.skipBravelyAnimations = this.checked;
+                    if (typeof saveStorySettings === 'function') saveStorySettings();
+                });
+            }
+            return r;
+        };
+    }
+
+    // ==============================================================
+    // BÔNUS — ELEMENTO TRAVADO (não muda no turno do adversário)
+    // ==============================================================
+    if (typeof window.saveAndRefresh === 'function' && !window._elementoTravadoHook) {
+        window._elementoTravadoHook = true;
+        const _origSaveAndRefresh = window.saveAndRefresh;
+
+        window.saveAndRefresh = function() {
+            if (typeof players !== 'undefined' && Array.isArray(players)) {
+                players.forEach(p => {
+                    if (p && p.element && !p._elementoTravado) {
+                        p._elementoTravado = true;
+                        p._elementoOriginal = p.element;
+                    }
+                });
+            }
+
+            const r = _origSaveAndRefresh.apply(this, arguments);
+
+            if (typeof players !== 'undefined' && Array.isArray(players)) {
+                players.forEach(p => {
+                    if (p && p._elementoTravado && p._elementoOriginal) {
+                        p.element = p._elementoOriginal;
+                    }
+                });
+            }
+            return r;
+        };
+    }
+
+    // ==============================================================
+    // CSS
+    // ==============================================================
+    if (!document.getElementById('v160CSS')) {
+        const style = document.createElement('style');
+        style.id = 'v160CSS';
+        style.textContent = `
+            #btnSkill.skill-cancel-mode {
+                background: linear-gradient(180deg, rgba(168,50,50,0.25), transparent 45%),
+                            linear-gradient(135deg, #6a2020, #3a1010) !important;
+                color: #f5c8c8 !important;
+                border-color: #a83232 !important;
+                box-shadow: 0 0 20px rgba(168, 50, 50, 0.5) !important;
+                animation: pulseCancel 1.2s ease-in-out infinite alternate;
+            }
+            @keyframes pulseCancel {
+                from { box-shadow: 0 0 10px rgba(168, 50, 50, 0.4); }
+                to   { box-shadow: 0 0 25px rgba(168, 50, 50, 0.8); }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    console.log('✅ [V16.2] Aplicado: Escambo, card na Aldeia, GIF do PA, elemento travado.');
+})();
+// =================================================================
+// historia.js — BLOCO 69 (V16.3 — Fix elemento + GIF + botão)
+// -----------------------------------------------------------------
+// Cole NO FINAL do historia.js, DEPOIS do V16.2 (ou substitua).
+//
+// Corrige:
+//   • Elemento do herói muda no turno (restauração garantida)
+//   • GIF do PA não aparece (recria showBravelyAnimation)
+//   • Botão Solo Sagrado travado em "CANCELAR" no Evento
+// =================================================================
+
+(function correcoesV163() {
+    if (window._correcoesV162) {
+        console.log('[V16.3] Substituindo V16.2...');
+        window._correcoesV162 = false;
+    }
+    if (window._correcoesV163) return;
+    window._correcoesV163 = true;
+
+    // ==============================================================
+    // FIX — ELEMENTO DO HERÓI NÃO MUDA NO TURNO
+    // --------------------------------------------------------------
+    // Abordagem: guardar o elemento "oficial" em p._elementoOriginal
+    // após initStoryBattle, e fazer updateHeroCard usar ele SEMPRE.
+    // ==============================================================
+    function travarElementos() {
+        if (typeof players === 'undefined' || !Array.isArray(players)) return;
+        players.forEach(p => {
+            if (p && p.element && !p._elementoOriginal) {
+                p._elementoOriginal = p.element;
+                p._elementoTravado = true;
+                console.log(`[V16.3] Elemento travado: ${p.name || p.class} = ${p.element}`);
+            }
+        });
+    }
+
+    // Após initStoryBattle, salva o elemento original
+    const _origInitBattle = window.initStoryBattle;
+    if (typeof _origInitBattle === 'function') {
+        window.initStoryBattle = async function() {
+            const r = await _origInitBattle.apply(this, arguments);
+            await new Promise(res => requestAnimationFrame(() => requestAnimationFrame(res)));
+            travarElementos();
+            // Reaplica após saveAndRefresh
+            if (typeof updateHeroCard === 'function') updateHeroCard();
+            return r;
+        };
+    }
+
+    // Sobrescreve saveAndRefresh pra restaurar o elemento APÓS o original
+    const _origSaveAndRefresh = window.saveAndRefresh;
+    if (typeof _origSaveAndRefresh === 'function') {
+        window.saveAndRefresh = function() {
+            // Salva antes
+            const elementosAntes = (typeof players !== 'undefined' && Array.isArray(players))
+                ? players.map(p => p ? p.element : null)
+                : [];
+
+            // Roda o original (que pode sobrescrever)
+            const r = _origSaveAndRefresh.apply(this, arguments);
+
+            // Restaura o elemento original
+            if (typeof players !== 'undefined' && Array.isArray(players)) {
+                players.forEach((p, i) => {
+                    if (p && p._elementoOriginal) {
+                        p.element = p._elementoOriginal;
+                    }
+                });
+            }
+
+            return r;
+        };
+    }
+
+    // Sobrescreve updateHeroCard pra usar o elemento original
+    const _origUpdateHeroCard = window.updateHeroCard;
+    if (typeof _origUpdateHeroCard === 'function') {
+        window.updateHeroCard = function() {
+            // Restaura elemento original ANTES de renderizar
+            if (typeof players !== 'undefined' && Array.isArray(players)) {
+                players.forEach(p => {
+                    if (p && p._elementoOriginal) {
+                        p.element = p._elementoOriginal;
+                    }
+                });
+            }
+            return _origUpdateHeroCard.apply(this, arguments);
+        };
+    }
+
+    console.log('✅ [V16.3] Fix elemento do herói aplicado.');
+
+    // ==============================================================
+    // FIX — GIF DO PA (recria showBravelyAnimation)
+    // --------------------------------------------------------------
+    // Recria do zero, replicando a lógica do entidades.js + V8.1,
+    // mas garantindo que o GIF apareça SEM depender do estado dos
+    // patches anteriores.
+    // ==============================================================
+    window.showBravelyAnimation = async function(playerClass) {
+        // Fora do modo história → usa o original do entidades.js se existir
+        if (!window._storyMode) {
+            // Tenta achar o original do entidades.js (pode ter sido sobrescrito)
+            if (typeof SPRITES !== 'undefined' && SPRITES.BRAVELY_TUPA) {
+                return _mostrarGifBravely(playerClass);
+            }
+            return Promise.resolve();
+        }
+
+        // Toggle ligado → pula
+        if (typeof STORY_SETTINGS !== 'undefined' && STORY_SETTINGS.skipBravelyAnimations) {
+            return Promise.resolve();
+        }
+
+        return _mostrarGifBravely(playerClass);
+    };
+
+    function _mostrarGifBravely(playerClass) {
+        return new Promise((resolve) => {
+            // Resolve o GIF: tenta STORY_BRAVELY_GIFS, depois fallback, depois BRAVELY_*
+            let gifUrl = '';
+
+            if (typeof getBravelyGifForHero === 'function') {
+                gifUrl = getBravelyGifForHero(playerClass);
+            }
+
+            if (!gifUrl) {
+                // Fallback direto
+                if (typeof STORY_BRAVELY_GIFS !== 'undefined' && STORY_BRAVELY_GIFS[playerClass]) {
+                    gifUrl = STORY_BRAVELY_GIFS[playerClass];
+                } else if (playerClass === 'Tupa' && typeof SPRITES !== 'undefined') {
+                    gifUrl = SPRITES.BRAVELY_TUPA;
+                } else if (playerClass === 'Sume' && typeof SPRITES !== 'undefined') {
+                    gifUrl = SPRITES.BRAVELY_SUME;
+                } else if (playerClass === 'Caipora' && typeof SPRITES !== 'undefined') {
+                    gifUrl = SPRITES.BRAVELY_CAIPORA;
+                } else if (typeof SPRITES !== 'undefined') {
+                    gifUrl = SPRITES.BRAVELY_TUPA;
+                }
+            }
+
+            if (!gifUrl) {
+                console.warn('[V16.3] GIF do Bravely não encontrado para', playerClass);
+                resolve();
+                return;
+            }
+
+            console.log('[V16.3] Mostrando GIF do Bravely:', gifUrl);
+
+            // Remove overlay antigo, se existir
+            const old = document.getElementById('bravelyAnimationOverlay');
+            if (old) old.remove();
+
+            const overlay = document.createElement('div');
+            overlay.className = 'bravely-animation-overlay';
+            overlay.id = 'bravelyAnimationOverlay';
+
+            const gif = document.createElement('img');
+            gif.src = gifUrl;
+            gif.className = 'bravely-animation-gif';
+            gif.alt = 'Poder Ancestral';
+            gif.onerror = function() {
+                console.warn('[V16.3] Falha ao carregar GIF:', gifUrl);
+                if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+                resolve();
+            };
+
+            overlay.appendChild(gif);
+
+            const board = (typeof tutorialMode !== 'undefined' && tutorialMode)
+                ? document.getElementById('tutorialBoard')
+                : document.getElementById('board');
+            if (board) board.appendChild(overlay);
+
+            if (typeof playSfx === 'function') { try { playSfx('skill1'); } catch(e) {} }
+
+            setTimeout(() => {
+                if (overlay.parentNode) {
+                    overlay.style.opacity = '0';
+                    overlay.style.transition = 'opacity 0.5s ease';
+                    setTimeout(() => {
+                        if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+                        resolve();
+                    }, 500);
+                } else {
+                    resolve();
+                }
+            }, 2000);
+        });
+    }
+
+    console.log('✅ [V16.3] GIF do Bravely recriado.');
+
+    // ==============================================================
+    // FIX — BOTÃO SOLO SAGRADO TRAVADO EM "CANCELAR"
+    // --------------------------------------------------------------
+    // Monitor: se o botão estiver "CANCELAR" mas skillActive for false,
+    // restaura o texto. Também escuta cliques pra resetar estado.
+    // ==============================================================
+    function _corrigirBotaoSkill() {
+        const btn = document.getElementById('btnSkill');
+        if (!btn) return;
+
+        const textoAtual = btn.innerHTML.trim();
+        const isCancelMode = textoAtual.includes('CANCELAR') || btn.classList.contains('skill-cancel-mode');
+        const skillAtivo = (typeof skillActive !== 'undefined') ? skillActive : false;
+
+        // Se está em modo cancelar mas skillActive é false → restaura
+        if (isCancelMode && !skillAtivo) {
+            btn.classList.remove('skill-cancel-mode');
+            btn.innerHTML = '✨ SOLO SAGRADO';
+        }
+        // Se está em modo normal mas skillActive é true → muda pra cancelar
+        else if (!isCancelMode && skillAtivo && window._storyMode) {
+            btn.classList.add('skill-cancel-mode');
+            btn.innerHTML = '✕ CANCELAR';
+        }
+    }
+
+    // Roda a cada 500ms (leve)
+    setInterval(_corrigirBotaoSkill, 500);
+
+    // Também escuta cliques no tabuleiro pra detectar quando o skill é consumido
+    if (!window._botaoSkillClickListener) {
+        window._botaoSkillClickListener = true;
+        document.addEventListener('click', function(e) {
+            // Se clicou num tile durante skillActive, o skill é consumido
+            if (e.target && e.target.classList && e.target.classList.contains('tile')) {
+                if (typeof skillActive !== 'undefined' && skillActive === true) {
+                    // Espera um tic pra o handleSelect rodar
+                    setTimeout(_corrigirBotaoSkill, 100);
+                }
+            }
+        }, true);
+    }
+
+    // Hook em switchConfig pra resetar o botão
+    const _origSwitchConfig = window.switchConfig;
+    if (typeof _origSwitchConfig === 'function') {
+        window.switchConfig = function(idx) {
+            const r = _origSwitchConfig.apply(this, arguments);
+            // Se não estamos em skillActive, força o texto normal
+            if (typeof skillActive === 'undefined' || skillActive === false) {
+                setTimeout(_corrigirBotaoSkill, 50);
+            }
+            return r;
+        };
+    }
+
+    // Hook no eventoIniciarBatalha (Evento) pra garantir reset
+    if (typeof window.eventoIniciarBatalha === 'function' && !window._eventoBatalhaBotaoHook) {
+        window._eventoBatalhaBotaoHook = true;
+        const _origEventoIniciar = window.eventoIniciarBatalha;
+        window.eventoIniciarBatalha = async function() {
+            // Reset antes
+            if (typeof skillActive !== 'undefined') skillActive = false;
+            const r = await _origEventoIniciar.apply(this, arguments);
+            // Reset depois
+            if (typeof skillActive !== 'undefined') skillActive = false;
+            setTimeout(_corrigirBotaoSkill, 200);
+            return r;
+        };
+    }
+
+    console.log('✅ [V16.3] Fix botão Solo Sagrado aplicado.');
+
+    // ==============================================================
+    // LOG FINAL
+    // ==============================================================
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V16.3] Fixes finais');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Elemento do herói não muda no turno');
+    console.log('• GIF do Poder Ancestral recriado (garantido)');
+    console.log('• Botão Solo Sagrado não fica travado');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — BLOCO 70 (V16.4 — Fix elemento do herói)
+// -----------------------------------------------------------------
+// Cole NO FINAL do historia.js, DEPOIS do V16.3.
+//
+// Corrige:
+//   • Elemento do herói pegava o "FOGO" default do entidades.js
+//     em vez do elemento real (VENTO/AR) do herói
+// =================================================================
+
+(function fixElementoV164() {
+    if (window._fixElementoV164) return;
+    window._fixElementoV164 = true;
+
+    // ==============================================================
+    // FONTE DE VERDADE DO ELEMENTO
+    // --------------------------------------------------------------
+    // Prioridade:
+    //   1. STORY_HERO_CLASSES[class].element (heróis novos)
+    //   2. getHeroStoryElement(class) (heróis base)
+    //   3. Amuleto equipado com elementOverride
+    //   4. 'FOGO' como último recurso
+    // ==============================================================
+    function getElementoOficial(heroClass) {
+        // 1. Herói novo com elemento fixo
+        if (typeof STORY_HERO_CLASSES !== 'undefined' && STORY_HERO_CLASSES[heroClass]) {
+            const h = STORY_HERO_CLASSES[heroClass];
+            if (h.element) return h.element;
+        }
+
+        // 2. Herói base (dinâmico pelo save)
+        if (typeof getHeroStoryElement === 'function') {
+            return getHeroStoryElement(heroClass);
+        }
+
+        // 3. Fallback
+        if (typeof getSaveElement === 'function') {
+            return getSaveElement();
+        }
+
+        return 'FOGO';
+    }
+
+    // ==============================================================
+    // TRAVAR ELEMENTO (agora usando fonte de verdade)
+    // ==============================================================
+    function travarElementosV164() {
+        if (typeof players === 'undefined' || !Array.isArray(players)) return;
+
+        players.forEach(p => {
+            if (!p || !p.class) return;
+
+            const elementoOficial = getElementoOficial(p.class);
+
+            // Verifica se tem amuleto com elementOverride
+            let elementoFinal = elementoOficial;
+            if (typeof getHeroEquipment === 'function' && typeof getAmuletById === 'function') {
+                try {
+                    const eq = getHeroEquipment(p.class);
+                    if (eq && eq.amuleto) {
+                        const am = getAmuletById(eq.amuleto);
+                        if (am && am.efeito && am.efeito.elementOverride) {
+                            elementoFinal = am.efeito.elementOverride;
+                        }
+                    }
+                } catch(e) {}
+            }
+
+            p.element = elementoFinal;
+            p._elementoOriginal = elementoFinal;
+            p._elementoTravado = true;
+
+            console.log(`[V16.4] Elemento travado: ${p.name || p.class} = ${elementoFinal} (era ${elementoOficial})`);
+        });
+    }
+
+    // ==============================================================
+    // HOOK EM applyStoryElementsToPlayers
+    // --------------------------------------------------------------
+    // A função original do historia.js define p.element. Depois dela,
+    // travamos o elemento usando a fonte de verdade.
+    // ==============================================================
+    const _origApplyElems = window.applyStoryElementsToPlayers;
+    if (typeof _origApplyElems === 'function') {
+        window.applyStoryElementsToPlayers = function() {
+            const r = _origApplyElems.apply(this, arguments);
+            travarElementosV164();
+            return r;
+        };
+    }
+
+    // ==============================================================
+    // HOOK EM initStoryBattle (garantia dupla)
+    // ==============================================================
+    const _origInitBattle = window.initStoryBattle;
+    if (typeof _origInitBattle === 'function') {
+        window.initStoryBattle = async function() {
+            const r = await _origInitBattle.apply(this, arguments);
+            await new Promise(res => requestAnimationFrame(() => requestAnimationFrame(res)));
+            travarElementosV164();
+            if (typeof updateHeroCard === 'function') updateHeroCard();
+            return r;
+        };
+    }
+
+    // ==============================================================
+    // HOOK EM saveAndRefresh (já existe V16.3, mas reforça)
+    // --------------------------------------------------------------
+    // Sobrescreve de novo pra garantir que usa a fonte de verdade
+    // ==============================================================
+    if (typeof window.saveAndRefresh === 'function') {
+        const _prevSave = window.saveAndRefresh;
+        window.saveAndRefresh = function() {
+            const r = _prevSave.apply(this, arguments);
+
+            // Restaura o elemento oficial
+            if (typeof players !== 'undefined' && Array.isArray(players)) {
+                players.forEach(p => {
+                    if (!p || !p.class) return;
+                    if (p._elementoOriginal) {
+                        p.element = p._elementoOriginal;
+                    }
+                });
+            }
+
+            return r;
+        };
+    }
+
+    // ==============================================================
+    // HOOK EM updateHeroCard (garantia tripla)
+    // ==============================================================
+    if (typeof window.updateHeroCard === 'function') {
+        const _prevUpdateHero = window.updateHeroCard;
+        window.updateHeroCard = function() {
+            if (typeof players !== 'undefined' && Array.isArray(players)) {
+                players.forEach(p => {
+                    if (p && p._elementoOriginal) {
+                        p.element = p._elementoOriginal;
+                    }
+                });
+            }
+            return _prevUpdateHero.apply(this, arguments);
+        };
+    }
+
+    // ==============================================================
+    // FORÇA TRAVAMENTO AO CARREGAR (se já está em batalha)
+    // ==============================================================
+    setTimeout(() => {
+        if (typeof players !== 'undefined' && Array.isArray(players) && players.length > 0) {
+            travarElementosV164();
+            if (typeof updateHeroCard === 'function') updateHeroCard();
+        }
+    }, 500);
+
+    console.log('✅ [V16.4] Elemento do herói corrigido (usa fonte de verdade, não p.element).');
+    console.log('   Fonte: STORY_HERO_CLASSES.element → getHeroStoryElement → getSaveElement');
+})();
+// =================================================================
+// historia.js — BLOCO 71 (V16.5 — Elemento no tabuleiro SEMPRE correto)
+// -----------------------------------------------------------------
+// Cole NO FINAL do historia.js, DEPOIS do V16.4.
+//
+// REGRA:
+//   • Herói com element fixo em STORY_HERO_CLASSES → usa ele
+//   • Herói SEM element fixo (Tupã/Sumé/Caipora) → usa getHeroStoryElement (do save)
+//   • FOGO do entidades.js NUNCA sobressai
+// =================================================================
+
+(function fixElementoTabuleiroV165() {
+    if (window._fixElementoV165) return;
+    window._fixElementoV165 = true;
+
+    // ==============================================================
+    // FUNÇÃO ÚNICA DE CÁLCULO
+    // --------------------------------------------------------------
+    // Não usa p.element atual. Calcula do zero pela classe.
+    // ==============================================================
+    function calcularElementoDoHeroi(heroClass) {
+        if (!heroClass) return 'FOGO';
+
+        // 1. Se o herói tem elemento FIXO na tabela → usa
+        if (typeof STORY_HERO_CLASSES !== 'undefined') {
+            const h = STORY_HERO_CLASSES[heroClass];
+            if (h && h.element) {
+                return h.element;
+            }
+        }
+
+        // 2. Se NÃO tem elemento fixo → usa o do save
+        if (typeof getHeroStoryElement === 'function') {
+            return getHeroStoryElement(heroClass);
+        }
+        if (typeof getSaveElement === 'function') {
+            return getSaveElement();
+        }
+
+        // 3. Último recurso
+        return 'FOGO';
+    }
+
+    // ==============================================================
+    // REESCREVE updateHeroCard DO ZERO
+    // --------------------------------------------------------------
+    // Não chama o anterior. Faz a lógica de renderização direto,
+    // calculando o elemento pela classe sempre.
+    // ==============================================================
+    window.updateHeroCard = function() {
+        const list = document.getElementById('heroesStatusList');
+        if (!list) return;
+
+        if (typeof tutorialMode !== 'undefined' && tutorialMode) {
+            list.innerHTML = '';
+            return;
+        }
+
+        if (typeof players === 'undefined' || !Array.isArray(players)) return;
+
+        const ELEMENT_ICONS = {
+            'FOGO':  { key: 'elem_fogo',  color: '#e74c3c' },
+            'AGUA':  { key: 'elem_agua',  color: '#3498db' },
+            'TERRA': { key: 'elem_terra', color: '#27ae60' },
+            'AR':    { key: 'elem_ar',    color: '#f1c40f' }
+        };
+
+        list.innerHTML = '';
+
+        players.forEach((p, index) => {
+            if (!p) return;
+
+            // ⭐ CALCULA O ELEMENTO OFICIAL (não usa p.element)
+            const elementoOficial = calcularElementoDoHeroi(p.class);
+            p.element = elementoOficial; // sincroniza de volta
+
+            const row = document.createElement('div');
+            row.className = 'hero-status-row';
+            if (index === currentPlayerIdx && currentPlayerIdx >= 0) row.classList.add('current');
+            if (p.dead) row.classList.add('dead');
+
+            const elemInfo = ELEMENT_ICONS[elementoOficial] || ELEMENT_ICONS['FOGO'];
+            row.style.borderLeftColor = elemInfo.color;
+
+            const hpPercent = p.maxHp > 0 ? Math.max(0, (p.hp / p.maxHp) * 100) : 0;
+            const hpColor = hpPercent > 60 ? '#2ecc71' : hpPercent > 30 ? '#f1c40f' : '#e74c3c';
+
+            const baseAtk = (typeof CLASS_DB !== 'undefined' && CLASS_DB[p.class]?.atk) || 0;
+            const amuletBonus = p.bonusAtk || 0;
+            const titleBonus = p.titleBonus?.ATK || 0;
+            const totalAtk = baseAtk + amuletBonus + titleBonus;
+
+            let atkText = `${totalAtk}`;
+            const muiraquitaIcon = (typeof icon === 'function') ? icon('muiraquita') : '💎';
+            const medalhaIcon = (typeof icon === 'function') ? icon('medalha') : '🏅';
+            if (amuletBonus > 0 && titleBonus > 0) {
+                atkText += ` <span style="color:#f39c12;font-size:0.7em;">(+${amuletBonus}${muiraquitaIcon} +${titleBonus}${medalhaIcon})</span>`;
+            } else if (amuletBonus > 0) {
+                atkText += ` <span style="color:#f39c12;font-size:0.7em;">(+${amuletBonus}${muiraquitaIcon})</span>`;
+            } else if (titleBonus > 0) {
+                atkText += ` <span style="color:#2ecc71;font-size:0.7em;">(+${titleBonus}${medalhaIcon})</span>`;
+            }
+
+            const sprite = (typeof SPRITES !== 'undefined' && SPRITES[p.class]) || '';
+            const elemIconHTML = (typeof icon === 'function') ? icon(elemInfo.key) : '';
+
+            row.innerHTML = `
+                <img class="hero-status-sprite" src="${sprite}" alt="${p.name || ''}">
+                <div class="hero-status-info">
+                    <div class="hero-status-name">
+                        <span class="hero-element-icon" style="color: ${elemInfo.color}; text-shadow: 0 0 6px ${elemInfo.color};" title="${elementoOficial}">
+                            ${elemIconHTML}
+                        </span>
+                        ${p.name || 'P'+(index+1)}
+                    </div>
+                    <div class="hero-status-hp">
+                        <span>${p.hp}/${p.maxHp}</span>
+                        <div class="mini-hp-bar">
+                            <div class="mini-hp-fill" style="width: ${hpPercent}%; background: ${hpColor};"></div>
+                        </div>
+                        <span class="hero-status-atk" title="Ataque total">${(typeof icon === 'function') ? icon('espadas') : '⚔️'} ${atkText}</span>
+                    </div>
+                </div>
+            `;
+
+            list.appendChild(row);
+        });
+
+        // Atualiza turnDisplayName
+        const turnName = document.getElementById('turnDisplayName');
+        if (turnName) {
+            if (currentPlayerIdx >= 0 && players[currentPlayerIdx]) {
+                const p = players[currentPlayerIdx];
+                const elementoOficial = calcularElementoDoHeroi(p.class);
+                const elemInfo = ELEMENT_ICONS[elementoOficial] || ELEMENT_ICONS['FOGO'];
+                const elemIconHTML = (typeof icon === 'function') ? icon(elemInfo.key) : '';
+                turnName.innerHTML = `${elemIconHTML} ${p.name || `Jogador ${currentPlayerIdx+1}`}`;
+                const turnDisplay = document.getElementById('turnP_Active');
+                if (turnDisplay) turnDisplay.classList.add('active-turn');
+            } else {
+                turnName.textContent = 'Boss';
+            }
+        }
+    };
+
+    // ==============================================================
+    // REFORÇA saveAndRefresh
+    // ==============================================================
+    if (typeof window.saveAndRefresh === 'function') {
+        const _prevSave = window.saveAndRefresh;
+        window.saveAndRefresh = function() {
+            const r = _prevSave.apply(this, arguments);
+
+            // Corrige p.element DEPOIS do original (que sobrescreveu)
+            if (typeof players !== 'undefined' && Array.isArray(players)) {
+                players.forEach(p => {
+                    if (p && p.class) {
+                        p.element = calcularElementoDoHeroi(p.class);
+                    }
+                });
+            }
+            return r;
+        };
+    }
+
+    // ==============================================================
+    // FORÇA RECÁLCULO AO CARREGAR
+    // ==============================================================
+    setTimeout(() => {
+        if (typeof players !== 'undefined' && Array.isArray(players) && players.length > 0) {
+            players.forEach(p => {
+                if (p && p.class) {
+                    p.element = calcularElementoDoHeroi(p.class);
+                    console.log(`[V16.5] ${p.name} → ${p.element}`);
+                }
+            });
+            window.updateHeroCard();
+        }
+    }, 500);
+
+    // ==============================================================
+    // MONITOR LEVE: a cada 2s, se algum p.element estiver errado, corrige
+    // ==============================================================
+    setInterval(() => {
+        if (!window._storyMode) return;
+        if (typeof players === 'undefined' || !Array.isArray(players)) return;
+
+        let mudou = false;
+        players.forEach(p => {
+            if (!p || !p.class) return;
+            const esperado = calcularElementoDoHeroi(p.class);
+            if (p.element !== esperado) {
+                p.element = esperado;
+                mudou = true;
+            }
+        });
+        if (mudou && typeof updateHeroCard === 'function') {
+            updateHeroCard();
+        }
+    }, 2000);
+
+    console.log('✅ [V16.5] updateHeroCard reescrito do zero.');
+    console.log('   Elemento calculado por classe: fixo (STORY_HERO_CLASSES) ou save (getHeroStoryElement).');
+})();
+// =================================================================
+// historia.js — BLOCO 72 (V17.0 — Sequenciamento + Aura de Morte)
+// -----------------------------------------------------------------
+// Cole NO FINAL do historia.js, DEPOIS do V16.5.
+//
+// Contém:
+//   1. Fila de cinematográficas COM TIMEOUT (GIF → purificação)
+//   2. Aura de morte do herói (vermelha/roxa) antes da derrota
+// =================================================================
+
+(function cinematograficasV170() {
+    if (window._cinematograficasV170) return;
+    window._cinematograficasV170 = true;
+
+    // ==============================================================
+    // 1. FILA DE CINEMATOGRÁFICAS COM TIMEOUT
+    // --------------------------------------------------------------
+    // Cada cinematográfica é enfileirada. A próxima só roda quando
+    // a anterior resolve OU quando o timeout de segurança estoura
+    // (para não travar o jogo se algo der errado).
+    // ==============================================================
+    window._cinemaFila = Promise.resolve();
+
+    function enfileirarCinema(fn, timeoutMs) {
+        timeoutMs = timeoutMs || 6000; // 6s de segurança
+        const anterior = window._cinemaFila || Promise.resolve();
+
+        const proxima = anterior.then(() => {
+            return new Promise((resolve) => {
+                let resolvido = false;
+
+                const finalizar = () => {
+                    if (resolvido) return;
+                    resolvido = true;
+                    clearTimeout(timer);
+                    resolve();
+                };
+
+                const timer = setTimeout(() => {
+                    console.warn('[V17.0] Timeout de cinematográfica — forçando avanço.');
+                    finalizar();
+                }, timeoutMs);
+
+                Promise.resolve(fn()).then(finalizar).catch(finalizar);
+            });
+        });
+
+        window._cinemaFila = proxima.catch(() => {});
+        return proxima;
+    }
+
+    window.enfileirarCinema = enfileirarCinema;
+
+    // ==============================================================
+    // 2. showBravelyAnimation ENFILEIRADO
+    // ==============================================================
+    const _origBravely = window.showBravelyAnimation;
+    if (typeof _origBravely === 'function') {
+        window.showBravelyAnimation = function(playerClass) {
+            // Fora do história → direto
+            if (!window._storyMode) {
+                return _origBravely.apply(this, arguments);
+            }
+
+            // Toggle ligado → pula (mas não enfileira)
+            if (typeof STORY_SETTINGS !== 'undefined' && STORY_SETTINGS.skipBravelyAnimations) {
+                return Promise.resolve();
+            }
+
+            // Enfileira (timeout de 4s — o GIF dura 2s)
+            return enfileirarCinema(() => {
+                return _origBravely.call(this, playerClass);
+            }, 4000);
+        };
+    }
+
+    // ==============================================================
+    // 3. showPurificacao ENFILEIRADA
+    // --------------------------------------------------------------
+    // Roda DEPOIS do GIF do PA (porque entra na fila).
+    // ==============================================================
+    const _origPurif = window.showPurificacao;
+    if (typeof _origPurif === 'function') {
+        window.showPurificacao = function(bossType, tileX, tileY, isFinalBoss) {
+            if (!window._storyMode) {
+                return _origPurif.apply(this, arguments);
+            }
+
+            // Toggle ligado → versão curta, mas ainda enfileirada
+            if (typeof STORY_SETTINGS !== 'undefined' && STORY_SETTINGS.skipBravelyAnimations) {
+                return enfileirarCinema(() => {
+                    return new Promise(resolve => {
+                        const board = document.getElementById('board');
+                        if (!board) { resolve(); return; }
+                        const overlay = document.createElement('div');
+                        overlay.className = 'purificacao-overlay active';
+                        overlay.style.zIndex = '300';
+                        overlay.innerHTML = `<div class="purificacao-darken"></div>`;
+                        board.appendChild(overlay);
+                        if (typeof playSfx === 'function') { try { playSfx('skill1'); } catch(e) {} }
+                        setTimeout(() => {
+                            if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+                            resolve();
+                        }, 800);
+                    });
+                }, 2000);
+            }
+
+            // Completa, enfileirada (timeout de 5s)
+            return enfileirarCinema(() => {
+                return _origPurif.call(this, bossType, tileX, tileY, isFinalBoss);
+            }, 5000);
+        };
+    }
+
+    // ==============================================================
+    // 4. showPoderAncestralEffect ENFILEIRADO
+    // --------------------------------------------------------------
+    // O "PODER ANCESTRAL" (texto) também precisa esperar.
+    // Mas ele dura só 2.4s. Se o toggle estiver ligado, não roda.
+    // ==============================================================
+    const _origPoder = window.showPoderAncestralEffect;
+    if (typeof _origPoder === 'function') {
+        window.showPoderAncestralEffect = function() {
+            if (typeof STORY_SETTINGS !== 'undefined' && STORY_SETTINGS.skipBravelyAnimations) {
+                return;
+            }
+            // Não enfileira — ele é rápido e pode sobrepor levemente
+            // (a intenção é ser um "flash" de texto, não uma cena)
+            return _origPoder.apply(this, arguments);
+        };
+    }
+
+    console.log('✅ [V17.0] Fila de cinematográficas instalada (GIF → purificação).');
+
+    // ==============================================================
+    // 5. AURA DE MORTE DO HERÓI
+    // --------------------------------------------------------------
+    // Quando um herói morre (hp <= 0), mostra uma aura vermelha/roxa
+    // no tile dele ANTES de disparar a tela de derrota.
+    // ==============================================================
+    async function mostrarAuraDeMorte(player) {
+        const board = document.getElementById('board');
+        if (!board || !player) return;
+
+        const s = (typeof getStep === 'function') ? getStep() : 59;
+        const cx = player.x * s + s / 2 + 8;
+        const cy = player.y * s + s / 2 + 8;
+
+        // Container da aura
+        const aura = document.createElement('div');
+        aura.className = 'aura-morte-overlay';
+        aura.style.zIndex = '250';
+        aura.style.position = 'absolute';
+        aura.style.left = '0';
+        aura.style.top = '0';
+        aura.style.width = '100%';
+        aura.style.height = '100%';
+        aura.style.pointerEvents = 'none';
+
+        // Darken suave
+        const darken = document.createElement('div');
+        darken.className = 'aura-morte-darken';
+        aura.appendChild(darken);
+
+        // Halo vermelho/roxo no tile do herói
+        const halo = document.createElement('div');
+        halo.className = 'aura-morte-halo';
+        halo.style.left = cx + 'px';
+        halo.style.top = cy + 'px';
+        halo.style.width = (s * 3) + 'px';
+        halo.style.height = (s * 3) + 'px';
+        aura.appendChild(halo);
+
+        // Feixe vertical descendente (alma subindo)
+        const feixe = document.createElement('div');
+        feixe.className = 'aura-morte-feixe';
+        feixe.style.left = cx + 'px';
+        feixe.style.width = (s * 1.5) + 'px';
+        aura.appendChild(feixe);
+
+        // Partículas (almas)
+        const particulas = 14;
+        for (let i = 0; i < particulas; i++) {
+            const p = document.createElement('div');
+            p.className = 'aura-morte-particula';
+            const offsetX = (Math.random() - 0.5) * s * 1.6;
+            const offsetY = (Math.random() - 0.5) * s * 1.6;
+            p.style.left = (cx + offsetX) + 'px';
+            p.style.top = (cy + offsetY) + 'px';
+            p.style.setProperty('--dx', (Math.random() * 60 - 30) + 'px');
+            p.style.setProperty('--dy', (-150 - Math.random() * 150) + 'px');
+            p.style.animationDelay = (Math.random() * 0.6) + 's';
+            p.style.animationDuration = (1.8 + Math.random() * 0.8) + 's';
+            aura.appendChild(p);
+        }
+
+        // Símbolos rúnicos (ᛉ = morte, ᛟ = fim, ᚦ = dor)
+        const runas = ['ᛉ', 'ᛟ', 'ᚦ', 'ᛏ'];
+        runas.forEach((runa, i) => {
+            const r = document.createElement('div');
+            r.className = 'aura-morte-runa';
+            r.textContent = runa;
+            const angle = (i / runas.length) * Math.PI * 2;
+            const dist = s * 2.2;
+            r.style.left = (cx + Math.cos(angle) * dist) + 'px';
+            r.style.top = (cy + Math.sin(angle) * dist) + 'px';
+            r.style.animationDelay = (i * 0.1) + 's';
+            aura.appendChild(r);
+        });
+
+        board.appendChild(aura);
+
+        // Aplica flash vermelho no sprite do herói
+        const img = document.getElementById(`imgP${player.id}`);
+        if (img) img.classList.add('aura-morte-sprite');
+
+        // SFX (reusa gameover — mas com pitch diferente se possível)
+        if (typeof playSfx === 'function') {
+            try { playSfx('gameover'); } catch(e) {}
+        }
+
+        // Duração: 2.8s
+        await new Promise(resolve => setTimeout(resolve, 2800));
+
+        // Cleanup
+        if (aura.parentNode) aura.parentNode.removeChild(aura);
+        if (img) img.classList.remove('aura-morte-sprite');
+    }
+
+    window.mostrarAuraDeMorte = mostrarAuraDeMorte;
+
+    // ==============================================================
+    // 6. HOOK NO applyDmg (detecta morte de herói)
+    // --------------------------------------------------------------
+    // Quando um herói chega a hp <= 0:
+    //   1. Mostra aura de morte
+    //   2. Se for o último herói vivo, dispara tela de derrota
+    // ==============================================================
+    const _origApplyDmg = window.applyDmg;
+    if (typeof _origApplyDmg === 'function') {
+        window.applyDmg = function(target, amount) {
+            if (!window._storyMode) {
+                return _origApplyDmg.apply(this, arguments);
+            }
+
+            if (!target || target.dead) {
+                return _origApplyDmg.apply(this, arguments);
+            }
+
+            const eraHeroiVivo = (typeof players !== 'undefined')
+                && players.includes(target)
+                && !target.dead;
+
+            const hpAntes = target.hp;
+
+            // Chama o original (aplica dano, marca dead, etc.)
+            const r = _origApplyDmg.apply(this, arguments);
+
+            // Se era herói e morreu agora → aura
+            if (eraHeroiVivo && target.dead) {
+                mostrarAuraDeMorte(target).then(() => {
+                    // Depois da aura: verifica se é o último herói vivo
+                    const vivos = players.filter(p => !p.dead);
+                    if (vivos.length === 0 && !window._endGameShowing) {
+                        // Todos morreram → tela de derrota
+                        if (typeof handleStoryDefeat === 'function') {
+                            handleStoryDefeat();
+                        } else if (typeof finishStoryPhase === 'function') {
+                            finishStoryPhase(false);
+                        }
+                    }
+                });
+            }
+
+            return r;
+        };
+    }
+
+    // ==============================================================
+    // 7. HOOK NO handleStoryDefeat (espera aura antes)
+    // --------------------------------------------------------------
+    // Se já estamos no meio de uma aura, o handleStoryDefeat original
+    // pode rodar antes dela terminar. Vou garantir que a tela de
+    // derrota só apareça DEPOIS.
+    // ==============================================================
+    const _origHandleStoryDefeat = window.handleStoryDefeat;
+    if (typeof _origHandleStoryDefeat === 'function') {
+        window.handleStoryDefeat = async function() {
+            if (!window._storyMode) {
+                return _origHandleStoryDefeat.apply(this, arguments);
+            }
+
+            // Espera a aura de morte (se houver) terminar
+            await new Promise(resolve => setTimeout(resolve, 300));
+
+            return _origHandleStoryDefeat.apply(this, arguments);
+        };
+    }
+
+    // ==============================================================
+    // CSS
+    // ==============================================================
+    if (!document.getElementById('auraMorteCSS')) {
+        const style = document.createElement('style');
+        style.id = 'auraMorteCSS';
+        style.textContent = `
+            /* ============ AURA DE MORTE ============ */
+            .aura-morte-overlay {
+                position: absolute;
+                inset: 0;
+                pointer-events: none;
+                overflow: hidden;
+            }
+
+            .aura-morte-darken {
+                position: absolute;
+                inset: 0;
+                background: radial-gradient(
+                    ellipse at center,
+                    rgba(80, 0, 20, 0.0) 0%,
+                    rgba(60, 0, 15, 0.4) 60%,
+                    rgba(20, 0, 5, 0.85) 100%
+                );
+                animation: auraMorteDarken 2.8s ease-in-out forwards;
+            }
+
+            @keyframes auraMorteDarken {
+                0%   { opacity: 0; }
+                20%  { opacity: 1; }
+                85%  { opacity: 1; }
+                100% { opacity: 0; }
+            }
+
+            .aura-morte-halo {
+                position: absolute;
+                border-radius: 50%;
+                transform: translate(-50%, -50%) scale(0.3);
+                background: radial-gradient(
+                    circle,
+                    rgba(255, 60, 80, 0.95) 0%,
+                    rgba(180, 20, 60, 0.75) 25%,
+                    rgba(90, 10, 110, 0.5) 50%,
+                    rgba(40, 0, 60, 0) 75%
+                );
+                box-shadow:
+                    0 0 40px rgba(200, 30, 70, 0.9),
+                    0 0 80px rgba(100, 20, 130, 0.6);
+                animation: auraMorteHalo 2.8s ease-out forwards;
+                mix-blend-mode: screen;
+            }
+
+            @keyframes auraMorteHalo {
+                0%   { transform: translate(-50%, -50%) scale(0.3); opacity: 0; }
+                15%  { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+                70%  { transform: translate(-50%, -50%) scale(1.4); opacity: 0.9; }
+                100% { transform: translate(-50%, -50%) scale(1.8); opacity: 0; }
+            }
+
+            .aura-morte-feixe {
+                position: absolute;
+                top: 0;
+                height: 100%;
+                transform: translateX(-50%) scaleY(0);
+                transform-origin: top center;
+                background: linear-gradient(
+                    180deg,
+                    rgba(255, 100, 120, 0.0) 0%,
+                    rgba(255, 60, 80, 0.5) 15%,
+                    rgba(180, 20, 60, 0.85) 45%,
+                    rgba(100, 20, 130, 0.7) 75%,
+                    rgba(40, 0, 60, 0.0) 100%
+                );
+                filter: blur(5px);
+                animation: auraMorteFeixe 2.8s cubic-bezier(0.3, 0, 0.4, 1) forwards;
+                mix-blend-mode: screen;
+            }
+
+            @keyframes auraMorteFeixe {
+                0%   { transform: translateX(-50%) scaleY(0); opacity: 0; }
+                15%  { transform: translateX(-50%) scaleY(1); opacity: 1; }
+                75%  { transform: translateX(-50%) scaleY(1); opacity: 1; }
+                100% { transform: translateX(-50%) scaleY(1); opacity: 0; }
+            }
+
+            .aura-morte-particula {
+                position: absolute;
+                width: 6px;
+                height: 6px;
+                border-radius: 50%;
+                background: radial-gradient(circle, #ff5c78 0%, #c0204a 40%, rgba(100, 20, 130, 0) 100%);
+                box-shadow: 0 0 10px 2px rgba(255, 60, 80, 0.9);
+                pointer-events: none;
+                opacity: 0;
+                animation: auraMorteParticula 2.2s ease-out forwards;
+            }
+
+            @keyframes auraMorteParticula {
+                0%   { opacity: 0; transform: translate(0, 0) scale(0.4); }
+                20%  { opacity: 1; transform: translate(0, -8px) scale(1); }
+                100% { opacity: 0; transform: translate(var(--dx, 0), var(--dy, -180px)) scale(0.5); }
+            }
+
+            .aura-morte-runa {
+                position: absolute;
+                font-family: 'Cinzel', serif;
+                font-size: 32px;
+                font-weight: 900;
+                color: #ff3c50;
+                text-shadow:
+                    0 0 12px rgba(255, 60, 80, 0.9),
+                    0 0 24px rgba(100, 20, 130, 0.7);
+                transform: translate(-50%, -50%) scale(0.3);
+                opacity: 0;
+                animation: auraMorteRuna 2.4s ease-out forwards;
+            }
+
+            @keyframes auraMorteRuna {
+                0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.3) rotate(0deg); }
+                25%  { opacity: 1; transform: translate(-50%, -50%) scale(1.2) rotate(15deg); }
+                80%  { opacity: 0.9; transform: translate(-50%, -50%) scale(1) rotate(0deg); }
+                100% { opacity: 0; transform: translate(-50%, -50%) scale(0.6) rotate(-30deg); }
+            }
+
+            .token img.aura-morte-sprite {
+                animation: auraMorteSprite 2.8s ease-out forwards !important;
+            }
+
+            @keyframes auraMorteSprite {
+                0%   { filter: brightness(1) drop-shadow(0 0 0 rgba(255, 60, 80, 0)); }
+                20%  { filter: brightness(2.5) saturate(0) drop-shadow(0 0 20px rgba(255, 60, 80, 1)) drop-shadow(0 0 40px rgba(100, 20, 130, 0.8)); }
+                50%  { filter: brightness(0.8) saturate(0) drop-shadow(0 0 15px rgba(255, 60, 80, 0.7)); }
+                85%  { filter: brightness(0.4) saturate(0) drop-shadow(0 0 10px rgba(255, 60, 80, 0.4)); opacity: 1; }
+                100% { filter: brightness(0.2) saturate(0) drop-shadow(0 0 6px rgba(255, 60, 80, 0.2)); opacity: 0; }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // ==============================================================
+    // LOG FINAL
+    // ==============================================================
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V17.0] Sequenciamento + Aura de Morte');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• GIF do PA → purificação (sequência, sem sobrepor)');
+    console.log('• Fila com timeout de segurança (não trava)');
+    console.log('• Aura de morte (halo vermelho/roxo + runas + partículas)');
+    console.log('• Sprite do herói esmaece junto com a aura');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — BLOCO 73 (V17.1 — Fix GIF + Aura + Restrição)
+// -----------------------------------------------------------------
+// Cole NO FINAL do historia.js, DEPOIS do V17.0.
+//
+// Corrige:
+//   1. GIF do PA → purificação (garantir ordem correta)
+//   2. Aura de morte (forçar delay na tela de derrota)
+//   3. Restrição do Evento (validar elemento REAL do herói)
+// =================================================================
+
+(function correcoesV171() {
+    if (window._correcoesV171) return;
+    window._correcoesV171 = true;
+
+    // ==============================================================
+    // 1. GIF DO PA → PURIFICAÇÃO (ordem garantida)
+    // --------------------------------------------------------------
+    // Problema: o triggerBravelyChain aplica dano (que mata o boss
+    // e dispara purificação) ANTES de chamar showBravelyAnimation.
+    //
+    // Solução: showPurificacao espera o GIF do PA terminar.
+    // ==============================================================
+    window._gifPAEmAndamento = false;
+    window._gifPAInicio = 0;
+
+    const _origShowBravely = window.showBravelyAnimation;
+    if (typeof _origShowBravely === 'function') {
+        window.showBravelyAnimation = async function(playerClass) {
+            if (!window._storyMode) {
+                return _origShowBravely.apply(this, arguments);
+            }
+
+            if (typeof STORY_SETTINGS !== 'undefined' && STORY_SETTINGS.skipBravelyAnimations) {
+                return Promise.resolve();
+            }
+
+            window._gifPAEmAndamento = true;
+            window._gifPAInicio = Date.now();
+
+            try {
+                return await _origShowBravely.call(this, playerClass);
+            } finally {
+                window._gifPAEmAndamento = false;
+            }
+        };
+    }
+
+    const _origShowPurif = window.showPurificacao;
+    if (typeof _origShowPurif === 'function') {
+        window.showPurificacao = async function(bossType, tileX, tileY, isFinalBoss) {
+            if (!window._storyMode) {
+                return _origShowPurif.apply(this, arguments);
+            }
+
+            // ⭐ ESPERA O GIF DO PA TERMINAR (se ainda estiver rodando)
+            // Timeout de segurança: 5s máximo
+            const inicioEspera = Date.now();
+            while (window._gifPAEmAndamento && (Date.now() - inicioEspera) < 5000) {
+                await new Promise(r => setTimeout(r, 100));
+            }
+
+            // Delay mínimo para garantir que a transição fique suave
+            await new Promise(r => setTimeout(r, 200));
+
+            return _origShowPurif.call(this, bossType, tileX, tileY, isFinalBoss);
+        };
+    }
+
+    console.log('✅ [V17.1] 1. GIF do PA → purificação (ordem garantida).');
+
+    // ==============================================================
+    // 2. AURA DE MORTE (forçar delay na tela de derrota)
+    // --------------------------------------------------------------
+    // O applyDmg original chama handleStoryDefeat ANTES do meu hook
+    // poder rodar. Solução: interceptar finishStoryPhase e esperar.
+    // ==============================================================
+    window._auraMorteEmAndamento = false;
+    window._ultimaMorteHeroi = 0;
+
+    // Hook em applyDmg — detecta morte de herói ANTES do original rodar
+    const _origApplyDmg = window.applyDmg;
+    if (typeof _origApplyDmg === 'function') {
+        window.applyDmg = function(target, amount) {
+            if (!window._storyMode) {
+                return _origApplyDmg.apply(this, arguments);
+            }
+
+            if (!target || target.dead) {
+                return _origApplyDmg.apply(this, arguments);
+            }
+
+            const eraHeroiVivo = (typeof players !== 'undefined')
+                && players.includes(target)
+                && !target.dead;
+
+            const r = _origApplyDmg.apply(this, arguments);
+
+            // Se herói morreu → mostra aura
+            if (eraHeroiVivo && target.dead) {
+                window._ultimaMorteHeroi = Date.now();
+
+                // Marca que a aura está rodando
+                if (typeof window.mostrarAuraDeMorte === 'function') {
+                    window._auraMorteEmAndamento = true;
+                    window.mostrarAuraDeMorte(target).then(() => {
+                        window._auraMorteEmAndamento = false;
+                        console.log('[V17.1] Aura de morte terminou');
+
+                        // Depois da aura: se todos mortos, dispara derrota
+                        const vivos = players.filter(p => !p.dead);
+                        if (vivos.length === 0 && !window._endGameShowing) {
+                            console.log('[V17.1] Todos morreram. Disparando derrota após aura.');
+                            if (typeof finishStoryPhase === 'function') {
+                                finishStoryPhase(false);
+                            } else if (typeof handleStoryDefeat === 'function') {
+                                handleStoryDefeat();
+                            }
+                        }
+                    });
+                }
+            }
+
+            return r;
+        };
+    }
+
+    // Interceptar finishStoryPhase pra esperar a aura (se houver)
+    const _origFinishPhase = window.finishStoryPhase;
+    if (typeof _origFinishPhase === 'function') {
+        window.finishStoryPhase = async function(victory) {
+            if (!window._storyMode) {
+                return _origFinishPhase.apply(this, arguments);
+            }
+
+            // Se há aura rodando E é derrota, espera a aura
+            if (!victory && window._auraMorteEmAndamento) {
+                console.log('[V17.1] finishStoryPhase: esperando aura de morte...');
+                const inicioEspera = Date.now();
+                while (window._auraMorteEmAndamento && (Date.now() - inicioEspera) < 4000) {
+                    await new Promise(r => setTimeout(r, 100));
+                }
+                // Delay extra para a tela ficar limpa
+                await new Promise(r => setTimeout(r, 300));
+            }
+
+            return _origFinishPhase.call(this, victory);
+        };
+    }
+
+    // Interceptar handleStoryDefeat também
+    const _origHandleDefeat = window.handleStoryDefeat;
+    if (typeof _origHandleDefeat === 'function') {
+        window.handleStoryDefeat = async function() {
+            if (!window._storyMode) {
+                return _origHandleDefeat.apply(this, arguments);
+            }
+
+            // Se há aura rodando, espera
+            if (window._auraMorteEmAndamento) {
+                console.log('[V17.1] handleStoryDefeat: esperando aura de morte...');
+                const inicioEspera = Date.now();
+                while (window._auraMorteEmAndamento && (Date.now() - inicioEspera) < 4000) {
+                    await new Promise(r => setTimeout(r, 100));
+                }
+                await new Promise(r => setTimeout(r, 300));
+            }
+
+            return _origHandleDefeat.apply(this, arguments);
+        };
+    }
+
+    console.log('✅ [V17.1] 2. Aura de morte antes da derrota.');
+
+    // ==============================================================
+    // 3. RESTRIÇÃO DO EVENTO (elemento REAL do herói)
+    // --------------------------------------------------------------
+    // Problema: validarHeroiRestricao usava amuleto. O amuleto
+    // NÃO deve sobrescrever a restrição — a restrição é sobre o
+    // ELEMENTO DO HERÓI, não sobre o equipamento.
+    // ==============================================================
+    function getElementoRealDoHeroi(heroClass) {
+        if (!heroClass) return 'FOGO';
+
+        // 1. Elemento FIXO da tabela
+        if (typeof STORY_HERO_CLASSES !== 'undefined') {
+            const h = STORY_HERO_CLASSES[heroClass];
+            if (h && h.element) return h.element;
+        }
+
+        // 2. Elemento dinâmico (save)
+        if (typeof getHeroStoryElement === 'function') {
+            return getHeroStoryElement(heroClass);
+        }
+        if (typeof getSaveElement === 'function') {
+            return getSaveElement();
+        }
+
+        return 'FOGO';
+    }
+
+    function validarRestricaoEvento(bossId) {
+        const cfg = (bossId === 'pesadelo')
+            ? (typeof EVENTO_PESADELO !== 'undefined' ? EVENTO_PESADELO : null)
+            : (typeof EVENTO_BOSSES !== 'undefined' ? EVENTO_BOSSES[bossId] : null);
+
+        if (!cfg || !cfg.restricao) return { valido: true };
+
+        const heroiClass = (STORY_PROGRESS.selectedHeroes || ['Tupa'])[0];
+        const heroiData = (typeof STORY_HERO_CLASSES !== 'undefined')
+            ? STORY_HERO_CLASSES[heroiClass]
+            : null;
+
+        if (!heroiData) return { valido: false, motivo: 'Herói inválido.' };
+
+        // ⭐ ELEMENTO REAL DO HERÓI (ignora amuleto)
+        const elementoReal = getElementoRealDoHeroi(heroiClass);
+
+        if (cfg.restricao.tipo === 'elemento') {
+            if (elementoReal !== cfg.restricao.valor) {
+                const elemIcon = { FOGO:'🔥', AGUA:'💧', TERRA:'⛰️', AR:'🌪️' };
+                return {
+                    valido: false,
+                    motivo: `Este ato exige heróis de ${elemIcon[cfg.restricao.valor] || ''} ${cfg.restricao.valor}. Seu herói atual (${heroiData.displayName}) é de ${elemIcon[elementoReal] || ''} ${elementoReal}.`
+                };
+            }
+        } else if (cfg.restricao.tipo === 'classe') {
+            if (heroiData.role !== cfg.restricao.valor) {
+                return {
+                    valido: false,
+                    motivo: `Este ato exige ${cfg.restricao.valor}s. Seu herói atual (${heroiData.displayName}) é ${heroiData.role}.`
+                };
+            }
+        }
+
+        return { valido: true };
+    }
+
+    // Hook em eventoIniciarFase (substitui o V14.0)
+    if (typeof window.eventoIniciarFase === 'function') {
+        const _origIniciarFase = window.eventoIniciarFase;
+        window.eventoIniciarFase = function(bossId, faseId) {
+            if (bossId !== 'pesadelo') {
+                const check = validarRestricaoEvento(bossId);
+                if (!check.valido) {
+                    if (typeof showToast === 'function') {
+                        showToast('🚫 Restrição', check.motivo, '🚫');
+                    } else {
+                        alert(check.motivo);
+                    }
+                    return;
+                }
+            }
+            return _origIniciarFase.apply(this, arguments);
+        };
+    }
+
+    // Hook em eventoIniciarBatalha (segunda camada)
+    if (typeof window.eventoIniciarBatalha === 'function') {
+        const _origIniciarBatalha = window.eventoIniciarBatalha;
+        window.eventoIniciarBatalha = async function(bossId, faseId) {
+            if (bossId !== 'pesadelo') {
+                const check = validarRestricaoEvento(bossId);
+                if (!check.valido) {
+                    console.error('[V17.1] Restrição violada em eventoIniciarBatalha:', check.motivo);
+                    if (typeof showToast === 'function') showToast('🚫 Restrição', check.motivo, '🚫');
+                    return;
+                }
+            }
+            return _origIniciarBatalha.apply(this, arguments);
+        };
+    }
+
+    // Também expõe pra debug
+    window.validarRestricaoEvento = validarRestricaoEvento;
+    window.getElementoRealDoHeroi = getElementoRealDoHeroi;
+
+    console.log('✅ [V17.1] 3. Restrição do Evento usa elemento REAL do herói.');
+
+    // ==============================================================
+    // LOG FINAL
+    // ==============================================================
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V17.1] Fixes aplicados');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• GIF do PA → purificação (ordem garantida)');
+    console.log('• Aura de morte antes da tela de derrota');
+    console.log('• Restrição do Evento valida elemento REAL');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('');
+    console.log('💡 Debug:');
+    console.log('   window.validarRestricaoEvento("teju_jagua")');
+    console.log('   window.getElementoRealDoHeroi("Tupa")');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — AJUSTE RÁPIDO (pausa entre GIF e purificação)
+// =================================================================
+(function ajustePausaGifV171fix() {
+    if (window._ajustePausaV171fix) return;
+    window._ajustePausaV171fix = true;
+
+    const _origPurif = window.showPurificacao;
+    if (typeof _origPurif === 'function') {
+        window.showPurificacao = async function(bossType, tileX, tileY, isFinalBoss) {
+            if (!window._storyMode) return _origPurif.apply(this, arguments);
+
+            // Espera o GIF, mas com timeout de 3s (em vez de 5s)
+            const inicio = Date.now();
+            while (window._gifPAEmAndamento && (Date.now() - inicio) < 3000) {
+                await new Promise(r => setTimeout(r, 50));
+            }
+
+            // ⭐ Remove o delay de 200ms (era do V17.1)
+            // Vai direto pra purificação
+            return _origPurif.call(this, bossType, tileX, tileY, isFinalBoss);
+        };
+    }
+    console.log('✅ [ajuste] Pausa entre GIF e purificação reduzida.');
+})();
+// =================================================================
+// historia.js — BLOCO 83 (V19.0 — Fix crash phase = null)
+// -----------------------------------------------------------------
+// Cole NO FINAL do historia.js (último bloco).
+//
+// Causa: showStoryDefeatScreen (V9.0-B1) acessa phase.name
+// quando phase é null (acontece no Evento).
+//
+// Solução: interceptar showStoryDefeatScreen e passar um objeto
+// seguro no lugar de null.
+// =================================================================
+
+(function fixCrashPhaseNull() {
+    if (window._fixCrashPhaseNull) return;
+    window._fixCrashPhaseNull = true;
+
+    const _origShowDefeat = window.showStoryDefeatScreen;
+    if (typeof _origShowDefeat !== 'function') {
+        console.warn('[V19.0] showStoryDefeatScreen não encontrado');
+        return;
+    }
+
+    window.showStoryDefeatScreen = function(phase, drops) {
+        // ⭐ Se phase for null/undefined, cria um objeto seguro
+        const phaseSafe = phase || {
+            id: 'evento',
+            name: 'Evento Semanal',
+            enemies: [],
+        };
+
+        return _origShowDefeat.call(this, phaseSafe, drops);
+    };
+
+    console.log('✅ [V19.0] Fix phase = null instalado.');
+})();
+// =================================================================
+// historia.js — BLOCO 85 (V21.0 — Atrasar tela de derrota)
+// -----------------------------------------------------------------
+// Cole NO FINAL do historia.js (último bloco).
+//
+// Abordagem:
+//   1. Marca o timestamp da última morte de herói (via players)
+//   2. Atrasa a criação de QUALQUER tela de derrota em 3s
+//      (showStoryDefeatScreen, showEndGame, _mostrarTelaFinalEvento)
+//   3. Durante o atraso, a aura (se existir) aparece
+//   4. Se a aura não existir, o jogador só vê um "delay" de 3s
+//      (não é ideal, mas não duplica)
+// =================================================================
+
+(function atrasarTelaDerrotaV210() {
+    if (window._atrasarTelaV210) return;
+    window._atrasarTelaV210 = true;
+
+    console.log('[V21.0] Instalando atraso de tela de derrota...');
+
+    // ==============================================================
+    // HELPER: há herói morto?
+    // ==============================================================
+    function temHeroiMorto() {
+        if (typeof players === 'undefined' || !Array.isArray(players)) return false;
+        return players.some(p => p && p.dead);
+    }
+
+    // ==============================================================
+    // 1. Hook em showStoryDefeatScreen
+    // --------------------------------------------------------------
+    // Se há herói morto E estamos em batalha, atrasa 3s.
+    // ==============================================================
+    const _origShowDefeat = window.showStoryDefeatScreen;
+    if (typeof _origShowDefeat === 'function') {
+        window.showStoryDefeatScreen = async function(phase, drops) {
+            // Se há herói morto, atrasa
+            if (temHeroiMorto() && (window._storyMode || window._eventoAtivo)) {
+                console.log('[V21.0] Atrasando showStoryDefeatScreen (3s)...');
+                await new Promise(r => setTimeout(r, 3000));
+            }
+            // phase = null safe
+            const phaseSafe = phase || { id: 'evento', name: 'Evento Semanal', enemies: [] };
+            return _origShowDefeat.call(this, phaseSafe, drops);
+        };
+    }
+
+    // ==============================================================
+    // 2. Hook em showEndGame
+    // --------------------------------------------------------------
+    // Se é derrota E há herói morto, atrasa 3s.
+    // ==============================================================
+    const _origShowEndGame = window.showEndGame;
+    if (typeof _origShowEndGame === 'function') {
+        window.showEndGame = async function(msg, isWin) {
+            if (!isWin && temHeroiMorto() && (window._storyMode || window._eventoAtivo)) {
+                console.log('[V21.0] Atrasando showEndGame (3s)...');
+                await new Promise(r => setTimeout(r, 3000));
+            }
+            return _origShowEndGame.apply(this, arguments);
+        };
+    }
+
+    // ==============================================================
+    // 3. Hook em _mostrarTelaFinalEvento (Evento)
+    // --------------------------------------------------------------
+    // Essa função é interna, mas pode estar exposta em window.
+    // Se estiver, atrasa.
+    // ==============================================================
+    const _origTelaFinal = window._mostrarTelaFinalEvento;
+    if (typeof _origTelaFinal === 'function') {
+        window._mostrarTelaFinalEvento = async function(vitoria, drops, dropsResult) {
+            if (!vitoria && temHeroiMorto() && window._eventoAtivo) {
+                console.log('[V21.0] Atrasando _mostrarTelaFinalEvento (3s)...');
+                await new Promise(r => setTimeout(r, 3000));
+            }
+            return _origTelaFinal.apply(this, arguments);
+        };
+    }
+
+    // ==============================================================
+    // 4. Aura (se existir, roda durante o atraso)
+    // --------------------------------------------------------------
+    // Se `mostrarAuraDeMorte` existir, roda durante os 3s de espera.
+    // Se não existir, o jogador só vê um "delay" (não é ideal, mas
+    // não duplica).
+    // ==============================================================
+    // (nada a fazer — a aura já roda por conta própria, se existir)
+
+    console.log('✅ [V21.0] Atraso de tela de derrota instalado.');
+    console.log('   • showStoryDefeatScreen: +3s se herói morto');
+    console.log('   • showEndGame: +3s se herói morto');
+    console.log('   • _mostrarTelaFinalEvento: +3s se herói morto');
 })();
