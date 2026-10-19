@@ -461,17 +461,17 @@ const SPRITES_STORY = {
     'heroi_Araci':'https://i.imgur.com/x8gAPJH.gif',
     'heroi_Tapyrayawara':'https://i.imgur.com/m0tdSWA.gif',
     'heroi_Curupira':    'https://i.imgur.com/x47LlSn.gif',
-    'heroi_Kianumanka':  'https://i.imgur.com/SEU_LINK_AQUI.gif',
-    'heroi_AnhangaMirim':'https://i.imgur.com/SEU_LINK_AQUI.gif',
-    'heroi_Matinta':     'https://i.imgur.com/SEU_LINK_AQUI.gif',
-    'heroi_Naia':        'https://i.imgur.com/SEU_LINK_AQUI.gif',
-    'heroi_Kuati':       'https://i.imgur.com/SEU_LINK_AQUI.gif',
-    'heroi_CabocloAgua': 'https://i.imgur.com/SEU_LINK_AQUI.gif',
-    'heroi_Tupinamba':   'https://i.imgur.com/SEU_LINK_AQUI.gif',
-    'heroi_Mbaraka':     'https://i.imgur.com/SEU_LINK_AQUI.gif',
-    'heroi_MaeDoOuro':   'https://i.imgur.com/SEU_LINK_AQUI.gif',
-    'heroi_PajeAcu':     'https://i.imgur.com/SEU_LINK_AQUI.gif',
-    'heroi_Negrinho':    'https://i.imgur.com/SEU_LINK_AQUI.gif',
+    'heroi_Kianumanka':  'https://i.imgur.com/khzS8ap.gif',
+    'heroi_AnhangaMirim':'https://i.imgur.com/2IvBU2b.gif',
+    'heroi_Matinta':     'https://i.imgur.com/1czUJ9V.gif',
+    'heroi_Naia':        'https://i.imgur.com/pOWy6qU.gif',
+    'heroi_Kuati':       'https://i.imgur.com/LrS3Pl8.gif',
+    'heroi_CabocloAgua': 'https://i.imgur.com/e8HyuJQ.gif',
+    'heroi_Tupinamba':   'https://i.imgur.com/wunRaOG.gif',
+    'heroi_Mbaraka':     'https://i.imgur.com/XbG8CIV.gif',
+    'heroi_MaeDoOuro':   'https://i.imgur.com/2W8jVZS.gif',
+    'heroi_PajeAcu':     'https://i.imgur.com/bpt2idM.gif',
+    'heroi_Negrinho':    'https://i.imgur.com/TD6Wz71.gif',
     'heroi_Ruda':        'https://i.imgur.com/fCvtKEx.gif',
 
     // --- Cenários ---
@@ -18685,40 +18685,40 @@ console.log('💡 Zeradas:', STORY_PROGRESS.clearedDifficulties || []);
         // Se vazio, usa SPRITES_STORY do mesmo id.
 
         // ---- Materiais ----
-        'fragmento_teju': '',
-        'fragmento_mboi': '',
-        'fragmento_monai': '',
-        'fragmento_jasy': '',
-        'fragmento_kurupi': '',
-        'fragmento_aoao': '',
-        'fragmento_luison': '',
+        'fragmento_teju': 'https://i.imgur.com/KZLVehp.png',
+        'fragmento_mboi': 'https://i.imgur.com/UbqoKLo.png',
+        'fragmento_monai': 'https://i.imgur.com/tsb1S32.png',
+        'fragmento_jasy': 'https://i.imgur.com/eHA6G7Y.png',
+        'fragmento_kurupi': 'https://i.imgur.com/lZUTJtt.png',
+        'fragmento_aoao': 'https://i.imgur.com/kFp1ZU4.png',
+        'fragmento_luison': 'https://i.imgur.com/khrbQlR.png',
 
         // ---- Armas (tacape) ----
-        'arma_teju_tacape': '',
-        'arma_mboi_tacape': '',
-        'arma_monai_tacape': '',
-        'arma_jasy_tacape': '',
-        'arma_kurupi_tacape': '',
-        'arma_aoao_tacape': '',
-        'arma_luison_tacape': '',
+        'arma_teju_tacape': 'https://i.imgur.com/lLVprTE.png',
+        'arma_mboi_tacape': 'https://i.imgur.com/yG0vaOB.png',
+        'arma_monai_tacape': 'https://i.imgur.com/6wI2Ctu.png',
+        'arma_jasy_tacape': 'https://i.imgur.com/JiE579L.png',
+        'arma_kurupi_tacape': 'https://i.imgur.com/OfTmKyD.png',
+        'arma_aoao_tacape': 'https://i.imgur.com/vcd54H6.png',
+        'arma_luison_tacape': 'https://i.imgur.com/3gfyDqQ.png',
 
         // ---- Armas (flecha) ----
-        'arma_teju_flecha': '',
-        'arma_mboi_flecha': '',
-        'arma_monai_flecha': '',
-        'arma_jasy_flecha': '',
-        'arma_kurupi_flecha': '',
-        'arma_aoao_flecha': '',
-        'arma_luison_flecha': '',
+        'arma_teju_flecha': 'https://i.imgur.com/zuBrBm1.png',
+        'arma_mboi_flecha': 'https://i.imgur.com/quiGqux.png',
+        'arma_monai_flecha': 'https://i.imgur.com/AtwwLRj.png',
+        'arma_jasy_flecha': 'https://i.imgur.com/VY6BuM3.png',
+        'arma_kurupi_flecha': 'https://i.imgur.com/PICIZDe.png',
+        'arma_aoao_flecha': 'https://i.imgur.com/Hb9fKsR.png',
+        'arma_luison_flecha': 'https://i.imgur.com/xmJQr2B.png',
 
         // ---- Armas (cajado) ----
-        'arma_teju_cajado': '',
-        'arma_mboi_cajado': '',
-        'arma_monai_cajado': '',
-        'arma_jasy_cajado': '',
-        'arma_kurupi_cajado': '',
-        'arma_aoao_cajado': '',
-        'arma_luison_cajado': '',
+        'arma_teju_cajado': 'https://i.imgur.com/Z5fZdzT.png',
+        'arma_mboi_cajado': 'https://i.imgur.com/TmWTowF.png',
+        'arma_monai_cajado': 'https://i.imgur.com/yIazf0k.png',
+        'arma_jasy_cajado': 'https://i.imgur.com/t3gPgqF.png',
+        'arma_kurupi_cajado': 'https://i.imgur.com/S55ogba.png',
+        'arma_aoao_cajado': 'https://i.imgur.com/BVMs4O9.png',
+        'arma_luison_cajado': 'https://i.imgur.com/IUL7382.png',
     };
 
     const EVENTO_EMOJIS = {
@@ -25948,4 +25948,197 @@ console.log('💡 Zeradas:', STORY_PROGRESS.clearedDifficulties || []);
     }, 2000);
 
     console.log('✅ [V15.1] Bloco de correções P0/P1 instalado.');
+})();
+// =================================================================
+// historia.js — PATCH: Reescrita Completa do Card de Fases
+// =================================================================
+(function reescreverRenderChapterPhases() {
+    if (window._reescreverRenderChapterPhases) return;
+    window._reescreverRenderChapterPhases = true;
+
+    window.renderChapterPhases = function(ch) {
+        const screen = document.getElementById('storyScreen');
+        if (!screen) return;
+
+        let html = '';
+        
+        ch.phases.forEach(ph => {
+            const un = isPhaseUnlocked(ch.id, ph.id);
+            const comp = isPhaseCompleted(ph.id);
+            const boss = ph.isBoss;
+            const finalBoss = ph.isFinalBoss;
+            const stars = getStarsForPhase(ph.id);
+            
+            let statusIcon;
+            if (comp) statusIcon = uiIcon('check');
+            else if (un) statusIcon = `<span class="story-phase-available">${uiIcon('arrow')}</span>`;
+            else statusIcon = uiIcon('lock');
+
+            let starsHTML = '<span class="story-phase-stars">';
+            for (let i = 1; i <= 3; i++) {
+                starsHTML += `<span class="story-star ${i <= stars ? 'on' : 'off'}">★</span>`;
+            }
+            starsHTML += '</span>';
+
+            // --- INÍCIO DA CORREÇÃO DOS SPRITES ---
+            const enemiesHTML = ph.enemies.map(eid => {
+                const e = STORY_ENEMIES[eid];
+                if (!e) return '';
+                
+                // 1. Tenta pegar o link do SPRITES_STORY
+                let urlFinal = SPRITES_STORY[eid];
+                
+                // 2. Se estiver vazio (como está acontecendo com todos os bosses), 
+                // vai na tabela global do entidades.js
+                if (!urlFinal || urlFinal.trim() === '') {
+                    const baseKey = STORY_TO_BASE_BOSS[eid]; // Ex: transforma 'saci' em 'SACI'
+                    if (baseKey && typeof SPRITES !== 'undefined' && SPRITES[baseKey]) {
+                        urlFinal = SPRITES[baseKey];
+                    }
+                }
+
+                // 3. Se tiver link, desenha a imagem. Se não, desenha o emoji.
+                let imgHTML;
+                if (urlFinal && urlFinal.trim() !== '') {
+                    imgHTML = `<img src="${urlFinal}" class="story-sprite" alt="${e.name}" onerror="this.outerHTML='${EMOJI_STORY[eid]||'?'}'">`;
+                } else {
+                    imgHTML = `<span class="story-enemy-mini">${EMOJI_STORY[eid]||'?'}</span>`;
+                }
+
+                return `<span class="story-phase-enemy" title="${e.name}">${imgHTML}</span>`;
+            }).join('<span class="story-phase-arrow">→</span>');
+            // --- FIM DA CORREÇÃO DOS SPRITES ---
+
+            const cls = [
+                'story-phase-card',
+                un ? 'unlocked' : 'locked',
+                comp ? 'completed' : '',
+                boss ? 'boss-phase' : '',
+                finalBoss ? 'final-boss' : ''
+            ].join(' ');
+
+            html += `<div class="${cls}" ${un?`onclick="startStoryPhase('${ch.id}','${ph.id}')"`:''}>
+                <div class="story-phase-bg">${ph.bg?storySpriteLarge(ph.bg):''}</div>
+                <div class="story-phase-header">
+                    <span class="story-phase-num">${ph.id}</span>
+                    ${starsHTML}
+                    <span class="story-phase-status">${statusIcon}</span>
+                </div>
+                <div class="story-phase-body">
+                    <h4 class="story-phase-name">${ph.name}</h4>
+                    <p class="story-phase-desc">${ph.description}</p>
+                    <div class="story-phase-enemies-row">${enemiesHTML}</div>
+                </div>
+            </div>`;
+        });
+
+        screen.innerHTML = `
+            <div class="story-container">
+                <div class="story-header"><h1 class="story-title">${ch.name}</h1><p class="story-subtitle">${ch.description}</p></div>
+                <div class="story-phases-grid">${html}</div>
+                <div class="story-footer"><button class="story-back-btn" onclick="renderAtosScreen()">← VOLTAR</button></div>
+            </div>`;
+    };
+
+    console.log('✅ [Patch Final] Função renderChapterPhases reescrita com fallback global.');
+})();
+// =================================================================
+// FIX: Reinjetar seletor de dificuldade após o patch final
+// de renderChapterPhases (que apagou o seletor).
+// =================================================================
+(function reinjetarSeletorDificuldade() {
+    if (window._difficultySelectorReinjetado) return;
+    window._difficultySelectorReinjetado = true;
+
+    const _origRender = window.renderChapterPhases;
+
+    window.renderChapterPhases = function(ch) {
+        const r = _origRender.apply(this, arguments);
+
+        // Só age se o seletor de dificuldade existir
+        if (typeof STORY_DIFFICULTIES === 'undefined') return r;
+
+        const screen = document.getElementById('storyScreen');
+        if (!screen) return r;
+
+        const header = screen.querySelector('.story-header');
+        if (!header) return r;
+
+        // Evita duplicar
+        if (header.querySelector('.story-difficulty-selector')) return r;
+
+        const diffAtual = (typeof storyCurrentDifficulty !== 'undefined')
+            ? storyCurrentDifficulty : 'normal';
+
+        const diffs = Object.values(STORY_DIFFICULTIES);
+        const botoesHTML = diffs.map(d => {
+            const unlocked = (typeof isDifficultyUnlocked === 'function')
+                ? isDifficultyUnlocked(d.id) : (d.id === 'normal');
+            const active = d.id === diffAtual;
+            return `
+                <button class="story-difficulty-btn ${active ? 'active' : ''} ${unlocked ? '' : 'locked'}"
+                        data-diff="${d.id}"
+                        ${unlocked ? '' : 'disabled'}
+                        style="--diff-color: ${d.color};">
+                    <span class="story-difficulty-icon">${d.icon}</span>
+                    <span class="story-difficulty-nome">${d.nome}</span>
+                    ${unlocked ? '' : '<span class="story-difficulty-lock">🔒</span>'}
+                </button>
+            `;
+        }).join('');
+
+        const selector = document.createElement('div');
+        selector.className = 'story-difficulty-selector';
+        selector.innerHTML = `
+            <div class="story-difficulty-label">DIFICULDADE</div>
+            <div class="story-difficulty-buttons">${botoesHTML}</div>
+        `;
+        header.appendChild(selector);
+
+        // Handler dos botões
+        selector.querySelectorAll('.story-difficulty-btn:not(.locked)').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const diffId = this.dataset.diff;
+                if (diffId === storyCurrentDifficulty) return;
+
+                if (typeof setStoryDifficulty === 'function') {
+                    if (!setStoryDifficulty(diffId)) return;
+                } else {
+                    storyCurrentDifficulty = diffId;
+                    if (typeof saveDifficultyToProgress === 'function') saveDifficultyToProgress();
+                }
+
+                // Re-renderiza a tela de fases
+                window.renderChapterPhases(ch);
+
+                const d = STORY_DIFFICULTIES[diffId];
+                if (d && typeof showToast === 'function') {
+                    showToast(d.icon, `Dificuldade: ${d.nome}`, d.icon);
+                }
+            });
+        });
+
+        // Badge da dificuldade ativa (se != normal)
+        if (diffAtual !== 'normal') {
+            const diff = STORY_DIFFICULTIES[diffAtual];
+            if (diff && !header.querySelector('.story-difficulty-active-badge')) {
+                const badge = document.createElement('div');
+                badge.className = 'story-difficulty-active-badge';
+                badge.style.setProperty('--diff-color', diff.color);
+                badge.innerHTML = `
+                    ${diff.icon} JOGANDO EM ${diff.nome.toUpperCase()}
+                    <span class="story-difficulty-active-hint">
+                        (HP ×${diff.hpMult} · ATK ×${diff.atkMult} · Recompensa ×${diff.rewardMult})
+                    </span>
+                `;
+                const sel = header.querySelector('.story-difficulty-selector');
+                if (sel) header.insertBefore(badge, sel);
+                else header.appendChild(badge);
+            }
+        }
+
+        return r;
+    };
+
+    console.log('✅ [FIX] Seletor de dificuldade reinjetado em renderChapterPhases.');
 })();
