@@ -32095,3 +32095,978 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
     console.log('   • Dano em área 3×3 no tile do BOSS (não no herói)');
     console.log('   • Se o boss não chegou adjacente → salto errou, sem dano');
 })();
+// =================================================================
+// historia.js — BLOCO 92 (V26.0 — Mostrar XP/ouro na tela do evento)
+// -----------------------------------------------------------------
+// Cole NO FINAL do historia.js (último bloco).
+//
+// O evento JÁ aplica XP/ouro/drops no STORY_PROGRESS, mas a tela
+// de vitória só mostra drops. Este patch adiciona uma linha com
+// XP e ouro ganhos.
+// =================================================================
+
+(function mostrarXPOuroEventoV260() {
+    if (window._mostrarXPOuroEventoV260) return;
+    window._mostrarXPOuroEventoV260 = true;
+
+    console.log('[V26.0] Adicionando XP/ouro na tela de vitória do evento...');
+
+    // ==============================================================
+    // Guarda os valores de XP/ouro ANTES da vitória (pra calcular o delta)
+    // ==============================================================
+    let _xpAntes = 0;
+    let _ouroAntes = 0;
+
+    const _origFinalizar = window.eventoFinalizarPartida;
+    if (typeof _origFinalizar === 'function') {
+        window.eventoFinalizarPartida = async function(vitoria, saindo) {
+            // Captura os valores ANTES
+            if (vitoria && !saindo && typeof STORY_PROGRESS !== 'undefined') {
+                _xpAntes = STORY_PROGRESS.totalXP || 0;
+                _ouroAntes = STORY_PROGRESS.gold || 0;
+                console.log(`[V26.0] XP antes: ${_xpAntes}, Ouro antes: ${_ouroAntes}`);
+            }
+
+            const result = await _origFinalizar.apply(this, arguments);
+
+            // Depois que a tela foi montada, injeta o delta
+            if (vitoria && !saindo) {
+                setTimeout(() => {
+                    _injetarXPOuroNaTela();
+                }, 100);
+            }
+
+            return result;
+        };
+    }
+
+    // ==============================================================
+    // Injeta a linha de XP/ouro na tela de vitória do evento
+    // ==============================================================
+    function _injetarXPOuroNaTela() {
+        const overlay = document.getElementById('gameOverlay');
+        if (!overlay) return;
+        if (!overlay.classList.contains('active')) return;
+
+        // Já tem a linha? Não duplica
+        if (overlay.querySelector('.evento-xp-ouro-delta')) return;
+
+        const xpDepois = (typeof STORY_PROGRESS !== 'undefined') ? (STORY_PROGRESS.totalXP || 0) : 0;
+        const ouroDepois = (typeof STORY_PROGRESS !== 'undefined') ? (STORY_PROGRESS.gold || 0) : 0;
+
+        const xpGanho = xpDepois - _xpAntes;
+        const ouroGanho = ouroDepois - _ouroAntes;
+
+        if (xpGanho <= 0 && ouroGanho <= 0) {
+            console.log('[V26.0] Sem XP/ouro a mostrar (delta zero).');
+            return;
+        }
+
+        // Acha o corpo da tela (depois dos drops, antes dos botões)
+        const body = overlay.querySelector('.victory-body');
+        if (!body) return;
+
+        const actions = body.querySelector('.victory-actions');
+
+        const div = document.createElement('div');
+        div.className = 'evento-xp-ouro-delta';
+        div.style.cssText = `
+            display: flex;
+            justify-content: center;
+            gap: 18px;
+            flex-wrap: wrap;
+            padding: 12px 16px;
+            margin: 8px 0;
+            background: rgba(10, 6, 2, 0.5);
+            border: 1px solid rgba(201, 162, 39, 0.3);
+            border-radius: 6px;
+            font-family: 'Cinzel', serif;
+            font-size: 1rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+        `;
+
+        const partes = [];
+        if (xpGanho > 0) {
+            partes.push(`<span style="color: #e8b923;">${uiIcon('xp')} +${xpGanho} XP</span>`);
+        }
+        if (ouroGanho > 0) {
+            partes.push(`<span style="color: #e8b923;">${uiIcon('gold')} +${ouroGanho} ouro</span>`);
+        }
+        div.innerHTML = partes.join('');
+
+        if (actions) {
+            body.insertBefore(div, actions);
+        } else {
+            body.appendChild(div);
+        }
+
+        console.log(`[V26.0] Tela de vitória: +${xpGanho} XP, +${ouroGanho} ouro`);
+    }
+
+    // ==============================================================
+    // Também intercepta `_mostrarTelaFinalEvento` (fallback)
+    // ==============================================================
+    const _origTelaFinal = window._mostrarTelaFinalEvento;
+    if (typeof _origTelaFinal === 'function') {
+        window._mostrarTelaFinalEvento = function(vitoria, drops, dropsResult) {
+            const result = _origTelaFinal.apply(this, arguments);
+            if (vitoria) {
+                setTimeout(() => {
+                    _injetarXPOuroNaTela();
+                }, 150);
+            }
+            return result;
+        };
+    }
+
+    // ==============================================================
+    // Ouro/XP por dificuldade (pra debug)
+    // ==============================================================
+    window.debugEventoRecompensas = function(bossId, faseId, diffId) {
+        const cfg = (bossId === 'pesadelo') ? EVENTO_PESADELO : EVENTO_BOSSES[bossId];
+        if (!cfg) return;
+        const diff = EVENTO_DIFICULDADES[diffId || 'normal'];
+        const xpBase = faseId === 'boss' ? cfg.recompensaXP : Math.floor(cfg.recompensaXP / 5);
+        const ouroBase = faseId === 'boss' ? cfg.recompensaOuro : Math.floor(cfg.recompensaOuro / 5);
+        console.log(`📊 ${cfg.nome} - Fase ${faseId} (${diff.nome}):`);
+        console.log(`   XP base: ${xpBase}, XP final: ${Math.floor(xpBase * diff.xpMult)}`);
+        console.log(`   Ouro base: ${ouroBase}, Ouro final: ${Math.floor(ouroBase * diff.ouroMult)}`);
+        console.log(`   Drops: arma ${Math.round(diff.dropArma * 100)}%, fragmento ${Math.round(diff.dropItem * 100)}%`);
+    };
+
+    console.log('✅ [V26.0] XP/ouro agora aparecem na tela do evento.');
+    console.log('   Use window.debugEventoRecompensas("teju_jagua", "boss", "normal")');
+})();
+// =================================================================
+// historia.js — BLOCO 95 (V26.3 — XP/ouro no evento, standalone)
+// -----------------------------------------------------------------
+// Cole NO FINAL do historia.js (último bloco).
+//
+// Este patch NÃO depende do V26.1/V26.2.
+// Ele faz TUDO:
+//   1. Garante que eventoFinalizarPartida seja chamado no evento
+//   2. Captura XP/ouro antes/depois
+//   3. Injeta XP/ouro na tela de vitória (qualquer overlay)
+// =================================================================
+
+(function xpOuroEventoV263() {
+    if (window._xpOuroEventoV263) return;
+    window._xpOuroEventoV263 = true;
+
+    console.log('[V26.3] Instalando XP/ouro no evento (standalone)...');
+
+    // ==============================================================
+    // ESTADO GLOBAL
+    // ==============================================================
+    window._evtXPAntes = 0;
+    window._evtOuroAntes = 0;
+    window._evtDeltaXP = 0;
+    window._evtDeltaOuro = 0;
+
+    // ==============================================================
+    // 1. HOOK EM eventoFinalizarPartida (captura antes/depois)
+    // ==============================================================
+    const _origFinalizar = window.eventoFinalizarPartida;
+    if (typeof _origFinalizar === 'function') {
+        window.eventoFinalizarPartida = async function(vitoria, saindo) {
+            console.log(`[V26.3] eventoFinalizarPartida chamado. vitoria=${vitoria}, saindo=${saindo}`);
+
+            if (vitoria && !saindo && typeof STORY_PROGRESS !== 'undefined') {
+                window._evtXPAntes = STORY_PROGRESS.totalXP || 0;
+                window._evtOuroAntes = STORY_PROGRESS.gold || 0;
+                console.log(`[V26.3] ANTES: XP=${window._evtXPAntes}, Ouro=${window._evtOuroAntes}`);
+            }
+
+            const result = await _origFinalizar.apply(this, arguments);
+
+            if (vitoria && !saindo && typeof STORY_PROGRESS !== 'undefined') {
+                window._evtDeltaXP = (STORY_PROGRESS.totalXP || 0) - window._evtXPAntes;
+                window._evtDeltaOuro = (STORY_PROGRESS.gold || 0) - window._evtOuroAntes;
+                console.log(`[V26.3] DEPOIS: XP=${STORY_PROGRESS.totalXP}, Ouro=${STORY_PROGRESS.gold}`);
+                console.log(`[V26.3] DELTA: +${window._evtDeltaXP} XP, +${window._evtDeltaOuro} ouro`);
+
+                // Injeta em vários momentos pra garantir
+                setTimeout(() => _injetarXP(), 50);
+                setTimeout(() => _injetarXP(), 300);
+                setTimeout(() => _injetarXP(), 800);
+            }
+
+            return result;
+        };
+        console.log('[V26.3] Hook em eventoFinalizarPartida OK.');
+    } else {
+        console.warn('[V26.3] eventoFinalizarPartida NÃO existe.');
+    }
+
+    // ==============================================================
+    // 2. HOOK EM handleStoryBossDefeat (garante chamada no evento)
+    // --------------------------------------------------------------
+    // Só age se o handleStoryBossDefeat atual NÃO chama
+    // eventoFinalizarPartida (que é o caso, pelo diagnóstico).
+    // ==============================================================
+    const _origBossDefeat = window.handleStoryBossDefeat;
+    if (typeof _origBossDefeat === 'function') {
+        const jaChama = _origBossDefeat.toString().includes('eventoFinalizarPartida');
+
+        if (jaChama) {
+            console.log('[V26.3] handleStoryBossDefeat JÁ chama eventoFinalizarPartida. Pulando hook.');
+        } else {
+            console.log('[V26.3] handleStoryBossDefeat NÃO chama eventoFinalizarPartida. Corrigindo...');
+
+            window.handleStoryBossDefeat = async function() {
+                if (!window._storyMode && !window._eventoAtivo) {
+                    return _origBossDefeat.apply(this, arguments);
+                }
+
+                // ⭐ Se é evento E é o último inimigo da fila
+                if (window._eventoAtivo) {
+                    const temProximo = typeof storyEnemiesRemaining !== 'undefined'
+                        && storyEnemiesRemaining.length > 1;
+
+                    if (!temProximo) {
+                        console.log('[V26.3] Último inimigo do evento. Chamando eventoFinalizarPartida(true).');
+
+                        // Purificação
+                        if (typeof showPurificacao === 'function') {
+                            try {
+                                await showPurificacao(boss.type, boss.x, boss.y, true);
+                            } catch(e) {
+                                console.warn('[V26.3] Erro na purificação:', e);
+                            }
+                        }
+                        await new Promise(r => setTimeout(r, 1500));
+
+                        // ⭐ Chama eventoFinalizarPartida (que agora está hookado pelo V26.3)
+                        if (typeof window.eventoFinalizarPartida === 'function') {
+                            await window.eventoFinalizarPartida(true, false);
+                        }
+                        return;
+                    }
+
+                    // Se tem próximo, deixa o original cuidar (chama advanceStoryEnemy)
+                    console.log('[V26.3] Ainda tem próximo inimigo. Original cuida.');
+                }
+
+                return _origBossDefeat.apply(this, arguments);
+            };
+
+            console.log('[V26.3] handleStoryBossDefeat corrigido.');
+        }
+    }
+
+    // ==============================================================
+    // 3. INJETAR XP/OURO NA TELA (qualquer overlay)
+    // ==============================================================
+    function _injetarXP() {
+        const xp = window._evtDeltaXP;
+        const ouro = window._evtDeltaOuro;
+
+        if (xp <= 0 && ouro <= 0) return;
+
+        // Acha qualquer overlay ativo
+        const overlays = [
+            document.getElementById('gameOverlay'),
+            document.getElementById('storyVictoryOverlay'),
+        ].filter(o => o && (o.classList.contains('active') || o.style.display !== 'none'));
+
+        if (overlays.length === 0) {
+            console.log('[V26.3] Nenhum overlay ativo.');
+            return;
+        }
+
+        overlays.forEach(overlay => {
+            if (overlay.querySelector('.evt-xp-ouro')) return;
+
+            const div = document.createElement('div');
+            div.className = 'evt-xp-ouro';
+            div.style.cssText = `
+                display: flex;
+                justify-content: center;
+                gap: 18px;
+                flex-wrap: wrap;
+                padding: 12px 20px;
+                margin: 12px auto;
+                background: linear-gradient(180deg, rgba(232,185,35,0.15), transparent 60%), rgba(10,6,2,0.6);
+                border: 2px solid rgba(201,162,39,0.5);
+                border-radius: 6px;
+                font-family: 'Cinzel', serif;
+                font-size: 1.05rem;
+                font-weight: 700;
+                letter-spacing: 1.5px;
+                max-width: 420px;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.5), 0 0 20px rgba(232,185,35,0.2);
+            `;
+
+            const partes = [];
+            if (xp > 0) {
+                const xpIcon = (typeof uiIcon === 'function') ? uiIcon('xp') : '⭐';
+                partes.push(`<span style="color: #e8b923;">${xpIcon} +${xp} XP</span>`);
+            }
+            if (ouro > 0) {
+                const goldIcon = (typeof uiIcon === 'function') ? uiIcon('gold') : '💰';
+                partes.push(`<span style="color: #e8b923;">${goldIcon} +${ouro} ouro</span>`);
+            }
+            div.innerHTML = partes.join('');
+
+            // Insere antes dos botões de ação, ou no body
+            const actions =
+                overlay.querySelector('.victory-actions') ||
+                overlay.querySelector('.story-result-actions');
+
+            if (actions && actions.parentNode) {
+                actions.parentNode.insertBefore(div, actions);
+            } else {
+                const body =
+                    overlay.querySelector('.victory-body') ||
+                    overlay.querySelector('.story-result-body') ||
+                    overlay;
+                body.appendChild(div);
+            }
+
+            console.log(`[V26.3] XP/ouro injetado em #${overlay.id}`);
+        });
+    }
+
+    // ==============================================================
+    // 4. RESET: ao iniciar nova batalha do evento
+    // ==============================================================
+    const _origEventoIniciar = window.eventoIniciarBatalha;
+    if (typeof _origEventoIniciar === 'function') {
+        window.eventoIniciarBatalha = async function() {
+            window._evtXPAntes = 0;
+            window._evtOuroAntes = 0;
+            window._evtDeltaXP = 0;
+            window._evtDeltaOuro = 0;
+            return _origEventoIniciar.apply(this, arguments);
+        };
+    }
+
+    // ==============================================================
+    // 5. DEBUG: força injeção manual
+    // ==============================================================
+    window.forcarXPOuro = function(xp, ouro) {
+        window._evtDeltaXP = xp || 120;
+        window._evtDeltaOuro = ouro || 90;
+        console.log(`[V26.3] Forçando injeção: +${window._evtDeltaXP} XP, +${window._evtDeltaOuro} ouro`);
+        _injetarXP();
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V26.3] XP/ouro no evento (standalone)');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Hook em eventoFinalizarPartida (captura delta)');
+    console.log('• Hook em handleStoryBossDefeat (garante chamada)');
+    console.log('• Injeta XP/ouro em qualquer overlay');
+    console.log('• Debug: window.forcarXPOuro(120, 90)');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — BLOCO 96 (V26.4 — Ícones pequenos + empurrar herói)
+// -----------------------------------------------------------------
+// Cole NO FINAL do historia.js (último bloco).
+//
+// Corrige:
+//   1. Ícones do XP/ouro grandes demais (V26.3) → 16px fixo
+//   2. Skills que movem o boss sobrepõem o herói → empurra o herói
+// =================================================================
+
+(function fixIconesEmpurraoV264() {
+    if (window._fixIconesEmpurraoV264) return;
+    window._fixIconesEmpurraoV264 = true;
+
+    console.log('[V26.4] Corrigindo ícones e empurrão...');
+
+    // ==============================================================
+    // 1. SOBRESCREVER A INJEÇÃO DE XP/OURO (ícones menores)
+    // ==============================================================
+    const _origInjetar = window._injetarXP; // não existe, mas garante
+
+    // Reinstala a injeção com tamanhos corretos
+    window._injetarXP = function _injetarXPFix() {
+        const xp = window._evtDeltaXP;
+        const ouro = window._evtDeltaOuro;
+
+        if (xp <= 0 && ouro <= 0) return;
+
+        const overlays = [
+            document.getElementById('gameOverlay'),
+            document.getElementById('storyVictoryOverlay'),
+        ].filter(o => o && (o.classList.contains('active') || o.style.display !== 'none'));
+
+        if (overlays.length === 0) return;
+
+        overlays.forEach(overlay => {
+            if (overlay.querySelector('.evt-xp-ouro')) return;
+
+            const div = document.createElement('div');
+            div.className = 'evt-xp-ouro';
+            div.style.cssText = `
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                gap: 14px;
+                flex-wrap: wrap;
+                padding: 8px 14px;
+                margin: 8px auto;
+                background: rgba(10, 6, 2, 0.6);
+                border: 1px solid rgba(201, 162, 39, 0.4);
+                border-radius: 4px;
+                font-family: 'Cinzel', serif;
+                font-size: 0.85rem;
+                font-weight: 700;
+                letter-spacing: 1px;
+                max-width: 320px;
+                width: fit-content;
+                box-sizing: border-box;
+            `;
+
+            const partes = [];
+            if (xp > 0) {
+                partes.push(`<span style="color: #e8b923; display: inline-flex; align-items: center; gap: 4px; font-size: 0.85rem;">
+                    <span style="font-size: 14px; line-height: 1;">⭐</span> +${xp} XP
+                </span>`);
+            }
+            if (ouro > 0) {
+                partes.push(`<span style="color: #e8b923; display: inline-flex; align-items: center; gap: 4px; font-size: 0.85rem;">
+                    <span style="font-size: 14px; line-height: 1;">💰</span> +${ouro} ouro
+                </span>`);
+            }
+            div.innerHTML = partes.join('');
+
+            // Insere antes dos botões
+            const actions =
+                overlay.querySelector('.victory-actions') ||
+                overlay.querySelector('.story-result-actions');
+
+            if (actions && actions.parentNode) {
+                actions.parentNode.insertBefore(div, actions);
+            } else {
+                const body =
+                    overlay.querySelector('.victory-body') ||
+                    overlay.querySelector('.story-result-body') ||
+                    overlay;
+                body.appendChild(div);
+            }
+
+            console.log(`[V26.4] XP/ouro injetado (ícones pequenos) em #${overlay.id}`);
+        });
+    };
+
+    // Remove a injeção antiga (do V26.3), se existir na tela
+    document.querySelectorAll('.evt-xp-ouro').forEach(el => el.remove());
+
+    // ==============================================================
+    // 2. EMPURRAR HERÓI QUANDO BOSS SOBREPÕE
+    // --------------------------------------------------------------
+    // No padrão 1 (move até o herói), o boss pode parar no mesmo tile.
+    // Solução: no final do movimento, se boss.x/y === herói.x/y,
+    // empurra o herói 1 tile na direção do movimento.
+    // ==============================================================
+    const _origPorco = STORY_ANIMAL_SKILLS['porco_espinho_bote'];
+    const _origCervo = STORY_ANIMAL_SKILLS['cervo_investida'];
+    const _origAnta = STORY_ANIMAL_SKILLS['anta_atropelamento'];
+    const _origLontra = STORY_ANIMAL_SKILLS['lontra_nado'];
+    const _origRaposa = STORY_ANIMAL_SKILLS['raposa_bote'];
+
+    // Helper: empurra herói se sobreposto
+    function _empurrarSeSobreposto(bossX, bossY, dir) {
+        if (typeof players === 'undefined') return;
+        players.forEach(p => {
+            if (p.dead) return;
+            if (p.x === bossX && p.y === bossY) {
+                // Empurra 1 tile na direção do movimento
+                const nx = p.x + dir.dx;
+                const ny = p.y + dir.dy;
+                if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) {
+                    if (typeof isOccupied !== 'function' || !isOccupied(nx, ny, p.id)) {
+                        p.x = nx;
+                        p.y = ny;
+                        if (typeof updateVisuals === 'function') updateVisuals();
+                        console.log(`[V26.4] Herói ${p.name} empurrado pra (${nx},${ny}) — boss sobrepôs`);
+                    }
+                }
+            }
+        });
+    }
+
+    // Sobrescreve os 5 handlers com a correção de empurrão
+    if (typeof _origPorco === 'function') {
+        STORY_ANIMAL_SKILLS['porco_espinho_bote'] = async (enemy) => {
+            const r = await _origPorco.call(this, enemy);
+            // Após o movimento, verifica se o boss sobrepôs o herói
+            _empurrarSeSobreposto(boss.x, boss.y, { dx: Math.sign(boss.x - enemy.x || 0), dy: Math.sign(boss.y - enemy.y || 0) });
+            return r;
+        };
+    }
+
+    if (typeof _origCervo === 'function') {
+        STORY_ANIMAL_SKILLS['cervo_investida'] = async (enemy) => {
+            const r = await _origCervo.call(this, enemy);
+            _empurrarSeSobreposto(boss.x, boss.y, { dx: 0, dy: 1 });
+            return r;
+        };
+    }
+
+    if (typeof _origAnta === 'function') {
+        STORY_ANIMAL_SKILLS['anta_atropelamento'] = async (enemy) => {
+            const r = await _origAnta.call(this, enemy);
+            _empurrarSeSobreposto(boss.x, boss.y, { dx: 0, dy: 1 });
+            return r;
+        };
+    }
+
+    if (typeof _origLontra === 'function') {
+        STORY_ANIMAL_SKILLS['lontra_nado'] = async (enemy) => {
+            const r = await _origLontra.call(this, enemy);
+            _empurrarSeSobreposto(boss.x, boss.y, { dx: 0, dy: 1 });
+            return r;
+        };
+    }
+
+    if (typeof _origRaposa === 'function') {
+        STORY_ANIMAL_SKILLS['raposa_bote'] = async (enemy) => {
+            const r = await _origRaposa.call(this, enemy);
+            _empurrarSeSobreposto(boss.x, boss.y, { dx: 0, dy: 1 });
+            return r;
+        };
+    }
+
+    // ==============================================================
+    // LOG FINAL
+    // ==============================================================
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V26.4] Correções');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Ícones XP/ouro: 14px fixo (não estouram mais)');
+    console.log('• Div XP/ouro: menor (não cobre botões)');
+    console.log('• Skills que movem boss: empurram herói se sobrepuser');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — BLOCO 97 (V26.5 — XP/ouro compacto + scroll)
+// -----------------------------------------------------------------
+// Cole NO FINAL do historia.js (último bloco).
+//
+// Corrige:
+//   1. Remove a div de XP/ouro do V26.3/V26.4 (que estoura a tela)
+//   2. Injeta XP/ouro no TOPO da tela (junto do título)
+//   3. Garante scroll no #gameOverlay e no .victory-panel
+// =================================================================
+
+(function xpOuroCompactoV265() {
+    if (window._xpOuroCompactoV265) return;
+    window._xpOuroCompactoV265 = true;
+
+    console.log('[V26.5] Corrigindo XP/ouro compacto + scroll...');
+
+    // ==============================================================
+    // 1. CSS: garante scroll + div compacta
+    // ==============================================================
+    if (!document.getElementById('v265CSS')) {
+        const style = document.createElement('style');
+        style.id = 'v265CSS';
+        style.textContent = `
+            /* Garante scroll no overlay */
+            #gameOverlay {
+                overflow-y: auto !important;
+                overflow-x: hidden !important;
+                -webkit-overflow-scrolling: touch;
+                padding: 20px 15px !important;
+                box-sizing: border-box;
+            }
+            #gameOverlay.active {
+                display: flex !important;
+                flex-direction: column !important;
+                align-items: center !important;
+                justify-content: flex-start !important;
+            }
+
+            /* Painel: não encolhe, mas permite scroll interno */
+            #gameOverlay .victory-panel {
+                flex-shrink: 0 !important;
+                margin: auto !important;
+                max-width: 640px;
+                width: 100%;
+                box-sizing: border-box;
+            }
+
+            /* Corpo do painel: espaçamento menor */
+            #gameOverlay .victory-body {
+                padding: 20px 22px !important;
+                gap: 12px !important;
+            }
+
+            /* XP/ouro: compacto no topo, junto do título */
+            .evt-xp-ouro-top {
+                display: inline-flex;
+                align-items: center;
+                gap: 10px;
+                padding: 4px 12px;
+                margin-top: 6px;
+                background: rgba(10, 6, 2, 0.5);
+                border: 1px solid rgba(201, 162, 39, 0.4);
+                border-radius: 20px;
+                font-family: 'Cinzel', serif;
+                font-size: 0.8rem;
+                font-weight: 700;
+                letter-spacing: 1px;
+                color: #e8b923;
+                white-space: nowrap;
+                max-width: 100%;
+                box-sizing: border-box;
+            }
+
+            .evt-xp-ouro-top .icone {
+                font-size: 13px;
+                line-height: 1;
+                display: inline-flex;
+                align-items: center;
+            }
+
+            /* Esconde a div antiga do V26.3/V26.4 */
+            .evt-xp-ouro {
+                display: none !important;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // ==============================================================
+    // 2. Remove divs antigas (V26.3/V26.4)
+    // ==============================================================
+    document.querySelectorAll('.evt-xp-ouro').forEach(el => el.remove());
+
+    // ==============================================================
+    // 3. Hook em eventoFinalizarPartida (captura delta)
+    // ==============================================================
+    const _origFinalizar = window.eventoFinalizarPartida;
+    if (typeof _origFinalizar === 'function') {
+        window.eventoFinalizarPartida = async function(vitoria, saindo) {
+            if (vitoria && !saindo && typeof STORY_PROGRESS !== 'undefined') {
+                window._evtXPAntes = STORY_PROGRESS.totalXP || 0;
+                window._evtOuroAntes = STORY_PROGRESS.gold || 0;
+            }
+
+            const result = await _origFinalizar.apply(this, arguments);
+
+            if (vitoria && !saindo && typeof STORY_PROGRESS !== 'undefined') {
+                window._evtDeltaXP = (STORY_PROGRESS.totalXP || 0) - window._evtXPAntes;
+                window._evtDeltaOuro = (STORY_PROGRESS.gold || 0) - window._evtOuroAntes;
+                console.log(`[V26.5] DELTA: +${window._evtDeltaXP} XP, +${window._evtDeltaOuro} ouro`);
+
+                setTimeout(() => _injetarCompacto(), 100);
+                setTimeout(() => _injetarCompacto(), 400);
+                setTimeout(() => _injetarCompacto(), 900);
+            }
+
+            return result;
+        };
+    }
+
+    // ==============================================================
+    // 4. Injeta XP/ouro no TOPO (junto do título)
+    // ==============================================================
+    function _injetarCompacto() {
+        const xp = window._evtDeltaXP || 0;
+        const ouro = window._evtDeltaOuro || 0;
+
+        if (xp <= 0 && ouro <= 0) return;
+
+        const overlay = document.getElementById('gameOverlay');
+        if (!overlay || !overlay.classList.contains('active')) return;
+
+        // Já tem? Não duplica
+        if (overlay.querySelector('.evt-xp-ouro-top')) return;
+
+        // Procura o título (dentro do scroll-top)
+        const scrollTop = overlay.querySelector('.victory-scroll-top');
+        if (!scrollTop) {
+            console.warn('[V26.5] .victory-scroll-top não encontrado');
+            return;
+        }
+
+        // Cria a div compacta
+        const div = document.createElement('div');
+        div.className = 'evt-xp-ouro-top';
+
+        const partes = [];
+        if (xp > 0) {
+            partes.push(`<span><span class="icone">⭐</span> +${xp} XP</span>`);
+        }
+        if (ouro > 0) {
+            partes.push(`<span><span class="icone">💰</span> +${ouro} ouro</span>`);
+        }
+        div.innerHTML = partes.join('');
+
+        // Insere DEPOIS do título, DENTRO do scroll-top
+        scrollTop.appendChild(div);
+
+        console.log(`[V26.5] XP/ouro compacto injetado no topo: +${xp} XP, +${ouro} ouro`);
+
+        // Garante scroll
+        _garantirScroll();
+    }
+
+    // ==============================================================
+    // 5. Garante scroll (força overflow)
+    // ==============================================================
+    function _garantirScroll() {
+        const overlay = document.getElementById('gameOverlay');
+        if (!overlay) return;
+        overlay.style.overflowY = 'auto';
+        overlay.style.maxHeight = '100vh';
+
+        const panel = overlay.querySelector('.victory-panel');
+        if (panel) {
+            panel.style.flexShrink = '0';
+            panel.style.margin = 'auto';
+        }
+
+        // Rola pro topo (pra ver o título)
+        overlay.scrollTop = 0;
+    }
+
+    // ==============================================================
+    // 6. Remove a injeção antiga do V26.3/V26.4 (sobrescreve)
+    // ==============================================================
+    window._injetarXP = _injetarCompacto;
+
+    // ==============================================================
+    // 7. Debug
+    // ==============================================================
+    window.forcarXPOuroCompacto = function(xp, ouro) {
+        window._evtDeltaXP = xp || 120;
+        window._evtDeltaOuro = ouro || 90;
+        document.querySelectorAll('.evt-xp-ouro, .evt-xp-ouro-top').forEach(el => el.remove());
+        _injetarCompacto();
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V26.5] XP/ouro compacto + scroll');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• XP/ouro no TOPO (junto do título, pequeno)');
+    console.log('• #gameOverlay com scroll garantido');
+    console.log('• Div antiga (V26.3/V26.4) escondida');
+    console.log('• Debug: window.forcarXPOuroCompacto(120, 90)');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — BLOCO 98 (V27.0 — Skills Aleatórias + Tela do Evento)
+// -----------------------------------------------------------------
+// Cole NO FINAL do historia.js (último bloco).
+//
+// 1. Skills (porco, cervo, anta, lontra, raposa): rolada aleatória,
+//    com colisão, dano no caminho + tile à frente.
+// 2. Evento: usa a tela de vitória do modo história (perfeita).
+// =================================================================
+
+(function consolidacaoV270() {
+    if (window._consolidacaoV270) return;
+    window._consolidacaoV270 = true;
+
+    console.log('[V27.0] Aplicando skills aleatórias + tela do evento...');
+
+    // ==============================================================
+    // PARTE 1 — SKILLS DE ROLAR/INVESTIR (Aleatório + Colisão)
+    // ==============================================================
+    
+    // Helper: gera as 4 direções
+    const DIRECOES = [
+        { dx: 0, dy: -1, name: 'up' },
+        { dx: 0, dy: 1, name: 'down' },
+        { dx: -1, dy: 0, name: 'left' },
+        { dx: 1, dy: 0, name: 'right' }
+    ];
+
+    async function _skillRolarAleatorio(enemy, opts) {
+        const atk = enemy.atk;
+        if (typeof addLog === 'function') addLog(opts.logMsg);
+
+        // ⭐ Escolhe direção aleatória
+        const dir = DIRECOES[Math.floor(Math.random() * DIRECOES.length)];
+        
+        const tilesPercorridos = [];
+        let lastX = boss.x, lastY = boss.y;
+        let colidiu = false;
+
+        for (let i = 0; i < opts.numSteps; i++) {
+            const nx = boss.x + dir.dx;
+            const ny = boss.y + dir.dy;
+            
+            // Borda do tabuleiro
+            if (nx < 0 || nx >= 8 || ny < 0 || ny >= 8) break;
+
+            // Colisão com herói ou obstáculo
+            if (typeof isOccupied === 'function' && isOccupied(nx, ny, -1)) {
+                colidiu = true;
+                break; // Para antes do obstáculo
+            }
+
+            // Move o boss
+            if (typeof spawnFxAt === 'function') spawnFxAt(opts.fxKey, opts.fxClass, nx, ny, { duration: 400 });
+            tilesPercorridos.push({ x: nx, y: ny });
+            boss.x = nx;
+            boss.y = ny;
+            lastX = nx;
+            lastY = ny;
+            if (typeof updateVisuals === 'function') updateVisuals();
+            await sleep(150);
+        }
+
+        await sleep(200);
+
+        // FX final
+        if (typeof spawnFxAt === 'function') {
+            spawnFxAt(opts.finalFxKey || opts.fxKey, opts.finalFxClass || opts.fxClass, lastX, lastY, { duration: 600, scale: 1.2 });
+        }
+
+        // ⭐ Monta a área de dano: tiles percorridos + tile à frente
+        const tilesDano = [...tilesPercorridos];
+        
+        // Se colidiu ou parou na borda, o tile à frente também toma dano
+        const frenteX = lastX + dir.dx;
+        const frenteY = lastY + dir.dy;
+        if (frenteX >= 0 && frenteX < 8 && frenteY >= 0 && frenteY < 8) {
+            tilesDano.push({ x: frenteX, y: frenteY });
+        }
+
+        // Aplica dano
+        let danoAplicado = 0;
+        players.forEach(p => {
+            if (p.dead) return;
+            if (tilesDano.some(t => t.x === p.x && t.y === p.y)) {
+                if (typeof applyDmg === 'function') applyDmg(p, atk);
+                if (opts.pushOnHit && typeof tryPushPlayer === 'function') {
+                    tryPushPlayer(p, dir.dx, dir.dy, 1);
+                }
+                danoAplicado++;
+            }
+        });
+
+        console.log(`[V27.0] ${opts.descricao}: rolou ${dir.name}, ${danoAplicado} herói(s) atingido(s)`);
+        await sleep(300);
+    }
+
+    // Substitui os 5 handlers
+    STORY_ANIMAL_SKILLS['porco_espinho_bote'] = async (enemy) => {
+        return _skillRolarAleatorio(enemy, {
+            logMsg: `🦔 ${enemy.name} rola em bola de espinhos!`,
+            numSteps: 3,
+            fxKey: 'spike_roll', fxClass: 'fx-spike-roll',
+            finalFxKey: 'spike_burst', finalFxClass: 'fx-spike-burst',
+            pushOnHit: true,
+            descricao: 'Porco-espinho'
+        });
+    };
+
+    STORY_ANIMAL_SKILLS['cervo_investida'] = async (enemy) => {
+        return _skillRolarAleatorio(enemy, {
+            logMsg: `🦌 ${enemy.name} baixa os chifres e investe!`,
+            numSteps: 3,
+            fxKey: 'antler_charge', fxClass: 'fx-antler-charge',
+            finalFxKey: 'shockwave', finalFxClass: 'fx-shockwave',
+            descricao: 'Cervo'
+        });
+    };
+
+    STORY_ANIMAL_SKILLS['anta_atropelamento'] = async (enemy) => {
+        return _skillRolarAleatorio(enemy, {
+            logMsg: `🦛 ${enemy.name} atropela!`,
+            numSteps: 3,
+            fxKey: 'hoof_stomp', fxClass: 'fx-hoof-stomp',
+            finalFxKey: 'shockwave', finalFxClass: 'fx-shockwave',
+            descricao: 'Anta'
+        });
+    };
+
+    STORY_ANIMAL_SKILLS['lontra_nado'] = async (enemy) => {
+        return _skillRolarAleatorio(enemy, {
+            logMsg: `🦦 ${enemy.name} nada rapidamente!`,
+            numSteps: 3,
+            fxKey: 'splash_wave', fxClass: 'fx-splash-wave',
+            descricao: 'Lontra'
+        });
+    };
+
+    STORY_ANIMAL_SKILLS['raposa_bote'] = async (enemy) => {
+        return _skillRolarAleatorio(enemy, {
+            logMsg: `🦊 ${enemy.name} dá um bote ágil!`,
+            numSteps: 2,
+            fxKey: 'pounce_arc', fxClass: 'fx-pounce-arc',
+            finalFxKey: 'fang_bite', finalFxClass: 'fx-fang-bite',
+            descricao: 'Raposa'
+        });
+    };
+
+    // ==============================================================
+    // PARTE 2 — TELA DE VITÓRIA DO EVENTO (Igual à do História)
+    // ==============================================================
+    
+    // Remove gambiarras antigas
+    document.querySelectorAll('.evt-xp-ouro, .evt-xp-ouro-top').forEach(el => el.remove());
+    window._injetarXP = null; 
+
+    window._mostrarTelaFinalEvento = function(vitoria, drops, dropsResult) {
+        // Se perdeu, usa a tela de derrota padrão (que já funciona)
+        if (!vitoria) {
+            if (typeof showStoryDefeatScreen === 'function') {
+                showStoryDefeatScreen({ name: 'Evento' }, []);
+            }
+            return;
+        }
+
+        const cfg = _eventoBatalha.isPesadelo ? EVENTO_PESADELO : EVENTO_BOSSES[_eventoBatalha.bossId];
+        const diff = _eventoBatalha.dificuldade || { nome: 'Normal' };
+        const faseId = _eventoBatalha.faseId;
+
+        // Prepara os drops no formato que a tela de história espera
+        const dropsFormatados = [];
+        if (drops && drops.arma) dropsFormatados.push({ id: drops.arma, qty: 1 });
+        if (drops && drops.fragmento) dropsFormatados.push({ id: drops.fragmento, qty: 1 });
+
+        // Calcula XP/Ouro (a mesma lógica que já rodou no eventoFinalizarPartida)
+        const xpBase = faseId === 'boss' ? cfg.recompensaXP : Math.floor(cfg.recompensaXP / 5);
+        const ouroBase = faseId === 'boss' ? cfg.recompensaOuro : Math.floor(cfg.recompensaOuro / 5);
+        const xpGanho = Math.floor(xpBase * diff.xpMult);
+        const ouroGanho = Math.floor(ouroBase * diff.ouroMult);
+
+        // Monta o "phase" fake pro showStoryVictoryScreen
+        const phaseFake = {
+            id: faseId,
+            name: cfg.nome,
+            isBoss: faseId === 'boss',
+            isFinalBoss: _eventoBatalha.isPesadelo,
+            enemies: [cfg.id]
+        };
+
+        // Chama a tela PERFEITA do modo história
+        if (typeof showStoryVictoryScreen === 'function') {
+            showStoryVictoryScreen(
+                phaseFake,
+                dropsFormatados,
+                { xp: xpGanho, gold: ouroGanho },
+                {
+                    stars: 3, // Evento não tem estrelas, mas mostramos 3 pra ficar bonito
+                    totalStars: typeof getTotalStars === 'function' ? getTotalStars() : 0,
+                    unlockedHeroes: dropsResult && dropsResult.rudaDesbloqueado ? [{ displayName: 'Rudá' }] : []
+                }
+            );
+        }
+    };
+
+    // ==============================================================
+    // LOG FINAL
+    // ==============================================================
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V27.0] Consolidação');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Porco, cervo, anta, lontra, raposa: rolagem aleatória');
+    console.log('• Dano no caminho + tile à frente');
+    console.log('• Tela do evento: idêntica à do modo história');
+    console.log('═══════════════════════════════════════════════════');
+})();
