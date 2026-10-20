@@ -34053,23 +34053,23 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
     console.log('✅ [V29.0] Coop blindado contra boss renascendo.');
 })();
 // =================================================================
-// historia.js — BLOCO 106 (V30.3 — Fix Pajé-Açu: trava de linha)
+// historia.js — BLOCO 106 (V30.3-FIX — Pajé-Açu: só fere o boss)
 // -----------------------------------------------------------------
-// Cole NO FINAL do historia.js (último bloco).
-//
-// O PA do Pajé-Açu só empurra o boss se ele estiver NA MESMA LINHA
-// do herói. Se o boss estiver em outra linha, a skill pinta a linha
-// mas não aplica dano nem empurrão no boss.
+// Corrige: o bloco de dano base em heróis na linha foi REMOVIDO.
+// O PA do Pajé-Açu agora só:
+//   1. Pinta a linha de FOGO
+//   2. Se o boss estiver na linha → empurra pra borda + dano por colisão
+//   3. NÃO fere heróis na linha (nem o próprio Pajé-Açu)
 // =================================================================
 
 (function fixPajeAcuLinhaV303() {
     if (window._fixPajeAcuLinhaV303) return;
     window._fixPajeAcuLinhaV303 = true;
 
-    console.log('[V30.3] Corrigindo PA do Pajé-Açu (trava de linha)...');
+    console.log('[V30.3-FIX] Corrigindo PA do Pajé-Açu (só fere o boss)...');
 
     STORY_HERO_PA['pajeacu_linha'] = {
-        desc: 'Dano em linha do herói. Empurra boss pra borda. Colisão = +50% dano.',
+        desc: 'Dano em linha do herói. Empurra boss pra borda. Colisão = +50% dano. Só atinge o boss.',
         execute: async (active, target, totalAtk) => {
             if (!target) return;
 
@@ -34097,29 +34097,21 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
 
             await sleep(500);
 
-            // 3. Dano base em quem estiver na linha (heróis)
-            players.forEach(p => {
-                if (p.dead) return;
-                if (p.y === linha) {
-                    if (typeof applyDmg === 'function') applyDmg(p, totalAtk);
-                }
-            });
-
-            // 4. Empurrão e dano extra (SÓ SE O BOSS ESTIVER NA LINHA)
+            // 3. ⭐ SÓ O BOSS É AFETADO (NÃO fere heróis na linha)
             if (target && !target.dead) {
                 if (target.y === linha) {
                     const targetX = target.x < 4 ? 0 : 7;
-                    
+
                     // Move apenas o X (mantém o Y)
                     target.x = targetX;
-                    
+
                     if (typeof updateVisuals === 'function') updateVisuals();
                     await sleep(300);
 
                     // Dano extra por colisão na borda
                     const dmgExtra = Math.floor(totalAtk * 0.5);
                     if (typeof applyDmg === 'function') applyDmg(target, dmgExtra);
-                    
+
                     if (typeof addLog === 'function') {
                         addLog(`🔥 Pajé-Açu: boss empurrado e colidiu! (+${dmgExtra} dano)`);
                     }
@@ -34132,12 +34124,12 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
             }
 
             if (typeof addLog === 'function') {
-                addLog(`🔥 Pajé-Açu: linha de fogo! (${totalAtk} dano base)`);
+                addLog(`🔥 Pajé-Açu: linha de fogo! (só o boss é afetado)`);
             }
         }
     };
 
-    console.log('✅ [V30.3] PA do Pajé-Açu corrigido (trava de linha ativada).');
+    console.log('✅ [V30.3-FIX] PA do Pajé-Açu corrigido (não fere mais o herói).');
 })();
 // =================================================================
 // historia.js — BLOCO 112 (V34.0 — Renomear Tapyra + Migrar Save)
