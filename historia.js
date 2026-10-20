@@ -1226,7 +1226,7 @@ const STORY_HERO_CLASSES = {
         element: 'AR', paKey: 'bicho_cruz_completa', starsNeeded: 130,
     },
     "Tapyra'yawara": {
-        displayName: "Tapyra'yawara", spriteKey: 'heroi_Tapyrayawara', className: "Tapyra'yawara",
+        displayName: "Tapyra-Yawara", spriteKey: 'heroi_Tapyrayawara', className: "Tapyra-Yawara",
         role: 'Arqueiro', hp: 12, atk: 3, range: 3,
         element: 'TERRA', paKey: 'tapyra_coluna_alvo', starsNeeded: 170,
     },
@@ -34051,4 +34051,162 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
     }
 
     console.log('✅ [V29.0] Coop blindado contra boss renascendo.');
+})();
+// =================================================================
+// historia.js — BLOCO 106 (V30.3 — Fix Pajé-Açu: trava de linha)
+// -----------------------------------------------------------------
+// Cole NO FINAL do historia.js (último bloco).
+//
+// O PA do Pajé-Açu só empurra o boss se ele estiver NA MESMA LINHA
+// do herói. Se o boss estiver em outra linha, a skill pinta a linha
+// mas não aplica dano nem empurrão no boss.
+// =================================================================
+
+(function fixPajeAcuLinhaV303() {
+    if (window._fixPajeAcuLinhaV303) return;
+    window._fixPajeAcuLinhaV303 = true;
+
+    console.log('[V30.3] Corrigindo PA do Pajé-Açu (trava de linha)...');
+
+    STORY_HERO_PA['pajeacu_linha'] = {
+        desc: 'Dano em linha do herói. Empurra boss pra borda. Colisão = +50% dano.',
+        execute: async (active, target, totalAtk) => {
+            if (!target) return;
+
+            const linha = active.y; // A linha do herói
+            const tilesLinha = [];
+            for (let x = 0; x < 8; x++) {
+                tilesLinha.push({ x: x, y: linha, idx: linha * 8 + x });
+            }
+
+            // 1. Efeito visual (fogo na linha)
+            tilesLinha.forEach((t, i) => {
+                setTimeout(() => {
+                    if (typeof spawnFxAt === 'function') {
+                        spawnFxAt('impact', 'fx-impact', t.x, t.y, { duration: 500, scale: 0.6 });
+                    }
+                }, i * 40);
+            });
+
+            // 2. Pinta a linha de FOGO
+            tilesLinha.forEach(t => {
+                grid[t.idx] = 'FOGO';
+                const el = document.querySelectorAll('#grid .tile')[t.idx];
+                if (el) el.className = 'tile bg-FOGO';
+            });
+
+            await sleep(500);
+
+            // 3. Dano base em quem estiver na linha (heróis)
+            players.forEach(p => {
+                if (p.dead) return;
+                if (p.y === linha) {
+                    if (typeof applyDmg === 'function') applyDmg(p, totalAtk);
+                }
+            });
+
+            // 4. Empurrão e dano extra (SÓ SE O BOSS ESTIVER NA LINHA)
+            if (target && !target.dead) {
+                if (target.y === linha) {
+                    const targetX = target.x < 4 ? 0 : 7;
+                    
+                    // Move apenas o X (mantém o Y)
+                    target.x = targetX;
+                    
+                    if (typeof updateVisuals === 'function') updateVisuals();
+                    await sleep(300);
+
+                    // Dano extra por colisão na borda
+                    const dmgExtra = Math.floor(totalAtk * 0.5);
+                    if (typeof applyDmg === 'function') applyDmg(target, dmgExtra);
+                    
+                    if (typeof addLog === 'function') {
+                        addLog(`🔥 Pajé-Açu: boss empurrado e colidiu! (+${dmgExtra} dano)`);
+                    }
+                } else {
+                    // ⭐ BOSS ESTÁ EM OUTRA LINHA: NÃO FAZ NADA
+                    if (typeof addLog === 'function') {
+                        addLog(`🔥 Pajé-Açu: boss fora da linha de fogo (não foi afetado).`);
+                    }
+                }
+            }
+
+            if (typeof addLog === 'function') {
+                addLog(`🔥 Pajé-Açu: linha de fogo! (${totalAtk} dano base)`);
+            }
+        }
+    };
+
+    console.log('✅ [V30.3] PA do Pajé-Açu corrigido (trava de linha ativada).');
+})();
+// =================================================================
+// historia.js — BLOCO 112 (V34.0 — Renomear Tapyra + Migrar Save)
+// -----------------------------------------------------------------
+// Cole NO FINAL do historia.js (último bloco).
+// =================================================================
+
+(function renomearTapyraV340() {
+    if (window._renomearTapyraV340) return;
+    window._renomearTapyraV340 = true;
+
+    console.log('[V34.0] Renomeando Tapyra (apóstrofo → hífen)...');
+
+    // 1. Muda o displayName e o className na tabela
+    if (typeof STORY_HERO_CLASSES !== 'undefined' && STORY_HERO_CLASSES["Tapyra'yawara"]) {
+        const hero = STORY_HERO_CLASSES["Tapyra'yawara"];
+        hero.displayName = "Tapyra-Yawara";
+        hero.className = "Tapyra-Yawara";
+
+        // Move a chave do objeto para o novo nome
+        STORY_HERO_CLASSES["Tapyra-Yawara"] = hero;
+        delete STORY_HERO_CLASSES["Tapyra'yawara"];
+    }
+
+    // 2. Atualiza a tabela de unlocks por estrelas (se existir)
+    if (typeof STORY_HERO_UNLOCKS !== 'undefined' && Array.isArray(STORY_HERO_UNLOCKS)) {
+        STORY_HERO_UNLOCKS.forEach(entry => {
+            if (entry.className === "Tapyra'yawara") {
+                entry.className = "Tapyra-Yawara";
+                entry.displayName = "Tapyra-Yawara";
+            }
+        });
+    }
+
+    // 3. Atualiza os detalhes do herói (STORY_HERO_DETAILS)
+    if (typeof STORY_HERO_DETAILS !== 'undefined' && STORY_HERO_DETAILS["Tapyra'yawara"]) {
+        STORY_HERO_DETAILS["Tapyra-Yawara"] = STORY_HERO_DETAILS["Tapyra'yawara"];
+        delete STORY_HERO_DETAILS["Tapyra'yawara"];
+    }
+
+    // 4. Atualiza imagens do PA
+    if (typeof STORY_HERO_PA_IMAGES !== 'undefined' && STORY_HERO_PA_IMAGES["Tapyra'yawara"] !== undefined) {
+        STORY_HERO_PA_IMAGES["Tapyra-Yawara"] = STORY_HERO_PA_IMAGES["Tapyra'yawara"];
+        delete STORY_HERO_PA_IMAGES["Tapyra'yawara"];
+    }
+
+    // 5. Migra o save do jogador (se ele já tinha o herói)
+    if (typeof STORY_PROGRESS !== 'undefined' && Array.isArray(STORY_PROGRESS.unlockedHeroesStory)) {
+        const idx = STORY_PROGRESS.unlockedHeroesStory.indexOf("Tapyra'yawara");
+        if (idx !== -1) {
+            STORY_PROGRESS.unlockedHeroesStory[idx] = "Tapyra-Yawara";
+            if (typeof saveStoryProgress === 'function') saveStoryProgress();
+            console.log('[V34.0] Save do jogador migrado: Tapyra\'yawara → Tapyra-Yawara');
+        }
+    }
+
+    // 6. Corrige os selects e grids (caso o jogador esteja com ele selecionado)
+    if (typeof STORY_PROGRESS !== 'undefined' && Array.isArray(STORY_PROGRESS.selectedHeroes)) {
+        const idx = STORY_PROGRESS.selectedHeroes.indexOf("Tapyra'yawara");
+        if (idx !== -1) {
+            STORY_PROGRESS.selectedHeroes[idx] = "Tapyra-Yawara";
+            if (typeof saveStoryProgress === 'function') saveStoryProgress();
+        }
+    }
+
+    // 7. Corrige a sprite (se existir)
+    if (typeof SPRITES_STORY !== 'undefined' && SPRITES_STORY["heroi_Tapyrayawara"]) {
+        SPRITES_STORY["heroi_Tapyra-Yawara"] = SPRITES_STORY["heroi_Tapyrayawara"];
+    }
+
+    console.log('✅ [V34.0] Tapyra-Yawara renomeado. Botão "?" deve funcionar agora.');
 })();
