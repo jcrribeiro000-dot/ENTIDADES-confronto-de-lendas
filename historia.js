@@ -1566,22 +1566,22 @@ const STORY_FX_SPRITES = {
     spike_burst:'https://i.imgur.com/tJ3dO1s.png',
     spike_roll:'https://i.imgur.com/QttcQrj.png',
     jaw_snap:'https://i.imgur.com/xSvWvNx.png',
-    tail_whip:'https://i.imgur.com/H5ZbfwL.png',
+    tail_whip:'https://i.imgur.com/KkzGAY1.png',
     antler_charge:'https://i.imgur.com/jSLWgto.png',
     hoof_stomp:'https://i.imgur.com/bbViaiw.png',
-    pounce_arc:'https://i.imgur.com/23VkeNf.png',
+    pounce_arc:'https://i.imgur.com/r3KQ85p.png',
     claw_slash:'https://i.imgur.com/r3KQ85p.png',
     fang_bite:'https://i.imgur.com/LGPJ1nD.png',
     wing_gust:'https://i.imgur.com/ZLoFtuS.png',
     peck_beak:'https://i.imgur.com/7DnDATC.png',
-    coil_wrap:'https://i.imgur.com/WqNakSK.png',
+    coil_wrap:'https://i.imgur.com/CR7b6qJ.png',
     sting_venom:'https://i.imgur.com/WDr1mko.png',
     splash_wave:'https://i.imgur.com/s6lL5PM.png',
     fin_slash:'https://i.imgur.com/HbejI8O.png',
     tentacle_glow:'',
     ground_crack:'https://i.imgur.com/vKBQ0EW.png',
-    shockwave:'https://i.imgur.com/UfjAlRZ.png',
-    fog_cloud:'https://i.imgur.com/DJIefCf.png',
+    shockwave:'https://i.imgur.com/ASN5fHQ.png',
+    fog_cloud:'https://i.imgur.com/VKFJ2j6.png',
     swarm_cloud:'https://i.imgur.com/9btzF9A.png',
     spectral_veil:'',
     push_arrow:'',
@@ -1591,7 +1591,7 @@ const STORY_FX_SPRITES = {
     element_pulse:'https://i.imgur.com/9Zxsavx.png',
     flame_short:'https://i.imgur.com/V1MTCcM.png',
     impact:'https://i.imgur.com/sOtm43e.png',
-    heavy_slash:'',
+    heavy_slash:'https://i.imgur.com/pHVNBWZ.png',
 };
 // =================================================================
 // 🎬 GIFs do PODER ANCESTRAL dos heróis
@@ -33069,4 +33069,986 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
     console.log('• Dano no caminho + tile à frente');
     console.log('• Tela do evento: idêntica à do modo história');
     console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — BLOCO 99 (V28.0 — PVP: PA funciona)
+// -----------------------------------------------------------------
+// Cole NO FINAL do historia.js (último bloco).
+//
+// Corrige: o triggerBravelyChain do V23.2 ignora PVP (só aceita
+// _storyMode ou _eventoAtivo). Este patch reativa o PA no PVP.
+// =================================================================
+
+(function pvpPAfuncionaV280() {
+    if (window._pvpPAfuncionaV280) return;
+    window._pvpPAfuncionaV280 = true;
+
+    console.log('[V28.0] Ativando PA no PVP...');
+
+    const _origBravely = window.triggerBravelyChain;
+    if (typeof _origBravely !== 'function') {
+        console.warn('[V28.0] triggerBravelyChain não existe.');
+        return;
+    }
+
+    window.triggerBravelyChain = async function(active, target, totalAtk) {
+        // ⭐ No PVP, faz o PA completo
+        if (window._pvpMode) {
+            return await _triggerBravelyPVP(active, target, totalAtk);
+        }
+
+        // Fora do PVP, chama o original
+        return _origBravely.apply(this, arguments);
+    };
+
+    // ==============================================================
+    // LÓGICA DO PA NO PVP
+    // ==============================================================
+    async function _triggerBravelyPVP(active, target, totalAtk) {
+        if (!active || !target) return;
+
+        const heroData = (typeof STORY_HERO_CLASSES !== 'undefined')
+            ? STORY_HERO_CLASSES[active.class]
+            : null;
+
+        if (!heroData || !heroData.paKey) return;
+
+        const paKey = heroData.paKey;
+        const element = active.element || 'FOGO';
+
+        // Overlay "PODER ANCESTRAL"
+        if (typeof showPoderAncestralEffect === 'function') {
+            try { showPoderAncestralEffect(); } catch(e) {}
+        }
+        await sleep(300);
+
+        try { if (typeof playSfx === 'function') playSfx('skill1'); } catch(e) {}
+
+        // Heróis base (Tupã/Sumé/Caipora) → lógica própria
+        if (paKey.startsWith('base_')) {
+            return await _pvpBravelyBase(active, target, totalAtk, paKey, element);
+        }
+
+        // Heróis novos → lógica simplificada
+        return await _pvpBravelyNovo(active, target, totalAtk, paKey, element);
+    }
+
+    // ==============================================================
+    // PA dos heróis base (Tupã/Sumé/Caipora)
+    // ==============================================================
+    async function _pvpBravelyBase(active, target, totalAtk, paKey, element) {
+        const affectedIndices = [];
+
+        if (paKey === 'base_coluna') {
+            // Tupã: coluna
+            if (typeof triggerElementalFX === 'function') {
+                triggerElementalFX(element, active.x, 'COL', active.x, active.y);
+            }
+            for (let row = 0; row < 8; row++) affectedIndices.push(row * 8 + active.x);
+            if (target.x === active.x) {
+                if (typeof applyDmg === 'function') applyDmg(target, totalAtk);
+            }
+        }
+        else if (paKey === 'base_linha_cura') {
+            // Sumé: linha + cura
+            if (typeof triggerElementalFX === 'function') {
+                triggerElementalFX(element, active.y, 'ROW', active.x, active.y);
+            }
+            for (let col = 0; col < 8; col++) affectedIndices.push(active.y * 8 + col);
+            if (target.y === active.y) {
+                if (typeof applyDmg === 'function') applyDmg(target, totalAtk);
+            }
+            // Cura
+            if (typeof players !== 'undefined') {
+                players.forEach(p => {
+                    if (!p.dead && p.y === active.y) {
+                        p.hp = Math.min(p.maxHp, p.hp + 2);
+                        if (typeof showHealEffect === 'function') showHealEffect(p.x, p.y, 2);
+                    }
+                });
+            }
+        }
+        else if (paKey === 'base_area_alvo') {
+            // Caipora: área 3×3 no alvo
+            for (let dy = -1; dy <= 1; dy++) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    const nx = target.x + dx;
+                    const ny = target.y + dy;
+                    if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) {
+                        affectedIndices.push(ny * 8 + nx);
+                    }
+                }
+            }
+            if (typeof applyDmg === 'function') applyDmg(target, totalAtk);
+        }
+
+        // Converte tiles
+        affectedIndices.forEach(idx => {
+            if (typeof grid !== 'undefined') grid[idx] = element;
+            const tile = document.querySelectorAll('#grid .tile')[idx];
+            if (tile) tile.className = `tile bg-${element}`;
+        });
+
+        console.log(`[V28.0] PA base no PVP: ${paKey}, ${affectedIndices.length} tiles`);
+    }
+
+    // ==============================================================
+    // PA dos heróis novos (simplificado pro PVP)
+    // --------------------------------------------------------------
+    // No PVP, o PA é só dano + conversão de tiles. Sem cura,
+    // sem empurrão, sem cura. Pro PVP ficar justo.
+    // ==============================================================
+    async function _pvpBravelyNovo(active, target, totalAtk, paKey, element) {
+        if (!target || target.dead) return;
+
+        // Aplica dano direto no alvo
+        if (typeof applyDmg === 'function') {
+            applyDmg(target, totalAtk);
+        }
+
+        // Converte tiles ao redor do alvo (área 3×3) pro elemento
+        const tiles = [];
+        for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+                const nx = target.x + dx;
+                const ny = target.y + dy;
+                if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) {
+                    tiles.push(ny * 8 + nx);
+                }
+            }
+        }
+
+        tiles.forEach(idx => {
+            if (typeof grid !== 'undefined') grid[idx] = element;
+            const tile = document.querySelectorAll('#grid .tile')[idx];
+            if (tile) tile.className = `tile bg-${element}`;
+        });
+
+        // FX visual
+        if (typeof spawnFxArea === 'function') {
+            spawnFxArea('impact', 'fx-impact', target.x, target.y, 1, { duration: 600 });
+        }
+
+        console.log(`[V28.0] PA ${paKey} no PVP: ${totalAtk} dano, ${tiles.length} tiles`);
+    }
+
+    // Helper
+    function sleep(ms) {
+        return new Promise(r => setTimeout(r, ms));
+    }
+
+    console.log('✅ [V28.0] PA no PVP ativado.');
+})();
+// =================================================================
+// historia.js — BLOCO 100 (V28.1 — PVP: PA EXATO do modo história)
+// -----------------------------------------------------------------
+// Cole NO FINAL do historia.js (último bloco).
+// Substitui o V28.0.
+//
+// Corrige: o V28.0 simplificava o PA no PVP. Agora usa o PA EXATO
+// (mesmo STORY_HERO_PA[paKey] do modo história).
+// =================================================================
+
+(function pvpPAexatoV281() {
+    if (window._pvpPAexatoV281) return;
+    window._pvpPAexatoV281 = true;
+
+    // Desativa o V28.0 se existir
+    window._pvpPAfuncionaV280 = false;
+
+    console.log('[V28.1] Instalando PA EXATO no PVP...');
+
+    const _origBravely = window.triggerBravelyChain;
+    if (typeof _origBravely !== 'function') {
+        console.warn('[V28.1] triggerBravelyChain não existe.');
+        return;
+    }
+
+    window.triggerBravelyChain = async function(active, target, totalAtk) {
+        // ⭐ No PVP, executa o PA exato (sem simplificação)
+        if (window._pvpMode) {
+            return await _executarPAexatoPVP(active, target, totalAtk);
+        }
+        return _origBravely.apply(this, arguments);
+    };
+
+    // ==============================================================
+    // EXECUTA O PA EXATO NO PVP
+    // ==============================================================
+    async function _executarPAexatoPVP(active, target, totalAtk) {
+        if (!active || !target) return;
+
+        const heroData = (typeof STORY_HERO_CLASSES !== 'undefined')
+            ? STORY_HERO_CLASSES[active.class]
+            : null;
+
+        if (!heroData || !heroData.paKey) return;
+
+        const paKey = heroData.paKey;
+        const element = active.element || 'FOGO';
+
+        // 1. Overlay "PODER ANCESTRAL"
+        if (typeof showPoderAncestralEffect === 'function') {
+            try { showPoderAncestralEffect(); } catch(e) {}
+        }
+        await sleep(300);
+
+        try { if (typeof playSfx === 'function') playSfx('skill1'); } catch(e) {}
+
+        // 2. Heróis base (Tupã/Sumé/Caipora) → lógica própria
+        if (paKey.startsWith('base_')) {
+            return await _pvpBravelyBase(active, target, totalAtk, paKey, element);
+        }
+
+        // 3. Heróis novos → PA EXATO
+        return await _pvpBravelyNovoExato(active, target, totalAtk, paKey, element);
+    }
+
+    // ==============================================================
+    // PA dos heróis base (Tupã/Sumé/Caipora) — mantido igual
+    // ==============================================================
+    async function _pvpBravelyBase(active, target, totalAtk, paKey, element) {
+        const affectedIndices = [];
+
+        if (paKey === 'base_coluna') {
+            if (typeof triggerElementalFX === 'function') {
+                triggerElementalFX(element, active.x, 'COL', active.x, active.y);
+            }
+            for (let row = 0; row < 8; row++) affectedIndices.push(row * 8 + active.x);
+            if (target.x === active.x) {
+                if (typeof applyDmg === 'function') applyDmg(target, totalAtk);
+            }
+        }
+        else if (paKey === 'base_linha_cura') {
+            if (typeof triggerElementalFX === 'function') {
+                triggerElementalFX(element, active.y, 'ROW', active.x, active.y);
+            }
+            for (let col = 0; col < 8; col++) affectedIndices.push(active.y * 8 + col);
+            if (target.y === active.y) {
+                if (typeof applyDmg === 'function') applyDmg(target, totalAtk);
+            }
+            players.forEach(p => {
+                if (!p.dead && p.y === active.y) {
+                    p.hp = Math.min(p.maxHp, p.hp + 2);
+                    if (typeof showHealEffect === 'function') showHealEffect(p.x, p.y, 2);
+                }
+            });
+        }
+        else if (paKey === 'base_area_alvo') {
+            for (let dy = -1; dy <= 1; dy++) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    const nx = target.x + dx;
+                    const ny = target.y + dy;
+                    if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) {
+                        affectedIndices.push(ny * 8 + nx);
+                    }
+                }
+            }
+            if (typeof applyDmg === 'function') applyDmg(target, totalAtk);
+        }
+
+        affectedIndices.forEach(idx => {
+            if (typeof grid !== 'undefined') grid[idx] = element;
+            const tile = document.querySelectorAll('#grid .tile')[idx];
+            if (tile) tile.className = `tile bg-${element}`;
+        });
+
+        console.log(`[V28.1] PA base no PVP: ${paKey}, ${affectedIndices.length} tiles`);
+    }
+
+    // ==============================================================
+    // PA dos heróis novos — EXATO (chama STORY_HERO_PA[paKey])
+    // ==============================================================
+    async function _pvpBravelyNovoExato(active, target, totalAtk, paKey, element) {
+        if (!target) return;
+
+        const paFn = STORY_HERO_PA[paKey];
+        if (!paFn || typeof paFn.execute !== 'function') {
+            console.warn(`[V28.1] PA ${paKey} não encontrado em STORY_HERO_PA`);
+            return;
+        }
+
+        // ⭐ Chama o PA EXATO (com cura, empurrão, tudo)
+        try {
+            await paFn.execute(active, target, totalAtk);
+        } catch(e) {
+            console.warn(`[V28.1] Erro no PA ${paKey}:`, e);
+        }
+
+        // ⭐ Calcula os tiles afetados (mesma lógica do V23.2)
+        const targetSnapshot = target ? { x: target.x, y: target.y, dead: target.dead, id: target.id } : null;
+        const paTiles = _calcularTilesPA(active, paKey, targetSnapshot);
+
+        // ⭐ Converte os tiles (mesmo que o PA já tenha convertido alguns)
+        paTiles.forEach(idx => {
+            if (typeof grid !== 'undefined') grid[idx] = element;
+            const tile = document.querySelectorAll('#grid .tile')[idx];
+            if (tile) tile.className = `tile bg-${element}`;
+        });
+
+        console.log(`[V28.1] PA EXATO ${paKey} no PVP: ${totalAtk} dano, ${paTiles.length} tiles`);
+    }
+
+    // ==============================================================
+    // Calcula tiles do PA (mesma lógica do V23.2)
+    // ==============================================================
+    function _calcularTilesPA(active, paKey, targetSnapshot) {
+        const tiles = [];
+        const cx = active.x;
+        const cy = active.y;
+        const hasTarget = targetSnapshot && typeof targetSnapshot.x === 'number';
+
+        if (paKey === 'kanarott_cruz_empurra') {
+            for (let i = -2; i <= 2; i++) {
+                const ny = cy + i;
+                if (ny >= 0 && ny < 8) tiles.push(ny * 8 + cx);
+            }
+            for (let i = -2; i <= 2; i++) {
+                if (i === 0) continue;
+                const nx = cx + i;
+                if (nx >= 0 && nx < 8) tiles.push(cy * 8 + nx);
+            }
+        }
+        else if (paKey === 'teperesik_area2x2') {
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dy = -1; dy <= 1; dy++) {
+                    if (dx === 0 && dy === 0) continue;
+                    const nx = cx + dx, ny = cy + dy;
+                    if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) tiles.push(ny * 8 + nx);
+                }
+            }
+        }
+        else if (paKey === 'eru_linha_horizontal') {
+            for (let x = 0; x < 8; x++) tiles.push(cy * 8 + x);
+        }
+        else if (paKey === 'andure_area2x2_cura') {
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dy = -1; dy <= 1; dy++) {
+                    const nx = cx + dx, ny = cy + dy;
+                    if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) tiles.push(ny * 8 + nx);
+                }
+            }
+        }
+        else if (paKey === 'maedamata_area3x3_cura') {
+            for (let dx = -2; dx <= 2; dx++) {
+                for (let dy = -2; dy <= 2; dy++) {
+                    const nx = cx + dx, ny = cy + dy;
+                    if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) tiles.push(ny * 8 + nx);
+                }
+            }
+        }
+        else if (paKey === 'paje_coluna_fogo') {
+            for (let y = 0; y < 8; y++) tiles.push(y * 8 + cx);
+        }
+        else if (paKey === 'jurua_area_alvo_3x3') {
+            if (hasTarget) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dy = -1; dy <= 1; dy++) {
+                        const nx = targetSnapshot.x + dx, ny = targetSnapshot.y + dy;
+                        if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) tiles.push(ny * 8 + nx);
+                    }
+                }
+            }
+        }
+        else if (paKey === 'araci_linha_horizontal') {
+            for (let x = 0; x < 8; x++) tiles.push(cy * 8 + x);
+        }
+        else if (paKey === 'bicho_cruz_completa') {
+            if (hasTarget) {
+                for (let x = 0; x < 8; x++) tiles.push(targetSnapshot.y * 8 + x);
+                for (let y = 0; y < 8; y++) {
+                    if (y !== targetSnapshot.y) tiles.push(y * 8 + targetSnapshot.x);
+                }
+            }
+        }
+        else if (paKey === 'tapyra_coluna_alvo') {
+            if (hasTarget) {
+                for (let y = 0; y < 8; y++) tiles.push(y * 8 + targetSnapshot.x);
+            }
+        }
+        else if (paKey === 'curupira_chuva_flechas') {
+            grid.forEach((el, idx) => { if (el === 'AR') tiles.push(idx); });
+        }
+        else if (paKey === 'kianumanka_meteoro') {
+            if (hasTarget) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dy = -1; dy <= 1; dy++) {
+                        const nx = targetSnapshot.x + dx, ny = targetSnapshot.y + dy;
+                        if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) tiles.push(ny * 8 + nx);
+                    }
+                }
+            }
+        }
+        else if (paKey === 'anhanga_mirim_raio') {
+            if (hasTarget) {
+                for (let i = 0; i < 8; i++) {
+                    if (!tiles.includes(i * 8 + targetSnapshot.x)) tiles.push(i * 8 + targetSnapshot.x);
+                    if (!tiles.includes(targetSnapshot.y * 8 + i)) tiles.push(targetSnapshot.y * 8 + i);
+                }
+            }
+        }
+        else if (paKey === 'matinta_rajada') {
+            for (let x = 0; x < 8; x++) tiles.push(cy * 8 + x);
+        }
+        else if (paKey === 'naia_apaga_fogo') {
+            grid.forEach((el, idx) => { if (el === 'FOGO') tiles.push(idx); });
+        }
+        else if (paKey === 'kuati_explosao') {
+            const area = [];
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dy = -1; dy <= 1; dy++) {
+                    const nx = cx + dx, ny = cy + dy;
+                    if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) area.push(ny * 8 + nx);
+                }
+            }
+            const linha = [];
+            for (let x = 0; x < 8; x++) linha.push(cy * 8 + x);
+            [...new Set([...area, ...linha])].forEach(idx => tiles.push(idx));
+        }
+        else if (paKey === 'caboclo_mare') {
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dy = -1; dy <= 1; dy++) {
+                    const nx = cx + dx, ny = cy + dy;
+                    if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) tiles.push(ny * 8 + nx);
+                }
+            }
+        }
+        else if (paKey === 'tupinamba_avalanche') {
+            if (hasTarget) {
+                for (let i = 0; i < 8; i++) {
+                    if (!tiles.includes(i * 8 + targetSnapshot.x)) tiles.push(i * 8 + targetSnapshot.x);
+                    if (!tiles.includes(targetSnapshot.y * 8 + i)) tiles.push(targetSnapshot.y * 8 + i);
+                }
+            }
+        }
+        else if (paKey === 'mbaraka_salto_raio') {
+            if (hasTarget) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dy = -1; dy <= 1; dy++) {
+                        const nx = targetSnapshot.x + dx, ny = targetSnapshot.y + dy;
+                        if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) tiles.push(ny * 8 + nx);
+                    }
+                }
+            }
+        }
+        else if (paKey === 'maedouro_caminho') {
+            if (hasTarget) {
+                const stepX = Math.sign(targetSnapshot.x - cx);
+                for (let x = cx; x !== targetSnapshot.x + stepX; x += (stepX || 1)) {
+                    const nx = Math.max(0, Math.min(7, x));
+                    const idx = cy * 8 + nx;
+                    if (!tiles.includes(idx)) tiles.push(idx);
+                    if (stepX === 0) break;
+                }
+                const stepY = Math.sign(targetSnapshot.y - cy);
+                for (let y = cy; y !== targetSnapshot.y + stepY; y += (stepY || 1)) {
+                    const ny = Math.max(0, Math.min(7, y));
+                    const idx = ny * 8 + targetSnapshot.x;
+                    if (!tiles.includes(idx)) tiles.push(idx);
+                    if (stepY === 0) break;
+                }
+                const bossIdx = targetSnapshot.y * 8 + targetSnapshot.x;
+                if (!tiles.includes(bossIdx)) tiles.push(bossIdx);
+            }
+        }
+        else if (paKey === 'pajeacu_linha') {
+            for (let x = 0; x < 8; x++) tiles.push(cy * 8 + x);
+        }
+        else if (paKey === 'negrinho_cruz_cura') {
+            if (hasTarget) {
+                for (let i = 0; i < 8; i++) {
+                    if (!tiles.includes(i * 8 + targetSnapshot.x)) tiles.push(i * 8 + targetSnapshot.x);
+                    if (!tiles.includes(targetSnapshot.y * 8 + i)) tiles.push(targetSnapshot.y * 8 + i);
+                }
+            }
+        }
+
+        return tiles;
+    }
+
+    function sleep(ms) {
+        return new Promise(r => setTimeout(r, ms));
+    }
+
+    console.log('✅ [V28.1] PA EXATO no PVP instalado.');
+    console.log('   • Heróis base: lógica própria (Tupã/Sumé/Caipora)');
+    console.log('   • Heróis novos: STORY_HERO_PA[paKey].execute (cura, empurrão, etc.)');
+})();
+// =================================================================
+// historia.js — BLOCO 101 (V28.2 — Coop: PA funciona)
+// -----------------------------------------------------------------
+// Cole NO FINAL do historia.js (último bloco).
+//
+// Corrige: o triggerBravelyChain do V23.2 ignora Coop (só aceita
+// _storyMode, _eventoAtivo e _pvpMode). Este patch reativa no Coop.
+// =================================================================
+
+(function coopPAfuncionaV282() {
+    if (window._coopPAfuncionaV282) return;
+    window._coopPAfuncionaV282 = true;
+
+    console.log('[V28.2] Ativando PA no Coop...');
+
+    const _origBravely = window.triggerBravelyChain;
+    if (typeof _origBravely !== 'function') {
+        console.warn('[V28.2] triggerBravelyChain não existe.');
+        return;
+    }
+
+    window.triggerBravelyChain = async function(active, target, totalAtk) {
+        // ⭐ No Coop, faz o PA exato (mesma lógica do modo história)
+        if (window._coopMode) {
+            return await _executarPAexatoCoop(active, target, totalAtk);
+        }
+        // Fora do Coop, chama o original (que já tem PVP)
+        return _origBravely.apply(this, arguments);
+    };
+
+    // ==============================================================
+    // EXECUTA O PA EXATO NO COOP
+    // --------------------------------------------------------------
+    // Usa a mesma lógica do V23.2 (boss real, sem fake).
+    // ==============================================================
+    async function _executarPAexatoCoop(active, target, totalAtk) {
+        if (!active || !target) return;
+
+        const heroData = (typeof STORY_HERO_CLASSES !== 'undefined')
+            ? STORY_HERO_CLASSES[active.class]
+            : null;
+
+        if (!heroData || !heroData.paKey) return;
+
+        const paKey = heroData.paKey;
+        const element = active.element || 'FOGO';
+
+        // Snapshot do alvo
+        const targetSnapshot = {
+            x: target.x,
+            y: target.y,
+            dead: target.dead,
+            id: target.id,
+        };
+
+        // Overlay "PODER ANCESTRAL"
+        if (typeof showPoderAncestralEffect === 'function') {
+            try { showPoderAncestralEffect(); } catch(e) {}
+        }
+        await sleep(300);
+
+        try { if (typeof playSfx === 'function') playSfx('skill1'); } catch(e) {}
+
+        // Heróis base (Tupã/Sumé/Caipora) → lógica própria
+        if (paKey.startsWith('base_')) {
+            return await _coopBravelyBase(active, target, totalAtk, paKey, element);
+        }
+
+        // Heróis novos → PA EXATO (STORY_HERO_PA)
+        return await _coopBravelyNovoExato(active, target, totalAtk, paKey, element, targetSnapshot);
+    }
+
+    // ==============================================================
+    // PA dos heróis base (igual ao V23.2)
+    // ==============================================================
+    async function _coopBravelyBase(active, target, totalAtk, paKey, element) {
+        const affectedIndices = [];
+
+        if (paKey === 'base_coluna') {
+            if (typeof triggerElementalFX === 'function') {
+                triggerElementalFX(element, active.x, 'COL', active.x, active.y);
+            }
+            for (let row = 0; row < 8; row++) affectedIndices.push(row * 8 + active.x);
+            if (target && !target.dead && target.x === active.x) {
+                if (typeof applyDmg === 'function') applyDmg(target, totalAtk);
+            }
+        }
+        else if (paKey === 'base_linha_cura') {
+            if (typeof triggerElementalFX === 'function') {
+                triggerElementalFX(element, active.y, 'ROW', active.x, active.y);
+            }
+            for (let col = 0; col < 8; col++) affectedIndices.push(active.y * 8 + col);
+            if (target && !target.dead && target.y === active.y) {
+                if (typeof applyDmg === 'function') applyDmg(target, totalAtk);
+            }
+            players.forEach(p => {
+                if (!p.dead && p.y === active.y) {
+                    p.hp = Math.min(p.maxHp, p.hp + 2);
+                    if (typeof showHealEffect === 'function') showHealEffect(p.x, p.y, 2);
+                }
+            });
+        }
+        else if (paKey === 'base_area_alvo') {
+            if (target) {
+                for (let dy = -1; dy <= 1; dy++) {
+                    for (let dx = -1; dx <= 1; dx++) {
+                        const nx = target.x + dx;
+                        const ny = target.y + dy;
+                        if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) {
+                            affectedIndices.push(ny * 8 + nx);
+                        }
+                    }
+                }
+                if (typeof applyDmg === 'function') applyDmg(target, totalAtk);
+            }
+        }
+
+        affectedIndices.forEach(idx => {
+            if (typeof grid !== 'undefined') grid[idx] = element;
+            const tile = document.querySelectorAll('#grid .tile')[idx];
+            if (tile) tile.className = `tile bg-${element}`;
+        });
+
+        console.log(`[V28.2] PA base no Coop: ${paKey}, ${affectedIndices.length} tiles`);
+    }
+
+    // ==============================================================
+    // PA dos heróis novos — EXATO (chama STORY_HERO_PA[paKey])
+    // ==============================================================
+    async function _coopBravelyNovoExato(active, target, totalAtk, paKey, element, targetSnapshot) {
+        const paFn = STORY_HERO_PA[paKey];
+        if (!paFn || typeof paFn.execute !== 'function') {
+            console.warn(`[V28.2] PA ${paKey} não encontrado em STORY_HERO_PA`);
+            return;
+        }
+
+        // ⭐ Chama o PA EXATO (com cura, empurrão, tudo)
+        try {
+            await paFn.execute(active, target, totalAtk);
+        } catch(e) {
+            console.warn(`[V28.2] Erro no PA ${paKey}:`, e);
+        }
+
+        // ⭐ Calcula os tiles afetados (mesma lógica do V23.2)
+        const paTiles = _calcularTilesPA(active, paKey, targetSnapshot);
+
+        // ⭐ Converte os tiles
+        paTiles.forEach(idx => {
+            if (typeof grid !== 'undefined') grid[idx] = element;
+            const tile = document.querySelectorAll('#grid .tile')[idx];
+            if (tile) tile.className = `tile bg-${element}`;
+        });
+
+        console.log(`[V28.2] PA EXATO ${paKey} no Coop: ${totalAtk} dano, ${paTiles.length} tiles`);
+    }
+
+    // ==============================================================
+    // Calcula tiles do PA (mesma lógica do V23.2)
+    // ==============================================================
+    function _calcularTilesPA(active, paKey, targetSnapshot) {
+        const tiles = [];
+        const cx = active.x;
+        const cy = active.y;
+        const hasTarget = targetSnapshot && typeof targetSnapshot.x === 'number';
+
+        if (paKey === 'kanarott_cruz_empurra') {
+            for (let i = -2; i <= 2; i++) {
+                const ny = cy + i;
+                if (ny >= 0 && ny < 8) tiles.push(ny * 8 + cx);
+            }
+            for (let i = -2; i <= 2; i++) {
+                if (i === 0) continue;
+                const nx = cx + i;
+                if (nx >= 0 && nx < 8) tiles.push(cy * 8 + nx);
+            }
+        }
+        else if (paKey === 'teperesik_area2x2') {
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dy = -1; dy <= 1; dy++) {
+                    if (dx === 0 && dy === 0) continue;
+                    const nx = cx + dx, ny = cy + dy;
+                    if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) tiles.push(ny * 8 + nx);
+                }
+            }
+        }
+        else if (paKey === 'eru_linha_horizontal') {
+            for (let x = 0; x < 8; x++) tiles.push(cy * 8 + x);
+        }
+        else if (paKey === 'andure_area2x2_cura') {
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dy = -1; dy <= 1; dy++) {
+                    const nx = cx + dx, ny = cy + dy;
+                    if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) tiles.push(ny * 8 + nx);
+                }
+            }
+        }
+        else if (paKey === 'maedamata_area3x3_cura') {
+            for (let dx = -2; dx <= 2; dx++) {
+                for (let dy = -2; dy <= 2; dy++) {
+                    const nx = cx + dx, ny = cy + dy;
+                    if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) tiles.push(ny * 8 + nx);
+                }
+            }
+        }
+        else if (paKey === 'paje_coluna_fogo') {
+            for (let y = 0; y < 8; y++) tiles.push(y * 8 + cx);
+        }
+        else if (paKey === 'jurua_area_alvo_3x3') {
+            if (hasTarget) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dy = -1; dy <= 1; dy++) {
+                        const nx = targetSnapshot.x + dx, ny = targetSnapshot.y + dy;
+                        if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) tiles.push(ny * 8 + nx);
+                    }
+                }
+            }
+        }
+        else if (paKey === 'araci_linha_horizontal') {
+            for (let x = 0; x < 8; x++) tiles.push(cy * 8 + x);
+        }
+        else if (paKey === 'bicho_cruz_completa') {
+            if (hasTarget) {
+                for (let x = 0; x < 8; x++) tiles.push(targetSnapshot.y * 8 + x);
+                for (let y = 0; y < 8; y++) {
+                    if (y !== targetSnapshot.y) tiles.push(y * 8 + targetSnapshot.x);
+                }
+            }
+        }
+        else if (paKey === 'tapyra_coluna_alvo') {
+            if (hasTarget) {
+                for (let y = 0; y < 8; y++) tiles.push(y * 8 + targetSnapshot.x);
+            }
+        }
+        else if (paKey === 'curupira_chuva_flechas') {
+            grid.forEach((el, idx) => { if (el === 'AR') tiles.push(idx); });
+        }
+        else if (paKey === 'kianumanka_meteoro') {
+            if (hasTarget) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dy = -1; dy <= 1; dy++) {
+                        const nx = targetSnapshot.x + dx, ny = targetSnapshot.y + dy;
+                        if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) tiles.push(ny * 8 + nx);
+                    }
+                }
+            }
+        }
+        else if (paKey === 'anhanga_mirim_raio') {
+            if (hasTarget) {
+                for (let i = 0; i < 8; i++) {
+                    if (!tiles.includes(i * 8 + targetSnapshot.x)) tiles.push(i * 8 + targetSnapshot.x);
+                    if (!tiles.includes(targetSnapshot.y * 8 + i)) tiles.push(targetSnapshot.y * 8 + i);
+                }
+            }
+        }
+        else if (paKey === 'matinta_rajada') {
+            for (let x = 0; x < 8; x++) tiles.push(cy * 8 + x);
+        }
+        else if (paKey === 'naia_apaga_fogo') {
+            grid.forEach((el, idx) => { if (el === 'FOGO') tiles.push(idx); });
+        }
+        else if (paKey === 'kuati_explosao') {
+            const area = [];
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dy = -1; dy <= 1; dy++) {
+                    const nx = cx + dx, ny = cy + dy;
+                    if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) area.push(ny * 8 + nx);
+                }
+            }
+            const linha = [];
+            for (let x = 0; x < 8; x++) linha.push(cy * 8 + x);
+            [...new Set([...area, ...linha])].forEach(idx => tiles.push(idx));
+        }
+        else if (paKey === 'caboclo_mare') {
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dy = -1; dy <= 1; dy++) {
+                    const nx = cx + dx, ny = cy + dy;
+                    if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) tiles.push(ny * 8 + nx);
+                }
+            }
+        }
+        else if (paKey === 'tupinamba_avalanche') {
+            if (hasTarget) {
+                for (let i = 0; i < 8; i++) {
+                    if (!tiles.includes(i * 8 + targetSnapshot.x)) tiles.push(i * 8 + targetSnapshot.x);
+                    if (!tiles.includes(targetSnapshot.y * 8 + i)) tiles.push(targetSnapshot.y * 8 + i);
+                }
+            }
+        }
+        else if (paKey === 'mbaraka_salto_raio') {
+            if (hasTarget) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dy = -1; dy <= 1; dy++) {
+                        const nx = targetSnapshot.x + dx, ny = targetSnapshot.y + dy;
+                        if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) tiles.push(ny * 8 + nx);
+                    }
+                }
+            }
+        }
+        else if (paKey === 'maedouro_caminho') {
+            if (hasTarget) {
+                const stepX = Math.sign(targetSnapshot.x - cx);
+                for (let x = cx; x !== targetSnapshot.x + stepX; x += (stepX || 1)) {
+                    const nx = Math.max(0, Math.min(7, x));
+                    const idx = cy * 8 + nx;
+                    if (!tiles.includes(idx)) tiles.push(idx);
+                    if (stepX === 0) break;
+                }
+                const stepY = Math.sign(targetSnapshot.y - cy);
+                for (let y = cy; y !== targetSnapshot.y + stepY; y += (stepY || 1)) {
+                    const ny = Math.max(0, Math.min(7, y));
+                    const idx = ny * 8 + targetSnapshot.x;
+                    if (!tiles.includes(idx)) tiles.push(idx);
+                    if (stepY === 0) break;
+                }
+                const bossIdx = targetSnapshot.y * 8 + targetSnapshot.x;
+                if (!tiles.includes(bossIdx)) tiles.push(bossIdx);
+            }
+        }
+        else if (paKey === 'pajeacu_linha') {
+            for (let x = 0; x < 8; x++) tiles.push(cy * 8 + x);
+        }
+        else if (paKey === 'negrinho_cruz_cura') {
+            if (hasTarget) {
+                for (let i = 0; i < 8; i++) {
+                    if (!tiles.includes(i * 8 + targetSnapshot.x)) tiles.push(i * 8 + targetSnapshot.x);
+                    if (!tiles.includes(targetSnapshot.y * 8 + i)) tiles.push(targetSnapshot.y * 8 + i);
+                }
+            }
+        }
+
+        return tiles;
+    }
+
+    function sleep(ms) {
+        return new Promise(r => setTimeout(r, ms));
+    }
+
+    console.log('✅ [V28.2] PA no Coop ativado.');
+    console.log('   • Heróis base: lógica própria (Tupã/Sumé/Caipora)');
+    console.log('   • Heróis novos: STORY_HERO_PA[paKey].execute (cura, empurrão, etc.)');
+})();
+// =================================================================
+// historia.js — BLOCO 102 (V29.0 — Fix Boss Renascendo no Coop)
+// -----------------------------------------------------------------
+// Cole NO FINAL do historia.js (último bloco).
+//
+// Corrige: o boss morre, mas o coop.js recria ele porque a
+// sincronização com o Firestore se perde (culpa dos patches de PA).
+// =================================================================
+
+(function fixCoopBossRenascendoV290() {
+    if (window._fixCoopBossRenascendoV290) return;
+    window._fixCoopBossRenascendoV290 = true;
+
+    console.log('[V29.0] Blindando Coop contra boss renascendo...');
+
+    // ==============================================================
+    // 1. AVISAR O COOP QUANDO O BOSS MORRER
+    // --------------------------------------------------------------
+    // Envolve o applyDmg para avisar o coop.js ANTES de processar
+    // ==============================================================
+    const _origApplyDmg = window.applyDmg;
+    if (typeof _origApplyDmg === 'function') {
+        window.applyDmg = function(target, amount) {
+            const result = _origApplyDmg.apply(this, arguments);
+
+            // ⭐ Se o boss morreu e estamos no Coop
+            if (window._coopMode && target === boss && boss.dead) {
+                console.log('[V29.0] Boss morreu no Coop. Avisando coop.js...');
+
+                // Força a flag de processamento (para o coop.js não deixar o boss renascer)
+                if (typeof coopProcessandoMorteBoss !== 'undefined') {
+                    window.coopProcessandoMorteBoss = true;
+                }
+                if (typeof coopPartidaConcluida !== 'undefined') {
+                    window.coopPartidaConcluida = true;
+                }
+                if (typeof coopBossRunning !== 'undefined') {
+                    window.coopBossRunning = false;
+                }
+
+                // Se o coop tiver uma função de processar morte, chama
+                if (typeof window.coopProcessarMorteBoss === 'function') {
+                    setTimeout(() => {
+                        window.coopProcessarMorteBoss();
+                    }, 100);
+                }
+            }
+
+            return result;
+        };
+    }
+
+    // ==============================================================
+    // 2. BLOQUEAR O BOSS DE "VOLTAR À VIDA" NO COOP
+    // --------------------------------------------------------------
+    // Se o Firestore tentar restaurar o HP do boss (via
+    // coopAplicarEstadoDoRoom), e ele já morreu localmente,
+    // a gente barra.
+    // ==============================================================
+    const _origAplicarEstado = window.coopAplicarEstadoDoRoom;
+    if (typeof _origAplicarEstado === 'function') {
+        window.coopAplicarEstadoDoRoom = function(room) {
+            // ⭐ Se estamos processando a morte, ignora a sala
+            if (window.coopProcessandoMorteBoss) {
+                console.log('[V29.0] Ignorando estado da sala (processando morte do boss)');
+                return;
+            }
+
+            // ⭐ Se o boss local morreu e a sala diz que ele tá vivo
+            if (boss && boss.dead && room?.estadoJogo?.boss && !room.estadoJogo.boss.dead) {
+                console.log('[V29.0] Sala tentou reviver o boss. Bloqueado.');
+                return;
+            }
+
+            return _origAplicarEstado.apply(this, arguments);
+        };
+    }
+
+    // ==============================================================
+    // 3. BLOQUEAR O P2 DE RODAR O BOSS SE ELE JÁ MORREU
+    // ==============================================================
+    const _origRodarBossP2 = window.coopRodarBossP2;
+    if (typeof _origRodarBossP2 === 'function') {
+        window.coopRodarBossP2 = async function() {
+            if (boss && boss.dead) {
+                console.log('[V29.0] coopRodarBossP2 bloqueado (boss morto)');
+                return;
+            }
+            if (window.coopProcessandoMorteBoss) {
+                console.log('[V29.0] coopRodarBossP2 bloqueado (processando morte)');
+                return;
+            }
+            return _origRodarBossP2.apply(this, arguments);
+        };
+    }
+
+    // ==============================================================
+    // 4. RESETAR FLAGS AO INICIAR BATALHA
+    // ==============================================================
+    if (typeof window.initStoryBattle === 'function') {
+        const _origInit = window.initStoryBattle;
+        window.initStoryBattle = async function() {
+            if (window._coopMode) {
+                window.coopProcessandoMorteBoss = false;
+                window.coopPartidaConcluida = false;
+            }
+            return _origInit.apply(this, arguments);
+        };
+    }
+
+    // ==============================================================
+    // 5. GARANTIR QUE O ADVANCE STORY ENEMY NÃO SEJA CHAMADO DUAS VEZES
+    // --------------------------------------------------------------
+    // O coop.js tem um "monitor de turno travado" que chama
+    // advanceStoryEnemy. Se o boss já morreu, a gente bloqueia.
+    // ==============================================================
+    const _origAdvance = window.advanceStoryEnemy;
+    if (typeof _origAdvance === 'function' && !window._v290Advance) {
+        window._v290Advance = true;
+        let _advanceRodando = false;
+
+        window.advanceStoryEnemy = async function() {
+            if (_advanceRodando) {
+                console.log('[V29.0] advanceStoryEnemy já rodando. Bloqueado.');
+                return;
+            }
+            _advanceRodando = true;
+            try {
+                return await _origAdvance.apply(this, arguments);
+            } finally {
+                _advanceRodando = false;
+            }
+        };
+    }
+
+    console.log('✅ [V29.0] Coop blindado contra boss renascendo.');
 })();
