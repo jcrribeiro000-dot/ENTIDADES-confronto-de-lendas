@@ -2575,4 +2575,57 @@ console.log('✅ pvp.js V3.0 (baseado no coop) carregado.');
     console.log('📊 Herói selecionado: ' + (pvpMeuHeroClass || '(não definido)'));
     console.log('═══════════════════════════════════════════════════');
 })();
+// =================================================================
+// pvp.js — PATCH V36.3 (Compatibilidade com Stats Nível 11)
+// =================================================================
+(function compatStat11Pvp() {
+    if (window._compatStat11Pvp) return;
+    window._compatStat11Pvp = true;
+
+    const _origPvpExec = window.pvpExecutarAcaoManual;
+    if (typeof _origPvpExec === 'function') {
+        window.pvpExecutarAcaoManual = async function(active) {
+            if (!active) return _origPvpExec.apply(this, arguments);
+
+            const bonus = (typeof getHeroBonusFromLevel === 'function')
+                ? getHeroBonusFromLevel(active.class) : null;
+            
+            if (!bonus || (!bonus.range && !bonus.paThreshold && !bonus.formAtk && !bonus.bonusElemento)) {
+                return _origPvpExec.apply(this, arguments);
+            }
+
+            const info = CLASS_DB[active.class];
+            const bravelyEl = document.getElementById('bravely_tiles');
+            const origMin = info?.min;
+            const origThreshold = bravelyEl?.value;
+            const origBonusAtk = active.bonusAtk || 0;
+            let modificouBonus = false;
+
+            try {
+                if (info && bonus.range) info.min = Math.max(0, (info.min || 0) + bonus.range);
+                if (bravelyEl && bonus.paThreshold) bravelyEl.value = Math.max(3, parseInt(bravelyEl.value) + bonus.paThreshold);
+
+                let bonusTemp = 0;
+                if (bonus.formAtk > 0 && path.length > 0 && typeof detectShape === 'function') {
+                    if (detectShape([...path])) bonusTemp += bonus.formAtk;
+                }
+                if (bonus.bonusElemento > 0 && path.length > 0 && grid[path[0]] === active.element) {
+                    bonusTemp += bonus.bonusElemento;
+                }
+
+                if (bonusTemp > 0) {
+                    active.bonusAtk = origBonusAtk + bonusTemp;
+                    modificouBonus = true;
+                }
+
+                return await _origPvpExec.apply(this, arguments);
+            } finally {
+                if (info && origMin !== undefined) info.min = origMin;
+                if (bravelyEl && origThreshold !== undefined) bravelyEl.value = origThreshold;
+                if (modificouBonus) active.bonusAtk = origBonusAtk;
+            }
+        };
+        console.log('✅ [V36.3] Stats Nível 11 aplicados no PVP.');
+    }
+})();
 

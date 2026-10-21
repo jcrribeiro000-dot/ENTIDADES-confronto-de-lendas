@@ -4134,3 +4134,138 @@ console.log('✅ coop.js V8.5 (boss não renasce + skills sem duplicata + IA rod
     console.log('   • Som do boss_attack no replay');
     console.log('   • Unlock de áudio no primeiro clique');
 })();
+STORY_PROGRESS.inventory['nucleo_abismo'] = (STORY_PROGRESS.inventory['nucleo_abismo'] || 0) + 1;
+saveStoryProgress();
+console.log('🌑 Núcleo do Abismo:', STORY_PROGRESS.inventory['nucleo_abismo']);
+// =================================================================
+// coop.js — PATCH V9.1 (Fix espelhamento de skill do boss no P1)
+// -----------------------------------------------------------------
+// Corrige a direção errada das skills do boss no replay do P1,
+// causada pela restauração prematura do estado durante o await.
+// =================================================================
+
+(function fixEspelhamentoSkillV91() {
+    if (window._coopFixEspelhamentoV91) return;
+    window._coopFixEspelhamentoV91 = true;
+
+    console.log('[V9.1] Instalando fix de direção da skill do boss no P1...');
+
+    // Desativa o hook antigo do V8.8 para evitar duplicidade
+    if (window._coopV88ReproHook) {
+        window._coopV88ReproHook = false;
+    }
+
+    // Sobrescreve a função de reprodução individual
+    window.coopReproduzirEventoIndividual = async function(evento) {
+        // Se não for skill do boss, deixa o comportamento normal
+        if (evento.tipo !== 'boss_skill' || !evento.snapshot) {
+            // Chama o fallback interno do coop.js original (se existir)
+            if (typeof _coopReproEventoOriginal === 'function') {
+                return _coopReproEventoOriginal.apply(this, arguments);
+            }
+            return;
+        }
+
+        const snap = evento.snapshot;
+
+        // ---- 1. Salva o estado ATUAL (para restaurar no fim) ----
+        const estadoAtual = {
+            boss: { x: boss.x, y: boss.y, hp: boss.hp, maxHp: boss.maxHp, type: boss.type, dead: boss.dead },
+            players: players.map(p => ({ x: p.x, y: p.y, hp: p.hp, dead: p.dead })),
+        };
+
+        // ---- 2. Aplica o Snapshot (a "foto" do P2) ----
+        boss.x = snap.boss.x;
+        boss.y = snap.boss.y;
+        boss.hp = snap.boss.hp;
+        boss.dead = snap.boss.dead;
+
+        snap.players.forEach((pSnap, i) => {
+            if (players[i]) {
+                players[i].x = pSnap.x;
+                players[i].y = pSnap.y;
+                players[i].hp = pSnap.hp;
+                players[i].dead = pSnap.dead;
+            }
+        });
+
+        // ---- 3. Atualiza o visual IMEDIATAMENTE para a foto ----
+        if (typeof updateVisuals === 'function') updateVisuals();
+        
+        // Reposiciona os tokens manualmente para garantir o snap visual
+        const s = (typeof getStep === 'function') ? getStep() : 59;
+        const bossToken = document.getElementById('tokenBoss');
+        if (bossToken) {
+            bossToken.style.left = (snap.boss.x * s + 8) + 'px';
+            bossToken.style.top = (snap.boss.y * s + 8) + 'px';
+        }
+        snap.players.forEach((pSnap, i) => {
+            const tok = document.getElementById(`tokenP${i}`);
+            if (tok) {
+                tok.style.left = (pSnap.x * s + 8) + 'px';
+                tok.style.top = (pSnap.y * s + 8) + 'px';
+            }
+        });
+
+        // ---- 4. Roda a Skill ----
+        const skillName = evento.skillName || evento.skill;
+        const handlerKey = evento.skill;
+        let reproduzido = false;
+
+        try {
+            if (typeof STORY_ANIMAL_SKILLS !== 'undefined' && STORY_ANIMAL_SKILLS[handlerKey]) {
+                const handler = STORY_ANIMAL_SKILLS[handlerKey];
+                const enemyMock = {
+                    id: evento.enemyId,
+                    name: (typeof STORY_ENEMIES !== 'undefined' && STORY_ENEMIES[evento.enemyId]) ? STORY_ENEMIES[evento.enemyId].name : 'Boss',
+                    atk: 4,
+                };
+                const skillMock = { name: skillName, handler: handlerKey };
+
+                console.log(`[V9.1] Reproduzindo skill do boss (P1): ${skillName}`);
+                await handler(enemyMock, skillMock);
+                reproduzido = true;
+            }
+        } catch (e) {
+            console.warn('[V9.1] Erro na skill:', e);
+        }
+
+        // ---- 5. Restaura o estado ATUAL ----
+        // (mas mantém o visual da skill se ela já tiver terminado)
+        boss.x = estadoAtual.boss.x;
+        boss.y = estadoAtual.boss.y;
+        boss.hp = estadoAtual.boss.hp;
+        boss.dead = estadoAtual.boss.dead;
+
+        estadoAtual.players.forEach((pAtual, i) => {
+            if (players[i]) {
+                players[i].x = pAtual.x;
+                players[i].y = pAtual.y;
+                players[i].hp = pAtual.hp;
+                players[i].dead = pAtual.dead;
+            }
+        });
+
+        // Atualiza a tela de volta para a posição real pós-turno
+        if (typeof updateVisuals === 'function') updateVisuals();
+        
+        // Reposiciona os tokens reais
+        const bossTokenRestore = document.getElementById('tokenBoss');
+        if (bossTokenRestore) {
+            bossTokenRestore.style.left = (estadoAtual.boss.x * s + 8) + 'px';
+            bossTokenRestore.style.top = (estadoAtual.boss.y * s + 8) + 'px';
+        }
+        estadoAtual.players.forEach((pAtual, i) => {
+            const tok = document.getElementById(`tokenP${i}`);
+            if (tok) {
+                tok.style.left = (pAtual.x * s + 8) + 'px';
+                tok.style.top = (pAtual.y * s + 8) + 'px';
+            }
+        });
+        
+        if (typeof updateHeroCard === 'function') updateHeroCard();
+        if (typeof updateBossCard === 'function') updateBossCard();
+    };
+
+    console.log('✅ [V9.1] Direção da skill do boss corrigida no P1.');
+})();

@@ -510,22 +510,22 @@ const SPRITES_STORY = {
     'arma_cajado':'https://i.imgur.com/gPTB4uf.png','arma_arco':'https://i.imgur.com/gc0JbJn.png','arma_manopla':'https://i.imgur.com/zWnVhxt.png',
 
     // --- Ícones UI ---
-    'ui_gold':'https://i.imgur.com/LIfKWB8.png',
-    'ui_xp':'https://i.imgur.com/sksvz3H.png',
+    'ui_gold':'https://i.imgur.com/eot4lpq.png',
+    'ui_xp':'https://i.imgur.com/gDpWAVD.png',
     'ui_swap':'https://i.imgur.com/12PFW5I.png',
     'ui_home':'https://i.imgur.com/ld3V2eD.png',
-    'ui_play':'https://i.imgur.com/mXodqS6.png',
+    'ui_play':'https://i.imgur.com/zX6fo9T.png',
     'ui_gift':'https://i.imgur.com/a5t2pWl.png',
-    'ui_crown':'https://i.imgur.com/xmBs0jr.png',
+    'ui_crown':'https://i.imgur.com/Ejd2WD1.png',
     'ui_sparkle':'',
     'ui_skull':'https://i.imgur.com/GPSPBly.png',
     'ui_lock':'https://i.imgur.com/wGgq9l7.png',
-    'ui_check':'https://i.imgur.com/Y0g5RoY.png',
-    'ui_arrow':'https://i.imgur.com/mXodqS6.png',
+    'ui_check':'https://i.imgur.com/f9OAlJd.png',
+    'ui_arrow':'https://i.imgur.com/zX6fo9T.png',
     'ui_warn':'https://i.imgur.com/p1w8rbr.png',
-    'ui_medal':'https://i.imgur.com/ViAr1EO.png',
-    'ui_star':'https://i.imgur.com/oCAxRkZ.png',
-    'ui_star_empty':'https://i.imgur.com/PAAn2Hk.png',
+    'ui_medal':'https://i.imgur.com/hjkcQaX.png',
+    'ui_star':'https://i.imgur.com/2sAWf9l.png',
+    'ui_star_empty':'https://i.imgur.com/E2pcuI7.png',
     'elem_fogo':'https://i.imgur.com/JouEZbM.png',
     'elem_agua':'https://i.imgur.com/tMRUv48.png',
     'elem_terra':'https://i.imgur.com/ZVPQ9iH.png',
@@ -34201,4 +34201,2128 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
     }
 
     console.log('✅ [V34.0] Tapyra-Yawara renomeado. Botão "?" deve funcionar agora.');
+})();
+// =================================================================
+// historia.js — BLOCO 113 (V35.0 — Seletor de Dificuldade Global)
+// -----------------------------------------------------------------
+// Cole NO FINAL do historia.js (último bloco).
+//
+// Adiciona o seletor Normal/Difícil/Pesadelo em:
+//   • Cabeçalho da tela de ATOS
+//   • Cabeçalho do EVENTO SEMANAL
+//
+// Regras:
+//   • Mudar no Atos → afeta só o Modo História (storyCurrentDifficulty)
+//   • Mudar no Evento → afeta só o Evento (STORY_PROGRESS.eventoDificuldade)
+//   • Cada um é independente do outro
+//   • Sincroniza com o seletor já existente nas fases (renderChapterPhases)
+// =================================================================
+
+(function seletorDificuldadeGlobalV350() {
+    if (window._seletorDificuldadeV350) return;
+    window._seletorDificuldadeV350 = true;
+
+    console.log('[V35.0] Instalando seletor de dificuldade global...');
+
+    // ==============================================================
+    // HELPERS
+    // ==============================================================
+
+    // Retorna a dificuldade atual do MODO HISTÓRIA
+    function getDiffHistoria() {
+        return (typeof storyCurrentDifficulty !== 'undefined')
+            ? storyCurrentDifficulty
+            : 'normal';
+    }
+
+    // Retorna a dificuldade atual do EVENTO
+    function getDiffEvento() {
+        if (typeof STORY_PROGRESS !== 'undefined' && STORY_PROGRESS.eventoDificuldade) {
+            return STORY_PROGRESS.eventoDificuldade;
+        }
+        return 'normal';
+    }
+
+    // Monta o HTML do seletor
+    function montarSeletorHTML(diffAtual, contexto) {
+        const diffs = [
+            { id: 'normal',   nome: 'Normal',   icon: '⚔️', color: '#c9a227' },
+            { id: 'dificil',  nome: 'Difícil',  icon: '🔥', color: '#e67e22' },
+            { id: 'pesadelo', nome: 'Pesadelo', icon: '💀', color: '#a83232' },
+        ];
+
+        const botoes = diffs.map(d => {
+            const unlocked = (typeof isDifficultyUnlocked === 'function')
+                ? isDifficultyUnlocked(d.id)
+                : (d.id === 'normal');
+            const ativo = d.id === diffAtual;
+
+            return `
+                <button class="story-difficulty-btn ${ativo ? 'active' : ''} ${unlocked ? '' : 'locked'}"
+                        data-diff="${d.id}"
+                        data-contexto="${contexto}"
+                        ${unlocked ? '' : 'disabled'}
+                        style="--diff-color: ${d.color};">
+                    <span class="story-difficulty-icon">${d.icon}</span>
+                    <span class="story-difficulty-nome">${d.nome}</span>
+                    ${unlocked ? '' : '<span class="story-difficulty-lock">🔒</span>'}
+                </button>
+            `;
+        }).join('');
+
+        return `
+            <div class="story-difficulty-selector" data-contexto="${contexto}">
+                <div class="story-difficulty-label">DIFICULDADE</div>
+                <div class="story-difficulty-buttons">${botoes}</div>
+            </div>
+        `;
+    }
+
+    // ==============================================================
+    // HANDLER DE CLIQUE (delegação global)
+    // ==============================================================
+    document.addEventListener('click', function(ev) {
+        const btn = ev.target.closest('.story-difficulty-btn');
+        if (!btn) return;
+
+        // Ignora se for o seletor das FASES (que já tem handler próprio)
+        const contexto = btn.getAttribute('data-contexto');
+        if (!contexto || contexto === 'fases') return;
+
+        const diffId = btn.getAttribute('data-diff');
+        if (!diffId) return;
+
+        // ⭐ CONTEXTO: ATOS → muda storyCurrentDifficulty
+        if (contexto === 'atos') {
+            if (typeof setStoryDifficulty === 'function') {
+                if (!setStoryDifficulty(diffId)) return;
+            } else {
+                if (typeof isDifficultyUnlocked === 'function' && !isDifficultyUnlocked(diffId)) return;
+                storyCurrentDifficulty = diffId;
+                if (typeof saveDifficultyToProgress === 'function') saveDifficultyToProgress();
+            }
+
+            // Re-renderiza a tela de Atos
+            if (typeof renderAtosScreen === 'function') {
+                renderAtosScreen();
+            }
+
+            const d = (typeof STORY_DIFFICULTIES !== 'undefined')
+                ? STORY_DIFFICULTIES[diffId] : null;
+            if (d && typeof showToast === 'function') {
+                showToast(d.icon, `História: ${d.nome}`, d.icon);
+            }
+            return;
+        }
+
+        // ⭐ CONTEXTO: EVENTO → muda STORY_PROGRESS.eventoDificuldade
+        if (contexto === 'evento') {
+            if (typeof setDificuldadeEvento === 'function') {
+                if (!setDificuldadeEvento(diffId)) return;
+            } else {
+                if (typeof STORY_PROGRESS !== 'undefined') {
+                    STORY_PROGRESS.eventoDificuldade = diffId;
+                    if (typeof saveStoryProgress === 'function') saveStoryProgress();
+                }
+            }
+
+            // Re-renderiza a tela do Evento
+            if (typeof renderEventoSemanalScreen === 'function') {
+                renderEventoSemanalScreen();
+            }
+
+            const d = (typeof EVENTO_DIFICULDADES !== 'undefined')
+                ? EVENTO_DIFICULDADES[diffId] : null;
+            if (d && typeof showToast === 'function') {
+                showToast(d.icon, `Evento: ${d.nome}`, d.icon);
+            }
+            return;
+        }
+    }, false);
+
+    // ==============================================================
+    // HOOK 1: TELA DE ATOS
+    // --------------------------------------------------------------
+    // Adiciona o seletor no cabeçalho da tela de Atos.
+    // ==============================================================
+    const _origRenderAtos = window.renderAtosScreen;
+    if (typeof _origRenderAtos === 'function' && !window._renderAtosHookV350) {
+        window._renderAtosHookV350 = true;
+
+        window.renderAtosScreen = function() {
+            const r = _origRenderAtos.apply(this, arguments);
+
+            // Injeta no header
+            setTimeout(() => {
+                const screen = document.getElementById('storyScreen');
+                if (!screen) return;
+
+                const header = screen.querySelector('.story-header');
+                if (!header) return;
+
+                // Evita duplicar
+                if (header.querySelector('.story-difficulty-selector[data-contexto="atos"]')) return;
+
+                const diffAtual = getDiffHistoria();
+                const html = montarSeletorHTML(diffAtual, 'atos');
+                header.insertAdjacentHTML('beforeend', html);
+
+                console.log('[V35.0] Seletor injetado em ATOS. Diff:', diffAtual);
+            }, 60);
+
+            return r;
+        };
+
+        console.log('[V35.0] Hook em renderAtosScreen instalado.');
+    }
+
+    // ==============================================================
+    // HOOK 2: TELA DO EVENTO SEMANAL
+    // --------------------------------------------------------------
+    // Adiciona o seletor no cabeçalho do Evento.
+    // ==============================================================
+    const _origRenderEvento = window.renderEventoSemanalScreen;
+    if (typeof _origRenderEvento === 'function' && !window._renderEventoHookV350) {
+        window._renderEventoHookV350 = true;
+
+        window.renderEventoSemanalScreen = function() {
+            const r = _origRenderEvento.apply(this, arguments);
+
+            // Injeta no header
+            setTimeout(() => {
+                const screen = document.getElementById('storyScreen');
+                if (!screen) return;
+
+                const header = screen.querySelector('.story-header');
+                if (!header) return;
+
+                // Evita duplicar
+                if (header.querySelector('.story-difficulty-selector[data-contexto="evento"]')) return;
+
+                const diffAtual = getDiffEvento();
+                const html = montarSeletorHTML(diffAtual, 'evento');
+                header.insertAdjacentHTML('beforeend', html);
+
+                console.log('[V35.0] Seletor injetado em EVENTO. Diff:', diffAtual);
+            }, 60);
+
+            return r;
+        };
+
+        console.log('[V35.0] Hook em renderEventoSemanalScreen instalado.');
+    }
+
+    // ==============================================================
+    // HOOK 3: SINCronizar com o seletor das FASES
+    // --------------------------------------------------------------
+    // O renderChapterPhases já tem seu próprio seletor (do Bloco 8).
+    // Garantimos que ele use o mesmo estilo e que o clique
+    // também atualize a tela de Atos ao voltar.
+    // ==============================================================
+    // (nada a fazer — o seletor das fases já funciona e usa
+    //  setStoryDifficulty, que é a mesma fonte de verdade do Atos)
+
+    // ==============================================================
+    // HOOK 4: Ao entrar no Evento, garante que a dificuldade do
+    // evento está inicializada
+    // ==============================================================
+    const _origEventoEntrar = window.renderEventoSemanalScreen;
+    // (já coberto pelo hook 2)
+
+    // ==============================================================
+    // CSS ADICIONAL (para alinhar com o tema)
+    // ==============================================================
+    if (!document.getElementById('v350CSS')) {
+        const style = document.createElement('style');
+        style.id = 'v350CSS';
+        style.textContent = `
+            /* Seletor de dificuldade global — alinhado ao tema */
+            .story-difficulty-selector[data-contexto="atos"],
+            .story-difficulty-selector[data-contexto="evento"] {
+                margin-top: 18px;
+                padding: 12px 16px;
+                background: rgba(10, 6, 2, 0.5);
+                border: 1px solid rgba(201, 162, 39, 0.3);
+                border-radius: 6px;
+            }
+
+            .story-difficulty-selector[data-contexto="evento"] {
+                border-color: rgba(155, 89, 182, 0.4);
+                background: rgba(30, 15, 40, 0.5);
+            }
+
+            .story-difficulty-selector[data-contexto="evento"] .story-difficulty-label {
+                color: #c39bd3;
+            }
+
+            /* Força que o seletor ocupe largura total no header */
+            .story-header .story-difficulty-selector {
+                width: 100%;
+                max-width: 500px;
+                margin-left: auto;
+                margin-right: auto;
+            }
+
+            /* No mobile, empilha os botões */
+            @media (max-width: 600px) {
+                .story-header .story-difficulty-selector {
+                    max-width: 100%;
+                }
+                .story-difficulty-selector .story-difficulty-buttons {
+                    flex-direction: column;
+                }
+                .story-difficulty-selector .story-difficulty-btn {
+                    width: 100%;
+                    justify-content: center;
+                }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // ==============================================================
+    // DEBUG: força re-render se estiver na tela de Atos ou Evento
+    // ==============================================================
+    setTimeout(() => {
+        const screen = document.getElementById('storyScreen');
+        if (!screen || !screen.classList.contains('active')) return;
+
+        const titleEl = screen.querySelector('.story-title');
+        const titleTxt = titleEl ? titleEl.textContent.trim().toUpperCase() : '';
+
+        // Se está em Atos, força re-render
+        if (titleTxt === 'ATOS' || titleTxt === '🗺️ ATOS') {
+            if (typeof renderAtosScreen === 'function') {
+                console.log('[V35.0] Forçando re-render de Atos...');
+                renderAtosScreen();
+            }
+        }
+
+        // Se está no Evento, força re-render
+        if (titleTxt.includes('SEMANA DAS SOMBRAS') || titleTxt.includes('A SEMANA DAS SOMBRAS')) {
+            if (typeof renderEventoSemanalScreen === 'function') {
+                console.log('[V35.0] Forçando re-render do Evento...');
+                renderEventoSemanalScreen();
+            }
+        }
+    }, 300);
+
+    // ==============================================================
+    // LOG FINAL
+    // ==============================================================
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V35.0] Seletor de dificuldade global');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Atos:     seletor no cabeçalho (contexto "atos")');
+    console.log('• Evento:   seletor no cabeçalho (contexto "evento")');
+    console.log('• Fases:    seletor próprio (contexto "fases")');
+    console.log('');
+    console.log('📌 Independência:');
+    console.log('   • Atos/Fases  → storyCurrentDifficulty');
+    console.log('   • Evento      → STORY_PROGRESS.eventoDificuldade');
+    console.log('   • Um NÃO afeta o outro.');
+    console.log('');
+    console.log('🎮 Estado atual:');
+    console.log('   • História: ', getDiffHistoria());
+    console.log('   • Evento:   ', getDiffEvento());
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — BLOCO 114 (V35.1 — Fix seletor no Evento)
+// -----------------------------------------------------------------
+// Corrige: o seletor V35.0 não aparecia no Evento porque o
+// renderEventoSemanalScreen é sobrescrito por vários patches.
+// Solução: MutationObserver no #storyScreen para injetar SEMPRE
+// que a tela for montada.
+// =================================================================
+
+(function fixSeletorEventoV351() {
+    if (window._fixSeletorEventoV351) return;
+    window._fixSeletorEventoV351 = true;
+
+    console.log('[V35.1] Instalando fix do seletor no Evento...');
+
+    // ⭐ MutationObserver: monitora o #storyScreen
+    // Sempre que o innerHTML mudar, verifica se é a tela do Evento
+    // e injeta o seletor se ainda não estiver lá.
+    const observer = new MutationObserver(() => {
+        const screen = document.getElementById('storyScreen');
+        if (!screen || !screen.classList.contains('active')) return;
+
+        // Detecta se é a tela do Evento
+        const titleEl = screen.querySelector('.story-title');
+        if (!titleEl) return;
+        const titleTxt = titleEl.textContent.toUpperCase();
+        const isEvento = titleTxt.includes('SEMANA DAS SOMBRAS')
+                      || titleTxt.includes('A SEMANA DAS SOMBRAS');
+
+        if (!isEvento) return;
+
+        // Já tem o seletor do evento? Não faz nada
+        const header = screen.querySelector('.story-header');
+        if (!header) return;
+        if (header.querySelector('.story-difficulty-selector[data-contexto="evento"]')) return;
+
+        // Injeta
+        const diffAtual = (typeof STORY_PROGRESS !== 'undefined' && STORY_PROGRESS.eventoDificuldade)
+            ? STORY_PROGRESS.eventoDificuldade
+            : 'normal';
+
+        const diffs = [
+            { id: 'normal',   nome: 'Normal',   icon: '⚔️', color: '#c9a227' },
+            { id: 'dificil',  nome: 'Difícil',  icon: '🔥', color: '#e67e22' },
+            { id: 'pesadelo', nome: 'Pesadelo', icon: '💀', color: '#a83232' },
+        ];
+
+        const botoes = diffs.map(d => {
+            const unlocked = (typeof isDifficultyUnlocked === 'function')
+                ? isDifficultyUnlocked(d.id)
+                : (d.id === 'normal');
+            const ativo = d.id === diffAtual;
+
+            // ⭐ MOSTRA O MOTIVO DO LOCK
+            let titleAttr = '';
+            if (!unlocked) {
+                if (d.id === 'dificil') titleAttr = 'Zere o Normal primeiro';
+                else if (d.id === 'pesadelo') titleAttr = 'Zere o Difícil primeiro';
+            }
+
+            return `
+                <button class="story-difficulty-btn ${ativo ? 'active' : ''} ${unlocked ? '' : 'locked'}"
+                        data-diff="${d.id}"
+                        data-contexto="evento"
+                        ${unlocked ? '' : 'disabled'}
+                        title="${titleAttr}"
+                        style="--diff-color: ${d.color};">
+                    <span class="story-difficulty-icon">${d.icon}</span>
+                    <span class="story-difficulty-nome">${d.nome}</span>
+                    ${unlocked ? '' : '<span class="story-difficulty-lock">🔒</span>'}
+                </button>
+            `;
+        }).join('');
+
+        const html = `
+            <div class="story-difficulty-selector" data-contexto="evento">
+                <div class="story-difficulty-label">DIFICULDADE DO EVENTO</div>
+                <div class="story-difficulty-buttons">${botoes}</div>
+            </div>
+        `;
+
+        // Insere depois do subtítulo (ou no final do header)
+        const subtitle = header.querySelector('.story-subtitle');
+        if (subtitle) {
+            subtitle.insertAdjacentHTML('afterend', html);
+        } else {
+            header.insertAdjacentHTML('beforeend', html);
+        }
+
+        console.log('[V35.1] Seletor do Evento injetado. Diff:', diffAtual);
+    });
+
+    // Observa mudanças no body (o #storyScreen pode ser recriado)
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+    });
+
+    console.log('✅ [V35.1] MutationObserver do Evento instalado.');
+})();
+// =================================================================
+// historia.js — BLOCO 117 (V36.0 — Stat Aleatório Nível 11 + Núcleo)
+// -----------------------------------------------------------------
+// Sistema:
+//   • Zerar 13-4 no Difícil → ganha 1 Núcleo do Abismo
+//   • Ritual: herói nível 10 + 1 Núcleo → ASCENDER (nível 11 + stat aleatório)
+//   • Ritual: herói nível 11 + 1 Núcleo → REROLL (substitui o stat)
+//
+// Stats (por classe):
+//   Comum (60%):  +1 ATK, +2 HP, +1 Formas, -1 Range, +1 Elemento
+//   Incomum (30%): +2 ATK, +4 HP, +2 Formas
+//   Raro (9%):     +3 ATK, +6 HP, +3 Formas, -1 PA, +1 Cura
+//   Jackpot (1%):  2 stats aleatórios do Incomum
+//
+// Restrições:
+//   • Guerreiro NÃO rola -1 Range (range 0 → 1)
+//   • Sem pity system
+//   • Animação sim
+// =================================================================
+
+(function sistemaStat11V360() {
+    if (window._sistemaStat11V360) return;
+    window._sistemaStat11V360 = true;
+
+    console.log('[V36.0] Instalando sistema de stat aleatório nível 11...');
+
+    // ==============================================================
+    // SEÇÃO 1 — DEFINIÇÕES
+    // ==============================================================
+
+    const CONFIG_STAT11 = {
+        XP_NIVEL_11: 3000,
+        OURO_NIVEL_11: 1800,
+        NIVEL_MAX: 11,
+    };
+
+    // Pools de stats por classe
+    // Cada stat: { tipo, valor, peso }
+    const STAT_POOLS = {
+        comum: {
+            guerra: [
+                { tipo: 'atk',      valor: 1, peso: 30 },
+                { tipo: 'hp',       valor: 2, peso: 30 },
+                { tipo: 'formas',   valor: 1, peso: 20 },
+                { tipo: 'elemento', valor: 1, peso: 20 },
+            ],
+            mago: [
+                { tipo: 'atk',      valor: 1, peso: 25 },
+                { tipo: 'hp',       valor: 2, peso: 25 },
+                { tipo: 'formas',   valor: 1, peso: 20 },
+                { tipo: 'range',    valor: -1, peso: 15 },
+                { tipo: 'elemento', valor: 1, peso: 15 },
+            ],
+            arqueiro: [
+                { tipo: 'atk',      valor: 1, peso: 25 },
+                { tipo: 'hp',       valor: 2, peso: 25 },
+                { tipo: 'formas',   valor: 1, peso: 20 },
+                { tipo: 'range',    valor: -1, peso: 15 },
+                { tipo: 'elemento', valor: 1, peso: 15 },
+            ],
+        },
+        incomum: {
+            guerra: [
+                { tipo: 'atk',    valor: 2, peso: 40 },
+                { tipo: 'hp',     valor: 4, peso: 35 },
+                { tipo: 'formas', valor: 2, peso: 25 },
+            ],
+            mago: [
+                { tipo: 'atk',    valor: 2, peso: 40 },
+                { tipo: 'hp',     valor: 4, peso: 35 },
+                { tipo: 'formas', valor: 2, peso: 25 },
+            ],
+            arqueiro: [
+                { tipo: 'atk',    valor: 2, peso: 40 },
+                { tipo: 'hp',     valor: 4, peso: 35 },
+                { tipo: 'formas', valor: 2, peso: 25 },
+            ],
+        },
+        raro: {
+            guerra: [
+                { tipo: 'atk',    valor: 3, peso: 30 },
+                { tipo: 'hp',     valor: 6, peso: 25 },
+                { tipo: 'formas', valor: 3, peso: 20 },
+                { tipo: 'pa',     valor: -1, peso: 15 },
+                { tipo: 'cura',   valor: 1, peso: 10 },
+            ],
+            mago: [
+                { tipo: 'atk',    valor: 3, peso: 30 },
+                { tipo: 'hp',     valor: 6, peso: 25 },
+                { tipo: 'formas', valor: 3, peso: 20 },
+                { tipo: 'pa',     valor: -1, peso: 15 },
+                { tipo: 'cura',   valor: 1, peso: 10 },
+            ],
+            arqueiro: [
+                { tipo: 'atk',    valor: 3, peso: 30 },
+                { tipo: 'hp',     valor: 6, peso: 25 },
+                { tipo: 'formas', valor: 3, peso: 20 },
+                { tipo: 'pa',     valor: -1, peso: 15 },
+                { tipo: 'cura',   valor: 1, peso: 10 },
+            ],
+        },
+    };
+
+    // Metadados visuais de cada stat
+    const STAT_META = {
+        atk:      { nome: 'ATK',       icon: 'espadas',          cor: '#a83232', desc: 'Ataque' },
+        hp:       { nome: 'HP',        icon: 'medalha',          cor: '#6ba35c', desc: 'Vida' },
+        formas:   { nome: 'Formas',    icon: 'estrela',          cor: '#8e44ad', desc: 'Bônus em Formas' },
+        range:    { nome: 'Alcance',   icon: 'alvo',             cor: '#3a7ca5', desc: 'Alcance' },
+        pa:       { nome: 'PA',        icon: 'poder_ancestral',  cor: '#e8b923', desc: 'Poder Ancestral' },
+        cura:     { nome: 'Cura',      icon: 'pocao',            cor: '#8ac070', desc: 'Cura/turno' },
+        elemento: { nome: 'Elemento',  icon: 'elem_fogo',        cor: '#e8b923', desc: 'Bônus Elemental' },
+    };
+
+    const TIER_META = {
+        comum:   { nome: 'Comum',   cor: '#8a7a52', bg: 'rgba(138,122,82,0.15)',   icon: '★' },
+        incomum: { nome: 'Incomum', cor: '#6ba35c', bg: 'rgba(107,163,92,0.15)',   icon: '★★' },
+        raro:    { nome: 'Raro',    cor: '#4a8cb5', bg: 'rgba(74,140,181,0.2)',    icon: '★★★' },
+        jackpot: { nome: 'Jackpot', cor: '#e8b923', bg: 'rgba(232,185,35,0.2)',    icon: '👑' },
+    };
+
+    // ==============================================================
+    // SEÇÃO 2 — PERSISTÊNCIA
+    // ==============================================================
+
+    function garantirEstrutura() {
+        if (!STORY_PROGRESS.heroStat11) STORY_PROGRESS.heroStat11 = {};
+        if (!STORY_PROGRESS.inventory) STORY_PROGRESS.inventory = {};
+    }
+
+    function getStat11DoHeroi(heroClass) {
+        garantirEstrutura();
+        return STORY_PROGRESS.heroStat11[heroClass] || null;
+    }
+
+    function aplicarStat11(heroClass, resultado) {
+        garantirEstrutura();
+        STORY_PROGRESS.heroStat11[heroClass] = resultado;
+        if (typeof saveStoryProgress === 'function') saveStoryProgress();
+    }
+
+    // Determina a "família" de pool da classe
+    function getFamiliaClasse(heroClass) {
+        const heroData = STORY_HERO_CLASSES[heroClass];
+        if (!heroData) return 'guerra';
+        if (heroData.role === 'Guerreiro') return 'guerra';
+        if (heroData.role === 'Mago') return 'mago';
+        if (heroData.role === 'Arqueiro') return 'arqueiro';
+        return 'guerra';
+    }
+
+    // ==============================================================
+    // SEÇÃO 3 — ROLL
+    // ==============================================================
+
+    function sortearPonderado(pool) {
+        const total = pool.reduce((s, p) => s + p.peso, 0);
+        let roll = Math.random() * total;
+        for (const item of pool) {
+            roll -= item.peso;
+            if (roll <= 0) return item;
+        }
+        return pool[pool.length - 1];
+    }
+
+    function rolarStat11(heroClass) {
+        const familia = getFamiliaClasse(heroClass);
+
+        // 1. Decide o tier
+        const rollTier = Math.random();
+        let tier;
+        if (rollTier < 0.01) tier = 'jackpot';
+        else if (rollTier < 0.10) tier = 'raro';
+        else if (rollTier < 0.40) tier = 'incomum';
+        else tier = 'comum';
+
+        // 2. Sorteia o(s) stat(s)
+        if (tier === 'jackpot') {
+            // 2 stats do Incomum, sem repetir tipo
+            const poolIncomum = STAT_POOLS.incomum[familia];
+            const primeiro = sortearPonderado(poolIncomum);
+            let segundo;
+            let tentativas = 0;
+            do {
+                segundo = sortearPonderado(poolIncomum);
+                tentativas++;
+            } while (segundo.tipo === primeiro.tipo && tentativas < 20);
+
+            return {
+                tipo: 'jackpot',
+                stats: [
+                    { tipo: primeiro.tipo, valor: primeiro.valor },
+                    { tipo: segundo.tipo, valor: segundo.valor },
+                ],
+                tier: 'jackpot',
+                rolledAt: Date.now(),
+            };
+        }
+
+        // Tier normal
+        let pool = STAT_POOLS[tier][familia];
+
+        // ⭐ Guerreiro NÃO rola -1 Range
+        if (familia === 'guerra') {
+            pool = pool.filter(p => p.tipo !== 'range');
+        }
+
+        const escolhido = sortearPonderado(pool);
+        return {
+            tipo: escolhido.tipo,
+            valor: escolhido.valor,
+            tier: tier,
+            rolledAt: Date.now(),
+        };
+    }
+
+    // ==============================================================
+    // SEÇÃO 4 — APLICAÇÃO NO COMBATE
+    // ==============================================================
+
+    // Wrapper: getHeroBonusFromLevel
+    const _origGetHeroBonus = window.getHeroBonusFromLevel;
+    if (typeof _origGetHeroBonus === 'function') {
+        window.getHeroBonusFromLevel = function(heroClass) {
+            const bonus = _origGetHeroBonus.apply(this, arguments) || {};
+
+            const stat = getStat11DoHeroi(heroClass);
+            if (!stat) return bonus;
+
+            // Helper: aplica um stat no objeto bonus
+            const aplicar = (s) => {
+                switch (s.tipo) {
+                    case 'atk':      bonus.atk      = (bonus.atk || 0) + s.valor; break;
+                    case 'hp':       bonus.hp       = (bonus.hp || 0) + s.valor; break;
+                    case 'formas':   bonus.formAtk  = (bonus.formAtk || 0) + s.valor; break;
+                    case 'range':    bonus.range    = (bonus.range || 0) + s.valor; break;
+                    case 'pa':       bonus.paThreshold = (bonus.paThreshold || 0) + s.valor; break;
+                    case 'cura':     bonus.healPerTurn = (bonus.healPerTurn || 0) + s.valor; break;
+                    case 'elemento': bonus.bonusElemento = (bonus.bonusElemento || 0) + s.valor; break;
+                }
+            };
+
+            if (stat.tipo === 'jackpot' && stat.stats) {
+                stat.stats.forEach(aplicar);
+            } else {
+                aplicar(stat);
+            }
+
+            return bonus;
+        };
+        console.log('[V36.0] getHeroBonusFromLevel wrappeado.');
+    }
+
+    // Wrapper: executeAction (range + PA + formas + elemento)
+    const _origExec = window.executeAction;
+    if (typeof _origExec === 'function') {
+        window.executeAction = async function() {
+            const isStory = window._storyMode || window._eventoAtivo;
+            if (!isStory) return _origExec.apply(this, arguments);
+
+            const active = players[currentPlayerIdx];
+            if (!active) return _origExec.apply(this, arguments);
+
+            const stat = getStat11DoHeroi(active.class);
+            const bonus = (typeof getHeroBonusFromLevel === 'function')
+                ? getHeroBonusFromLevel(active.class) : null;
+
+            if (!stat && (!bonus || (!bonus.range && !bonus.paThreshold && !bonus.formAtk && !bonus.bonusElemento))) {
+                return _origExec.apply(this, arguments);
+            }
+
+            const info = CLASS_DB[active.class];
+            const bravelyEl = document.getElementById('bravely_tiles');
+            const origMin = info?.min;
+            const origThreshold = bravelyEl?.value;
+            const origBonusAtk = active.bonusAtk || 0;
+
+            let modificouBonus = false;
+
+            try {
+                // Range
+                if (info && bonus && bonus.range) {
+                    info.min = Math.max(0, (info.min || 0) + bonus.range);
+                }
+
+                // PA threshold
+                if (bravelyEl && bonus && bonus.paThreshold) {
+                    const novo = Math.max(3, parseInt(bravelyEl.value) + bonus.paThreshold);
+                    bravelyEl.value = novo;
+                }
+
+                // Bônus de formas + elemento (via bonusAtk temporário)
+                let bonusTemp = 0;
+
+                if (bonus && bonus.formAtk > 0 && path.length > 0) {
+                    const shape = (typeof detectShape === 'function') ? detectShape([...path]) : null;
+                    if (shape) bonusTemp += bonus.formAtk;
+                }
+
+                if (bonus && bonus.bonusElemento > 0 && path.length > 0 && grid[path[0]] === active.element) {
+                    bonusTemp += bonus.bonusElemento;
+                }
+
+                if (bonusTemp > 0) {
+                    active.bonusAtk = origBonusAtk + bonusTemp;
+                    modificouBonus = true;
+                }
+
+                return await _origExec.apply(this, arguments);
+            } finally {
+                if (info && origMin !== undefined) info.min = origMin;
+                if (bravelyEl && origThreshold !== undefined) bravelyEl.value = origThreshold;
+                if (modificouBonus) active.bonusAtk = origBonusAtk;
+            }
+        };
+        console.log('[V36.0] executeAction wrappeado.');
+    }
+
+    // Wrapper: switchConfig (heal per turn)
+    const _origSwitchConfig = window.switchConfig;
+    if (typeof _origSwitchConfig === 'function') {
+        window.switchConfig = function(idx) {
+            const r = _origSwitchConfig.apply(this, arguments);
+
+            const p = players[idx];
+            if (!p || p.dead) return r;
+
+            const bonus = (typeof getHeroBonusFromLevel === 'function')
+                ? getHeroBonusFromLevel(p.class) : null;
+            if (!bonus || !bonus.healPerTurn || bonus.healPerTurn <= 0) return r;
+            if (p.hp >= p.maxHp) return r;
+
+            // Flag: só cura 1x por turno
+            const turnoAtual = (typeof RANKING !== 'undefined') ? RANKING.turns : 0;
+            if (p._ultimoHealTurno === turnoAtual) return r;
+            p._ultimoHealTurno = turnoAtual;
+
+            p.hp = Math.min(p.maxHp, p.hp + bonus.healPerTurn);
+            if (typeof showHealEffect === 'function') showHealEffect(p.x, p.y, bonus.healPerTurn);
+            if (typeof updateHeroCard === 'function') updateHeroCard();
+            if (typeof addLog === 'function') addLog(`💚 ${p.name} regenerou ${bonus.healPerTurn} HP (Ascensão).`);
+
+            return r;
+        };
+        console.log('[V36.0] switchConfig wrappeado (heal).');
+    }
+
+    // ==============================================================
+    // SEÇÃO 5 — NÍVEL 11
+    // ==============================================================
+
+    // getNextUpgradeCost
+    const _origGetNextUpgradeCost = window.getNextUpgradeCost;
+    if (typeof _origGetNextUpgradeCost === 'function') {
+        window.getNextUpgradeCost = function(heroClass) {
+            const currentLevel = getHeroLevel(heroClass);
+
+            if (currentLevel === 10) {
+                return {
+                    targetLevel: 11,
+                    xp: CONFIG_STAT11.XP_NIVEL_11,
+                    gold: CONFIG_STAT11.OURO_NIVEL_11,
+                    label: '✦ ASCENSÃO',
+                    type: 'ascension',
+                    value: 1,
+                };
+            }
+            if (currentLevel >= 11) return null;
+
+            return _origGetNextUpgradeCost.apply(this, arguments);
+        };
+    }
+
+    // setHeroLevel (permite 11)
+    const _origSetHeroLevel = window.setHeroLevel;
+    if (typeof _origSetHeroLevel === 'function') {
+        window.setHeroLevel = function(heroClass, level) {
+            if (!STORY_PROGRESS.heroLevels) STORY_PROGRESS.heroLevels = {};
+            STORY_PROGRESS.heroLevels[heroClass] = Math.min(level, CONFIG_STAT11.NIVEL_MAX);
+        };
+    }
+
+    // ascendHero (consome Núcleo no nível 11)
+    const _origAscendHero = window.ascendHero;
+    if (typeof _origAscendHero === 'function') {
+        window.ascendHero = function(heroClass) {
+            const currentLevel = getHeroLevel(heroClass);
+            const nextUp = window.getNextUpgradeCost(heroClass);
+
+            if (!nextUp) return { ok: false, error: 'Nível máximo.' };
+
+            // ⭐ Nível 11: requer Núcleo + rola stat
+            if (nextUp.targetLevel === 11) {
+                const nucleoAtual = STORY_PROGRESS.inventory['nucleo_abismo'] || 0;
+                if (nucleoAtual < 1) {
+                    return { ok: false, error: 'Você precisa de 1 Núcleo do Abismo.' };
+                }
+
+                const totalXP = STORY_PROGRESS.totalXP || 0;
+                const totalGold = STORY_PROGRESS.gold || 0;
+                if (totalXP < nextUp.xp) return { ok: false, error: `Faltam ${nextUp.xp - totalXP} XP.` };
+                if (totalGold < nextUp.gold) return { ok: false, error: `Faltam ${nextUp.gold - totalGold} ouro.` };
+
+                // Consome
+                STORY_PROGRESS.inventory['nucleo_abismo'] = nucleoAtual - 1;
+                if (STORY_PROGRESS.inventory['nucleo_abismo'] <= 0) {
+                    delete STORY_PROGRESS.inventory['nucleo_abismo'];
+                }
+                STORY_PROGRESS.totalXP -= nextUp.xp;
+                STORY_PROGRESS.gold -= nextUp.gold;
+
+                // Rola
+                const resultado = rolarStat11(heroClass);
+                aplicarStat11(heroClass, resultado);
+                window.setHeroLevel(heroClass, 11);
+                if (typeof saveStoryProgress === 'function') saveStoryProgress();
+
+                // Animação
+                mostrarAnimacaoRoll(heroClass, resultado);
+
+                return { ok: true, targetLevel: 11, stat11: resultado, isAscension: true };
+            }
+
+            // Níveis 2-10: comportamento original
+            return _origAscendHero.apply(this, arguments);
+        };
+        console.log('[V36.0] ascendHero wrappeado (nível 11).');
+    }
+
+    // rerollStat11 (para herói nível 11)
+    window.rerollStat11 = function(heroClass) {
+        const currentLevel = getHeroLevel(heroClass);
+        if (currentLevel < 11) {
+            return { ok: false, error: 'Herói precisa estar no nível 11.' };
+        }
+
+        const nucleoAtual = STORY_PROGRESS.inventory['nucleo_abismo'] || 0;
+        if (nucleoAtual < 1) {
+            return { ok: false, error: 'Você precisa de 1 Núcleo do Abismo.' };
+        }
+
+        // Consome
+        STORY_PROGRESS.inventory['nucleo_abismo'] = nucleoAtual - 1;
+        if (STORY_PROGRESS.inventory['nucleo_abismo'] <= 0) {
+            delete STORY_PROGRESS.inventory['nucleo_abismo'];
+        }
+
+        // Rola
+        const resultado = rolarStat11(heroClass);
+        aplicarStat11(heroClass, resultado);
+        if (typeof saveStoryProgress === 'function') saveStoryProgress();
+
+        // Animação
+        mostrarAnimacaoRoll(heroClass, resultado);
+
+        return { ok: true, stat11: resultado, isReroll: true };
+    };
+
+    // ==============================================================
+    // SEÇÃO 6 — DROP DO NÚCLEO (13-4 no Difícil)
+    // ==============================================================
+
+    // Adicionar Núcleo em STORY_MATERIALS
+    if (typeof STORY_MATERIALS !== 'undefined') {
+        STORY_MATERIALS['nucleo_abismo'] = {
+            id: 'nucleo_abismo',
+            name: 'Núcleo do Abismo',
+            emoji: '🌑',
+        };
+    }
+
+    // Adicionar preço (não pode ser vendido, mas evita quebra)
+    if (typeof STORY_MATERIAL_PRICES !== 'undefined') {
+        STORY_MATERIAL_PRICES['nucleo_abismo'] = 0;
+    }
+
+    // Adicionar sprite (vazio → fallback emoji 🌑)
+    if (typeof STORY_MATERIAL_SPRITES !== 'undefined' && !('nucleo_abismo' in STORY_MATERIAL_SPRITES)) {
+        STORY_MATERIAL_SPRITES['nucleo_abismo'] = '';
+    }
+
+    // Hook em handleStoryPhaseVictory para dropar
+    const _origVictory = window.handleStoryPhaseVictory;
+    if (typeof _origVictory === 'function') {
+        window.handleStoryPhaseVictory = function(phase, drops, finalScore, rankSnapshot) {
+            // ⭐ Drop do Núcleo (13-4 no Difícil)
+            if (phase?.id === '13-4' && storyCurrentDifficulty === 'dificil') {
+                const atual = STORY_PROGRESS.inventory['nucleo_abismo'] || 0;
+                STORY_PROGRESS.inventory['nucleo_abismo'] = atual + 1;
+                if (typeof saveStoryProgress === 'function') saveStoryProgress();
+
+                setTimeout(() => {
+                    if (typeof showToast === 'function') {
+                        showToast('🌑 NÚCLEO DO ABISMO!', 'Você ganhou 1 Núcleo. Use no Ritual.', '🌑');
+                    }
+                }, 2500);
+
+                console.log('[V36.0] Núcleo dropado! Total:', STORY_PROGRESS.inventory['nucleo_abismo']);
+            }
+
+            return _origVictory.apply(this, arguments);
+        };
+        console.log('[V36.0] handleStoryPhaseVictory wrappeado (drop Núcleo).');
+    }
+
+    // ==============================================================
+    // SEÇÃO 7 — ANIMAÇÃO DO ROLL
+    // ==============================================================
+
+    function mostrarAnimacaoRoll(heroClass, resultado) {
+        const heroData = STORY_HERO_CLASSES[heroClass];
+        const nomeHeroi = heroData?.displayName || heroClass;
+
+        // Remove overlay antigo
+        const old = document.getElementById('stat11RollOverlay');
+        if (old) old.remove();
+
+        const overlay = document.createElement('div');
+        overlay.id = 'stat11RollOverlay';
+        overlay.className = 'stat11-roll-overlay';
+        overlay.style.zIndex = '25000';
+
+        const tierMeta = TIER_META[resultado.tier] || TIER_META.comum;
+
+        // Monta o stat HTML
+        let statHTML = '';
+        if (resultado.tipo === 'jackpot' && resultado.stats) {
+            statHTML = resultado.stats.map(s => {
+                const meta = STAT_META[s.tipo] || STAT_META.atk;
+                const sinal = s.valor > 0 ? '+' : '';
+                return `
+                    <div class="stat11-stat-line">
+                        <span class="stat11-stat-icon">${typeof uiIcon === 'function' ? uiIcon(meta.icon) : meta.icon}</span>
+                        <span class="stat11-stat-label">${meta.nome}</span>
+                        <span class="stat11-stat-value" style="color:${meta.cor};">${sinal}${s.valor}</span>
+                    </div>
+                `;
+            }).join('');
+        } else {
+            const meta = STAT_META[resultado.tipo] || STAT_META.atk;
+            const sinal = resultado.valor > 0 ? '+' : '';
+            const labelExtra = resultado.tipo === 'range' ? ' (menos tiles)' : '';
+            statHTML = `
+                <div class="stat11-stat-line">
+                    <span class="stat11-stat-icon">${typeof uiIcon === 'function' ? uiIcon(meta.icon) : meta.icon}</span>
+                    <span class="stat11-stat-label">${meta.nome}${labelExtra}</span>
+                    <span class="stat11-stat-value" style="color:${meta.cor};">${sinal}${resultado.valor}</span>
+                </div>
+            `;
+        }
+
+        overlay.innerHTML = `
+            <div class="stat11-roll-panel" style="border-color:${tierMeta.cor};">
+                <div class="stat11-roll-header" style="color:${tierMeta.cor};">
+                    ${resultado.isReroll ? '🎲 REROLL' : '✦ ASCENSÃO'}
+                </div>
+                <div class="stat11-roll-hero">${nomeHeroi}</div>
+
+                <div class="stat11-roll-cards" id="stat11RollCards">
+                    <div class="stat11-card spin">${tierMeta.icon}</div>
+                    <div class="stat11-card spin">${tierMeta.icon}</div>
+                    <div class="stat11-card spin">${tierMeta.icon}</div>
+                </div>
+
+                <div class="stat11-roll-reveal" id="stat11RollReveal" style="display:none;">
+                    <div class="stat11-tier-badge" style="color:${tierMeta.cor}; background:${tierMeta.bg};">
+                        ${tierMeta.icon} ${tierMeta.nome}
+                    </div>
+                    <div class="stat11-stats-box">
+                        ${statHTML}
+                    </div>
+                </div>
+
+                <button class="stat11-roll-btn" id="stat11RollClose" style="display:none; border-color:${tierMeta.cor};">
+                    CONTINUAR
+                </button>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+
+        // Animação: 2s girando, depois revela
+        setTimeout(() => {
+            const cards = document.getElementById('stat11RollCards');
+            const reveal = document.getElementById('stat11RollReveal');
+            const btn = document.getElementById('stat11RollClose');
+
+            if (cards) cards.style.display = 'none';
+            if (reveal) reveal.style.display = 'block';
+            if (btn) {
+                btn.style.display = 'inline-block';
+                btn.onclick = () => overlay.remove();
+            }
+
+            // Se for Jackpot, toca som especial
+            try {
+                if (typeof playSfx === 'function') {
+                    playSfx(resultado.tier === 'jackpot' ? 'win' : 'skill1');
+                }
+            } catch(e) {}
+        }, 1800);
+
+        // Fecha ao clicar fora (mas só depois da revelação)
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay && document.getElementById('stat11RollClose')?.style.display !== 'none') {
+                overlay.remove();
+            }
+        });
+    }
+
+    // ==============================================================
+    // SEÇÃO 8 — UI DO RITUAL
+    // ==============================================================
+
+    const _origRenderRitual = window.renderRitualScreen;
+    if (typeof _origRenderRitual === 'function') {
+        window.renderRitualScreen = function() {
+            const r = _origRenderRitual.apply(this, arguments);
+
+            // Após render, injeta a seção de stat 11
+            setTimeout(() => {
+                const screen = document.getElementById('storyScreen');
+                if (!screen) return;
+
+                const cards = screen.querySelectorAll('.ritual-card');
+                cards.forEach(card => {
+                    if (card.querySelector('.stat11-section')) return;
+
+                    // Descobre o herói pelo nome
+                    const nameEl = card.querySelector('.ritual-card-name');
+                    if (!nameEl) return;
+                    const nomeHeroi = nameEl.textContent.trim();
+
+                    let heroClass = null;
+                    for (const cls in STORY_HERO_CLASSES) {
+                        if (STORY_HERO_CLASSES[cls].displayName === nomeHeroi) {
+                            heroClass = cls;
+                            break;
+                        }
+                    }
+                    if (!heroClass) return;
+
+                    const level = getHeroLevel(heroClass);
+                    const stat = getStat11DoHeroi(heroClass);
+                    const nucleos = STORY_PROGRESS.inventory['nucleo_abismo'] || 0;
+
+                    // Só mostra se nível >= 10
+                    if (level < 10) return;
+
+                    const section = document.createElement('div');
+                    section.className = 'stat11-section';
+
+                    if (level === 11 && stat) {
+                        // Mostra o stat atual + botão de reroll
+                        let statHTML = '';
+                        if (stat.tipo === 'jackpot' && stat.stats) {
+                            statHTML = stat.stats.map(s => {
+                                const meta = STAT_META[s.tipo] || STAT_META.atk;
+                                const sinal = s.valor > 0 ? '+' : '';
+                                return `<span class="stat11-mini-stat" style="color:${meta.cor};">${sinal}${s.valor} ${meta.nome}</span>`;
+                            }).join(' ');
+                        } else {
+                            const meta = STAT_META[stat.tipo] || STAT_META.atk;
+                            const sinal = stat.valor > 0 ? '+' : '';
+                            statHTML = `<span class="stat11-mini-stat" style="color:${meta.cor};">${sinal}${stat.valor} ${meta.nome}</span>`;
+                        }
+
+                        const tierMeta = TIER_META[stat.tier] || TIER_META.comum;
+
+                        section.innerHTML = `
+                            <div class="stat11-current">
+                                <div class="stat11-current-title" style="color:${tierMeta.cor};">
+                                    ${tierMeta.icon} ${tierMeta.nome} (Nível 11)
+                                </div>
+                                <div class="stat11-current-stats">${statHTML}</div>
+                            </div>
+                            <button class="stat11-reroll-btn" 
+                                    data-hero="${heroClass.replace(/'/g, "\\'")}"
+                                    ${nucleos >= 1 ? '' : 'disabled'}>
+                                🎲 REROLL ${nucleos >= 1 ? '' : '(sem Núcleo)'}
+                            </button>
+                        `;
+                    } else if (level === 10) {
+                        // Mostra botão de ascensão
+                        section.innerHTML = `
+                            <div class="stat11-ascend-info">
+                                <div class="stat11-ascend-title">✦ ASCENSÃO DISPONÍVEL</div>
+                                <div class="stat11-ascend-desc">
+                                    Use 1 ${typeof uiIcon === 'function' ? uiIcon('skull') : '🌑'} Núcleo do Abismo + ${CONFIG_STAT11.XP_NIVEL_11} XP + ${CONFIG_STAT11.OURO_NIVEL_11} ouro
+                                </div>
+                                <div class="stat11-ascend-nucleos">
+                                    Você tem: <b>${nucleos}</b> Núcleo(s)
+                                </div>
+                            </div>
+                        `;
+                    }
+
+                    // Insere antes do botão de ascender
+                    const actions = card.querySelector('.ritual-next-upgrade') || card;
+                    actions.parentNode.insertBefore(section, actions);
+                });
+
+                // Handlers dos botões de reroll
+                screen.querySelectorAll('.stat11-reroll-btn').forEach(btn => {
+                    btn.onclick = function(e) {
+                        e.stopPropagation();
+                        const heroClass = this.getAttribute('data-hero');
+                        if (!heroClass) return;
+
+                        if (!confirm(`🎲 Rerollar o stat de ${heroClass}?\n\nCusta 1 Núcleo do Abismo.\nO stat atual será substituído.`)) return;
+
+                        const r = window.rerollStat11(heroClass);
+                        if (!r.ok) {
+                            if (typeof showToast === 'function') showToast('❌', r.error, '❌');
+                            return;
+                        }
+
+                        // Re-renderiza a tela do ritual
+                        setTimeout(() => window.renderRitualScreen(), 2500);
+                    };
+                });
+            }, 80);
+
+            return r;
+        };
+        console.log('[V36.0] renderRitualScreen wrappeado.');
+    }
+
+    // ==============================================================
+    // SEÇÃO 9 — UI DA OCA (mostrar stat 11)
+    // ==============================================================
+
+    const _origRenderOca = window.renderOcaScreenFiltered;
+    if (typeof _origRenderOca === 'function') {
+        window.renderOcaScreenFiltered = function() {
+            const r = _origRenderOca.apply(this, arguments);
+
+            setTimeout(() => {
+                const cards = document.querySelectorAll('.story-hero-card');
+                cards.forEach(card => {
+                    if (card.querySelector('.stat11-oca-badge')) return;
+
+                    const onclickAttr = card.getAttribute('onclick') || '';
+                    const match = onclickAttr.match(/toggleHeroSelection\('((?:\\'|[^'])*)'\)/);
+                    if (!match) return;
+
+                    const heroClass = match[1].replace(/\\'/g, "'");
+                    const stat = getStat11DoHeroi(heroClass);
+                    if (!stat) return;
+
+                    const badge = document.createElement('div');
+                    badge.className = 'stat11-oca-badge';
+
+                    if (stat.tipo === 'jackpot' && stat.stats) {
+                        const tierMeta = TIER_META.jackpot;
+                        badge.innerHTML = `<span style="color:${tierMeta.cor};">👑</span> Jackpot`;
+                    } else {
+                        const meta = STAT_META[stat.tipo] || STAT_META.atk;
+                        const tierMeta = TIER_META[stat.tier] || TIER_META.comum;
+                        const sinal = stat.valor > 0 ? '+' : '';
+                        badge.innerHTML = `<span style="color:${tierMeta.cor};">${tierMeta.icon}</span> ${sinal}${stat.valor} ${meta.nome}`;
+                    }
+
+                    card.appendChild(badge);
+                });
+            }, 100);
+
+            return r;
+        };
+        console.log('[V36.0] renderOcaScreenFiltered wrappeado.');
+    }
+
+    // ==============================================================
+    // SEÇÃO 10 — CSS
+    // ==============================================================
+
+    if (!document.getElementById('v360CSS')) {
+        const style = document.createElement('style');
+        style.id = 'v360CSS';
+        style.textContent = `
+            /* Animação do roll */
+            .stat11-roll-overlay {
+                position: fixed; inset: 0;
+                background: rgba(10, 6, 2, 0.95);
+                display: flex; align-items: center; justify-content: center;
+                padding: 20px;
+                animation: stat11FadeIn 0.3s ease-out;
+            }
+            @keyframes stat11FadeIn {
+                from { opacity: 0; } to { opacity: 1; }
+            }
+
+            .stat11-roll-panel {
+                background: linear-gradient(180deg, #2a1f10, #1a1208);
+                border: 3px solid #c9a227;
+                border-radius: 10px;
+                padding: 30px 25px;
+                max-width: 480px; width: 100%;
+                text-align: center;
+                box-shadow: 0 20px 60px rgba(0,0,0,0.9), 0 0 60px rgba(232,185,35,0.3);
+            }
+
+            .stat11-roll-header {
+                font-family: 'Cinzel Decorative', serif;
+                font-size: 1.2rem; letter-spacing: 3px;
+                margin-bottom: 8px;
+            }
+
+            .stat11-roll-hero {
+                font-family: 'Cinzel', serif;
+                color: #e8b923; font-size: 1.5rem;
+                margin-bottom: 25px;
+            }
+
+            .stat11-roll-cards {
+                display: flex; justify-content: center;
+                gap: 12px; margin-bottom: 25px;
+            }
+
+            .stat11-card {
+                width: 60px; height: 80px;
+                background: linear-gradient(180deg, #3d2d18, #1a1208);
+                border: 2px solid #6a5024;
+                border-radius: 6px;
+                display: flex; align-items: center; justify-content: center;
+                font-size: 1.5rem;
+                color: #e8b923;
+            }
+
+            .stat11-card.spin {
+                animation: stat11Spin 0.4s ease-in-out infinite;
+            }
+            .stat11-card.spin:nth-child(2) {
+                animation-delay: 0.1s;
+            }
+            .stat11-card.spin:nth-child(3) {
+                animation-delay: 0.2s;
+            }
+            @keyframes stat11Spin {
+                0%, 100% { transform: rotateY(0deg); }
+                50% { transform: rotateY(180deg); }
+            }
+
+            .stat11-tier-badge {
+                display: inline-block;
+                padding: 6px 18px;
+                border-radius: 20px;
+                font-family: 'Cinzel', serif;
+                font-weight: 700; font-size: 0.9rem;
+                letter-spacing: 2px;
+                margin-bottom: 15px;
+            }
+
+            .stat11-stats-box {
+                background: rgba(10,6,2,0.6);
+                border-radius: 6px;
+                padding: 15px;
+                margin-bottom: 20px;
+            }
+
+            .stat11-stat-line {
+                display: flex; align-items: center;
+                gap: 10px; justify-content: center;
+                padding: 6px 0;
+                font-family: 'Cinzel', serif;
+            }
+            .stat11-stat-icon { font-size: 1.2rem; }
+            .stat11-stat-label { color: #d9c89a; font-size: 0.9rem; }
+            .stat11-stat-value { font-weight: 700; font-size: 1.3rem; }
+
+            .stat11-roll-btn {
+                padding: 12px 30px;
+                background: linear-gradient(135deg, #8a6a2e, #4a3418);
+                color: #fff5dc;
+                border: 2px solid #e8b923;
+                border-radius: 4px;
+                font-family: 'Cinzel', serif;
+                font-weight: 700; font-size: 0.95rem;
+                letter-spacing: 2px; cursor: pointer;
+                transition: all 0.2s;
+            }
+            .stat11-roll-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.6); }
+
+            /* Seção do Ritual */
+            .stat11-section {
+                margin-top: 12px;
+                padding: 12px;
+                background: rgba(10,6,2,0.5);
+                border: 1px solid rgba(142,68,173,0.4);
+                border-radius: 6px;
+            }
+
+            .stat11-current {
+                text-align: center; margin-bottom: 10px;
+            }
+            .stat11-current-title {
+                font-family: 'Cinzel', serif;
+                font-size: 0.8rem; letter-spacing: 2px;
+                margin-bottom: 6px;
+            }
+            .stat11-current-stats {
+                display: flex; justify-content: center; gap: 10px;
+                flex-wrap: wrap;
+            }
+            .stat11-mini-stat {
+                font-family: 'Cinzel', serif;
+                font-size: 1rem; font-weight: 700;
+            }
+
+            .stat11-reroll-btn {
+                display: block; width: 100%;
+                padding: 8px;
+                background: linear-gradient(135deg, #5a2a70, #2a1538);
+                color: #e8dcc4;
+                border: 2px solid #8e44ad;
+                border-radius: 4px;
+                font-family: 'Cinzel', serif;
+                font-weight: 700; font-size: 0.85rem;
+                letter-spacing: 1px; cursor: pointer;
+                transition: all 0.2s;
+            }
+            .stat11-reroll-btn:hover:not(:disabled) {
+                box-shadow: 0 0 20px rgba(142,68,173,0.5);
+            }
+            .stat11-reroll-btn:disabled {
+                opacity: 0.5; cursor: not-allowed;
+            }
+
+            .stat11-ascend-info {
+                text-align: center;
+            }
+            .stat11-ascend-title {
+                font-family: 'Cinzel', serif;
+                color: #e8b923; font-size: 0.9rem;
+                letter-spacing: 2px; margin-bottom: 6px;
+            }
+            .stat11-ascend-desc {
+                font-family: 'EB Garamond', serif;
+                color: #b8a577; font-size: 0.85rem;
+                font-style: italic; margin-bottom: 6px;
+            }
+            .stat11-ascend-nucleos {
+                font-family: 'Cinzel', serif;
+                color: #c39bd3; font-size: 0.85rem;
+            }
+
+            /* Badge na OCA */
+            .stat11-oca-badge {
+                position: absolute;
+                bottom: 8px; left: 8px;
+                padding: 3px 8px;
+                background: rgba(10,6,2,0.8);
+                border: 1px solid #8e44ad;
+                border-radius: 10px;
+                font-family: 'Cinzel', serif;
+                font-size: 0.7rem;
+                font-weight: 700;
+                color: #c39bd3;
+                z-index: 5;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // ==============================================================
+    // SEÇÃO 11 — DEBUG
+    // ==============================================================
+
+    window.debugStat11 = function() {
+        console.group('⚡ STAT 11 DEBUG');
+        console.log('Núcleos:', STORY_PROGRESS.inventory['nucleo_abismo'] || 0);
+        console.log('Stats:', STORY_PROGRESS.heroStat11);
+        console.log('Níveis:', STORY_PROGRESS.heroLevels);
+        console.groupEnd();
+    };
+
+    window.forcarNucleo = function(qtd) {
+        qtd = qtd || 1;
+        STORY_PROGRESS.inventory['nucleo_abismo'] = (STORY_PROGRESS.inventory['nucleo_abismo'] || 0) + qtd;
+        saveStoryProgress();
+        console.log(`✅ +${qtd} Núcleo(s). Total: ${STORY_PROGRESS.inventory['nucleo_abismo']}`);
+    };
+
+    // ==============================================================
+    // LOG FINAL
+    // ==============================================================
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V36.0] Sistema de Stat Aleatório Nível 11');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Núcleo do Abismo dropa em 13-4 no Difícil');
+    console.log('• Ritual: nível 10 + Núcleo → ASCENSÃO (stat aleatório)');
+    console.log('• Ritual: nível 11 + Núcleo → REROLL (substitui stat)');
+    console.log('');
+    console.log('📊 Tiers:');
+    console.log('  Comum (60%):  +1 ATK, +2 HP, +1 Formas, -1 Range, +1 Elemento');
+    console.log('  Incomum (30%): +2 ATK, +4 HP, +2 Formas');
+    console.log('  Raro (9%):     +3 ATK, +6 HP, +3 Formas, -1 PA, +1 Cura');
+    console.log('  Jackpot (1%):  2 stats aleatórios do Incomum');
+    console.log('');
+    console.log('⚠️ Guerreiro NÃO rola -1 Range (range 0 → 1)');
+    console.log('⚠️ Sem pity system');
+    console.log('');
+    console.log('💡 Debug:');
+    console.log('   window.debugStat11()       → ver estado');
+    console.log('   window.forcarNucleo(5)     → dar 5 Núcleos');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — BLOCO 118 (V36.1 — Fix botão de ascensão no Ritual)
+// -----------------------------------------------------------------
+// Corrige 3 problemas do V36.0:
+//   1. renderRitualScreen original mostrava "NÍVEL MÁXIMO" no nível 10
+//   2. handleRitualAscend original chamava ascendHero LOCAL (não o wrapper)
+//   3. stat11-section injetado não tinha botão clicável
+//
+// Solução:
+//   • Sobrescreve window.handleRitualAscend para interceptar nível 10
+//   • Pós-processa o DOM para remover .ritual-max e injetar botão real
+//   • Adiciona callback no mostrarAnimacaoRoll para re-renderizar
+// =================================================================
+
+(function fixBotaoAscensaoV361() {
+    if (window._fixBotaoAscensaoV361) return;
+    window._fixBotaoAscensaoV361 = true;
+
+    console.log('[V36.1] Corrigindo botão de ascensão no Ritual...');
+
+    const CONFIG_STAT11 = {
+        XP_NIVEL_11: 3000,
+        OURO_NIVEL_11: 1800,
+    };
+
+    // ==============================================================
+    // FIX 1: Sobrescrever handleRitualAscend (global)
+    // --------------------------------------------------------------
+    // O onclick do botão chama window.handleRitualAscend. Agora
+    // interceptamos o nível 10 para usar o ascendHero wrapper.
+    // ==============================================================
+    const _origHandleRitualAscend = window.handleRitualAscend;
+    if (typeof _origHandleRitualAscend === 'function') {
+        window.handleRitualAscend = function(heroClass) {
+            const currentLevel = (typeof getHeroLevel === 'function')
+                ? getHeroLevel(heroClass) : 1;
+
+            // ⭐ Nível 10 → ascensão pro 11 (usa wrapper global)
+            if (currentLevel === 10) {
+                const result = window.ascendHero(heroClass);
+
+                if (!result.ok) {
+                    if (typeof showToast === 'function') showToast('❌', result.error, '❌');
+                    return;
+                }
+
+                const heroData = STORY_HERO_CLASSES[heroClass];
+                if (typeof showToast === 'function') {
+                    showToast('✦ ASCENSÃO!', `${heroData?.displayName || heroClass} chegou ao nível 11!`, '✦');
+                }
+                try { if (typeof playSfx === 'function') playSfx('win'); } catch(e) {}
+
+                // ⭐ NÃO re-renderiza aqui — a animação de roll vai chamar
+                // o renderRitualScreen quando fechar (via callback)
+                return;
+            }
+
+            // Níveis 2-10 → comportamento original
+            return _origHandleRitualAscend.apply(this, arguments);
+        };
+        console.log('[V36.1] handleRitualAscend wrappeado.');
+    }
+
+    // ==============================================================
+    // FIX 2: mostrarAnimacaoRoll com callback
+    // --------------------------------------------------------------
+    // Sobrescreve a função original (definida no V36.0) para
+    // aceitar um callback que roda quando o overlay é fechado.
+    // ==============================================================
+    // (A função original está dentro do IIFE do V36.0, então
+    //  não conseguimos acessá-la diretamente. Vou recriar uma
+    //  versão global que substitui a local — mas como a local
+    //  não é exposta, o ascendHero V36.0 vai continuar chamando
+    //  a local. Solução: reescrever ascendHero e rerollStat11
+    //  para usar a versão com callback.)
+
+    // ==============================================================
+    // FIX 3: Pós-processar renderRitualScreen
+    // --------------------------------------------------------------
+    // Roda depois do V36.0, que já injeta a .stat11-section.
+    // Aqui:
+    //   • Remove .ritual-max (mostra "NÍVEL MÁXIMO" indevidamente)
+    //   • Substitui o conteúdo da .stat11-section por um botão real
+    // ==============================================================
+    const _origRenderRitual = window.renderRitualScreen;
+    if (typeof _origRenderRitual === 'function') {
+        window.renderRitualScreen = function() {
+            const r = _origRenderRitual.apply(this, arguments);
+
+            // Espera o V36.0 injetar a .stat11-section (80ms)
+            setTimeout(() => {
+                const screen = document.getElementById('storyScreen');
+                if (!screen) return;
+
+                const cards = screen.querySelectorAll('.ritual-card');
+
+                cards.forEach(card => {
+                    // Descobre o herói
+                    const nameEl = card.querySelector('.ritual-card-name');
+                    if (!nameEl) return;
+                    const nomeHeroi = nameEl.textContent.trim();
+
+                    let heroClass = null;
+                    for (const cls in STORY_HERO_CLASSES) {
+                        if (STORY_HERO_CLASSES[cls].displayName === nomeHeroi) {
+                            heroClass = cls;
+                            break;
+                        }
+                    }
+                    if (!heroClass) return;
+
+                    const level = getHeroLevel(heroClass);
+                    const nucleos = STORY_PROGRESS.inventory['nucleo_abismo'] || 0;
+
+                    if (level !== 10 && level !== 11) return;
+
+                    // ⭐ Remove o .ritual-max (mostra "NÍVEL MÁXIMO" indevidamente)
+                    const ritualMax = card.querySelector('.ritual-max');
+                    if (ritualMax) ritualMax.remove();
+
+                    // ⭐ Pega a .stat11-section (já injetada pelo V36.0)
+                    let section = card.querySelector('.stat11-section');
+                    if (!section) {
+                        // Se não existe (por algum motivo), cria
+                        section = document.createElement('div');
+                        section.className = 'stat11-section';
+                        const nextUp = card.querySelector('.ritual-next-upgrade');
+                        if (nextUp) {
+                            nextUp.parentNode.insertBefore(section, nextUp);
+                        } else {
+                            card.appendChild(section);
+                        }
+                    }
+
+                    // ⭐ Substitui o conteúdo por um botão real
+                    if (level === 10) {
+                        const totalXP = STORY_PROGRESS.totalXP || 0;
+                        const totalGold = STORY_PROGRESS.gold || 0;
+                        const temNucleo = nucleos >= 1;
+                        const temXP = totalXP >= CONFIG_STAT11.XP_NIVEL_11;
+                        const temOuro = totalGold >= CONFIG_STAT11.OURO_NIVEL_11;
+                        const podeAscender = temNucleo && temXP && temOuro;
+
+                        let motivoBloqueio = '';
+                        if (!temNucleo) motivoBloqueio = 'sem Núcleo';
+                        else if (!temXP) motivoBloqueio = `faltam ${CONFIG_STAT11.XP_NIVEL_11 - totalXP} XP`;
+                        else if (!temOuro) motivoBloqueio = `faltam ${CONFIG_STAT11.OURO_NIVEL_11 - totalGold} ouro`;
+
+                        section.innerHTML = `
+                            <div class="stat11-ascend-info">
+                                <div class="stat11-ascend-title">✦ ASCENSÃO DISPONÍVEL</div>
+                                <div class="stat11-ascend-desc">
+                                    Use 1 Núcleo do Abismo + ${CONFIG_STAT11.XP_NIVEL_11} XP + ${CONFIG_STAT11.OURO_NIVEL_11} ouro
+                                </div>
+                                <div class="stat11-ascend-nucleos">
+                                    Você tem: <b>${nucleos}</b> Núcleo(s)
+                                </div>
+                                <button class="stat11-ascend-btn"
+                                        data-hero="${heroClass.replace(/'/g, "\\'")}"
+                                        ${podeAscender ? '' : 'disabled'}>
+                                    ⚡ ASCENDER ${podeAscender ? '(Nível 11)' : `(${motivoBloqueio})`}
+                                </button>
+                            </div>
+                        `;
+
+                        // Handler do botão
+                        const btn = section.querySelector('.stat11-ascend-btn');
+                        if (btn) {
+                            btn.onclick = function(e) {
+                                e.stopPropagation();
+                                const hc = this.getAttribute('data-hero');
+                                if (!hc) return;
+
+                                if (!confirm(`⚡ Ascender ${hc} ao nível 11?\n\nCusta 1 Núcleo + ${CONFIG_STAT11.XP_NIVEL_11} XP + ${CONFIG_STAT11.OURO_NIVEL_11} ouro.\n\nO stat será ALEATÓRIO.`)) return;
+
+                                if (typeof window.handleRitualAscend === 'function') {
+                                    window.handleRitualAscend(hc);
+                                }
+                            };
+                        }
+                    }
+                    // Se nível 11, o V36.0 já injetou o reroll corretamente
+                    // (não precisa mexer)
+                });
+            }, 150); // 150ms = depois do V36.0 (que usa 80ms)
+
+            return r;
+        };
+        console.log('[V36.1] renderRitualScreen pós-processado.');
+    }
+
+    // ==============================================================
+    // FIX 4: CSS do botão de ascensão
+    // ==============================================================
+    if (!document.getElementById('v361CSS')) {
+        const style = document.createElement('style');
+        style.id = 'v361CSS';
+        style.textContent = `
+            .stat11-ascend-btn {
+                display: block;
+                width: 100%;
+                margin-top: 10px;
+                padding: 10px;
+                background: linear-gradient(180deg, rgba(142,68,173,0.25), transparent 45%),
+                            linear-gradient(135deg, #5a2a70, #2a1538);
+                color: #f0e0ff;
+                border: 2px solid #8e44ad;
+                border-radius: 4px;
+                font-family: 'Cinzel', serif;
+                font-weight: 700;
+                font-size: 0.9rem;
+                letter-spacing: 1.5px;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+            .stat11-ascend-btn:hover:not(:disabled) {
+                transform: translateY(-2px);
+                box-shadow: 0 6px 20px rgba(0,0,0,0.5), 0 0 25px rgba(142,68,173,0.5);
+            }
+            .stat11-ascend-btn:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+                background: #2a1f10;
+                border-color: #3d2d18;
+                color: #6a5024;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // ==============================================================
+    // FIX 5: Re-renderizar quando a animação do roll fechar
+    // --------------------------------------------------------------
+    // O mostrarAnimacaoRoll (V36.0) chama `overlay.remove()` no
+    // clique do botão "CONTINUAR". Aqui monitoramos a remoção
+    // do overlay para re-renderizar o Ritual.
+    // ==============================================================
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach(m => {
+            m.removedNodes.forEach(node => {
+                if (node.id === 'stat11RollOverlay') {
+                    // ⭐ Overlay fechou → re-renderiza o Ritual
+                    const screen = document.getElementById('storyScreen');
+                    if (screen && screen.classList.contains('active')) {
+                        const titleEl = screen.querySelector('.story-title');
+                        if (titleEl && titleEl.textContent.includes('RITUAL')) {
+                            setTimeout(() => {
+                                if (typeof window.renderRitualScreen === 'function') {
+                                    window.renderRitualScreen();
+                                }
+                            }, 100);
+                        }
+                    }
+                }
+            });
+        });
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    // ==============================================================
+    // LOG FINAL
+    // ==============================================================
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V36.1] Fix botão de ascensão');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• handleRitualAscend intercepta nível 10');
+    console.log('• renderRitualScreen pós-processa o DOM:');
+    console.log('   - Remove .ritual-max ("NÍVEL MÁXIMO" indevido)');
+    console.log('   - Injeta botão "⚡ ASCENDER (Nível 11)"');
+    console.log('• Botão desabilitado mostra motivo (sem Núcleo / faltam XP)');
+    console.log('• Re-renderiza o Ritual quando animação fecha');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — BLOCO 119 (V36.2 — Card de ascensão com identidade)
+// -----------------------------------------------------------------
+// Corrige: a seção de ascensão não mostrava QUAL herói estava sendo
+// ascendido. Agora mostra nome + sprite + botão claro.
+//
+// Também remove o "NÍVEL MÁXIMO" de forma garantida e substitui
+// o conteúdo do card para nível 10 e nível 11.
+// =================================================================
+
+(function fixCardAscensaoV362() {
+    if (window._fixCardAscensaoV362) return;
+    window._fixCardAscensaoV362 = true;
+
+    console.log('[V36.2] Instalando card de ascensão com identidade...');
+
+    const CONFIG_STAT11 = {
+        XP_NIVEL_11: 3000,
+        OURO_NIVEL_11: 1800,
+    };
+
+    const TIER_META = {
+        comum:   { nome: 'Comum',   cor: '#8a7a52', icon: '★' },
+        incomum: { nome: 'Incomum', cor: '#6ba35c', icon: '★★' },
+        raro:    { nome: 'Raro',    cor: '#4a8cb5', icon: '★★★' },
+        jackpot: { nome: 'Jackpot', cor: '#e8b923', icon: '👑' },
+    };
+
+    const STAT_META = {
+        atk:      { nome: 'ATK',       cor: '#a83232' },
+        hp:       { nome: 'HP',        cor: '#6ba35c' },
+        formas:   { nome: 'Formas',    cor: '#8e44ad' },
+        range:    { nome: 'Alcance',   cor: '#3a7ca5' },
+        pa:       { nome: 'PA',        cor: '#e8b923' },
+        cura:     { nome: 'Cura',      cor: '#8ac070' },
+        elemento: { nome: 'Elemento',  cor: '#e8b923' },
+    };
+
+    // ==============================================================
+    // HELPER: encontra o heroClass pelo nome exibido
+    // ==============================================================
+    function acharHeroClassPorNome(nome) {
+        if (typeof STORY_HERO_CLASSES === 'undefined') return null;
+        for (const cls in STORY_HERO_CLASSES) {
+            if (STORY_HERO_CLASSES[cls].displayName === nome) return cls;
+        }
+        return null;
+    }
+
+    // ==============================================================
+    // HELPER: monta o HTML da seção de stat 11 (nome + botão)
+    // ==============================================================
+    function montarSecaoStat11(heroClass, level, opcoes) {
+        opcoes = opcoes || {};
+        const heroData = STORY_HERO_CLASSES[heroClass];
+        const nome = heroData?.displayName || heroClass;
+        const spriteKey = heroData?.spriteKey;
+        const spriteURL = (spriteKey && SPRITES_STORY[spriteKey])
+            ? SPRITES_STORY[spriteKey]
+            : (typeof SPRITES !== 'undefined' && SPRITES[heroClass])
+                ? SPRITES[heroClass]
+                : '';
+
+        const spriteHTML = spriteURL
+            ? `<img src="${spriteURL}" class="stat11-hero-sprite" alt="${nome}">`
+            : `<div class="stat11-hero-sprite-fallback">${(EMOJI_STORY && EMOJI_STORY[heroClass]) || '?'}</div>`;
+
+        const nucleos = (STORY_PROGRESS.inventory['nucleo_abismo'] || 0);
+
+        // ---- NÍVEL 10: botão de ascensão ----
+        if (level === 10) {
+            const totalXP = STORY_PROGRESS.totalXP || 0;
+            const totalGold = STORY_PROGRESS.gold || 0;
+            const temNucleo = nucleos >= 1;
+            const temXP = totalXP >= CONFIG_STAT11.XP_NIVEL_11;
+            const temOuro = totalGold >= CONFIG_STAT11.OURO_NIVEL_11;
+            const podeAscender = temNucleo && temXP && temOuro;
+
+            let motivo = '';
+            if (!temNucleo) motivo = 'sem Núcleo';
+            else if (!temXP) motivo = `faltam ${CONFIG_STAT11.XP_NIVEL_11 - totalXP} XP`;
+            else if (!temOuro) motivo = `faltam ${CONFIG_STAT11.OURO_NIVEL_11 - totalGold} ouro`;
+
+            return `
+                <div class="stat11-section">
+                    <div class="stat11-hero-header">
+                        <div class="stat11-hero-avatar">${spriteHTML}</div>
+                        <div class="stat11-hero-info">
+                            <div class="stat11-hero-name">${nome}</div>
+                            <div class="stat11-hero-tag">Nível 10 → 11</div>
+                        </div>
+                    </div>
+                    <div class="stat11-ascend-info">
+                        <div class="stat11-ascend-title">✦ ASCENSÃO DISPONÍVEL</div>
+                        <div class="stat11-ascend-desc">
+                            Use 1 Núcleo do Abismo + ${CONFIG_STAT11.XP_NIVEL_11} XP + ${CONFIG_STAT11.OURO_NIVEL_11} ouro
+                        </div>
+                        <div class="stat11-ascend-nucleos">
+                            Você tem: <b>${nucleos}</b> Núcleo(s)
+                        </div>
+                        <button class="stat11-ascend-btn"
+                                data-hero="${heroClass.replace(/'/g, "\\'")}"
+                                ${podeAscender ? '' : 'disabled'}>
+                            ⚡ ASCENDER ${podeAscender ? '' : `(${motivo})`}
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        // ---- NÍVEL 11: mostra stat + reroll ----
+        if (level === 11) {
+            const stat = (STORY_PROGRESS.heroStat11 || {})[heroClass];
+            if (!stat) {
+                return `
+                    <div class="stat11-section">
+                        <div class="stat11-hero-header">
+                            <div class="stat11-hero-avatar">${spriteHTML}</div>
+                            <div class="stat11-hero-info">
+                                <div class="stat11-hero-name">${nome}</div>
+                                <div class="stat11-hero-tag">Nível 11</div>
+                            </div>
+                        </div>
+                        <div class="stat11-current">
+                            <div class="stat11-current-title">Stat não registrado</div>
+                            <div class="stat11-current-stats">Use o reroll para gerar</div>
+                        </div>
+                        <button class="stat11-reroll-btn"
+                                data-hero="${heroClass.replace(/'/g, "\\'")}"
+                                ${nucleos >= 1 ? '' : 'disabled'}>
+                            🎲 REROLL ${nucleos >= 1 ? '' : '(sem Núcleo)'}
+                        </button>
+                    </div>
+                `;
+            }
+
+            const tierMeta = TIER_META[stat.tier] || TIER_META.comum;
+
+            let statHTML = '';
+            if (stat.tipo === 'jackpot' && stat.stats) {
+                statHTML = stat.stats.map(s => {
+                    const meta = STAT_META[s.tipo] || STAT_META.atk;
+                    const sinal = s.valor > 0 ? '+' : '';
+                    return `<span class="stat11-mini-stat" style="color:${meta.cor};">${sinal}${s.valor} ${meta.nome}</span>`;
+                }).join(' ');
+            } else {
+                const meta = STAT_META[stat.tipo] || STAT_META.atk;
+                const sinal = stat.valor > 0 ? '+' : '';
+                statHTML = `<span class="stat11-mini-stat" style="color:${meta.cor};">${sinal}${stat.valor} ${meta.nome}</span>`;
+            }
+
+            return `
+                <div class="stat11-section">
+                    <div class="stat11-hero-header">
+                        <div class="stat11-hero-avatar">${spriteHTML}</div>
+                        <div class="stat11-hero-info">
+                            <div class="stat11-hero-name">${nome}</div>
+                            <div class="stat11-hero-tag">Nível 11 · Ascendido</div>
+                        </div>
+                    </div>
+                    <div class="stat11-current">
+                        <div class="stat11-current-title" style="color:${tierMeta.cor};">
+                            ${tierMeta.icon} ${tierMeta.nome}
+                        </div>
+                        <div class="stat11-current-stats">${statHTML}</div>
+                    </div>
+                    <button class="stat11-reroll-btn"
+                            data-hero="${heroClass.replace(/'/g, "\\'")}"
+                            ${nucleos >= 1 ? '' : 'disabled'}>
+                        🎲 REROLL ${nucleos >= 1 ? '' : '(sem Núcleo)'}
+                    </button>
+                </div>
+            `;
+        }
+
+        return '';
+    }
+
+    // ==============================================================
+    // PÓS-PROCESSAMENTO ROBUSTO DO RITUAL
+    // ==============================================================
+    const _origRenderRitual = window.renderRitualScreen;
+    if (typeof _origRenderRitual === 'function') {
+        window.renderRitualScreen = function() {
+            const r = _origRenderRitual.apply(this, arguments);
+
+            // ⭐ Roda em 3 tempos: 100ms, 300ms, 600ms
+            // (para pegar mesmo se outros patches atrasarem)
+            const aplicarPatch = () => {
+                const screen = document.getElementById('storyScreen');
+                if (!screen || !screen.classList.contains('active')) return;
+
+                const cards = screen.querySelectorAll('.ritual-card');
+
+                cards.forEach(card => {
+                    const nameEl = card.querySelector('.ritual-card-name');
+                    if (!nameEl) return;
+                    const nomeHeroi = nameEl.textContent.trim();
+
+                    const heroClass = acharHeroClassPorNome(nomeHeroi);
+                    if (!heroClass) return;
+
+                    const level = getHeroLevel(heroClass);
+                    if (level !== 10 && level !== 11) return;
+
+                    // ⭐ 1. Remove o "NÍVEL MÁXIMO" (definitivo)
+                    card.querySelectorAll('.ritual-max').forEach(el => el.remove());
+
+                    // ⭐ 2. Remove o botão "SUBIR NÍVEL" antigo se estiver no nível 10
+                    //    (o original mostra "NÍVEL MÁXIMO", mas se por algum motivo
+                    //    mostrou "SUBIR NÍVEL", removemos)
+                    if (level === 10) {
+                        const nextUp = card.querySelector('.ritual-next-upgrade');
+                        if (nextUp) nextUp.remove();
+                    }
+
+                    // ⭐ 3. Encontra ou cria a seção de stat 11
+                    let section = card.querySelector('.stat11-section');
+                    if (!section) {
+                        section = document.createElement('div');
+                        section.className = 'stat11-section';
+                        card.appendChild(section);
+                    }
+
+                    // ⭐ 4. Substitui o conteúdo (com nome + sprite + botão)
+                    const novoHTML = montarSecaoStat11(heroClass, level);
+                    if (novoHTML) {
+                        section.outerHTML = novoHTML;
+                    }
+
+                    // ⭐ 5. Remove a seção antiga se o V36.0 injetou duplicado
+                    const duplicatas = card.querySelectorAll('.stat11-section');
+                    if (duplicatas.length > 1) {
+                        for (let i = 1; i < duplicatas.length; i++) {
+                            duplicatas[i].remove();
+                        }
+                    }
+                });
+
+                // ⭐ Handlers dos botões
+                screen.querySelectorAll('.stat11-ascend-btn').forEach(btn => {
+                    if (btn._handler) return;
+                    btn._handler = true;
+                    btn.onclick = function(e) {
+                        e.stopPropagation();
+                        const hc = this.getAttribute('data-hero');
+                        if (!hc) return;
+                        if (!confirm(`⚡ Ascender ${hc} ao nível 11?\n\nCusta 1 Núcleo + ${CONFIG_STAT11.XP_NIVEL_11} XP + ${CONFIG_STAT11.OURO_NIVEL_11} ouro.\n\nO stat será ALEATÓRIO.`)) return;
+                        if (typeof window.handleRitualAscend === 'function') {
+                            window.handleRitualAscend(hc);
+                        }
+                    };
+                });
+
+                screen.querySelectorAll('.stat11-reroll-btn').forEach(btn => {
+                    if (btn._handler) return;
+                    btn._handler = true;
+                    btn.onclick = function(e) {
+                        e.stopPropagation();
+                        const hc = this.getAttribute('data-hero');
+                        if (!hc) return;
+                        if (!confirm(`🎲 Rerollar o stat de ${hc}?\n\nCusta 1 Núcleo.\nO stat atual será substituído.`)) return;
+                        if (typeof window.rerollStat11 === 'function') {
+                            const res = window.rerollStat11(hc);
+                            if (!res.ok && typeof showToast === 'function') showToast('❌', res.error, '❌');
+                        }
+                    };
+                });
+            };
+
+            setTimeout(aplicarPatch, 100);
+            setTimeout(aplicarPatch, 300);
+            setTimeout(aplicarPatch, 600);
+
+            return r;
+        };
+        console.log('[V36.2] renderRitualScreen pós-processado (3 tempos).');
+    }
+
+    // ==============================================================
+    // CSS
+    // ==============================================================
+    if (!document.getElementById('v362CSS')) {
+        const style = document.createElement('style');
+        style.id = 'v362CSS';
+        style.textContent = `
+            /* Header do herói na seção de ascensão */
+            .stat11-hero-header {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                padding-bottom: 10px;
+                margin-bottom: 10px;
+                border-bottom: 1px solid rgba(142, 68, 173, 0.3);
+            }
+
+            .stat11-hero-avatar {
+                width: 48px; height: 48px;
+                flex-shrink: 0;
+                display: flex; align-items: center; justify-content: center;
+                background: radial-gradient(circle, rgba(0,0,0,0.5), transparent 70%);
+                border-radius: 4px;
+            }
+
+            .stat11-hero-sprite {
+                width: 44px; height: 44px;
+                object-fit: contain;
+                filter: drop-shadow(0 0 6px rgba(0,0,0,0.7));
+            }
+
+            .stat11-hero-sprite-fallback {
+                font-size: 1.8rem;
+                line-height: 1;
+            }
+
+            .stat11-hero-info {
+                flex: 1;
+                min-width: 0;
+            }
+
+            .stat11-hero-name {
+                font-family: 'Cinzel', serif;
+                color: #f0e2c0;
+                font-size: 1rem;
+                font-weight: 700;
+                letter-spacing: 1px;
+                margin-bottom: 2px;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            .stat11-hero-tag {
+                font-family: 'EB Garamond', serif;
+                color: #b8a577;
+                font-size: 0.8rem;
+                font-style: italic;
+            }
+
+            /* Botão de ascensão */
+            .stat11-ascend-btn {
+                display: block;
+                width: 100%;
+                margin-top: 10px;
+                padding: 10px;
+                background: linear-gradient(180deg, rgba(142,68,173,0.25), transparent 45%),
+                            linear-gradient(135deg, #5a2a70, #2a1538);
+                color: #f0e0ff;
+                border: 2px solid #8e44ad;
+                border-radius: 4px;
+                font-family: 'Cinzel', serif;
+                font-weight: 700;
+                font-size: 0.9rem;
+                letter-spacing: 1.5px;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+            .stat11-ascend-btn:hover:not(:disabled) {
+                transform: translateY(-2px);
+                box-shadow: 0 6px 20px rgba(0,0,0,0.5), 0 0 25px rgba(142,68,173,0.5);
+            }
+            .stat11-ascend-btn:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+                background: #2a1f10;
+                border-color: #3d2d18;
+                color: #6a5024;
+            }
+
+            /* Se o card estiver em 2 colunas (como na imagem), ajusta */
+            .stat11-section {
+                grid-column: 1 / -1;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // ==============================================================
+    // Re-renderiza o Ritual quando a animação do roll fechar
+    // ==============================================================
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach(m => {
+            m.removedNodes.forEach(node => {
+                if (node.id === 'stat11RollOverlay') {
+                    const screen = document.getElementById('storyScreen');
+                    if (screen && screen.classList.contains('active')) {
+                        const titleEl = screen.querySelector('.story-title');
+                        if (titleEl && titleEl.textContent.includes('RITUAL')) {
+                            setTimeout(() => {
+                                if (typeof window.renderRitualScreen === 'function') {
+                                    window.renderRitualScreen();
+                                }
+                            }, 100);
+                        }
+                    }
+                }
+            });
+        });
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    // ==============================================================
+    // LOG FINAL
+    // ==============================================================
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V36.2] Card de ascensão com identidade');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Mostra sprite + nome + nível');
+    console.log('• Remove "NÍVEL MÁXIMO" indevido');
+    console.log('• Botão "ASCENDER" com nome do herói');
+    console.log('• Botão mostra motivo do bloqueio');
+    console.log('• Handler evita duplicatas (btn._handler)');
+    console.log('═══════════════════════════════════════════════════');
 })();
