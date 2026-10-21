@@ -2628,4 +2628,73 @@ console.log('✅ pvp.js V3.0 (baseado no coop) carregado.');
         console.log('✅ [V36.3] Stats Nível 11 aplicados no PVP.');
     }
 })();
+// =================================================================
+// ⚔️ PVP V10.34 — CORREÇÃO EXCLUSIVA DO HP NO PVP (Anti-Herança)
+// -----------------------------------------------------------------
+// 1. Quando o P2 entra, ele ignora o HP do Firestore (do P1) e 
+//    calcula o próprio HP real baseado no Nível/Equipamento.
+// 2. Protege o P2 de ter a vida sobrescrita pelo listener.
+// =================================================================
+
+(function fixPvpHpV1034() {
+    if (window._fixPvpHpV1034) return;
+    window._fixPvpHpV1034 = true;
+
+    console.log('✅ [V10.34] Aplicando blindagem de HP exclusiva no PVP...');
+
+    // 1. Força o HP correto ANTES do jogo montar o tabuleiro do P2
+    const _origPvpRebuild = window.pvpRebuildPlayers;
+    if (typeof _origPvpRebuild === 'function') {
+        window.pvpRebuildPlayers = function() {
+            // Se eu sou o P2 e a sala já tem os dados de ambos
+            if (pvpRole === 'oponente' && pvpRoomData?.estadoJogo?.players) {
+                const p2Data = pvpRoomData.estadoJogo.players[1];
+                const meuHeroi = pvpRoomData.oponente?.heroiClass || 'Tupa';
+                
+                if (p2Data) {
+                    // Calcula o HP real do P2
+                    let baseHp = (STORY_HERO_CLASSES[meuHeroi]?.hp) || 8;
+                    if (typeof getHeroBonusFromLevel === 'function') {
+                        baseHp += getHeroBonusFromLevel(meuHeroi).hp || 0;
+                    }
+                    
+                    // Sobrescreve o HP do P1 que veio no Firestore com o HP real do P2
+                    p2Data.class = meuHeroi;
+                    p2Data.hp = baseHp;
+                    p2Data.maxHp = baseHp;
+                    console.log(`[V10.34] P2 ignorou HP do P1 e calculou o próprio: ${baseHp}`);
+                }
+            }
+            return _origPvpRebuild.apply(this, arguments);
+        };
+    }
+
+    // 2. Protege o P2 de ter a vida sobrescrita pela nuvem durante o jogo
+    const _origAplicar = window.pvpAplicarEstadoDoRoom;
+    if (typeof _origAplicar === 'function') {
+        window.pvpAplicarEstadoDoRoom = function(room) {
+            if (pvpRole === 'oponente' && room?.estadoJogo?.players && players.length >= 2) {
+                const p2Data = room.estadoJogo.players[1];
+                const meuHeroi = pvpRoomData?.oponente?.heroiClass || 'Tupa';
+                
+                // Se o Firestore mandar um HP diferente do meu (ex: 15 do P1)
+                if (p2Data && p2Data.hp !== players[1].hp) {
+                    let baseHp = (STORY_HERO_CLASSES[meuHeroi]?.hp) || 8;
+                    if (typeof getHeroBonusFromLevel === 'function') {
+                        baseHp += getHeroBonusFromLevel(meuHeroi).hp || 0;
+                    }
+                    
+                    // Restaura a vida local do P2 e ignora a do Firestore
+                    players[1].hp = baseHp;
+                    players[1].maxHp = baseHp;
+                    p2Data.hp = baseHp;
+                    p2Data.maxHp = baseHp;
+                }
+            }
+            return _origAplicar.apply(this, arguments);
+        };
+    }
+
+    console.log('✅ [V10.34] Blindagem aplicada. O P2 não herda mais a vida do P1.');
+})();
 

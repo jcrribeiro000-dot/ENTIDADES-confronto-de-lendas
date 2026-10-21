@@ -4137,3 +4137,1065 @@ console.log('✅ coop.js V8.5 (boss não renasce + skills sem duplicata + IA rod
 STORY_PROGRESS.inventory['nucleo_abismo'] = (STORY_PROGRESS.inventory['nucleo_abismo'] || 0) + 1;
 saveStoryProgress();
 console.log('🌑 Núcleo do Abismo:', STORY_PROGRESS.inventory['nucleo_abismo']);
+// =================================================================
+// ⚔️ COOP V10.6 — O VERDADEIRO CONSERTO (P2 MATANDO BOSS)
+// -----------------------------------------------------------------
+// 1. P2 mata o boss: publica o estado de morte e passa a vez pro P1.
+// 2. P1 vê o boss morto e processa a transição.
+// 3. Bloqueia Monitor V8.5 de pular bosses.
+// =================================================================
+
+(function coopV106() {
+    if (window._coopV106) return;
+    window._coopV106 = true;
+
+    // Desativa o V10.5 para não conflitar
+    if (window._coopV105) window._coopV105 = false;
+
+    console.log('✅ [V10.6] Instalando correção para P2 matando boss...');
+
+    // -----------------------------------------------------------------
+    // FIX 1 — Monitor V8.5 não pula mais bosses
+    // -----------------------------------------------------------------
+    const _origAdvance = window.advanceStoryEnemy;
+    if (typeof _origAdvance === 'function') {
+        window.advanceStoryEnemy = async function() {
+            if (window._coopMode) {
+                console.log('[V10.6] advanceStoryEnemy bloqueado (Monitor V8.5).');
+                return;
+            }
+            return _origAdvance.apply(this, arguments);
+        };
+    }
+
+    // -----------------------------------------------------------------
+    // FIX 2 — Lógica de Morte do Boss (P2 avisa, P1 processa)
+    // -----------------------------------------------------------------
+    const _origProcessarMorte = window.coopProcessarMorteBoss;
+    if (typeof _origProcessarMorte === 'function') {
+        window.coopProcessarMorteBoss = async function() {
+            if (!window._coopMode) return _origProcessarMorte.apply(this, arguments);
+
+            // ⭐ SE FOR O P2: Não processa a fila. Apenas avisa o P1.
+            if (coopRole === 'oponente') {
+                if (coopProcessandoMorteBoss) return;
+                coopProcessandoMorteBoss = true;
+                
+                console.log('[V10.6] P2 matou o boss. Passando a vez pro P1.');
+                const estado = coopCapturarEstado();
+                
+                try {
+                    await fbDb.collection(COOP_ROOMS).doc(coopRoomId).update({
+                        'estadoJogo.boss': { ...estado.boss, dead: true, hp: 0 },
+                        'estadoJogo.players': estado.players,
+                        'estadoJogo.grid': estado.grid,
+                        'estadoJogo.eventosTurno': [...coopEventosTurno],
+                        status: 'turno_joao',
+                        'estadoJogo.turnoDe': 'criador',
+                        atualizadaEm: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                } catch(e) { console.error(e); }
+                
+                coopEventosTurno = [];
+                coopPausar();
+                coopProcessandoMorteBoss = false;
+                return;
+            }
+
+            // ⭐ SE FOR O P1: Roda o original (avança a fila) e força o turno
+            await _origProcessarMorte.apply(this, arguments);
+            
+            if (coopRoomId) {
+                try {
+                    await fbDb.collection(COOP_ROOMS).doc(coopRoomId).update({
+                        status: 'turno_joao',
+                        'estadoJogo.turnoDe': 'criador',
+                        atualizadaEm: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                } catch(e) {}
+            }
+        };
+    }
+
+    // -----------------------------------------------------------------
+    // FIX 3 — P2 não publica "turno_boss" falso após matar
+    // -----------------------------------------------------------------
+    const _origAtualizarSala = window.coopAtualizarSalaNoFirestore;
+    if (typeof _origAtualizarSala === 'function') {
+        window.coopAtualizarSalaNoFirestore = async function(estado) {
+            if (window._coopMode && coopRole === 'oponente' && estado.boss?.dead) {
+                console.log('[V10.6] P2 bloqueou publicação de turno_boss (já passou pro P1).');
+                return;
+            }
+            return _origAtualizarSala.apply(this, arguments);
+        };
+    }
+
+    // -----------------------------------------------------------------
+    // FIX 4 — P1 percebe o boss morto e assume a morte
+    // -----------------------------------------------------------------
+    const _origAplicarEstado = window.coopAplicarEstadoDoRoom;
+    if (typeof _origAplicarEstado === 'function') {
+        window.coopAplicarEstadoDoRoom = function(room) {
+            const r = _origAplicarEstado.apply(this, arguments);
+            
+            if (window._coopMode && coopRole === 'criador' && room.estadoJogo?.boss?.dead && !coopProcessandoMorteBoss && !coopPartidaConcluida) {
+                if (room.estadoJogo?.turnoDe === 'criador') {
+                    console.log('[V10.6] P1 assumindo processamento de morte (causada pelo P2)...');
+                    setTimeout(() => coopProcessarMorteBoss(), 600);
+                }
+            }
+            return r;
+        };
+    }
+
+    console.log('✅ [V10.6] Correção P2 matando boss instalada com sucesso.');
+})();
+// =================================================================
+// 💀 PATCH V10.7 — GAME OVER IMEDIATO SE QUALQUER HERÓI MORRER
+// -----------------------------------------------------------------
+// No Coop, a morte de um único herói encerra a batalha em derrota.
+// Isso evita que o outro jogador fique sozinho no tabuleiro.
+// =================================================================
+
+(function coopGameOverOnDeathV107() {
+    if (window._coopV107) return;
+    window._coopV107 = true;
+
+    // Função central que checa a morte e encerra
+    function checarMorte(t, wasDead) {
+        if (window._coopMode && !coopPartidaConcluida && t && players.includes(t) && !wasDead && t.hp <= 0) {
+            console.log(`[V10.7] Herói ${t.name} morreu. Game Over Coop imediato.`);
+            coopPartidaConcluida = true;
+
+            // Avisa o outro jogador via Firestore
+            if (coopRoomId) {
+                fbDb.collection(COOP_ROOMS).doc(coopRoomId).update({
+                    status: 'concluida',
+                    vencedor: 'boss',
+                    atualizadaEm: firebase.firestore.FieldValue.serverTimestamp(),
+                }).catch(e => console.warn('[V10.7] Erro ao publicar derrota:', e));
+            }
+
+            // Mostra a tela de derrota local
+            setTimeout(() => {
+                if (typeof coopFinalizar === 'function') {
+                    coopFinalizar(false);
+                }
+            }, 1000);
+        }
+    }
+
+    // 1. Hook no applyDmg (usado pelo Boss AI para dar dano nos heróis)
+    const _origApplyDmg = window.applyDmg;
+    if (typeof _origApplyDmg === 'function') {
+        window.applyDmg = function(t, amt) {
+            const wasDead = t ? t.dead : false;
+            const r = _origApplyDmg.apply(this, arguments);
+            checarMorte(t, wasDead);
+            return r;
+        };
+    }
+
+    // 2. Hook no coopApplyDmg (usado pelo P2 ou P1 caso haja ataque amigo, ou fallback)
+    const _origCoopApplyDmg = window.coopApplyDmg;
+    if (typeof _origCoopApplyDmg === 'function') {
+        window.coopApplyDmg = function(t, amt) {
+            const wasDead = t ? t.dead : false;
+            const r = _origCoopApplyDmg.apply(this, arguments);
+            checarMorte(t, wasDead);
+            return r;
+        };
+    }
+
+    console.log('✅ [V10.7] Patch Game Over em caso de morte de herói aplicado.');
+})();
+// =================================================================
+// ⚔️ COOP V10.8 — CORREÇÃO DO P2 (P2 não via o novo boss)
+// -----------------------------------------------------------------
+// Quando o P2 matava o boss, a flag coopBossMortoNesteTurno ficava
+// true. O P1 avançava a fila e mandava o novo boss (ex: Jaci), mas
+// a flag travava a atualização no P2, impedindo o P2 de trocar o
+// boss morto pelo novo.
+// =================================================================
+
+(function coopV108() {
+    if (window._coopV108) return;
+    window._coopV108 = true;
+
+    console.log('✅ [V10.8] Instalando correção para P2 receber o novo boss...');
+
+    const _origAplicarEstado = window.coopAplicarEstadoDoRoom;
+    if (typeof _origAplicarEstado === 'function') {
+        window.coopAplicarEstadoDoRoom = function(room) {
+            // Se eu sou o P2 e a sala está me mandando um boss VIVO
+            if (window._coopMode && coopRole === 'oponente') {
+                if (room?.estadoJogo?.boss && !room.estadoJogo.boss.dead) {
+                    // Eu tinha matado o boss anterior? Se sim, limpo a flag
+                    // para que a trava do V8.7 não bloqueie a atualização.
+                    if (window.coopBossMortoNesteTurno) {
+                        console.log('[V10.8] P2 limpando flag de boss morto para aceitar o novo.');
+                        window.coopBossMortoNesteTurno = false;
+                    }
+                    // Garante que o estado de morte local está limpo
+                    coopProcessandoMorteBoss = false;
+                }
+            }
+
+            return _origAplicarEstado.apply(this, arguments);
+        };
+    }
+
+    console.log('✅ [V10.8] Correção P2 instalada com sucesso.');
+})();
+// =================================================================
+// ⚔️ COOP V10.9 — DESTRAVADOR FORÇADO DO P2 (Boss Fantasma)
+// -----------------------------------------------------------------
+// Se o P2 receber um boss vivo da sala, limpa à força as flags
+// de morte (coopProcessandoMorteBoss, coopBossMortoNesteTurno) e
+// restaura o boss local para o P2 poder jogar.
+// =================================================================
+
+(function coopV109() {
+    if (window._coopV109) return;
+    window._coopV109 = true;
+
+    console.log('✅ [V10.9] Instalando destravador do P2...');
+
+    const _origAplicarEstado = window.coopAplicarEstadoDoRoom;
+    if (typeof _origAplicarEstado === 'function') {
+        window.coopAplicarEstadoDoRoom = function(room) {
+            // Se é o P2 e a sala mandou um boss VIVO
+            if (window._coopMode && coopRole === 'oponente' && room?.estadoJogo?.boss) {
+                const bossRoom = room.estadoJogo.boss;
+                
+                if (!bossRoom.dead) {
+                    // Limpa as travas de morte locais do P2
+                    coopProcessandoMorteBoss = false;
+                    window.coopBossMortoNesteTurno = false;
+                    coopBossRunning = false;
+
+                    // Força o boss local a aceitar a vida e o tipo da sala
+                    if (boss && boss.dead) {
+                        boss.dead = false;
+                        console.log('[V10.9] P2 destravou o boss local (fantasma removido).');
+                    }
+                    boss.hp = bossRoom.hp;
+                    boss.maxHp = bossRoom.maxHp;
+                    boss.type = coopBossTypeNormalize(bossRoom.type);
+                    
+                    // Restaura a imagem do boss
+                    const imgBoss = document.getElementById('imgBoss');
+                    if (imgBoss) {
+                        const sprite = coopGetBossSprite(boss.type);
+                        if (sprite) imgBoss.src = sprite;
+                    }
+                }
+            }
+            return _origAplicarEstado.apply(this, arguments);
+        };
+    }
+
+    // Monitor de segurança: se por algum motivo o listener não atualizar,
+    // o monitor força o destravamento a cada 1s.
+    setInterval(() => {
+        if (!window._coopMode) return;
+        if (coopRole !== 'oponente') return;
+        if (coopPartidaConcluida) return;
+        if (!coopRoomData) return;
+
+        const bossRoom = coopRoomData.estadoJogo?.boss;
+        const turnoDe = coopRoomData.estadoJogo?.turnoDe;
+
+        // Se a sala diz que o boss tá vivo e é minha vez de jogar
+        if (bossRoom && !bossRoom.dead && turnoDe === 'oponente') {
+            // Se o meu boss local tá morto ou processando morte, destrava!
+            if (boss.dead || coopProcessandoMorteBoss || window.coopBossMortoNesteTurno) {
+                console.log('[V10.9] Monitor: P2 destravando o turno forçadamente.');
+                coopProcessandoMorteBoss = false;
+                window.coopBossMortoNesteTurno = false;
+                boss.dead = false;
+                boss.hp = bossRoom.hp;
+                boss.maxHp = bossRoom.maxHp;
+                
+                if (typeof coopDesbloquear === 'function') coopDesbloquear();
+            }
+        }
+    }, 1000);
+
+    console.log('✅ [V10.9] Destravador do P2 instalado com sucesso.');
+})();
+// =================================================================
+// 💀 PATCH V10.10 — DEATH WATCHDOG (Morte de um = Game Over)
+// -----------------------------------------------------------------
+// Independente de onde o dano veio, se qualquer herói chegar a 0 
+// de vida, o jogo encerra imediatamente com derrota para os dois.
+// =================================================================
+
+(function coopDeathWatchdogV1010() {
+    if (window._coopV1010) return;
+    window._coopV1010 = true;
+
+    console.log('✅ [V10.10] Instalando Death Watchdog (fim imediato na morte)...');
+
+    // Monitor implacável: verifica a vida dos heróis a cada 500ms
+    setInterval(() => {
+        // Só age no modo coop, se o jogo estiver rolando
+        if (!window._coopMode) return;
+        if (coopPartidaConcluida || coopFinalizando) return;
+        if (!players || players.length < 2) return;
+
+        // Verifica se ALGUM herói (P1 ou P2) morreu
+        const alguemMorreu = players.some(p => p.dead);
+
+        if (alguemMorreu) {
+            console.log('[V10.10] ⚠️ Herói morreu! Forçando fim de jogo...');
+            
+            // Trava tudo para não executar duas vezes
+            coopPartidaConcluida = true;
+            coopFinalizando = true;
+
+            // Avisa o Firestore que quem venceu foi o Boss
+            if (coopRoomId) {
+                fbDb.collection(COOP_ROOMS).doc(coopRoomId).update({
+                    status: 'concluida',
+                    vencedor: 'boss',
+                    atualizadaEm: firebase.firestore.FieldValue.serverTimestamp(),
+                }).catch(e => console.warn('[V10.10] Erro ao publicar morte:', e));
+            }
+
+            // Mostra a tela de derrota
+            setTimeout(() => {
+                if (typeof coopFinalizar === 'function') {
+                    coopFinalizar(false);
+                }
+            }, 1200);
+        }
+    }, 500);
+
+    console.log('✅ [V10.10] Vigia de morte ativado.');
+})();
+// =================================================================
+// ⚔️ COOP V10.12 — CONSERTO FINAL (PA e Morte de 1 Herói)
+// -----------------------------------------------------------------
+// 1. Conserta o PA: espera o ataque acabar antes de trocar de boss.
+// 2. Conserta a Morte: Game Over imediato se QUALQUER herói morrer.
+// =================================================================
+
+(function coopV1012() {
+    if (window._coopV1012) return;
+    window._coopV1012 = true;
+
+    console.log('✅ [V10.12] Instalando correções de PA e Fim de Jogo...');
+
+    // -----------------------------------------------------------------
+    // FIX 1 — PA matando o próximo boss (Espera o ataque acabar)
+    // -----------------------------------------------------------------
+    const _origProcessarMorte = window.coopProcessarMorteBoss;
+    if (typeof _origProcessarMorte === 'function') {
+        window.coopProcessarMorteBoss = async function() {
+            if (!window._coopMode) return _origProcessarMorte.apply(this, arguments);
+
+            // Se for o P1 e a execução do ataque ainda estiver rolando, espera.
+            if (coopRole === 'criador') {
+                let tentativas = 0;
+                while (window.isExecutingAction && tentativas < 30) {
+                    await new Promise(r => setTimeout(r, 100));
+                    tentativas++;
+                }
+            }
+            
+            // Agora deixa o fluxo original (V10.6) cuidar de avançar a fila
+            return _origProcessarMorte.apply(this, arguments);
+        };
+    }
+
+    // -----------------------------------------------------------------
+    // FIX 2 — Fim de Jogo se 1 herói morrer
+    // -----------------------------------------------------------------
+    const _origPublicar = window.coopPublicarEstado;
+    if (typeof _origPublicar === 'function') {
+        window.coopPublicarEstado = async function() {
+            if (!window._coopMode) return _origPublicar.apply(this, arguments);
+
+            // Se QUALQUER herói morrer, a gente força o fim.
+            if (players && players.some(p => p.dead)) {
+                if (coopPartidaConcluida) return;
+                console.log('[V10.12] Herói morreu. Publicando derrota...');
+                coopPartidaConcluida = true;
+
+                if (coopRoomId) {
+                    try {
+                        await fbDb.collection(COOP_ROOMS).doc(coopRoomId).update({
+                            status: 'concluida',
+                            vencedor: 'boss',
+                            atualizadaEm: firebase.firestore.FieldValue.serverTimestamp(),
+                        });
+                    } catch(e) {}
+                }
+                
+                if (typeof coopFinalizar === 'function') {
+                    coopFinalizar(false);
+                }
+                return;
+            }
+
+            // Se todos vivos, publica normal
+            return _origPublicar.apply(this, arguments);
+        };
+    }
+
+    // Monitor para o P2 morrer no turno do boss (já que o P2 não publica estado quando morre)
+    setInterval(() => {
+        if (!window._coopMode) return;
+        if (coopPartidaConcluida || coopFinalizando) return;
+        if (!players || players.length < 2) return;
+
+        if (players.some(p => p.dead)) {
+            console.log('[V10.12] Monitor: Herói morto detectado. Encerrando...');
+            coopPartidaConcluida = true;
+            
+            if (coopRoomId) {
+                fbDb.collection(COOP_ROOMS).doc(coopRoomId).update({
+                    status: 'concluida',
+                    vencedor: 'boss',
+                    atualizadaEm: firebase.firestore.FieldValue.serverTimestamp(),
+                }).catch(() => {});
+            }
+
+            setTimeout(() => {
+                if (typeof coopFinalizar === 'function') coopFinalizar(false);
+            }, 1000);
+        }
+    }, 500);
+
+    console.log('✅ [V10.12] Conserto final aplicado com sucesso.');
+})();
+// =================================================================
+// 💀 COOP V10.13 — COMUNICAÇÃO DE GAME OVER E TELA DE DERROTA
+// -----------------------------------------------------------------
+// 1. Se alguém morrer, a sala é trancada em "concluida".
+// 2. O P2 não consegue mais sobrescrever o "concluida" com "turno".
+// 3. Troca o alert() feio pela tela de derrota do jogo.
+// =================================================================
+
+(function coopV1013() {
+    if (window._coopV1013) return;
+    window._coopV1013 = true;
+
+    console.log('✅ [V10.13] Instalando comunicação de Game Over...');
+
+    // -----------------------------------------------------------------
+    // FIX 1 — Bloquear publicação se a partida já acabou
+    // -----------------------------------------------------------------
+    const _origAtualizar = window.coopAtualizarSalaNoFirestore;
+    if (typeof _origAtualizar === 'function') {
+        window.coopAtualizarSalaNoFirestore = async function(estado) {
+            // Se a partida já era pra ter acabado, o P2 NÃO pode
+            // sobrescrever o status 'concluida' com 'turno_joao'.
+            if (coopPartidaConcluida) {
+                console.log('[V10.13] Publicação bloqueada: partida já concluída.');
+                return;
+            }
+            return _origAtualizar.apply(this, arguments);
+        };
+    }
+
+    // O mesmo para o publicar estado básico
+    const _origPublicar = window.coopPublicarEstado;
+    if (typeof _origPublicar === 'function') {
+        window.coopPublicarEstado = async function() {
+            if (coopPartidaConcluida) return;
+            return _origPublicar.apply(this, arguments);
+        };
+    }
+
+    // -----------------------------------------------------------------
+    // FIX 2 — O P2 recebe o 'concluida' e destrava na hora
+    // -----------------------------------------------------------------
+    // Substitui o listener para garantir que o P2 não ignore o fim de jogo
+    // se a flag coopFinalizando estiver ativa por algum motivo.
+    const _origListener = window.coopInstalarListener;
+    if (typeof _origListener === 'function') {
+        window.coopInstalarListener = function() {
+            const r = _origListener.apply(this, arguments);
+            
+            // Adiciona um monitor para o P2 que checa o Firestore
+            setInterval(() => {
+                if (!window._coopMode || coopRole !== 'oponente') return;
+                if (coopFinalizando) return;
+
+                // Se a sala no Firestore diz que concluiu, força a finalização
+                if (coopRoomData && coopRoomData.status === 'concluida') {
+                    console.log('[V10.13] P2 detectou conclusão. Encerrando tela...');
+                    coopPartidaConcluida = true;
+                    coopFinalizando = true;
+                    if (typeof coopFinalizar === 'function') {
+                        coopFinalizar(false);
+                    }
+                }
+            }, 1000);
+
+            return r;
+        };
+    }
+
+    // -----------------------------------------------------------------
+    // FIX 3 — Tela de Derrota Bonita (Substitui o Alert)
+    // -----------------------------------------------------------------
+    const _origFinalizar = window.coopFinalizar;
+    if (typeof _origFinalizar === 'function') {
+        window.coopFinalizar = async function(vitoria) {
+            // Se for derrota, mostra a tela bonita do jogo
+            if (!vitoria) {
+                if (typeof stopAllAudio === 'function') stopAllAudio();
+                
+                // Avisa o Firestore que acabou (por segurança)
+                if (coopRoomId) {
+                    fbDb.collection(COOP_ROOMS).doc(coopRoomId).update({
+                        status: 'concluida',
+                        vencedor: 'boss'
+                    }).catch(() => {});
+                }
+
+                // Limpa a sala local para não voltar pra ela
+                const salaId = coopRoomId;
+                coopRoomId = null;
+                coopPartidaConcluida = true;
+
+                // Mostra o overlay de derrota padrão do jogo
+                if (typeof showStoryDefeatScreen === 'function') {
+                    showStoryDefeatScreen({ name: 'Batalha Coop' }, []);
+                } else if (typeof showEndGame === 'function') {
+                    showEndGame("GAME OVER", false);
+                } else {
+                    alert("💀 DERROTA COOP...");
+                }
+
+                // Volta para a aldeia após alguns segundos (quando fechar a tela)
+                // O botão da tela de derrota já chama a função de voltar.
+                return;
+            }
+
+            // Se for vitória, deixa o fluxo original cuidar
+            return _origFinalizar.apply(this, arguments);
+        };
+    }
+
+    console.log('✅ [V10.13] Comunicação de Game Over instalada.');
+})();
+// =================================================================
+// ⚔️ COOP V10.14 — FIX HP DOBRADO E BOTÃO DE RETRY
+// -----------------------------------------------------------------
+// 1. Impede que o P2 dobre o HP ao ler o estado da sala.
+// 2. Remove o botão "Tentar Novamente" da tela de derrota.
+// =================================================================
+
+(function coopV1014() {
+    if (window._coopV1014) return;
+    window._coopV1014 = true;
+
+    console.log('✅ [V10.14] Instalando correções de HP e Retry...');
+
+    // -----------------------------------------------------------------
+    // FIX 1 — Impedir HP Dobrado
+    // -----------------------------------------------------------------
+    const _origRebuild = window.coopRebuildPlayers;
+    if (typeof _origRebuild === 'function') {
+        window.coopRebuildPlayers = function() {
+            const rd = coopRoomData || {};
+            const temEstado = rd.estadoJogo && rd.estadoJogo.players && rd.estadoJogo.players.length === 2;
+            
+            // Chama o rebuild original (que aplica o bônus de nível erroneamente)
+            const r = _origRebuild.apply(this, arguments);
+            
+            // ⭐ SE O ESTADO VEIO DO FIRESTORE: O HP JÁ ESTÁ CALCULADO!
+            // Vamos reverter o bônus que foi somado por engano.
+            if (temEstado && players && players.length === 2) {
+                players.forEach((p, i) => {
+                    const estadoP = rd.estadoJogo.players[i];
+                    if (estadoP && p.levelBonusApplied) {
+                        // O HP verdadeiro é o que veio do Firestore
+                        p.maxHp = estadoP.maxHp;
+                        p.hp = estadoP.hp;
+                        console.log(`[V10.14] HP de ${p.name} restaurado do Firestore: ${p.hp}/${p.maxHp}`);
+                    }
+                });
+                if (typeof updateVisuals === 'function') updateVisuals();
+                if (typeof updateHeroCard === 'function') updateHeroCard();
+            }
+            return r;
+        };
+    }
+
+    // -----------------------------------------------------------------
+    // FIX 2 — Remover o botão "Tentar Novamente" (Retry)
+    // -----------------------------------------------------------------
+    const _origFinalizar = window.coopFinalizar;
+    if (typeof _origFinalizar === 'function') {
+        window.coopFinalizar = async function(vitoria) {
+            const r = await _origFinalizar.apply(this, arguments);
+            
+            // Se for derrota, a tela do história.js é montada.
+            // A gente espera 100ms e remove o botão quebrado.
+            if (!vitoria) {
+                setTimeout(() => {
+                    const btns = document.querySelectorAll('#storyVictoryOverlay .story-result-btn');
+                    btns.forEach(btn => {
+                        if (btn.innerHTML.includes('TENTAR NOVAMENTE') || btn.innerHTML.includes('retryStoryPhase')) {
+                            btn.remove();
+                            console.log('[V10.14] Botão "Tentar Novamente" removido da tela de Coop.');
+                        }
+                    });
+                }, 100);
+            }
+            return r;
+        };
+    }
+
+    console.log('✅ [V10.14] Correções aplicadas com sucesso.');
+})();
+// =================================================================
+// ⚔️ COOP V10.19 — FIM DO HP FANTASMA E BOTÃO RETRY
+// =================================================================
+
+(function coopV1019() {
+    if (window._coopV1019) return;
+    window._coopV1019 = true;
+
+    console.log('✅ [V10.19] Aplicando correção do HP Fantasma (Placeholder)...');
+
+    // -----------------------------------------------------------------
+    // FIX 1 — Corrigir o HP do P2 antes de montar o tabuleiro
+    // -----------------------------------------------------------------
+    const _origRebuild = window.coopRebuildPlayers;
+    if (typeof _origRebuild === 'function') {
+        window.coopRebuildPlayers = function() {
+            const rd = coopRoomData || {};
+            
+            if (rd.estadoJogo && rd.estadoJogo.players) {
+                const p2State = rd.estadoJogo.players[1];
+                const p2Class = rd.oponente?.heroiClass || playerConfigs[1].class || 'Tupa';
+                
+                // Se o estado no Firestore diz que é Tupã, mas a sala diz que é Sumé
+                // (ou seja, o P2 acabou de entrar e o HP é do fantasma):
+                if (p2State && p2State.class !== p2Class) {
+                    const dataO = (typeof STORY_HERO_CLASSES !== 'undefined') ? STORY_HERO_CLASSES[p2Class] : null;
+                    const baseHp = dataO?.hp || 8; // Pega o HP base real do Sumé (8)
+                    
+                    // Corrige o estado antes que o jogo leia
+                    p2State.class = p2Class;
+                    p2State.hp = baseHp;
+                    p2State.maxHp = baseHp;
+                    
+                    console.log(`[V10.19] HP do P2 corrigido do fantasma (16) para ${p2Class} (${baseHp}).`);
+                }
+            }
+
+            // Roda o rebuild original com o estado já corrigido
+            return _origRebuild.apply(this, arguments);
+        };
+    }
+
+    // -----------------------------------------------------------------
+    // FIX 2 — Remover o botão "Tentar Novamente" na tela de derrota
+    // -----------------------------------------------------------------
+    const observer = new MutationObserver(() => {
+        // O botão tem o onclick="retryStoryPhase()"
+        const btn = document.querySelector('button[onclick="retryStoryPhase()"]');
+        if (btn) {
+            btn.remove();
+            console.log('[V10.19] Botão "Tentar Novamente" removido da tela.');
+        }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    console.log('✅ [V10.19] Correções aplicadas com sucesso.');
+})();
+// =================================================================
+// ⚔️ COOP V10.21 — A CURA DEFINITIVA DO HP (Firestore não sobrescreve)
+// =================================================================
+
+(function coopV1021() {
+    if (window._coopV1021) return;
+    window._coopV1021 = true;
+
+    console.log('✅ [V10.21] Protegendo o HP contra o atraso do Firestore...');
+
+    // -----------------------------------------------------------------
+    // FIX 1 — Ignorar o HP do Firestore se for o Fantasma
+    // -----------------------------------------------------------------
+    const _origAplicar = window.coopAplicarEstadoDoRoom;
+    if (typeof _origAplicar === 'function') {
+        window.coopAplicarEstadoDoRoom = function(room) {
+            // Antes do jogo aplicar o estado, a gente filtra o HP
+            if (room?.estadoJogo?.players && players.length >= 2) {
+                room.estadoJogo.players.forEach((pData, i) => {
+                    // Se a classe no Firestore é DIFERENTE da classe local
+                    // (ex: Firestore tem Tupa de placeholder, mas o player é Sume)
+                    if (players[i] && pData.class !== players[i].class) {
+                        // Nós ignoramos o HP do Firestore e forçamos o HP local
+                        pData.hp = players[i].hp;
+                        pData.maxHp = players[i].maxHp;
+                        pData.class = players[i].class;
+                        console.log(`[V10.21] Firestore tentou sobrescrever HP com ${pData.class}. Ignorado. Mantendo ${players[i].class} com ${players[i].hp} HP.`);
+                    }
+                });
+            }
+            return _origAplicar.apply(this, arguments);
+        };
+    }
+
+    // -----------------------------------------------------------------
+    // FIX 2 — Remover o botão "Tentar Novamente" (Retry)
+    // -----------------------------------------------------------------
+    const observer = new MutationObserver(() => {
+        const btns = document.querySelectorAll('#storyVictoryOverlay .story-result-btn');
+        btns.forEach(btn => {
+            if (btn.innerHTML.includes('TENTAR NOVAMENTE') || btn.getAttribute('onclick')?.includes('retryStoryPhase')) {
+                btn.remove();
+                console.log('[V10.21] Botão "Tentar Novamente" removido da tela.');
+            }
+        });
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    console.log('✅ [V10.21] Correções aplicadas.');
+})();
+// =================================================================
+// ⚔️ ONLINE V10.23 — O FIM DOS BÔNUS FANTASMAS (PVP e COOP)
+// -----------------------------------------------------------------
+// 1. Desativa Títulos no PVP e no Coop.
+// 2. Impede duplicação de Nível no PVP.
+// 3. Impede duplicação de Nível no Coop.
+// =================================================================
+
+(function onlineFixHpV1023() {
+    if (window._onlineFixHpV1023) return;
+    window._onlineFixHpV1023 = true;
+
+    console.log('✅ [V10.23] Instalando correção de HP (PVP + Coop)...');
+
+    // -----------------------------------------------------------------
+    // FIX 1 — Desativar Títulos no PVP e Coop (Evita o +3 fantasma)
+    // -----------------------------------------------------------------
+    const _origInitGame = window.initGame;
+    if (typeof _origInitGame === 'function') {
+        window.initGame = async function() {
+            const isOnline = window._pvpMode || window._coopMode;
+            let tituloSalvo = null;
+
+            if (isOnline && typeof ACTIVE_TITLE !== 'undefined' && ACTIVE_TITLE !== null) {
+                tituloSalvo = ACTIVE_TITLE;
+                window.ACTIVE_TITLE = null; // Desativa o título na inicialização
+            }
+
+            const r = await _origInitGame.apply(this, arguments);
+
+            if (isOnline && typeof ACTIVE_TITLE !== 'undefined' && tituloSalvo !== null) {
+                window.ACTIVE_TITLE = tituloSalvo; // Restaura
+            }
+            return r;
+        };
+    }
+
+    // -----------------------------------------------------------------
+    // FIX 2 — Bloquear duplicação de Nível no PVP
+    // -----------------------------------------------------------------
+    const _origPvpRebuild = window.pvpRebuildPlayers;
+    if (typeof _origPvpRebuild === 'function') {
+        window.pvpRebuildPlayers = function() {
+            const temEstado = pvpRoomData?.estadoJogo?.players?.length === 2;
+
+            if (temEstado) {
+                const _origLvlBonus = window.getHeroBonusFromLevel;
+                const _origEquip = window.applyHeroEquipment;
+                const _origTitle = window.applyTitleBonus;
+
+                window.getHeroBonusFromLevel = () => ({ hp: 0, atk: 0, formAtk: 0, paAtk: 0 });
+                window.applyHeroEquipment = () => {};
+                window.applyTitleBonus = () => {};
+
+                const r = _origPvpRebuild.apply(this, arguments);
+
+                window.getHeroBonusFromLevel = _origLvlBonus;
+                window.applyHeroEquipment = _origEquip;
+                window.applyTitleBonus = _origTitle;
+                return r;
+            }
+            return _origPvpRebuild.apply(this, arguments);
+        };
+    }
+
+    // -----------------------------------------------------------------
+    // FIX 3 — Bloquear duplicação de Nível no COOP (A correção faltante)
+    // -----------------------------------------------------------------
+    const _origCoopRebuild = window.coopRebuildPlayers;
+    if (typeof _origCoopRebuild === 'function') {
+        window.coopRebuildPlayers = function() {
+            const temEstado = coopRoomData?.estadoJogo?.players?.length === 2;
+
+            if (temEstado) {
+                const _origLvlBonus = window.getHeroBonusFromLevel;
+                const _origEquip = window.applyHeroEquipment;
+                const _origTitle = window.applyTitleBonus;
+
+                window.getHeroBonusFromLevel = () => ({ hp: 0, atk: 0, formAtk: 0, paAtk: 0 });
+                window.applyHeroEquipment = () => {};
+                window.applyTitleBonus = () => {};
+
+                const r = _origCoopRebuild.apply(this, arguments);
+
+                window.getHeroBonusFromLevel = _origLvlBonus;
+                window.applyHeroEquipment = _origEquip;
+                window.applyTitleBonus = _origTitle;
+                return r;
+            }
+            return _origCoopRebuild.apply(this, arguments);
+        };
+    }
+
+    console.log('✅ [V10.23] Correção aplicada no PVP e no Coop.');
+})();
+// =================================================================
+// ⚔️ ONLINE V10.24 — O FIM DA DUPLICAÇÃO DE NÍVEL (A Causa Real)
+// -----------------------------------------------------------------
+// O Coop iniciava o bônus de nível pela História e depois o
+// coopRebuildPlayers somava de novo. Este patch aplica uma trava
+// global para garantir que o nível só suba uma vez.
+// =================================================================
+
+(function onlineFixHpV1024() {
+    if (window._onlineFixHpV1024) return;
+    window._onlineFixHpV1024 = true;
+
+    console.log('✅ [V10.24] Instalando trava global contra bônus duplo...');
+
+    // -----------------------------------------------------------------
+    // FIX 1 — Travar o bônus de nível (Evita o 12 + 3 + 3 = 18)
+    // -----------------------------------------------------------------
+    const _origApplyLevel = window.applyHeroLevelBonus;
+    if (typeof _origApplyLevel === 'function') {
+        window.applyHeroLevelBonus = function(player) {
+            if (!player) return;
+            
+            // Se o bônus já foi aplicado neste herói, não soma de novo
+            if (player.levelBonusApplied) {
+                return; 
+            }
+            
+            // Aplica o bônus (12 + 3 = 15) e marca a flag
+            _origApplyLevel.apply(this, arguments);
+            player.levelBonusApplied = true;
+        };
+    }
+
+    // -----------------------------------------------------------------
+    // FIX 2 — Bloquear Títulos no Online
+    // -----------------------------------------------------------------
+    // Garante que o Título não entre no PVP nem no Coop, independente de onde seja chamado
+    const _origApplyTitle = window.applyTitleBonus;
+    if (typeof _origApplyTitle === 'function') {
+        window.applyTitleBonus = function(player) {
+            if (window._pvpMode || window._coopMode || window._eventoAtivo) {
+                return; // Ignora títulos nos modos online
+            }
+            return _origApplyTitle.apply(this, arguments);
+        };
+    }
+
+    console.log('✅ [V10.24] Nível travado. PVP e Coop devem ficar com o HP correto.');
+})();
+// =================================================================
+// ⚔️ ONLINE V10.25 — O CONSERTO FINAL DOS STATUS (TÍTULO E ATK)
+// -----------------------------------------------------------------
+// 1. Desativa o V10.24 (que quebrou o ATK).
+// 2. Remove o Título de todos os heróis no PVP e Coop.
+// 3. Força a soma do Bônus de Nível e Equipamento no ATK.
+// =================================================================
+
+(function onlineFixStatsV1025() {
+    if (window._onlineFixStatsV1025) return;
+    window._onlineFixStatsV1025 = true;
+
+    // Desativa a trava do V10.24 (que impedia o cálculo do ATK)
+    window._onlineFixHpV1024 = false;
+
+    console.log('✅ [V10.25] Instalando correção de ATK e Títulos...');
+
+    const _origInit = window.initGame;
+    if (typeof _origInit === 'function') {
+        window.initGame = async function() {
+            const r = await _origInit.apply(this, arguments);
+
+            // Se estamos no PVP ou Coop, a gente conserta os status
+            if (window._pvpMode || window._coopMode) {
+                if (!players || players.length === 0) return r;
+
+                players.forEach(p => {
+                    // 1. DESTRUIR O TÍTULO
+                    p.titleBonus = null;
+
+                    // 2. APLICAR O BÔNUS DE NÍVEL NO ATK
+                    if (!p.levelBonusApplied && typeof getHeroBonusFromLevel === 'function') {
+                        const b = getHeroBonusFromLevel(p.class) || {};
+                        // Soma o ATK do nível direto no bonusAtk
+                        p.bonusAtk = (p.bonusAtk || 0) + (b.atk || 0);
+                        p.levelBonusApplied = true;
+                    }
+
+                    // 3. APLICAR O EQUIPAMENTO (Arma/Amuleto)
+                    if (!p.equipApplied && typeof applyHeroEquipment === 'function') {
+                        try { 
+                            applyHeroEquipment(p); 
+                            p.equipApplied = true; 
+                        } catch(e) {}
+                    }
+                });
+
+                // Atualiza a tela para mostrar os valores corretos (3 + 6.5 = 9.5)
+                if (typeof updateHeroCard === 'function') updateHeroCard();
+                if (typeof updateVisuals === 'function') updateVisuals();
+            }
+            return r;
+        };
+    }
+
+    console.log('✅ [V10.25] Status calculados (sem Título, com Nível e Arma).');
+})();
+// =================================================================
+// ⚔️ ONLINE V10.32 — O ISOLAMENTO DO HP DO P2 (O Fim do Fantasma 15)
+// -----------------------------------------------------------------
+// O P2 estava herdando a vida do P1 (15) porque o Firestore carregava
+// o estado do placeholder ou do save anterior. Este patch força o P2
+// a assumir a vida base real do herói dele, ignorando o resto.
+// =================================================================
+
+(function fixP2HpIsolationV1032() {
+    if (window._fixP2HpIsolationV1032) return;
+    window._fixP2HpIsolationV1032 = true;
+
+    console.log('✅ [V10.32] Isolando HP do P2 (PVP e Coop)...');
+
+    function limparHpPlaceholder(rd, meuIdx, playerConfigsArray) {
+        if (!rd?.estadoJogo?.players) return;
+        
+        const p2Data = rd.estadoJogo.players[1];
+        if (!p2Data) return;
+
+        // Se eu sou o P2 (meuIdx === 1)
+        if (meuIdx === 1) {
+            const heroOponente = rd.oponente?.heroiClass || playerConfigsArray[1]?.class || 'Tupa';
+            const dataO = (typeof STORY_HERO_CLASSES !== 'undefined') ? STORY_HERO_CLASSES[heroOponente] : null;
+            const baseHp = dataO?.hp || 8;
+
+            // Se a classe no Firestore é diferente da minha classe real
+            // OU se o HP atual é maior que o meu HP base + um limite seguro (ex: +10)
+            // Significa que eu peguei o HP do P1 ou do Placeholder.
+            if (p2Data.class !== heroOponente || p2Data.maxHp > (baseHp + 10)) {
+                console.log(`[V10.32] HP do P2 limpo: ${p2Data.maxHp} -> ${baseHp} (Base do ${heroOponente})`);
+                p2Data.class = heroOponente;
+                p2Data.hp = baseHp;
+                p2Data.maxHp = baseHp;
+            }
+        }
+    }
+
+    // Hook no PVP
+    const _origPvpRebuild = window.pvpRebuildPlayers;
+    if (typeof _origPvpRebuild === 'function') {
+        window.pvpRebuildPlayers = function() {
+            limparHpPlaceholder(pvpRoomData, pvpMeuIdx(), playerConfigs);
+            return _origPvpRebuild.apply(this, arguments);
+        };
+    }
+
+    // Hook no Coop
+    const _origCoopRebuild = window.coopRebuildPlayers;
+    if (typeof _origCoopRebuild === 'function') {
+        window.coopRebuildPlayers = function() {
+            limparHpPlaceholder(coopRoomData, coopMeuIdx(), playerConfigs);
+            return _origCoopRebuild.apply(this, arguments);
+        };
+    }
+
+    console.log('✅ [V10.32] Correção aplicada. O P2 agora terá a vida real dele.');
+})();
+// =================================================================
+// ⚔️ ONLINE V10.33 — HP DO P2 FORÇADO E ISOLADO (Definitivo)
+// -----------------------------------------------------------------
+// Se o navegador for do P2, ele recalcula a própria vida e ignora o
+// Firestore. Se for do P1, ele limpa o placeholder para a vida base.
+// =================================================================
+
+(function fixP2HpV1033() {
+    if (window._fixP2HpV1033) return;
+    window._fixP2HpV1033 = true;
+
+    console.log('✅ [V10.33] Isolamento forçado de HP no PVP e Coop...');
+
+    function fixP2State(rd, meuIdx, heroOponente) {
+        if (!rd || !rd.estadoJogo || !rd.estadoJogo.players || !rd.estadoJogo.players[1]) return;
+        const p2Data = rd.estadoJogo.players[1];
+
+        if (meuIdx === 1) {
+            // ⭐ EU SOU O P2. Ignoro o Firestore e calculo meu HP real.
+            const dataO = STORY_HERO_CLASSES[heroOponente];
+            const baseHp = dataO ? dataO.hp : 8;
+            let bonusHp = 0;
+            
+            if (typeof getHeroBonusFromLevel === 'function') {
+                bonusHp += getHeroBonusFromLevel(heroOponente).hp || 0;
+            }
+            if (typeof getHeroEquipment === 'function' && typeof getAmuletById === 'function') {
+                const eq = getHeroEquipment(heroOponente);
+                if (eq && eq.amuleto) {
+                    const a = getAmuletById(eq.amuleto);
+                    if (a && a.efeito) bonusHp += a.efeito.hpBonus || 0;
+                }
+            }
+            
+            p2Data.class = heroOponente;
+            p2Data.maxHp = baseHp + bonusHp;
+            p2Data.hp = baseHp + bonusHp;
+            console.log(`[V10.33] P2 auto-corrigido. HP real: ${p2Data.maxHp}`);
+            
+        } else if (meuIdx === 0) {
+            // ⭐ EU SOU O P1. Vejo o P2 placeholder.
+            if (rd.oponente && rd.oponente.uid && p2Data.class !== heroOponente) {
+                const dataO = STORY_HERO_CLASSES[heroOponente];
+                const baseHp = dataO ? dataO.hp : 8;
+                p2Data.class = heroOponente;
+                p2Data.maxHp = baseHp;
+                p2Data.hp = baseHp;
+                console.log(`[V10.33] P1 limpou placeholder do P2. HP base: ${baseHp}`);
+            }
+        }
+    }
+
+    // Aplica no PVP
+    const _origPvpRebuild = window.pvpRebuildPlayers;
+    if (typeof _origPvpRebuild === 'function') {
+        window.pvpRebuildPlayers = function() {
+            if (typeof pvpRoomData !== 'undefined' && typeof pvpMeuIdx === 'function') {
+                const heroOponente = pvpRoomData?.oponente?.heroiClass || 'Tupa';
+                fixP2State(pvpRoomData, pvpMeuIdx(), heroOponente);
+            }
+            return _origPvpRebuild.apply(this, arguments);
+        };
+    }
+
+    // Aplica no Coop
+    const _origCoopRebuild = window.coopRebuildPlayers;
+    if (typeof _origCoopRebuild === 'function') {
+        window.coopRebuildPlayers = function() {
+            if (typeof coopRoomData !== 'undefined' && typeof coopMeuIdx === 'function') {
+                const heroOponente = coopRoomData?.oponente?.heroiClass || 'Tupa';
+                fixP2State(coopRoomData, coopMeuIdx(), heroOponente);
+            }
+            return _origCoopRebuild.apply(this, arguments);
+        };
+    }
+
+    console.log('✅ [V10.33] O HP do P2 agora é 100% independente e calculado localmente.');
+})();

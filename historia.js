@@ -39691,3 +39691,270 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
 // =================================================================
 // FIM DO PATCH V46.0
 // =================================================================
+// =================================================================
+// 🎯 V10.29 — MATEMÁTICA CORRETA NO CARD (Nível + Stat 11)
+// -----------------------------------------------------------------
+// O card (UI) ignorava o bônus de nível. Este patch reescreve o
+// updateHeroCard para calcular o dano exato igual a batalha faz.
+// =================================================================
+
+(function fixCardAtkV1029() {
+    if (window._fixCardAtkV1029) return;
+    window._fixCardAtkV1029 = true;
+
+    console.log('✅ [V10.29] Instalando matemática correta no card (ATK)...');
+
+    window.updateHeroCard = function() {
+        const list = document.getElementById('heroesStatusList');
+        if (!list) return;
+        if (typeof tutorialMode !== 'undefined' && tutorialMode) {
+            list.innerHTML = '';
+            return;
+        }
+        if (typeof players === 'undefined' || !Array.isArray(players)) return;
+
+        const ELEMENT_ICONS = {
+            'FOGO':  { key: 'elem_fogo',  color: '#e74c3c' },
+            'AGUA':  { key: 'elem_agua',  color: '#3498db' },
+            'TERRA': { key: 'elem_terra', color: '#27ae60' },
+            'AR':    { key: 'elem_ar',    color: '#f1c40f' }
+        };
+
+        list.innerHTML = '';
+
+        players.forEach((p, index) => {
+            if (!p) return;
+            
+            if (typeof calcularElementoDoHeroi === 'function') {
+                p.element = calcularElementoDoHeroi(p.class);
+            }
+
+            const row = document.createElement('div');
+            row.className = 'hero-status-row';
+            if (index === currentPlayerIdx && currentPlayerIdx >= 0) row.classList.add('current');
+            if (p.dead) row.classList.add('dead');
+
+            const elemInfo = ELEMENT_ICONS[p.element] || ELEMENT_ICONS['FOGO'];
+            row.style.borderLeftColor = elemInfo.color;
+
+            const hpPercent = p.maxHp > 0 ? Math.max(0, (p.hp / p.maxHp) * 100) : 0;
+            const hpColor = hpPercent > 60 ? '#2ecc71' : hpPercent > 30 ? '#f1c40f' : '#e74c3c';
+
+            const baseAtk = (typeof CLASS_DB !== 'undefined' && CLASS_DB[p.class]?.atk) || 0;
+            const equipBonus = p.bonusAtk || 0; 
+            
+            // ⭐ AQUI ESTÁ O SEGREDO: Puxa o Nível + Stat 11
+            let levelBonus = 0;
+            if (typeof getHeroBonusFromLevel === 'function') {
+                const b = getHeroBonusFromLevel(p.class) || {};
+                levelBonus = b.atk || 0;
+            }
+
+            const totalAtk = baseAtk + equipBonus + levelBonus;
+
+            let atkText = `${totalAtk}`;
+            const muiraquitaIcon = (typeof icon === 'function') ? icon('muiraquita') : '💎';
+            const starIcon = '⭐';
+
+            if (equipBonus > 0 && levelBonus > 0) {
+                atkText += ` <span style="color:#f39c12;font-size:0.7em;">(+${equipBonus}${muiraquitaIcon} +${levelBonus}${starIcon})</span>`;
+            } else if (equipBonus > 0) {
+                atkText += ` <span style="color:#f39c12;font-size:0.7em;">(+${equipBonus}${muiraquitaIcon})</span>`;
+            } else if (levelBonus > 0) {
+                atkText += ` <span style="color:#2ecc71;font-size:0.7em;">(+${levelBonus}${starIcon})</span>`;
+            }
+
+            const sprite = (typeof SPRITES !== 'undefined' && SPRITES[p.class]) || '';
+            const elemIconHTML = (typeof icon === 'function') ? icon(elemInfo.key) : '';
+
+            row.innerHTML = `
+                <img class="hero-status-sprite" src="${sprite}" alt="${p.name || ''}">
+                <div class="hero-status-info">
+                    <div class="hero-status-name">
+                        <span class="hero-element-icon" style="color: ${elemInfo.color}; text-shadow: 0 0 6px ${elemInfo.color};" title="${p.element}">
+                            ${elemIconHTML}
+                        </span>
+                        ${p.name || 'P'+(index+1)}
+                    </div>
+                    <div class="hero-status-hp">
+                        <span>${p.hp}/${p.maxHp}</span>
+                        <div class="mini-hp-bar">
+                            <div class="mini-hp-fill" style="width: ${hpPercent}%; background: ${hpColor};"></div>
+                        </div>
+                        <span class="hero-status-atk" title="Ataque total">${(typeof icon === 'function') ? icon('espadas') : '⚔️'} ${atkText}</span>
+                    </div>
+                </div>
+            `;
+            list.appendChild(row);
+        });
+
+        const turnName = document.getElementById('turnDisplayName');
+        if (turnName) {
+            if (currentPlayerIdx >= 0 && players[currentPlayerIdx]) {
+                const p = players[currentPlayerIdx];
+                const elemInfo = ELEMENT_ICONS[p.element] || ELEMENT_ICONS['FOGO'];
+                const elemIconHTML = (typeof icon === 'function') ? icon(elemInfo.key) : '';
+                turnName.innerHTML = `${elemIconHTML} ${p.name || `Jogador ${currentPlayerIdx+1}`}`;
+                const turnDisplay = document.getElementById('turnP_Active');
+                if (turnDisplay) turnDisplay.classList.add('active-turn');
+            } else {
+                turnName.textContent = 'Boss';
+            }
+        }
+    };
+
+    // Força a atualização imediata se o jogo estiver aberto
+    if (typeof players !== 'undefined' && players.length > 0) {
+        window.updateHeroCard();
+    }
+
+    console.log('✅ [V10.29] Card atualizado. O bônus de Nível/Stat11 agora aparece.');
+})();
+// =================================================================
+// 🎯 V10.30 — CORREÇÃO DO CÁLCULO DUPLO NA OCA (O +6 vs +4)
+// -----------------------------------------------------------------
+// A OCA estava somando o Stat do Nível 11 duas vezes no bônus de ATK.
+// Este patch esconde o Stat temporariamente na renderização para que
+// a conta fique idêntica à do combate (Total 7).
+// =================================================================
+
+(function fixOcaDoubleCountingV1030() {
+    if (window._fixOcaDoubleCountingV1030) return;
+    window._fixOcaDoubleCountingV1030 = true;
+
+    console.log('✅ [V10.30] Consertando cálculo duplo na OCA...');
+
+    const _origRenderOca = window.renderOcaScreenFiltered;
+    if (typeof _origRenderOca === 'function') {
+        window.renderOcaScreenFiltered = function() {
+            const backup = {};
+            
+            // O V42.0 soma o Stat11 manualmente, mesmo que o getHeroBonusFromLevel já tenha somado.
+            // Vamos ocultar o Stat11 durante a renderização da OCA para não contar duas vezes.
+            if (typeof STORY_PROGRESS !== 'undefined' && STORY_PROGRESS.heroStat11) {
+                for (let hc in STORY_PROGRESS.heroStat11) {
+                    backup[hc] = STORY_PROGRESS.heroStat11[hc];
+                    STORY_PROGRESS.heroStat11[hc] = { tipo: 'none', valor: 0 };
+                }
+            }
+
+            // Renderiza a OCA
+            const r = _origRenderOca.apply(this, arguments);
+
+            // Restaura os status do Nível 11 intactos
+            if (typeof STORY_PROGRESS !== 'undefined' && STORY_PROGRESS.heroStat11) {
+                for (let hc in backup) {
+                    STORY_PROGRESS.heroStat11[hc] = backup[hc];
+                }
+            }
+            return r;
+        };
+    }
+
+    // Força atualização se a OCA já estiver aberta na tela
+    const screen = document.getElementById('storyScreen');
+    if (screen && screen.classList.contains('active') && screen.innerHTML.includes('OCA')) {
+        window.renderOcaScreenFiltered();
+    }
+
+    console.log('✅ [V10.30] OCA corrigida. O +2 do Nível 11 não é mais contado duas vezes.');
+})();
+// =================================================================
+// 🎯 V10.31 — REESCRITA DEFINITIVA DO CARD DA OCA (MATEMÁTICA EXATA)
+// -----------------------------------------------------------------
+// O código antigo (V42.0) estava somando o stat11 mais de uma vez.
+// Este patch reescreve o cálculo visual do card da OCA para:
+//   1. Usar getHeroBonusFromLevel (que já tem Nível + Stat11).
+//   2. Somar o Equipamento.
+//   3. Ignorar o stat11 "solta" na tabela.
+// =================================================================
+
+(function fixOcaCardV1031() {
+    if (window._fixOcaCardV1031) return;
+    window._fixOcaCardV1031 = true;
+
+    console.log('✅ [V10.31] Reescrevendo matemática da OCA...');
+
+    const _origRenderOca = window.renderOcaScreenFiltered;
+    if (typeof _origRenderOca === 'function') {
+        window.renderOcaScreenFiltered = function() {
+            // Chama a renderização base (que desenha os cards vazios)
+            const r = _origRenderOca.apply(this, arguments);
+
+            // A gente espera um pouco (para vencer o setTimeout do patch antigo)
+            // e sobrescreve os textos de status com a conta correta.
+            setTimeout(() => {
+                document.querySelectorAll('.story-hero-card').forEach(card => {
+                    if (card.classList.contains('locked')) return;
+                    
+                    const onclickAttr = card.getAttribute('onclick') || '';
+                    const match = onclickAttr.match(/toggleHeroSelection\('((?:\\'|[^'])*)'\)/);
+                    if (!match) return;
+                    
+                    const heroClass = match[1].replace(/\\'/g, "'");
+                    const heroData = STORY_HERO_CLASSES[heroClass];
+                    if (!heroData) return;
+
+                    // 1. Valores Base
+                    const baseHp = heroData.hp;
+                    const baseAtk = heroData.atk;
+
+                    let bonusHp = 0;
+                    let bonusAtk = 0;
+
+                    // 2. Bônus de Nível + Nível 11 (Essa função JÁ retorna a soma dos dois)
+                    if (typeof getHeroBonusFromLevel === 'function') {
+                        const lvlBonus = getHeroBonusFromLevel(heroClass);
+                        bonusHp += lvlBonus.hp || 0;
+                        bonusAtk += lvlBonus.atk || 0;
+                    }
+
+                    // 3. Bônus de Equipamento (Arma e Amuleto)
+                    if (typeof getHeroEquipment === 'function') {
+                        const eq = getHeroEquipment(heroClass);
+                        
+                        if (eq.arma && typeof getWeaponById === 'function') {
+                            const w = getWeaponById(eq.arma);
+                            if (w) bonusAtk += w.atkBonus || 0;
+                        }
+                        
+                        if (eq.amuleto && typeof getAmuletById === 'function') {
+                            const a = getAmuletById(eq.amuleto);
+                            if (a && a.efeito) {
+                                bonusHp += a.efeito.hpBonus || 0;
+                                bonusAtk += a.efeito.atkBonus || 0;
+                            }
+                        }
+                    }
+
+                    // 4. Formatação Verde (+X)
+                    const formatarStat = (base, bonus) => {
+                        if (bonus === 0) return `${base}`;
+                        const cor = bonus > 0 ? '#8ac070' : '#d05050';
+                        const sinal = bonus > 0 ? '+' : '';
+                        return `${base} <span style="color:${cor}; font-weight:900; text-shadow: 0 0 4px rgba(0,0,0,0.8);">${sinal}${bonus}</span>`;
+                    };
+
+                    const hpText = formatarStat(baseHp, bonusHp);
+                    const atkText = formatarStat(baseAtk, bonusAtk);
+
+                    // 5. Atualiza o texto no Card
+                    const infoDiv = card.querySelector('.story-hero-level');
+                    if (infoDiv) {
+                        infoDiv.innerHTML = `${heroData.role} · HP ${hpText} · ATK ${atkText}`;
+                    }
+                });
+            }, 200); // 200ms garante que roda DEPOIS de todos os patches antigos
+
+            return r;
+        };
+    }
+
+    // Força atualização se a OCA já estiver aberta
+    const screen = document.getElementById('storyScreen');
+    if (screen && screen.classList.contains('active') && screen.innerHTML.includes('OCA')) {
+        window.renderOcaScreenFiltered();
+    }
+
+    console.log('✅ [V10.31] OCA corrigida definitivamente.');
+})();

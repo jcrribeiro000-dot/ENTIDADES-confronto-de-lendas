@@ -5012,3 +5012,49 @@ document.addEventListener("DOMContentLoaded", function() {
 // FIM DO ARQUIVO — V10.5
 // =================================================================
 // =================================================================
+// =================================================================
+// 🚫 DESATIVADOR DEFINITIVO DE TÍTULOS (na raiz)
+// -----------------------------------------------------------------
+// Impede o carregamento, salvamento e aplicação de Títulos.
+// 1. Limpa o LocalStorage.
+// 2. Anula a variável ACTIVE_TITLE.
+// 3. Sobrescreve as funções de bônus para não fazerem nada.
+// 4. Esconde o botão "TÍTULOS" da tela inicial.
+// =================================================================
+
+(function desativarTitulosEntidades() {
+    console.log('✅ [entidades] Desativando sistema de Títulos na raiz...');
+
+    // 1. Zera a variável global (já que estamos no mesmo escopo do arquivo)
+    try { ACTIVE_TITLE = null; } catch(e) {}
+
+    // 2. Limpa o save do navegador
+    try { localStorage.removeItem('entity_titles_data'); } catch(e) {}
+
+    // 3. Sobrescreve as funções principais para neutralizar o sistema
+    window.loadTitleData = function() { try { ACTIVE_TITLE = null; } catch(e) {} };
+    window.saveTitleData = function() {};
+    window.applyTitleBonus = function() {};       // Não aplica +0.5 no ATK/HP
+    window.removeTitleBonus = function() {};      // Não remove nada (pois não há)
+    window.checkTitleUnlocks = function() { return 0; };
+    window.updateTitleStats = function() {};      // Não computa progresso
+    window.triggerTitleUnlock = function() {};    // Não mostra notificação de unlock
+    window.updateActiveTitle = function() { ACTIVE_TITLE = null; };
+
+    // 4. Remove o botão "TÍTULOS" da tela inicial
+    document.addEventListener('DOMContentLoaded', () => {
+        const btns = document.querySelectorAll('.title-btn');
+        btns.forEach(btn => {
+            if (btn.innerHTML.includes('TÍTULOS')) {
+                btn.style.display = 'none';
+            }
+        });
+    });
+
+    // 5. Remove qualquer bônus residual dos heróis na memória
+    if (typeof players !== 'undefined' && Array.isArray(players)) {
+        players.forEach(p => { if (p) p.titleBonus = null; });
+    }
+
+    console.log('✅ [entidades] Títulos desativados com sucesso. O +0.5 morreu.');
+})();
