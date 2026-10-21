@@ -36326,3 +36326,2543 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
     console.log('• Handler evita duplicatas (btn._handler)');
     console.log('═══════════════════════════════════════════════════');
 })();
+// =================================================================
+// historia.js — BLOCO 122 (V37.2 — Fix HP do Pesadelo)
+// =================================================================
+(function fixHPPesadelo() {
+    if (window._fixHPPesadeloV372) return;
+    window._fixHPPesadeloV372 = true;
+
+    // 1. Cadastra o Pesadelo no banco de inimigos para o motor reconhecer
+    if (typeof STORY_ENEMIES !== 'undefined' && typeof EVENTO_PESADELO !== 'undefined') {
+        if (!STORY_ENEMIES['pesadelo']) {
+            STORY_ENEMIES['pesadelo'] = {
+                id: 'pesadelo',
+                name: EVENTO_PESADELO.nome || 'Pesadelo',
+                hp: EVENTO_PESADELO.hp || 200,
+                atk: EVENTO_PESADELO.atk || 6,
+                isBoss: true,
+                isEvento: true
+            };
+        }
+    }
+
+    // 2. Intercepta o início do evento para forçar o HP correto após o jogo carregar
+    const _origEventoIniciar = window.eventoIniciarBatalha;
+    if (typeof _origEventoIniciar === 'function') {
+        window.eventoIniciarBatalha = async function(bossId, faseId) {
+            // Chama a função original do evento
+            await _origEventoIniciar.apply(this, arguments);
+
+            // Se for o Pesadelo, força o HP e ATK corretos ignorando o initGame padrão
+            if (bossId === 'pesadelo' && window._eventoBatalha && window._eventoBatalha.isPesadelo) {
+                const hpBase = (typeof EVENTO_PESADELO !== 'undefined') ? EVENTO_PESADELO.hp : 200;
+                const mult = window._eventoBatalha.dificuldade?.hpMult || 1;
+                const hpFinal = Math.ceil(hpBase * mult);
+                
+                if (typeof boss !== 'undefined') {
+                    boss.maxHp = hpFinal;
+                    boss.hp = hpFinal;
+                }
+                
+                if (typeof updateVisuals === 'function') updateVisuals();
+                if (typeof updateBossCard === 'function') updateBossCard();
+                if (typeof updateHeaderBossName === 'function') updateHeaderBossName();
+                
+                console.log(`[V37.2] HP do Pesadelo ajustado para: ${hpFinal}`);
+            }
+        };
+    }
+})();
+// =================================================================
+// historia.js — BLOCO 123 (V38.0 — Craft Múltiplo e Limite 99)
+// -----------------------------------------------------------------
+// Permite craftar e estocar até 99 de cada arma/amuleto.
+// Altera a UI para mostrar a quantidade atual e o botão de forjar.
+// =================================================================
+
+(function craftMultiploV380() {
+    if (window._craftMultiploV380) return;
+    window._craftMultiploV380 = true;
+
+    const LIMITE_CRAFT = 99;
+
+    // Helper para contar quantas armas/amuletos o jogador tem
+    function countWeapon(id) {
+        return (STORY_PROGRESS.craftedWeapons || []).filter(w => w === id).length;
+    }
+    function countAmulet(id) {
+        return (STORY_PROGRESS.craftedAmulets || []).filter(a => a === id).length;
+    }
+
+    // ==============================================================
+    // 1. HANDLERS DE CRAFT E DESMANCHE
+    // ==============================================================
+
+    window.handleCraftWeapon = function(id) {
+        const w = getWeaponById(id);
+        if (!w) return;
+        if (countWeapon(id) >= LIMITE_CRAFT) {
+            showToast('❌ Limite', 'Você já tem 99 desta arma.', '❌');
+            return;
+        }
+        if (!isWeaponAvailable(id)) {
+            showToast('❌', 'Ato ainda não desbloqueado.', '❌');
+            return;
+        }
+        if (!hasMaterials(w.receita)) {
+            showToast('❌', 'Materiais insuficientes.', '❌');
+            return;
+        }
+        if ((STORY_PROGRESS.gold || 0) < w.custoOuro) {
+            showToast('❌', `Faltam ${w.custoOuro - (STORY_PROGRESS.gold||0)} de ouro.`, '❌');
+            return;
+        }
+
+        consumeMaterials(w.receita);
+        STORY_PROGRESS.gold -= w.custoOuro;
+        if (!Array.isArray(STORY_PROGRESS.craftedWeapons)) STORY_PROGRESS.craftedWeapons = [];
+        STORY_PROGRESS.craftedWeapons.push(id);
+        saveStoryProgress();
+        showToast('🔨 Forjada!', `${w.emoji} ${w.nome} (Total: ${countWeapon(id)})`, '🔨');
+        try { playSfx('win'); } catch(e) {}
+        renderTesourariaScreen();
+    };
+
+    window.handleCraftAmulet = function(id) {
+        const a = getAmuletById(id);
+        if (!a) return;
+        if (countAmulet(id) >= LIMITE_CRAFT) {
+            showToast('❌ Limite', 'Você já tem 99 deste amuleto.', '❌');
+            return;
+        }
+        if (!isAmuletAvailable(id)) {
+            showToast('❌', 'Ato ainda não desbloqueado.', '❌');
+            return;
+        }
+        if (!hasMaterials(a.receita)) {
+            showToast('❌', 'Materiais insuficientes.', '❌');
+            return;
+        }
+        if ((STORY_PROGRESS.gold || 0) < a.custoOuro) {
+            showToast('❌', `Faltam ${a.custoOuro - (STORY_PROGRESS.gold||0)} de ouro.`, '❌');
+            return;
+        }
+
+        consumeMaterials(a.receita);
+        STORY_PROGRESS.gold -= a.custoOuro;
+        if (!Array.isArray(STORY_PROGRESS.craftedAmulets)) STORY_PROGRESS.craftedAmulets = [];
+        STORY_PROGRESS.craftedAmulets.push(id);
+        saveStoryProgress();
+        showToast('🔨 Forjado!', `${a.emoji} ${a.nome} (Total: ${countAmulet(id)})`, '🔨');
+        try { playSfx('win'); } catch(e) {}
+        renderTesourariaScreen();
+    };
+
+    window.handleDismantleWeapon = function(id) {
+        const w = getWeaponById(id);
+        if (!w) return;
+        if (countWeapon(id) === 0) return;
+        if (!confirm(`Desmanchar 1 unidade de "${w.nome}"?\n\nVocê receberá 50% dos materiais de volta.`)) return;
+
+        const arr = STORY_PROGRESS.craftedWeapons;
+        const idx = arr.indexOf(id);
+        if (idx !== -1) arr.splice(idx, 1);
+
+        // Re-equilibrar equipamentos se necessário
+        let remaining = countWeapon(id);
+        let equipped = 0;
+        for (const hc in STORY_PROGRESS.heroEquipment || {}) {
+            if (STORY_PROGRESS.heroEquipment[hc].arma === id) {
+                equipped++;
+                if (equipped > remaining) STORY_PROGRESS.heroEquipment[hc].arma = null;
+            }
+        }
+
+        refundMaterials(w.receita, 0.5);
+        saveStoryProgress();
+        showToast('🔥 Desmanchada', `50% dos materiais devolvidos.`, '🔥');
+        renderTesourariaScreen();
+    };
+
+    window.handleDismantleAmulet = function(id) {
+        const a = getAmuletById(id);
+        if (!a) return;
+        if (countAmulet(id) === 0) return;
+        if (!confirm(`Desmanchar 1 unidade de "${a.nome}"?\n\nVocê receberá 50% dos materiais de volta.`)) return;
+
+        const arr = STORY_PROGRESS.craftedAmulets;
+        const idx = arr.indexOf(id);
+        if (idx !== -1) arr.splice(idx, 1);
+
+        let remaining = countAmulet(id);
+        let equipped = 0;
+        for (const hc in STORY_PROGRESS.heroEquipment || {}) {
+            if (STORY_PROGRESS.heroEquipment[hc].amuleto === id) {
+                equipped++;
+                if (equipped > remaining) STORY_PROGRESS.heroEquipment[hc].amuleto = null;
+            }
+        }
+
+        refundMaterials(a.receita, 0.5);
+        saveStoryProgress();
+        showToast('🔥 Desmanchado', `50% dos materiais devolvidos.`, '🔥');
+        renderTesourariaScreen();
+    };
+
+    // ==============================================================
+    // 2. UI DA TESOURARIA (Renders)
+    // ==============================================================
+
+    window.renderTesourariaScreen = function() {
+        const screen = document.getElementById('storyScreen');
+        if (!screen) return;
+
+        const inv = STORY_PROGRESS.inventory || {};
+        const materialIds = Object.keys(inv).filter(id => inv[id] > 0);
+        const totalXP = STORY_PROGRESS.totalXP || 0;
+        const totalGold = STORY_PROGRESS.gold || 0;
+
+        let contentHTML = '';
+        if (tesourariaTab === 'inventario') {
+            contentHTML = window.renderTesourariaInventario(materialIds);
+        } else if (tesourariaTab === 'forja') {
+            contentHTML = window.renderTesourariaForja();
+        } else if (tesourariaTab === 'amuletos') {
+            contentHTML = window.renderTesourariaAmuletos();
+        }
+
+        screen.innerHTML = `
+            <div class="story-container">
+                <div class="story-header">
+                    <h1 class="story-title">🏛️ TESOURARIA</h1>
+                    <p class="story-subtitle">Inventário, forja e amuletos.</p>
+                    <div style="text-align:center;margin-top:15px;display:flex;gap:15px;justify-content:center;flex-wrap:wrap;">
+                        <span class="story-stars-counter" style="background:rgba(58,42,24,.9);border:1px solid #6a5024;padding:8px 14px;border-radius:20px;font-family:'Cinzel',serif;font-weight:700;color:#e8b923;">
+                            ${uiIcon('xp')} ${totalXP} XP
+                        </span>
+                        <span class="story-stars-counter" style="background:rgba(58,42,24,.9);border:1px solid #6a5024;padding:8px 14px;border-radius:20px;font-family:'Cinzel',serif;font-weight:700;color:#e8b923;">
+                            ${uiIcon('gold')} ${totalGold}
+                        </span>
+                    </div>
+                </div>
+                <div class="tesouraria-tabs">
+                    <button class="tesouraria-tab ${tesourariaTab === 'inventario' ? 'active' : ''}" onclick="tesourariaTab='inventario'; renderTesourariaScreen();">📦 Inventário</button>
+                    <button class="tesouraria-tab ${tesourariaTab === 'forja' ? 'active' : ''}" onclick="tesourariaTab='forja'; renderTesourariaScreen();">⚔️ Forja de Armas</button>
+                    <button class="tesouraria-tab ${tesourariaTab === 'amuletos' ? 'active' : ''}" onclick="tesourariaTab='amuletos'; renderTesourariaScreen();">🧿 Forja de Amuletos</button>
+                </div>
+                <div class="tesouraria-content">${contentHTML}</div>
+                <div class="story-footer"><button class="story-back-btn" onclick="renderAldeiaScreen()">← VOLTAR À ALDEIA</button></div>
+            </div>
+        `;
+    };
+
+    window.renderTesourariaForja = function() {
+        const allWeapons = Object.values(STORY_WEAPONS).filter(w => isWeaponAvailable(w.id));
+        if (allWeapons.length === 0) return `<div class="tesouraria-empty"><div class="tesouraria-empty-icon">⚔️</div><div class="tesouraria-empty-text">Nenhuma forja liberada ainda.</div><div class="tesouraria-empty-hint">Complete fases para liberar receitas.</div></div>`;
+
+        const cardsHTML = allWeapons.map(w => {
+            const count = countWeapon(w.id);
+            const canCraft = hasMaterials(w.receita) && (STORY_PROGRESS.gold || 0) >= w.custoOuro && count < LIMITE_CRAFT;
+            const recHTML = Object.entries(w.receita).map(([matId, qty]) => {
+                const m = STORY_MATERIALS[matId];
+                if (!m) return '';
+                const has = STORY_PROGRESS.inventory[matId] || 0;
+                const ok = has >= qty ? 'ok' : 'no';
+                return `<span class="forge-recipe-mat ${ok}">${m.emoji} ${has}/${qty}</span>`;
+            }).join('');
+            const tipoLabel = { tacape:'Tacape', flecha:'Flecha', cajado:'Cajado' }[w.tipo];
+            const isCrafted = count > 0;
+            
+            let actionHTML = '';
+            if (count >= LIMITE_CRAFT) {
+                actionHTML = `
+                    <div class="forge-forged-tag" style="color:#e8b923;">✅ Limite Máximo (99)</div>
+                    <button class="forge-btn danger" onclick="handleDismantleWeapon('${w.id}')">🔥 Desmanchar 1</button>`;
+            } else {
+                actionHTML = `
+                    ${isCrafted ? `<div class="forge-forged-tag" style="color:#8ac070;">✅ Forjada (${count}/99)</div>` : ''}
+                    <div class="forge-ouro ${canCraft ? 'ok' : 'no'}">${uiIcon('gold')} ${w.custoOuro}</div>
+                    <button class="forge-btn" ${canCraft ? '' : 'disabled'} onclick="handleCraftWeapon('${w.id}')">
+                        ${canCraft ? (isCrafted ? '🔨 Forjar +1' : '🔨 Forjar') : '✕ Sem recursos'}
+                    </button>
+                    ${isCrafted ? `<button class="forge-btn danger" onclick="handleDismantleWeapon('${w.id}')">🔥 Desmanchar 1</button>` : ''}
+                `;
+            }
+            return `
+                <div class="forge-card ${isCrafted ? 'crafted' : ''}">
+                    <div class="forge-card-header">
+                        <div class="forge-emoji">${w.emoji}</div>
+                        <div class="forge-info">
+                            <div class="forge-name">${w.nome}</div>
+                            <div class="forge-meta">Ato ${w.ato} · ${tipoLabel} · +${w.atkBonus} ATK</div>
+                        </div>
+                    </div>
+                    <div class="forge-recipe">${recHTML}</div>
+                    <div class="forge-actions">${actionHTML}</div>
+                </div>`;
+        }).join('');
+        return `<div class="forge-grid">${cardsHTML}</div>`;
+    };
+
+    window.renderTesourariaAmuletos = function() {
+        const allAmulets = Object.values(STORY_AMULETS).filter(a => isAmuletAvailable(a.id));
+        if (allAmulets.length === 0) return `<div class="tesouraria-empty"><div class="tesouraria-empty-icon">🧿</div><div class="tesouraria-empty-text">Nenhum amuleto liberado ainda.</div><div class="tesouraria-empty-hint">Derrote o boss do ato para revelar o amuleto.</div></div>`;
+
+        const cardsHTML = allAmulets.map(a => {
+            const count = countAmulet(a.id);
+            const canCraft = hasMaterials(a.receita) && (STORY_PROGRESS.gold || 0) >= a.custoOuro && count < LIMITE_CRAFT;
+            const recHTML = Object.entries(a.receita).map(([matId, qty]) => {
+                const m = STORY_MATERIALS[matId];
+                if (!m) return '';
+                const has = STORY_PROGRESS.inventory[matId] || 0;
+                const ok = has >= qty ? 'ok' : 'no';
+                return `<span class="forge-recipe-mat ${ok}">${m.emoji} ${has}/${qty}</span>`;
+            }).join('');
+            const ef = a.efeito;
+            let efHTML = [];
+            if (ef.elementOverride) efHTML.push(`🎨 Elemento → ${ef.elementOverride}`);
+            if (ef.hpBonus)         efHTML.push(`❤️ +${ef.hpBonus} HP`);
+            if (ef.atkBonus)        efHTML.push(`⚔️ +${ef.atkBonus} ATK`);
+            if (ef.healPerTurn)     efHTML.push(`💚 Cura ${ef.healPerTurn} HP/turno`);
+            const isCrafted = count > 0;
+            
+            let actionHTML = '';
+            if (count >= LIMITE_CRAFT) {
+                actionHTML = `
+                    <div class="forge-forged-tag" style="color:#e8b923;">✅ Limite Máximo (99)</div>
+                    <button class="forge-btn danger" onclick="handleDismantleAmulet('${a.id}')">🔥 Desmanchar 1</button>`;
+            } else {
+                actionHTML = `
+                    ${isCrafted ? `<div class="forge-forged-tag" style="color:#8ac070;">✅ Forjado (${count}/99)</div>` : ''}
+                    <div class="forge-ouro ${canCraft ? 'ok' : 'no'}">${uiIcon('gold')} ${a.custoOuro}</div>
+                    <button class="forge-btn" ${canCraft ? '' : 'disabled'} onclick="handleCraftAmulet('${a.id}')">
+                        ${canCraft ? (isCrafted ? '🔨 Forjar +1' : '🔨 Forjar') : '✕ Sem recursos'}
+                    </button>
+                    ${isCrafted ? `<button class="forge-btn danger" onclick="handleDismantleAmulet('${a.id}')">🔥 Desmanchar 1</button>` : ''}
+                `;
+            }
+            return `
+                <div class="forge-card ${isCrafted ? 'crafted amulet' : 'amulet'}">
+                    <div class="forge-card-header">
+                        <div class="forge-emoji">${a.emoji}</div>
+                        <div class="forge-info">
+                            <div class="forge-name">${a.nome}</div>
+                            <div class="forge-meta">Ato ${a.ato}</div>
+                        </div>
+                    </div>
+                    <div class="forge-effects">${efHTML.join(' · ')}</div>
+                    <div class="forge-recipe">${recHTML}</div>
+                    <div class="forge-actions">${actionHTML}</div>
+                </div>`;
+        }).join('');
+        return `<div class="forge-grid">${cardsHTML}</div>`;
+    };
+
+    window.renderTesourariaInventario = function(materialIds) {
+        if (materialIds.length === 0) return `<div class="tesouraria-empty"><div class="tesouraria-empty-icon">📦</div><div class="tesouraria-empty-text">Seu inventário está vazio.</div><div class="tesouraria-empty-hint">Derrote inimigos para coletar materiais.</div></div>`;
+        
+        materialIds.sort((a, b) => (window.getMaterialPrice ? window.getMaterialPrice(b) : 2) - (window.getMaterialPrice ? window.getMaterialPrice(a) : 2));
+        const inv_count = (id) => STORY_PROGRESS.inventory[id] || 0;
+        const totalValue = materialIds.reduce((sum, id) => sum + (window.getMaterialPrice ? window.getMaterialPrice(id) : 2) * inv_count(id), 0);
+
+        const cardsHTML = materialIds.map(id => {
+            const m = STORY_MATERIALS[id] || { emoji: '❓', name: 'Desconhecido' };
+            const qty = STORY_PROGRESS.inventory[id] || 0;
+            const price = window.getMaterialPrice ? window.getMaterialPrice(id) : 2;
+            return `<div class="tesouraria-item"><div class="tesouraria-item-icon">${m.emoji}</div><div class="tesouraria-item-name">${m.name}</div><div class="tesouraria-item-qty">×${qty}</div><div class="tesouraria-item-price">${uiIcon('gold')} ${price} / un.</div></div>`;
+        }).join('');
+
+        const weaponCounts = {};
+        (STORY_PROGRESS.craftedWeapons || []).forEach(id => weaponCounts[id] = (weaponCounts[id] || 0) + 1);
+        const amuletCounts = {};
+        (STORY_PROGRESS.craftedAmulets || []).forEach(id => amuletCounts[id] = (amuletCounts[id] || 0) + 1);
+
+        const weapons = Object.keys(weaponCounts).map(id => ({ ...getWeaponById(id), count: weaponCounts[id] })).filter(w => w.id);
+        const amulets = Object.keys(amuletCounts).map(id => ({ ...getAmuletById(id), count: amuletCounts[id] })).filter(a => a.id);
+
+        const usageMap = {};
+        const eqMap = STORY_PROGRESS.heroEquipment || {};
+        for (const heroClass in eqMap) {
+            const e = eqMap[heroClass];
+            if (e.arma) { if(!usageMap[e.arma]) usageMap[e.arma] = []; usageMap[e.arma].push(heroClass); }
+            if (e.amuleto) { if(!usageMap[e.amuleto]) usageMap[e.amuleto] = []; usageMap[e.amuleto].push(heroClass); }
+        }
+
+        let weaponsHTML = '';
+        if (weapons.length === 0) {
+            weaponsHTML = `<div class="inv-empty-line">Nenhuma arma forjada ainda.</div>`;
+        } else {
+            weaponsHTML = weapons.map(w => {
+                const equippedBy = usageMap[w.id] || [];
+                const owner = equippedBy.length > 0 ? equippedBy.map(hc => STORY_HERO_CLASSES[hc]?.displayName || hc).join(', ') : null;
+                const icon = (typeof getWeaponIcon === 'function') ? getWeaponIcon(w.id, 'normal') : (w.emoji || '⚔️');
+                return `
+                    <div class="inv-equip-row">
+                        <div class="inv-equip-icon">${icon}</div>
+                        <div class="inv-equip-info">
+                            <div class="inv-equip-name">${w.nome} (x${w.count})</div>
+                            <div class="inv-equip-meta">+${w.atkBonus} ATK ${w.elemento === 'ANY' ? '· ✨ Abissal' : `· ${elemIcon(w.elemento)} ${w.elemento}`}</div>
+                        </div>
+                        <div class="inv-equip-owner ${owner ? 'used' : 'free'}">${owner ? `👤 ${owner}` : '— Livre —'}</div>
+                    </div>`;
+            }).join('');
+        }
+
+        let amuletsHTML = '';
+        if (amulets.length === 0) {
+            amuletsHTML = `<div class="inv-empty-line">Nenhum amuleto forjado ainda.</div>`;
+        } else {
+            amuletsHTML = amulets.map(a => {
+                const equippedBy = usageMap[a.id] || [];
+                const owner = equippedBy.length > 0 ? equippedBy.map(hc => STORY_HERO_CLASSES[hc]?.displayName || hc).join(', ') : null;
+                const icon = (typeof getAmuletIcon === 'function') ? getAmuletIcon(a.id, 'normal') : (a.emoji || '🧿');
+                const ef = a.efeito || {};
+                const efeitos = [];
+                if (ef.elementOverride) efeitos.push(`${elemIcon(ef.elementOverride)} ${ef.elementOverride}`);
+                if (ef.hpBonus)         efeitos.push(`+${ef.hpBonus} HP`);
+                if (ef.atkBonus)        efeitos.push(`+${ef.atkBonus} ATK`);
+                if (ef.healPerTurn)     efeitos.push(`+${ef.healPerTurn} HP/turno`);
+                return `
+                    <div class="inv-equip-row amulet">
+                        <div class="inv-equip-icon">${icon}</div>
+                        <div class="inv-equip-info">
+                            <div class="inv-equip-name">${a.nome} (x${a.count})</div>
+                            <div class="inv-equip-meta">${efeitos.join(' · ') || '—'}</div>
+                        </div>
+                        <div class="inv-equip-owner ${owner ? 'used' : 'free'}">${owner ? `👤 ${owner}` : '— Livre —'}</div>
+                    </div>`;
+            }).join('');
+        }
+
+        const equipSection = `
+            <div class="inv-equipment-section">
+                <div class="inv-equipment-title">⚔️ ARMAS FORJADAS</div>
+                <div class="inv-equip-list">${weaponsHTML}</div>
+                <div class="inv-equipment-title" style="margin-top:16px;">🧿 AMULETOS FORJADOS</div>
+                <div class="inv-equip-list">${amuletsHTML}</div>
+                <div class="inv-equipment-hint">💡 Para equipar, abra o <b>painel de um herói</b> na <b>OCA</b> (botão <b>?</b>) e escolha o item.</div>
+            </div>`;
+
+        return `
+            <div class="tesouraria-total">Valor total do inventário: <b>${uiIcon('gold')} ${totalValue}</b></div>
+            <div class="tesouraria-grid">${cardsHTML}</div>
+            <div class="tesouraria-hint">💡 Venda materiais no <b>Escambo</b> para ganhar ouro.</div>
+            ${equipSection}
+        `;
+    };
+
+    // ==============================================================
+    // 3. EQUIPAR (Permite múltiplos heróis usarem a mesma arma se tiver no estoque)
+    // ==============================================================
+    window.handleEquipWeapon = function(heroClass, weaponId) {
+        if (!weaponId) {
+            unequipWeapon(heroClass);
+            showToast('⚔️', 'Arma removida.', '⚔️');
+            return;
+        }
+        const w = getWeaponById(weaponId);
+        if (!w) return;
+        const count = countWeapon(weaponId);
+        if (count === 0) { showToast('❌', 'Você não tem essa arma.', '❌'); return; }
+
+        const expectedTipo = getArchetypeFromHeroClass(heroClass);
+        if (w.tipo !== expectedTipo) { showToast('❌', `${STORY_HERO_CLASSES[heroClass].displayName} não pode usar ${w.tipo}.`, '❌'); return; }
+
+        let equippedCount = 0;
+        for (const hc in STORY_PROGRESS.heroEquipment) {
+            if (hc !== heroClass && STORY_PROGRESS.heroEquipment[hc].arma === weaponId) equippedCount++;
+        }
+
+        if (equippedCount >= count) {
+            for (const hc in STORY_PROGRESS.heroEquipment) {
+                if (hc !== heroClass && STORY_PROGRESS.heroEquipment[hc].arma === weaponId) {
+                    STORY_PROGRESS.heroEquipment[hc].arma = null;
+                    break;
+                }
+            }
+        }
+
+        getHeroEquipment(heroClass).arma = weaponId;
+        saveStoryProgress();
+        showToast('⚔️ Equipado!', `${w.emoji} ${w.nome}`, '⚔️');
+        
+        if (typeof window.openHeroDetails === 'function') {
+            setTimeout(() => {
+                if (typeof closeHeroDetails === 'function') closeHeroDetails();
+                setTimeout(() => window.openHeroDetails(heroClass), 320);
+            }, 100);
+        }
+    };
+
+    window.handleEquipAmulet = function(heroClass, amuletId) {
+        if (!amuletId) {
+            unequipAmulet(heroClass);
+            showToast('🧿', 'Amuleto removido.', '🧿');
+            return;
+        }
+        const a = getAmuletById(amuletId);
+        if (!a) return;
+        const count = countAmulet(amuletId);
+        if (count === 0) { showToast('❌', 'Você não tem esse amuleto.', '❌'); return; }
+
+        let equippedCount = 0;
+        for (const hc in STORY_PROGRESS.heroEquipment) {
+            if (hc !== heroClass && STORY_PROGRESS.heroEquipment[hc].amuleto === amuletId) equippedCount++;
+        }
+
+        if (equippedCount >= count) {
+            for (const hc in STORY_PROGRESS.heroEquipment) {
+                if (hc !== heroClass && STORY_PROGRESS.heroEquipment[hc].amuleto === amuletId) {
+                    STORY_PROGRESS.heroEquipment[hc].amuleto = null;
+                    break;
+                }
+            }
+        }
+
+        getHeroEquipment(heroClass).amuleto = amuletId;
+        saveStoryProgress();
+        showToast('🧿 Equipado!', `${a.emoji} ${a.nome}`, '🧿');
+        
+        if (typeof window.openHeroDetails === 'function') {
+            setTimeout(() => {
+                if (typeof closeHeroDetails === 'function') closeHeroDetails();
+                setTimeout(() => window.openHeroDetails(heroClass), 320);
+            }, 100);
+        }
+    };
+
+    // ==============================================================
+    // 4. FIX NO DROPDOWN DA OCA (Evitar duplicatas visuais)
+    // ==============================================================
+    const _origOpenDetails = window.openHeroDetails;
+    if (typeof _origOpenDetails === 'function') {
+        window.openHeroDetails = function(heroClass) {
+            _origOpenDetails.apply(this, arguments);
+            setTimeout(() => {
+                document.querySelectorAll('.equip-select').forEach(select => {
+                    const seen = new Set();
+                    Array.from(select.options).forEach(opt => {
+                        if (!opt.value) return;
+                        if (seen.has(opt.value)) {
+                            opt.remove();
+                        } else {
+                            seen.add(opt.value);
+                        }
+                    });
+                });
+            }, 100);
+        };
+    }
+
+    console.log('✅ [V38.0] Craft múltiplo (limite de 99) e otimização de equipamentos.');
+})();
+// =================================================================
+// historia.js — BLOCO 124 (V38.1 — Fix Equipamento com Múltiplos Itens)
+// =================================================================
+(function fixEquiparMultiploV381() {
+    if (window._fixEquiparMultiploV381) return;
+    window._fixEquiparMultiploV381 = true;
+
+    // 1. Conserta a função base de equipar armas
+    window.equipWeapon = function(heroClass, weaponId) {
+        const w = getWeaponById(weaponId);
+        if (!w) return { ok: false, error: 'Arma não encontrada.' };
+        if (!isWeaponCrafted(weaponId)) return { ok: false, error: 'Você não tem essa arma.' };
+
+        const expectedTipo = getArchetypeFromHeroClass(heroClass);
+        if (w.tipo !== expectedTipo) {
+            return { ok: false, error: `${STORY_HERO_CLASSES[heroClass].displayName} não pode usar ${w.tipo}.` };
+        }
+
+        // Verifica quantas cópias temos e quantas estão equipadas em OUTROS heróis
+        const totalCopies = (STORY_PROGRESS.craftedWeapons || []).filter(id => id === weaponId).length;
+        let equippedByOthers = 0;
+        for (const hc in STORY_PROGRESS.heroEquipment) {
+            if (hc !== heroClass && STORY_PROGRESS.heroEquipment[hc].arma === weaponId) {
+                equippedByOthers++;
+            }
+        }
+
+        if (equippedByOthers >= totalCopies) {
+            return { ok: false, error: 'Todas as cópias desta arma já estão em uso.' };
+        }
+
+        getHeroEquipment(heroClass).arma = weaponId;
+        saveStoryProgress();
+        return { ok: true };
+    };
+
+    // 2. Conserta a função base de equipar amuletos
+    window.equipAmulet = function(heroClass, amuletId) {
+        const a = getAmuletById(amuletId);
+        if (!a) return { ok: false, error: 'Amuleto não encontrado.' };
+        if (!isAmuletCrafted(amuletId)) return { ok: false, error: 'Você não tem esse amuleto.' };
+
+        const totalCopies = (STORY_PROGRESS.craftedAmulets || []).filter(id => id === amuletId).length;
+        let equippedByOthers = 0;
+        for (const hc in STORY_PROGRESS.heroEquipment) {
+            if (hc !== heroClass && STORY_PROGRESS.heroEquipment[hc].amuleto === amuletId) {
+                equippedByOthers++;
+            }
+        }
+
+        if (equippedByOthers >= totalCopies) {
+            return { ok: false, error: 'Todas as cópias deste amuleto já estão em uso.' };
+        }
+
+        getHeroEquipment(heroClass).amuleto = amuletId;
+        saveStoryProgress();
+        return { ok: true };
+    };
+
+    // 3. Conserta os botões de clique dos cards para atualizar a UI corretamente
+    window.handleWeaponCardClick = function(heroClass, weaponId, isEquipped) {
+        if (isEquipped) {
+            window.unequipWeapon(heroClass);
+            showToast('⚔️', 'Arma removida.', '⚔️');
+        } else {
+            const r = window.equipWeapon(heroClass, weaponId);
+            if (!r.ok) { showToast('❌', r.error, '❌'); return; }
+            const w = getWeaponById(weaponId);
+            showToast('⚔️ Equipado!', `${w.emoji || ''} ${w.nome}`, '⚔️');
+        }
+        if (typeof closeHeroDetails === 'function') closeHeroDetails();
+        setTimeout(() => window.openHeroDetails(heroClass), 320);
+    };
+
+    window.handleAmuletCardClick = function(heroClass, amuletId, isEquipped) {
+        if (isEquipped) {
+            window.unequipAmulet(heroClass);
+            showToast('🧿', 'Amuleto removido.', '🧿');
+        } else {
+            const r = window.equipAmulet(heroClass, amuletId);
+            if (!r.ok) { showToast('❌', r.error, '❌'); return; }
+            const a = getAmuletById(amuletId);
+            showToast('🧿 Equipado!', `${a.emoji || ''} ${a.nome}`, '🧿');
+        }
+        if (typeof closeHeroDetails === 'function') closeHeroDetails();
+        setTimeout(() => window.openHeroDetails(heroClass), 320);
+    };
+
+    // 4. Reescreve a injeção visual para AGRUPAR itens iguais
+    const _origOpenDetails = window.openHeroDetails;
+    window.openHeroDetails = function(heroClass) {
+        _origOpenDetails.apply(this, arguments);
+
+        const panel = document.querySelector('.hero-details-panel');
+        if (!panel) return;
+
+        const oldEquip = panel.querySelector('.hero-details-equipment');
+        if (oldEquip) oldEquip.remove();
+
+        const heroData = STORY_HERO_CLASSES[heroClass];
+        if (!heroData) return;
+        const archetype = getArchetypeFromHeroClass(heroClass);
+        const eq = getHeroEquipment(heroClass);
+        const equippedWeaponId = eq.arma || null;
+        const equippedAmuletId = eq.amuleto || null;
+
+        // Agrupa Armas
+        let craftedWeapons = (STORY_PROGRESS.craftedWeapons || []).map(id => getWeaponById(id)).filter(w => w && w.tipo === archetype);
+        const weaponCounts = {};
+        craftedWeapons.forEach(w => { weaponCounts[w.id] = (weaponCounts[w.id] || 0) + 1; });
+        const uniqueWeapons = Object.keys(weaponCounts).map(id => {
+            const w = getWeaponById(id);
+            w._count = weaponCounts[id];
+            return w;
+        });
+
+        // Agrupa Amuletos
+        let craftedAmulets = (STORY_PROGRESS.craftedAmulets || []).map(id => getAmuletById(id)).filter(Boolean);
+        const amuletCounts = {};
+        craftedAmulets.forEach(a => { amuletCounts[a.id] = (amuletCounts[a.id] || 0) + 1; });
+        const uniqueAmulets = Object.keys(amuletCounts).map(id => {
+            const a = getAmuletById(id);
+            a._count = amuletCounts[id];
+            return a;
+        });
+
+        function renderWeaponCard(w, isEquipped) {
+            const weaponIcon = getWeaponIcon(w.id, 'large');
+            const elemLabel = w.elemento === 'ANY' ? '✨ Abissal' : `${elemIcon(w.elemento)} ${w.elemento}`;
+            const elemClass = w.elemento === 'ANY' ? 'equip-elem-abissal' : `equip-elem-${w.elemento}`;
+            const bonusText = `+${w.atkBonus} ATK <span class="equip-elem-bonus">(+${w.elementoBonus} no elemento)</span>`;
+            
+            // Mostra a quantidade no nome
+            const qtdText = w._count > 1 ? `<span style="color:#e8b923; font-size:0.8rem; margin-left:5px;">(x${w._count})</span>` : '';
+
+            return `
+                <div class="equip-card ${isEquipped ? 'equipped' : ''}">
+                    <div class="equip-card-icon">${weaponIcon}</div>
+                    <div class="equip-card-info">
+                        <div class="equip-card-name">${w.nome} ${qtdText}</div>
+                        <div class="equip-card-bonus">${bonusText}</div>
+                        <div class="equip-card-elem ${elemClass}">${elemLabel}</div>
+                    </div>
+                    <button class="equip-card-btn ${isEquipped ? 'unequip' : 'equip'}"
+                            onclick="handleWeaponCardClick('${heroClass.replace(/'/g, "\\'")}', '${w.id}', ${isEquipped})">
+                        ${isEquipped ? '✕ Remover' : '⚔️ Equipar'}
+                    </button>
+                </div>`;
+        }
+
+        function renderAmuletCard(a, isEquipped) {
+            const amuletIcon = getAmuletIcon(a.id, 'large');
+            const ef = a.efeito || {};
+            const efeitos = [];
+            if (ef.elementOverride) efeitos.push(`${elemIcon(ef.elementOverride)} ${ef.elementOverride}`);
+            if (ef.hpBonus)         efeitos.push(`❤️ +${ef.hpBonus} HP`);
+            if (ef.atkBonus)        efeitos.push(`⚔️ +${ef.atkBonus} ATK`);
+            if (ef.healPerTurn)     efeitos.push(`💚 +${ef.healPerTurn} HP/turno`);
+            
+            const qtdText = a._count > 1 ? `<span style="color:#e8b923; font-size:0.8rem; margin-left:5px;">(x${a._count})</span>` : '';
+
+            return `
+                <div class="equip-card ${isEquipped ? 'equipped' : ''}">
+                    <div class="equip-card-icon">${amuletIcon}</div>
+                    <div class="equip-card-info">
+                        <div class="equip-card-name">${a.nome} ${qtdText}</div>
+                        <div class="equip-card-bonus">${efeitos.join(' · ') || '—'}</div>
+                    </div>
+                    <button class="equip-card-btn ${isEquipped ? 'unequip' : 'equip'}"
+                            onclick="handleAmuletCardClick('${heroClass.replace(/'/g, "\\'")}', '${a.id}', ${isEquipped})">
+                        ${isEquipped ? '✕ Remover' : '🧿 Equipar'}
+                    </button>
+                </div>`;
+        }
+
+        const weaponCards = uniqueWeapons.length > 0
+            ? uniqueWeapons.map(w => renderWeaponCard(w, equippedWeaponId === w.id)).join('')
+            : `<div class="equip-empty-msg">Nenhuma arma compatível forjada.</div>`;
+
+        const amuletCards = uniqueAmulets.length > 0
+            ? uniqueAmulets.map(a => renderAmuletCard(a, equippedAmuletId === a.id)).join('')
+            : `<div class="equip-empty-msg">Nenhum amuleto forjado.</div>`;
+
+        const equipHTML = `
+            <div class="hero-details-section hero-details-equipment">
+                <div class="hero-details-section-title">⚔️ EQUIPAMENTO</div>
+                <div class="equip-subsection-title">Arma (${archetype === 'tacape' ? 'Tacape' : archetype === 'flecha' ? 'Flecha' : 'Cajado'})</div>
+                <div class="equip-cards-grid">${weaponCards}</div>
+                <div class="equip-subsection-title" style="margin-top:14px;">Amuleto</div>
+                <div class="equip-cards-grid">${amuletCards}</div>
+            </div>`;
+
+        const notas = panel.querySelector('.hero-details-notes');
+        if (notas) {
+            notas.insertAdjacentHTML('beforebegin', equipHTML);
+        } else {
+            panel.insertAdjacentHTML('beforeend', equipHTML);
+        }
+    };
+
+    console.log('✅ [V38.1] Equipamento de múltiplos itens consertado (agrupamento e estoque).');
+})();
+
+// =================================================================
+// historia.js — BLOCO 126 (V39.1 — Correção Definitiva de Itens Únicos)
+// =================================================================
+(function sistemaItensUnicosV391() {
+    if (window._sistemaItensUnicosV391) return;
+    window._sistemaItensUnicosV391 = true;
+
+    // Salva os originais ANTES de sobrescrever
+    const _origGetWeaponIcon = window.getWeaponIcon;
+    const _origGetAmuletIcon = window.getAmuletIcon;
+
+    // ==============================================================
+    // 1. HELPERS DE ID ÚNICO E MIGRAÇÃO
+    // ==============================================================
+    function getBaseId(id) {
+        if (!id) return null;
+        return String(id).split('#')[0];
+    }
+
+    function gerarUid(baseId) {
+        return `${baseId}#${Date.now()}${Math.floor(Math.random()*1000)}`;
+    }
+
+    function migrarSaveAntigo() {
+        if (!STORY_PROGRESS.craftedWeapons) STORY_PROGRESS.craftedWeapons = [];
+        if (!STORY_PROGRESS.craftedAmulets) STORY_PROGRESS.craftedAmulets = [];
+
+        let mudou = false;
+
+        STORY_PROGRESS.craftedWeapons = STORY_PROGRESS.craftedWeapons.map(id => {
+            if (typeof id === 'string' && !id.includes('#')) { mudou = true; return gerarUid(id); }
+            return id;
+        });
+
+        STORY_PROGRESS.craftedAmulets = STORY_PROGRESS.craftedAmulets.map(id => {
+            if (typeof id === 'string' && !id.includes('#')) { mudou = true; return gerarUid(id); }
+            return id;
+        });
+
+        for (const heroClass in STORY_PROGRESS.heroEquipment || {}) {
+            const eq = STORY_PROGRESS.heroEquipment[heroClass];
+            if (eq.arma && !eq.arma.includes('#')) {
+                const uid = STORY_PROGRESS.craftedWeapons.find(w => getBaseId(w) === eq.arma);
+                eq.arma = uid || null;
+                mudou = true;
+            }
+            if (eq.amuleto && !eq.amuleto.includes('#')) {
+                const uid = STORY_PROGRESS.craftedAmulets.find(a => getBaseId(a) === eq.amuleto);
+                eq.amuleto = uid || null;
+                mudou = true;
+            }
+        }
+
+        if (mudou && typeof saveStoryProgress === 'function') {
+            saveStoryProgress();
+            console.log('[V39.1] Save migrado com sucesso!');
+        }
+    }
+    migrarSaveAntigo();
+
+    // ==============================================================
+    // 2. WRAPPERS DE ACESSO
+    // ==============================================================
+    const _origGetWeaponById = window.getWeaponById;
+    window.getWeaponById = function(uid) {
+        if (!uid) return null;
+        const baseId = getBaseId(uid);
+        const w = STORY_WEAPONS[baseId];
+        if (w) return { ...w, uid: uid, baseId: baseId, id: uid }; // id = uid para manter compatibilidade
+        return null;
+    };
+
+    const _origGetAmuletById = window.getAmuletById;
+    window.getAmuletById = function(uid) {
+        if (!uid) return null;
+        const baseId = getBaseId(uid);
+        const a = STORY_AMULETS[baseId];
+        if (a) return { ...a, uid: uid, baseId: baseId, id: uid };
+        return null;
+    };
+
+    window.getWeaponIcon = function(uid, size) {
+        const baseId = getBaseId(uid);
+        return (typeof _origGetWeaponIcon === 'function') ? _origGetWeaponIcon(baseId, size) : (STORY_WEAPONS[baseId]?.emoji || '⚔️');
+    };
+
+    window.getAmuletIcon = function(uid, size) {
+        const baseId = getBaseId(uid);
+        return (typeof _origGetAmuletIcon === 'function') ? _origGetAmuletIcon(baseId, size) : (STORY_AMULETS[baseId]?.emoji || '🧿');
+    };
+
+    // ==============================================================
+    // 3. CRAFTAR E DESMANCHAR
+    // ==============================================================
+    window.handleCraftWeapon = function(baseId) {
+        const w = STORY_WEAPONS[baseId];
+        if (!w) return;
+        
+        const count = STORY_PROGRESS.craftedWeapons.filter(id => getBaseId(id) === baseId).length;
+        if (count >= 99) { showToast('❌ Limite', 'Você já tem 99 desta arma.', '❌'); return; }
+        if (!isWeaponAvailable(baseId)) { showToast('❌', 'Ato ainda não desbloqueado.', '❌'); return; }
+        if (!hasMaterials(w.receita)) { showToast('❌', 'Materiais insuficientes.', '❌'); return; }
+        if ((STORY_PROGRESS.gold || 0) < w.custoOuro) { showToast('❌', `Faltam ${w.custoOuro - (STORY_PROGRESS.gold||0)} de ouro.`, '❌'); return; }
+
+        consumeMaterials(w.receita);
+        STORY_PROGRESS.gold -= w.custoOuro;
+        STORY_PROGRESS.craftedWeapons.push(gerarUid(baseId));
+        saveStoryProgress();
+        
+        showToast('🔨 Forjada!', `${w.emoji} ${w.nome} (Total: ${count + 1})`, '🔨');
+        try { playSfx('win'); } catch(e) {}
+        renderTesourariaScreen();
+    };
+
+    window.handleCraftAmulet = function(baseId) {
+        const a = STORY_AMULETS[baseId];
+        if (!a) return;
+        
+        const count = STORY_PROGRESS.craftedAmulets.filter(id => getBaseId(id) === baseId).length;
+        if (count >= 99) { showToast('❌ Limite', 'Você já tem 99 deste amuleto.', '❌'); return; }
+        if (!isAmuletAvailable(baseId)) { showToast('❌', 'Ato ainda não desbloqueado.', '❌'); return; }
+        if (!hasMaterials(a.receita)) { showToast('❌', 'Materiais insuficientes.', '❌'); return; }
+        if ((STORY_PROGRESS.gold || 0) < a.custoOuro) { showToast('❌', `Faltam ${a.custoOuro - (STORY_PROGRESS.gold||0)} de ouro.`, '❌'); return; }
+
+        consumeMaterials(a.receita);
+        STORY_PROGRESS.gold -= a.custoOuro;
+        STORY_PROGRESS.craftedAmulets.push(gerarUid(baseId));
+        saveStoryProgress();
+        
+        showToast('🔨 Forjado!', `${a.emoji} ${a.nome} (Total: ${count + 1})`, '🔨');
+        try { playSfx('win'); } catch(e) {}
+        renderTesourariaScreen();
+    };
+
+    window.handleDismantleWeapon = function(uid) {
+        const w = window.getWeaponById(uid);
+        if (!w) return;
+        if (!confirm(`Desmanchar "${w.nome}"?\n\nVocê receberá 50% dos materiais de volta.`)) return;
+
+        const idx = STORY_PROGRESS.craftedWeapons.indexOf(uid);
+        if (idx !== -1) STORY_PROGRESS.craftedWeapons.splice(idx, 1);
+
+        for (const hc in STORY_PROGRESS.heroEquipment || {}) {
+            if (STORY_PROGRESS.heroEquipment[hc].arma === uid) STORY_PROGRESS.heroEquipment[hc].arma = null;
+        }
+
+        refundMaterials(w.receita, 0.5);
+        saveStoryProgress();
+        showToast('🔥 Desmanchada', `50% dos materiais devolvidos.`, '🔥');
+        renderTesourariaScreen();
+    };
+
+    window.handleDismantleAmulet = function(uid) {
+        const a = window.getAmuletById(uid);
+        if (!a) return;
+        if (!confirm(`Desmanchar "${a.nome}"?\n\nVocê receberá 50% dos materiais de volta.`)) return;
+
+        const idx = STORY_PROGRESS.craftedAmulets.indexOf(uid);
+        if (idx !== -1) STORY_PROGRESS.craftedAmulets.splice(idx, 1);
+
+        for (const hc in STORY_PROGRESS.heroEquipment || {}) {
+            if (STORY_PROGRESS.heroEquipment[hc].amuleto === uid) STORY_PROGRESS.heroEquipment[hc].amuleto = null;
+        }
+
+        refundMaterials(a.receita, 0.5);
+        saveStoryProgress();
+        showToast('🔥 Desmanchado', `50% dos materiais devolvidos.`, '🔥');
+        renderTesourariaScreen();
+    };
+
+    // ==============================================================
+    // 4. EQUIPAR / DESEQUIPAR
+    // ==============================================================
+    window.equipWeapon = function(heroClass, uid) {
+        const w = window.getWeaponById(uid);
+        if (!w) return { ok: false, error: 'Item não encontrado.' };
+        if (!STORY_PROGRESS.craftedWeapons.includes(uid)) return { ok: false, error: 'Você não possui esta instância.' };
+
+        const expectedTipo = getArchetypeFromHeroClass(heroClass);
+        if (w.tipo !== expectedTipo) return { ok: false, error: `Classe incompatível.` };
+
+        for (const hc in STORY_PROGRESS.heroEquipment) {
+            if (hc !== heroClass && STORY_PROGRESS.heroEquipment[hc].arma === uid) {
+                STORY_PROGRESS.heroEquipment[hc].arma = null;
+            }
+        }
+
+        getHeroEquipment(heroClass).arma = uid;
+        saveStoryProgress();
+        return { ok: true };
+    };
+
+    window.equipAmulet = function(heroClass, uid) {
+        const a = window.getAmuletById(uid);
+        if (!a) return { ok: false, error: 'Item não encontrado.' };
+        if (!STORY_PROGRESS.craftedAmulets.includes(uid)) return { ok: false, error: 'Você não possui esta instância.' };
+
+        for (const hc in STORY_PROGRESS.heroEquipment) {
+            if (hc !== heroClass && STORY_PROGRESS.heroEquipment[hc].amuleto === uid) {
+                STORY_PROGRESS.heroEquipment[hc].amuleto = null;
+            }
+        }
+
+        getHeroEquipment(heroClass).amuleto = uid;
+        saveStoryProgress();
+        return { ok: true };
+    };
+
+    window.handleWeaponCardClick = function(heroClass, uid, isEquipped) {
+        if (isEquipped) {
+            window.unequipWeapon(heroClass);
+            showToast('⚔️', 'Arma removida.', '⚔️');
+        } else {
+            const r = window.equipWeapon(heroClass, uid);
+            if (!r.ok) { showToast('❌', r.error, '❌'); return; }
+            const w = window.getWeaponById(uid);
+            showToast('⚔️ Equipado!', `${w.emoji || ''} ${w.nome}`, '⚔️');
+        }
+        if (typeof closeHeroDetails === 'function') closeHeroDetails();
+        setTimeout(() => window.openHeroDetails(heroClass), 320);
+    };
+
+    window.handleAmuletCardClick = function(heroClass, uid, isEquipped) {
+        if (isEquipped) {
+            window.unequipAmulet(heroClass);
+            showToast('🧿', 'Amuleto removido.', '🧿');
+        } else {
+            const r = window.equipAmulet(heroClass, uid);
+            if (!r.ok) { showToast('❌', r.error, '❌'); return; }
+            const a = window.getAmuletById(uid);
+            showToast('🧿 Equipado!', `${a.emoji || ''} ${a.nome}`, '🧿');
+        }
+        if (typeof closeHeroDetails === 'function') closeHeroDetails();
+        setTimeout(() => window.openHeroDetails(heroClass), 320);
+    };
+
+    // ==============================================================
+    // 5. UI DA OCA (Painel do Herói)
+    // ==============================================================
+    const _origOpen = window.openHeroDetails;
+    window.openHeroDetails = function(heroClass) {
+        _origOpen.apply(this, arguments);
+
+        const panel = document.querySelector('.hero-details-panel');
+        if (!panel) return;
+
+        panel.querySelectorAll('.hero-details-equipment, .equip-row, .equip-select, .hero-details-weapon-element').forEach(el => el.remove());
+        panel.querySelectorAll('.hero-details-section').forEach(sec => {
+            if (sec.innerHTML.includes('Arma') && sec.innerHTML.includes('Amuleto') && sec.querySelector('select')) sec.remove();
+        });
+
+        const heroData = STORY_HERO_CLASSES[heroClass];
+        if (!heroData) return;
+        const archetype = getArchetypeFromHeroClass(heroClass);
+        const eq = getHeroEquipment(heroClass);
+        const equippedWeaponUid = eq.arma || null;
+        const equippedAmuletUid = eq.amuleto || null;
+
+        const userWeapons = (STORY_PROGRESS.craftedWeapons || []).map(uid => window.getWeaponById(uid)).filter(w => w && w.tipo === archetype);
+        const userAmulets = (STORY_PROGRESS.craftedAmulets || []).map(uid => window.getAmuletById(uid)).filter(Boolean);
+
+        const wCounts = {}; userWeapons.forEach(w => { wCounts[w.baseId] = (wCounts[w.baseId] || 0) + 1; });
+        const aCounts = {}; userAmulets.forEach(a => { aCounts[a.baseId] = (aCounts[a.baseId] || 0) + 1; });
+
+        function renderWeaponCard(w) {
+            const isEquipped = equippedWeaponUid === w.uid;
+            const weaponIcon = window.getWeaponIcon(w.uid, 'large');
+            const elemLabel = w.elemento === 'ANY' ? '✨ Abissal' : `${elemIcon(w.elemento)} ${w.elemento}`;
+            const elemClass = w.elemento === 'ANY' ? 'equip-elem-abissal' : `equip-elem-${w.elemento}`;
+            const bonusText = `+${w.atkBonus} ATK <span class="equip-elem-bonus">(+${w.elementoBonus})</span>`;
+            const qtdText = wCounts[w.baseId] > 1 ? `<span style="color:#e8b923; font-size:0.8rem; margin-left:5px;">(x${wCounts[w.baseId]})</span>` : '';
+            return `
+                <div class="equip-card ${isEquipped ? 'equipped' : ''}">
+                    <div class="equip-card-icon">${weaponIcon}</div>
+                    <div class="equip-card-info">
+                        <div class="equip-card-name">${w.nome} ${qtdText}</div>
+                        <div class="equip-card-bonus">${bonusText}</div>
+                        <div class="equip-card-elem ${elemClass}">${elemLabel}</div>
+                    </div>
+                    <button class="equip-card-btn ${isEquipped ? 'unequip' : 'equip'}"
+                            onclick="handleWeaponCardClick('${heroClass.replace(/'/g, "\\'")}', '${w.uid}', ${isEquipped})">
+                        ${isEquipped ? '✕ Remover' : '⚔️ Equipar'}
+                    </button>
+                </div>`;
+        }
+
+        function renderAmuletCard(a) {
+            const isEquipped = equippedAmuletUid === a.uid;
+            const amuletIcon = window.getAmuletIcon(a.uid, 'large');
+            const ef = a.efeito || {};
+            const efeitos = [];
+            if (ef.elementOverride) efeitos.push(`${elemIcon(ef.elementOverride)} ${ef.elementOverride}`);
+            if (ef.hpBonus) efeitos.push(`❤️ +${ef.hpBonus} HP`);
+            if (ef.atkBonus) efeitos.push(`⚔️ +${ef.atkBonus} ATK`);
+            if (ef.healPerTurn) efeitos.push(`💚 +${ef.healPerTurn} HP/turno`);
+            const qtdText = aCounts[a.baseId] > 1 ? `<span style="color:#e8b923; font-size:0.8rem; margin-left:5px;">(x${aCounts[a.baseId]})</span>` : '';
+            return `
+                <div class="equip-card ${isEquipped ? 'equipped' : ''}">
+                    <div class="equip-card-icon">${amuletIcon}</div>
+                    <div class="equip-card-info">
+                        <div class="equip-card-name">${a.nome} ${qtdText}</div>
+                        <div class="equip-card-bonus">${efeitos.join(' · ') || '—'}</div>
+                    </div>
+                    <button class="equip-card-btn ${isEquipped ? 'unequip' : 'equip'}"
+                            onclick="handleAmuletCardClick('${heroClass.replace(/'/g, "\\'")}', '${a.uid}', ${isEquipped})">
+                        ${isEquipped ? '✕ Remover' : '🧿 Equipar'}
+                    </button>
+                </div>`;
+        }
+
+        const weaponCards = userWeapons.length > 0 ? userWeapons.map(renderWeaponCard).join('') : `<div class="equip-empty-msg">Nenhuma arma compatível forjada.</div>`;
+        const amuletCards = userAmulets.length > 0 ? userAmulets.map(renderAmuletCard).join('') : `<div class="equip-empty-msg">Nenhum amuleto forjado.</div>`;
+
+        const equipHTML = `
+            <div class="hero-details-section hero-details-equipment">
+                <div class="hero-details-section-title">⚔️ EQUIPAMENTO</div>
+                <div class="equip-subsection-title">Arma (${archetype === 'tacape' ? 'Tacape' : archetype === 'flecha' ? 'Flecha' : 'Cajado'})</div>
+                <div class="equip-cards-grid">${weaponCards}</div>
+                <div class="equip-subsection-title" style="margin-top:14px;">Amuleto</div>
+                <div class="equip-cards-grid">${amuletCards}</div>
+            </div>`;
+
+        const notas = panel.querySelector('.hero-details-notes');
+        if (notas) notas.insertAdjacentHTML('beforebegin', equipHTML);
+        else panel.insertAdjacentHTML('beforeend', equipHTML);
+    };
+
+    // ==============================================================
+    // 6. UI DA TESOURARIA (Forja e Amuletos)
+    // ==============================================================
+    window.renderTesourariaForja = function() {
+        const allWeapons = Object.values(STORY_WEAPONS).filter(w => isWeaponAvailable(w.id));
+        if (allWeapons.length === 0) return `<div class="tesouraria-empty"><div class="tesouraria-empty-icon">⚔️</div><div class="tesouraria-empty-text">Nenhuma forja liberada.</div></div>`;
+
+        const cardsHTML = allWeapons.map(w => {
+            const count = (STORY_PROGRESS.craftedWeapons || []).filter(id => getBaseId(id) === w.id).length;
+            const canCraft = hasMaterials(w.receita) && (STORY_PROGRESS.gold || 0) >= w.custoOuro && count < 99;
+            const recHTML = Object.entries(w.receita).map(([matId, qty]) => {
+                const m = STORY_MATERIALS[matId];
+                if (!m) return '';
+                const has = STORY_PROGRESS.inventory[matId] || 0;
+                const ok = has >= qty ? 'ok' : 'no';
+                return `<span class="forge-recipe-mat ${ok}">${m.emoji} ${has}/${qty}</span>`;
+            }).join('');
+            const tipoLabel = { tacape:'Tacape', flecha:'Flecha', cajado:'Cajado' }[w.tipo];
+            const isCrafted = count > 0;
+            
+            let actionHTML = '';
+            if (count >= 99) {
+                actionHTML = `<div class="forge-forged-tag" style="color:#e8b923;">✅ Limite Máximo (99)</div>`;
+            } else {
+                actionHTML = `
+                    ${isCrafted ? `<div class="forge-forged-tag" style="color:#8ac070;">✅ Forjada (${count}/99)</div>` : ''}
+                    <div class="forge-ouro ${canCraft ? 'ok' : 'no'}">${uiIcon('gold')} ${w.custoOuro}</div>
+                    <button class="forge-btn" ${canCraft ? '' : 'disabled'} onclick="handleCraftWeapon('${w.id}')">
+                        ${canCraft ? (isCrafted ? '🔨 Forjar +1' : '🔨 Forjar') : '✕ Sem recursos'}
+                    </button>
+                `;
+            }
+            return `<div class="forge-card ${isCrafted ? 'crafted' : ''}"><div class="forge-card-header"><div class="forge-emoji">${w.emoji}</div><div class="forge-info"><div class="forge-name">${w.nome}</div><div class="forge-meta">Ato ${w.ato} · ${tipoLabel} · +${w.atkBonus} ATK</div></div></div><div class="forge-recipe">${recHTML}</div><div class="forge-actions">${actionHTML}</div></div>`;
+        }).join('');
+        return `<div class="forge-grid">${cardsHTML}</div>`;
+    };
+
+    window.renderTesourariaAmuletos = function() {
+        const allAmulets = Object.values(STORY_AMULETS).filter(a => isAmuletAvailable(a.id));
+        if (allAmulets.length === 0) return `<div class="tesouraria-empty"><div class="tesouraria-empty-icon">🧿</div><div class="tesouraria-empty-text">Nenhum amuleto liberado.</div></div>`;
+
+        const cardsHTML = allAmulets.map(a => {
+            const count = (STORY_PROGRESS.craftedAmulets || []).filter(id => getBaseId(id) === a.id).length;
+            const canCraft = hasMaterials(a.receita) && (STORY_PROGRESS.gold || 0) >= a.custoOuro && count < 99;
+            const recHTML = Object.entries(a.receita).map(([matId, qty]) => {
+                const m = STORY_MATERIALS[matId];
+                if (!m) return '';
+                const has = STORY_PROGRESS.inventory[matId] || 0;
+                const ok = has >= qty ? 'ok' : 'no';
+                return `<span class="forge-recipe-mat ${ok}">${m.emoji} ${has}/${qty}</span>`;
+            }).join('');
+            const ef = a.efeito;
+            let efHTML = [];
+            if (ef.elementOverride) efHTML.push(`🎨 Elemento → ${ef.elementOverride}`);
+            if (ef.hpBonus) efHTML.push(`❤️ +${ef.hpBonus} HP`);
+            if (ef.atkBonus) efHTML.push(`⚔️ +${ef.atkBonus} ATK`);
+            if (ef.healPerTurn) efHTML.push(`💚 Cura ${ef.healPerTurn} HP/turno`);
+            const isCrafted = count > 0;
+            
+            let actionHTML = '';
+            if (count >= 99) {
+                actionHTML = `<div class="forge-forged-tag" style="color:#e8b923;">✅ Limite Máximo (99)</div>`;
+            } else {
+                actionHTML = `
+                    ${isCrafted ? `<div class="forge-forged-tag" style="color:#8ac070;">✅ Forjado (${count}/99)</div>` : ''}
+                    <div class="forge-ouro ${canCraft ? 'ok' : 'no'}">${uiIcon('gold')} ${a.custoOuro}</div>
+                    <button class="forge-btn" ${canCraft ? '' : 'disabled'} onclick="handleCraftAmulet('${a.id}')">
+                        ${canCraft ? (isCrafted ? '🔨 Forjar +1' : '🔨 Forjar') : '✕ Sem recursos'}
+                    </button>
+                `;
+            }
+            return `<div class="forge-card ${isCrafted ? 'crafted amulet' : 'amulet'}"><div class="forge-card-header"><div class="forge-emoji">${a.emoji}</div><div class="forge-info"><div class="forge-name">${a.nome}</div><div class="forge-meta">Ato ${a.ato}</div></div></div><div class="forge-effects">${efHTML.join(' · ')}</div><div class="forge-recipe">${recHTML}</div><div class="forge-actions">${actionHTML}</div></div>`;
+        }).join('');
+        return `<div class="forge-grid">${cardsHTML}</div>`;
+    };
+
+    // ==============================================================
+    // 7. UI DO INVENTÁRIO (Agrupando os itens iguais)
+    // ==============================================================
+    window.renderTesourariaInventario = function(materialIds) {
+        if (materialIds.length === 0) return `<div class="tesouraria-empty"><div class="tesouraria-empty-icon">📦</div><div class="tesouraria-empty-text">Seu inventário está vazio.</div><div class="tesouraria-empty-hint">Derrote inimigos para coletar materiais.</div></div>`;
+        
+        materialIds.sort((a, b) => (window.getMaterialPrice ? window.getMaterialPrice(b) : 2) - (window.getMaterialPrice ? window.getMaterialPrice(a) : 2));
+        const inv_count = (id) => STORY_PROGRESS.inventory[id] || 0;
+        const totalValue = materialIds.reduce((sum, id) => sum + (window.getMaterialPrice ? window.getMaterialPrice(id) : 2) * inv_count(id), 0);
+
+        const cardsHTML = materialIds.map(id => {
+            const m = STORY_MATERIALS[id] || { emoji: '❓', name: 'Desconhecido' };
+            const qty = STORY_PROGRESS.inventory[id] || 0;
+            const price = window.getMaterialPrice ? window.getMaterialPrice(id) : 2;
+            return `<div class="tesouraria-item"><div class="tesouraria-item-icon">${m.emoji}</div><div class="tesouraria-item-name">${m.name}</div><div class="tesouraria-item-qty">×${qty}</div><div class="tesouraria-item-price">${uiIcon('gold')} ${price} / un.</div></div>`;
+        }).join('');
+
+        // ⭐ AGRUPAMENTO DOS EQUIPAMENTOS POR BASE ID
+        const wCounts = {};
+        (STORY_PROGRESS.craftedWeapons || []).forEach(uid => {
+            const baseId = getBaseId(uid);
+            wCounts[baseId] = (wCounts[baseId] || 0) + 1;
+        });
+        
+        const aCounts = {};
+        (STORY_PROGRESS.craftedAmulets || []).forEach(uid => {
+            const baseId = getBaseId(uid);
+            aCounts[baseId] = (aCounts[baseId] || 0) + 1;
+        });
+
+        const usageMap = {};
+        const eqMap = STORY_PROGRESS.heroEquipment || {};
+        for (const heroClass in eqMap) {
+            const e = eqMap[heroClass];
+            const wBase = getBaseId(e.arma);
+            const aBase = getBaseId(e.amuleto);
+            if (wBase) { if(!usageMap[wBase]) usageMap[wBase] = []; if (!usageMap[wBase].includes(heroClass)) usageMap[wBase].push(heroClass); }
+            if (aBase) { if(!usageMap[aBase]) usageMap[aBase] = []; if (!usageMap[aBase].includes(heroClass)) usageMap[aBase].push(heroClass); }
+        }
+
+        let weaponsHTML = '';
+        const uniqueWeapons = Object.keys(wCounts);
+        if (uniqueWeapons.length === 0) {
+            weaponsHTML = `<div class="inv-empty-line">Nenhuma arma forjada ainda.</div>`;
+        } else {
+            weaponsHTML = uniqueWeapons.map(baseId => {
+                const w = STORY_WEAPONS[baseId];
+                if (!w) return '';
+                const equippedBy = usageMap[baseId] || [];
+                const owner = equippedBy.length > 0 ? equippedBy.map(hc => STORY_HERO_CLASSES[hc]?.displayName || hc).join(', ') : null;
+                const icon = (typeof _origGetWeaponIcon === 'function') ? _origGetWeaponIcon(baseId, 'normal') : (w.emoji || '⚔️');
+                return `
+                    <div class="inv-equip-row">
+                        <div class="inv-equip-icon">${icon}</div>
+                        <div class="inv-equip-info">
+                            <div class="inv-equip-name">${w.nome} (x${wCounts[baseId]})</div>
+                            <div class="inv-equip-meta">+${w.atkBonus} ATK ${w.elemento === 'ANY' ? '· ✨ Abissal' : `· ${elemIcon(w.elemento)} ${w.elemento}`}</div>
+                        </div>
+                        <div class="inv-equip-owner ${owner ? 'used' : 'free'}">${owner ? `👤 ${owner}` : '— Livre —'}</div>
+                    </div>`;
+            }).join('');
+        }
+
+        let amuletsHTML = '';
+        const uniqueAmulets = Object.keys(aCounts);
+        if (uniqueAmulets.length === 0) {
+            amuletsHTML = `<div class="inv-empty-line">Nenhum amuleto forjado ainda.</div>`;
+        } else {
+            amuletsHTML = uniqueAmulets.map(baseId => {
+                const a = STORY_AMULETS[baseId];
+                if (!a) return '';
+                const equippedBy = usageMap[baseId] || [];
+                const owner = equippedBy.length > 0 ? equippedBy.map(hc => STORY_HERO_CLASSES[hc]?.displayName || hc).join(', ') : null;
+                const icon = (typeof _origGetAmuletIcon === 'function') ? _origGetAmuletIcon(baseId, 'normal') : (a.emoji || '🧿');
+                const ef = a.efeito || {};
+                const efeitos = [];
+                if (ef.elementOverride) efeitos.push(`${elemIcon(ef.elementOverride)} ${ef.elementOverride}`);
+                if (ef.hpBonus) efeitos.push(`+${ef.hpBonus} HP`);
+                if (ef.atkBonus) efeitos.push(`+${ef.atkBonus} ATK`);
+                if (ef.healPerTurn) efeitos.push(`+${ef.healPerTurn} HP/turno`);
+                return `
+                    <div class="inv-equip-row amulet">
+                        <div class="inv-equip-icon">${icon}</div>
+                        <div class="inv-equip-info">
+                            <div class="inv-equip-name">${a.nome} (x${aCounts[baseId]})</div>
+                            <div class="inv-equip-meta">${efeitos.join(' · ') || '—'}</div>
+                        </div>
+                        <div class="inv-equip-owner ${owner ? 'used' : 'free'}">${owner ? `👤 ${owner}` : '— Livre —'}</div>
+                    </div>`;
+            }).join('');
+        }
+
+        const equipSection = `
+            <div class="inv-equipment-section">
+                <div class="inv-equipment-title">⚔️ ARMAS FORJADAS</div>
+                <div class="inv-equip-list">${weaponsHTML}</div>
+                <div class="inv-equipment-title" style="margin-top:16px;">🧿 AMULETOS FORJADOS</div>
+                <div class="inv-equip-list">${amuletsHTML}</div>
+                <div class="inv-equipment-hint">💡 Para equipar, abra o <b>painel de um herói</b> na <b>OCA</b> (botão <b>?</b>) e escolha o item.</div>
+            </div>`;
+
+        return `
+            <div class="tesouraria-total">Valor total do inventário: <b>${uiIcon('gold')} ${totalValue}</b></div>
+            <div class="tesouraria-grid">${cardsHTML}</div>
+            <div class="tesouraria-hint">💡 Venda materiais no <b>Escambo</b> para ganhar ouro.</div>
+            ${equipSection}
+        `;
+    };
+
+    console.log('✅ [V39.1] Tesouraria e Inventário consertados com IDs Únicos.');
+})();
+// =================================================================
+// historia.js — BLOCO 127 (V40.0 — Tela Dedicada de Equipamentos)
+// -----------------------------------------------------------------
+// 1. Cria uma tela separada para gerenciar os equipamentos do herói.
+// 2. Adiciona botão "⚔️" no card da OCA.
+// 3. Traz o botão "Desmanchar" de volta.
+// 4. Limpa o painel de detalhes "?" para não misturar as coisas.
+// =================================================================
+
+(function telaEquipamentosV400() {
+    if (window._telaEquipamentosV400) return;
+    window._telaEquipamentosV400 = true;
+
+    // Salva os originais
+    const _origGetWeaponIcon = window.getWeaponIcon;
+    const _origGetAmuletIcon = window.getAmuletIcon;
+
+    // ==============================================================
+    // 1. HELPERS DE ID ÚNICO
+    // ==============================================================
+    function getBaseId(id) {
+        if (!id) return null;
+        return String(id).split('#')[0];
+    }
+
+    function gerarUid(baseId) {
+        return `${baseId}#${Date.now()}${Math.floor(Math.random()*1000)}`;
+    }
+
+    function migrarSaveAntigo() {
+        if (!STORY_PROGRESS.craftedWeapons) STORY_PROGRESS.craftedWeapons = [];
+        if (!STORY_PROGRESS.craftedAmulets) STORY_PROGRESS.craftedAmulets = [];
+
+        let mudou = false;
+
+        STORY_PROGRESS.craftedWeapons = STORY_PROGRESS.craftedWeapons.map(id => {
+            if (typeof id === 'string' && !id.includes('#')) { mudou = true; return gerarUid(id); }
+            return id;
+        });
+
+        STORY_PROGRESS.craftedAmulets = STORY_PROGRESS.craftedAmulets.map(id => {
+            if (typeof id === 'string' && !id.includes('#')) { mudou = true; return gerarUid(id); }
+            return id;
+        });
+
+        for (const heroClass in STORY_PROGRESS.heroEquipment || {}) {
+            const eq = STORY_PROGRESS.heroEquipment[heroClass];
+            if (eq.arma && !eq.arma.includes('#')) {
+                const uid = STORY_PROGRESS.craftedWeapons.find(w => getBaseId(w) === eq.arma);
+                eq.arma = uid || null; mudou = true;
+            }
+            if (eq.amuleto && !eq.amuleto.includes('#')) {
+                const uid = STORY_PROGRESS.craftedAmulets.find(a => getBaseId(a) === eq.amuleto);
+                eq.amuleto = uid || null; mudou = true;
+            }
+        }
+
+        if (mudou && typeof saveStoryProgress === 'function') saveStoryProgress();
+    }
+    migrarSaveAntigo();
+
+    // ==============================================================
+    // 2. WRAPPERS DE ACESSO E AÇÕES
+    // ==============================================================
+    window.getWeaponById = function(uid) {
+        if (!uid) return null;
+        const baseId = getBaseId(uid);
+        const w = STORY_WEAPONS[baseId];
+        if (w) return { ...w, uid: uid, baseId: baseId, id: uid };
+        return null;
+    };
+
+    window.getAmuletById = function(uid) {
+        if (!uid) return null;
+        const baseId = getBaseId(uid);
+        const a = STORY_AMULETS[baseId];
+        if (a) return { ...a, uid: uid, baseId: baseId, id: uid };
+        return null;
+    };
+
+    window.getWeaponIcon = function(uid, size) {
+        const baseId = getBaseId(uid);
+        return (typeof _origGetWeaponIcon === 'function') ? _origGetWeaponIcon(baseId, size) : (STORY_WEAPONS[baseId]?.emoji || '⚔️');
+    };
+
+    window.getAmuletIcon = function(uid, size) {
+        const baseId = getBaseId(uid);
+        return (typeof _origGetAmuletIcon === 'function') ? _origGetAmuletIcon(baseId, size) : (STORY_AMULETS[baseId]?.emoji || '🧿');
+    };
+
+    window.handleCraftWeapon = function(baseId) {
+        const w = STORY_WEAPONS[baseId];
+        if (!w) return;
+        const count = STORY_PROGRESS.craftedWeapons.filter(id => getBaseId(id) === baseId).length;
+        if (count >= 99) { showToast('❌ Limite', 'Você já tem 99 desta arma.', '❌'); return; }
+        if (!isWeaponAvailable(baseId)) { showToast('❌', 'Ato ainda não desbloqueado.', '❌'); return; }
+        if (!hasMaterials(w.receita)) { showToast('❌', 'Materiais insuficientes.', '❌'); return; }
+        if ((STORY_PROGRESS.gold || 0) < w.custoOuro) { showToast('❌', `Faltam ${w.custoOuro - (STORY_PROGRESS.gold||0)} de ouro.`, '❌'); return; }
+
+        consumeMaterials(w.receita);
+        STORY_PROGRESS.gold -= w.custoOuro;
+        STORY_PROGRESS.craftedWeapons.push(gerarUid(baseId));
+        saveStoryProgress();
+        
+        showToast('🔨 Forjada!', `${w.emoji} ${w.nome} (Total: ${count + 1})`, '🔨');
+        try { playSfx('win'); } catch(e) {}
+        renderTesourariaScreen();
+    };
+
+    window.handleCraftAmulet = function(baseId) {
+        const a = STORY_AMULETS[baseId];
+        if (!a) return;
+        const count = STORY_PROGRESS.craftedAmulets.filter(id => getBaseId(id) === baseId).length;
+        if (count >= 99) { showToast('❌ Limite', 'Você já tem 99 deste amuleto.', '❌'); return; }
+        if (!isAmuletAvailable(baseId)) { showToast('❌', 'Ato ainda não desbloqueado.', '❌'); return; }
+        if (!hasMaterials(a.receita)) { showToast('❌', 'Materiais insuficientes.', '❌'); return; }
+        if ((STORY_PROGRESS.gold || 0) < a.custoOuro) { showToast('❌', `Faltam ${a.custoOuro - (STORY_PROGRESS.gold||0)} de ouro.`, '❌'); return; }
+
+        consumeMaterials(a.receita);
+        STORY_PROGRESS.gold -= a.custoOuro;
+        STORY_PROGRESS.craftedAmulets.push(gerarUid(baseId));
+        saveStoryProgress();
+        
+        showToast('🔨 Forjado!', `${a.emoji} ${a.nome} (Total: ${count + 1})`, '🔨');
+        try { playSfx('win'); } catch(e) {}
+        renderTesourariaScreen();
+    };
+
+    window.handleDismantleWeapon = function(uid) {
+        const w = window.getWeaponById(uid);
+        if (!w) return;
+        if (!confirm(`Desmanchar "${w.nome}"?\n\nVocê receberá 50% dos materiais de volta.`)) return;
+
+        const idx = STORY_PROGRESS.craftedWeapons.indexOf(uid);
+        if (idx !== -1) STORY_PROGRESS.craftedWeapons.splice(idx, 1);
+
+        for (const hc in STORY_PROGRESS.heroEquipment || {}) {
+            if (STORY_PROGRESS.heroEquipment[hc].arma === uid) STORY_PROGRESS.heroEquipment[hc].arma = null;
+        }
+
+        refundMaterials(w.receita, 0.5);
+        saveStoryProgress();
+        showToast('🔥 Desmanchada', `50% dos materiais devolvidos.`, '🔥');
+        window.openEquipScreen(currentEquipHero); // Recarrega a tela atual
+    };
+
+    window.handleDismantleAmulet = function(uid) {
+        const a = window.getAmuletById(uid);
+        if (!a) return;
+        if (!confirm(`Desmanchar "${a.nome}"?\n\nVocê receberá 50% dos materiais de volta.`)) return;
+
+        const idx = STORY_PROGRESS.craftedAmulets.indexOf(uid);
+        if (idx !== -1) STORY_PROGRESS.craftedAmulets.splice(idx, 1);
+
+        for (const hc in STORY_PROGRESS.heroEquipment || {}) {
+            if (STORY_PROGRESS.heroEquipment[hc].amuleto === uid) STORY_PROGRESS.heroEquipment[hc].amuleto = null;
+        }
+
+        refundMaterials(a.receita, 0.5);
+        saveStoryProgress();
+        showToast('🔥 Desmanchado', `50% dos materiais devolvidos.`, '🔥');
+        window.openEquipScreen(currentEquipHero);
+    };
+
+    window.equipWeapon = function(heroClass, uid) {
+        const w = window.getWeaponById(uid);
+        if (!w) return { ok: false, error: 'Item não encontrado.' };
+        if (!STORY_PROGRESS.craftedWeapons.includes(uid)) return { ok: false, error: 'Você não possui esta instância.' };
+
+        const expectedTipo = getArchetypeFromHeroClass(heroClass);
+        if (w.tipo !== expectedTipo) return { ok: false, error: `Classe incompatível.` };
+
+        for (const hc in STORY_PROGRESS.heroEquipment) {
+            if (hc !== heroClass && STORY_PROGRESS.heroEquipment[hc].arma === uid) {
+                STORY_PROGRESS.heroEquipment[hc].arma = null;
+            }
+        }
+
+        getHeroEquipment(heroClass).arma = uid;
+        saveStoryProgress();
+        return { ok: true };
+    };
+
+    window.equipAmulet = function(heroClass, uid) {
+        const a = window.getAmuletById(uid);
+        if (!a) return { ok: false, error: 'Item não encontrado.' };
+        if (!STORY_PROGRESS.craftedAmulets.includes(uid)) return { ok: false, error: 'Você não possui esta instância.' };
+
+        for (const hc in STORY_PROGRESS.heroEquipment) {
+            if (hc !== heroClass && STORY_PROGRESS.heroEquipment[hc].amuleto === uid) {
+                STORY_PROGRESS.heroEquipment[hc].amuleto = null;
+            }
+        }
+
+        getHeroEquipment(heroClass).amuleto = uid;
+        saveStoryProgress();
+        return { ok: true };
+    };
+
+    // ==============================================================
+    // 3. LIMPAR O PAINEL ANTIGO (?) DE EQUIPAMENTOS
+    // ==============================================================
+    const _origOpenDetails = window.openHeroDetails;
+    window.openHeroDetails = function(heroClass) {
+        _origOpenDetails.apply(this, arguments);
+        const panel = document.querySelector('.hero-details-panel');
+        if (!panel) return;
+        
+        // Remove qualquer resquício de equipamento no painel de lore
+        panel.querySelectorAll('.hero-details-equipment, .equip-row, .equip-select, .hero-details-weapon-element').forEach(el => el.remove());
+        panel.querySelectorAll('.hero-details-section').forEach(sec => {
+            if (sec.innerHTML.includes('Arma') && sec.innerHTML.includes('Amuleto') && sec.querySelector('select')) sec.remove();
+        });
+    };
+
+    // ==============================================================
+    // 4. NOVA TELA DE EQUIPAMENTOS
+    // ==============================================================
+    let currentEquipHero = null;
+
+    window.openEquipScreen = function(heroClass) {
+        currentEquipHero = heroClass;
+        
+        // Remove overlay antigo se houver
+        const old = document.getElementById('equipScreenOverlay');
+        if (old) old.remove();
+
+        const heroData = STORY_HERO_CLASSES[heroClass];
+        if (!heroData) return;
+        const archetype = getArchetypeFromHeroClass(heroClass);
+        const eq = getHeroEquipment(heroClass);
+        const eqWeaponUid = eq.arma || null;
+        const eqAmuletUid = eq.amuleto || null;
+
+        const eqWeapon = window.getWeaponById(eqWeaponUid);
+        const eqAmulet = window.getAmuletById(eqAmuletUid);
+
+        // Armas/Amuletos disponíveis (não equipados neste herói)
+        const allWeapons = (STORY_PROGRESS.craftedWeapons || []).map(uid => window.getWeaponById(uid)).filter(w => w && w.tipo === archetype && w.uid !== eqWeaponUid);
+        const allAmulets = (STORY_PROGRESS.craftedAmulets || []).map(uid => window.getAmuletById(uid)).filter(a => a && a.uid !== eqAmuletUid);
+
+        // Conta itens iguais para mostrar (xN)
+        const wCounts = {}; allWeapons.forEach(w => { wCounts[w.baseId] = (wCounts[w.baseId] || 0) + 1; });
+        const aCounts = {}; allAmulets.forEach(a => { aCounts[a.baseId] = (aCounts[a.baseId] || 0) + 1; });
+
+        // HTML do Slot Equipado
+        const renderSlot = (item, tipo) => {
+            if (!item) return `<div class="equip-slot empty">Nenhum item equipado</div>`;
+            const icon = tipo === 'arma' ? window.getWeaponIcon(item.uid, 'large') : window.getAmuletIcon(item.uid, 'large');
+            const nome = item.nome;
+            return `
+                <div class="equip-slot filled">
+                    <div class="equip-slot-icon">${icon}</div>
+                    <div class="equip-slot-info">
+                        <div class="equip-slot-name">${nome}</div>
+                        <div class="equip-slot-actions">
+                            <button class="btn-unequip" onclick="desequiparItem('${heroClass.replace(/'/g, "\\'")}', '${tipo}')">Remover</button>
+                            <button class="btn-dismantle" onclick="handleDismantle${tipo === 'arma' ? 'Weapon' : 'Amulet'}('${item.uid}')">Desmanchar</button>
+                        </div>
+                    </div>
+                </div>`;
+        };
+
+        // HTML dos itens disponíveis
+        const renderAvailableWeapon = (w) => {
+            const icon = window.getWeaponIcon(w.uid, 'normal');
+            const qtd = wCounts[w.baseId] > 1 ? `<span style="color:#e8b923;">(x${wCounts[w.baseId]})</span>` : '';
+            return `
+                <div class="avail-card">
+                    <div class="avail-icon">${icon}</div>
+                    <div class="avail-name">${w.nome} ${qtd}</div>
+                    <button class="btn-equip" onclick="equiparItem('${heroClass.replace(/'/g, "\\'")}', '${w.uid}', 'arma')">Equipar</button>
+                    <button class="btn-dismantle-mini" onclick="handleDismantleWeapon('${w.uid}')">🔥</button>
+                </div>`;
+        };
+
+        const renderAvailableAmulet = (a) => {
+            const icon = window.getAmuletIcon(a.uid, 'normal');
+            const qtd = aCounts[a.baseId] > 1 ? `<span style="color:#e8b923;">(x${aCounts[a.baseId]})</span>` : '';
+            return `
+                <div class="avail-card">
+                    <div class="avail-icon">${icon}</div>
+                    <div class="avail-name">${a.nome} ${qtd}</div>
+                    <button class="btn-equip" onclick="equiparItem('${heroClass.replace(/'/g, "\\'")}', '${a.uid}', 'amuleto')">Equipar</button>
+                    <button class="btn-dismantle-mini" onclick="handleDismantleAmulet('${a.uid}')">🔥</button>
+                </div>`;
+        };
+
+        const weaponListHTML = allWeapons.length > 0 ? allWeapons.map(renderAvailableWeapon).join('') : `<div class="empty-msg">Nenhuma arma disponível.</div>`;
+        const amuletListHTML = allAmulets.length > 0 ? allAmulets.map(renderAvailableAmulet).join('') : `<div class="empty-msg">Nenhum amuleto disponível.</div>`;
+
+        const overlay = document.createElement('div');
+        overlay.id = 'equipScreenOverlay';
+        overlay.className = 'equip-screen-overlay';
+        overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+
+        overlay.innerHTML = `
+            <div class="equip-screen-panel">
+                <div class="equip-screen-header">
+                    <div class="equip-hero-title">
+                        <img src="${SPRITES[heroClass] || ''}" class="equip-hero-sprite">
+                        <h2>${heroData.displayName}</h2>
+                    </div>
+                    <button class="equip-screen-close" onclick="document.getElementById('equipScreenOverlay').remove()">✕</button>
+                </div>
+
+                <div class="equip-section">
+                    <div class="equip-section-title">⚔️ Arma Equipada</div>
+                    ${renderSlot(eqWeapon, 'arma')}
+                </div>
+
+                <div class="equip-section">
+                    <div class="equip-section-title">🧿 Amuleto Equipado</div>
+                    ${renderSlot(eqAmulet, 'amuleto')}
+                </div>
+
+                <div class="equip-section">
+                    <div class="equip-section-title">📦 Armas na Mochila (${archetype})</div>
+                    <div class="equip-avail-grid">${weaponListHTML}</div>
+                </div>
+
+                <div class="equip-section">
+                    <div class="equip-section-title">📦 Amuletos na Mochila</div>
+                    <div class="equip-avail-grid">${amuletListHTML}</div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+    };
+
+    window.desequiparItem = function(heroClass, tipo) {
+        if (tipo === 'arma') unequipWeapon(heroClass);
+        else unequipAmulet(heroClass);
+        window.openEquipScreen(heroClass);
+    };
+
+    window.equiparItem = function(heroClass, uid, tipo) {
+        let r;
+        if (tipo === 'arma') r = window.equipWeapon(heroClass, uid);
+        else r = window.equipAmulet(heroClass, uid);
+
+        if (!r.ok) { showToast('❌', r.error, '❌'); return; }
+        showToast(tipo === 'arma' ? '⚔️ Equipado' : '🧿 Equipado', 'Item equipado com sucesso!', '✅');
+        window.openEquipScreen(heroClass); // Atualiza a tela
+    };
+
+    // ==============================================================
+    // 5. INJETAR O BOTÃO "⚔️" NA OCA
+    // ==============================================================
+    const _origRenderOca = window.renderOcaScreenFiltered;
+    window.renderOcaScreenFiltered = function() {
+        const r = _origRenderOca.apply(this, arguments);
+        
+        setTimeout(() => {
+            const cards = document.querySelectorAll('.story-hero-card');
+            cards.forEach(card => {
+                if (card.classList.contains('locked')) return;
+                if (card.querySelector('.hero-equip-btn')) return;
+
+                const onclickAttr = card.getAttribute('onclick') || '';
+                const match = onclickAttr.match(/toggleHeroSelection\('((?:\\'|[^'])*)'\)/);
+                if (!match) return;
+
+                const heroClass = match[1].replace(/\\'/g, "'");
+
+                const btn = document.createElement('button');
+                btn.className = 'hero-equip-btn';
+                btn.innerHTML = '⚔️';
+                btn.title = 'Equipamentos';
+                btn.onclick = (e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    window.openEquipScreen(heroClass);
+                };
+                card.appendChild(btn);
+            });
+        }, 100);
+
+        return r;
+    };
+
+    // ==============================================================
+    // 6. UI DA TESOURARIA (Mantida, mas com botão Desmanchar)
+    // ==============================================================
+    window.renderTesourariaForja = function() {
+        const allWeapons = Object.values(STORY_WEAPONS).filter(w => isWeaponAvailable(w.id));
+        if (allWeapons.length === 0) return `<div class="tesouraria-empty"><div class="tesouraria-empty-icon">⚔️</div><div class="tesouraria-empty-text">Nenhuma forja liberada.</div></div>`;
+
+        const cardsHTML = allWeapons.map(w => {
+            const count = (STORY_PROGRESS.craftedWeapons || []).filter(id => getBaseId(id) === w.id).length;
+            const canCraft = hasMaterials(w.receita) && (STORY_PROGRESS.gold || 0) >= w.custoOuro && count < 99;
+            const recHTML = Object.entries(w.receita).map(([matId, qty]) => {
+                const m = STORY_MATERIALS[matId];
+                if (!m) return '';
+                const has = STORY_PROGRESS.inventory[matId] || 0;
+                const ok = has >= qty ? 'ok' : 'no';
+                return `<span class="forge-recipe-mat ${ok}">${m.emoji} ${has}/${qty}</span>`;
+            }).join('');
+            const tipoLabel = { tacape:'Tacape', flecha:'Flecha', cajado:'Cajado' }[w.tipo];
+            const isCrafted = count > 0;
+            
+            let actionHTML = '';
+            if (count >= 99) {
+                actionHTML = `<div class="forge-forged-tag" style="color:#e8b923;">✅ Limite Máximo (99)</div>`;
+            } else {
+                actionHTML = `
+                    ${isCrafted ? `<div class="forge-forged-tag" style="color:#8ac070;">✅ Forjada (${count}/99)</div>` : ''}
+                    <div class="forge-ouro ${canCraft ? 'ok' : 'no'}">${uiIcon('gold')} ${w.custoOuro}</div>
+                    <button class="forge-btn" ${canCraft ? '' : 'disabled'} onclick="handleCraftWeapon('${w.id}')">
+                        ${canCraft ? (isCrafted ? '🔨 Forjar +1' : '🔨 Forjar') : '✕ Sem recursos'}
+                    </button>
+                    ${isCrafted ? `<button class="forge-btn danger" onclick="handleDismantleWeapon((STORY_PROGRESS.craftedWeapons.find(uid => getBaseId(uid) === '${w.id}')))">🔥 Desmanchar 1</button>` : ''}
+                `;
+            }
+            return `<div class="forge-card ${isCrafted ? 'crafted' : ''}"><div class="forge-card-header"><div class="forge-emoji">${w.emoji}</div><div class="forge-info"><div class="forge-name">${w.nome}</div><div class="forge-meta">Ato ${w.ato} · ${tipoLabel} · +${w.atkBonus} ATK</div></div></div><div class="forge-recipe">${recHTML}</div><div class="forge-actions">${actionHTML}</div></div>`;
+        }).join('');
+        return `<div class="forge-grid">${cardsHTML}</div>`;
+    };
+
+    window.renderTesourariaAmuletos = function() {
+        const allAmulets = Object.values(STORY_AMULETS).filter(a => isAmuletAvailable(a.id));
+        if (allAmulets.length === 0) return `<div class="tesouraria-empty"><div class="tesouraria-empty-icon">🧿</div><div class="tesouraria-empty-text">Nenhum amuleto liberado.</div></div>`;
+
+        const cardsHTML = allAmulets.map(a => {
+            const count = (STORY_PROGRESS.craftedAmulets || []).filter(id => getBaseId(id) === a.id).length;
+            const canCraft = hasMaterials(a.receita) && (STORY_PROGRESS.gold || 0) >= a.custoOuro && count < 99;
+            const recHTML = Object.entries(a.receita).map(([matId, qty]) => {
+                const m = STORY_MATERIALS[matId];
+                if (!m) return '';
+                const has = STORY_PROGRESS.inventory[matId] || 0;
+                const ok = has >= qty ? 'ok' : 'no';
+                return `<span class="forge-recipe-mat ${ok}">${m.emoji} ${has}/${qty}</span>`;
+            }).join('');
+            const ef = a.efeito;
+            let efHTML = [];
+            if (ef.elementOverride) efHTML.push(`🎨 Elemento → ${ef.elementOverride}`);
+            if (ef.hpBonus) efHTML.push(`❤️ +${ef.hpBonus} HP`);
+            if (ef.atkBonus) efHTML.push(`⚔️ +${ef.atkBonus} ATK`);
+            if (ef.healPerTurn) efHTML.push(`💚 Cura ${ef.healPerTurn} HP/turno`);
+            const isCrafted = count > 0;
+            
+            let actionHTML = '';
+            if (count >= 99) {
+                actionHTML = `<div class="forge-forged-tag" style="color:#e8b923;">✅ Limite Máximo (99)</div>`;
+            } else {
+                actionHTML = `
+                    ${isCrafted ? `<div class="forge-forged-tag" style="color:#8ac070;">✅ Forjado (${count}/99)</div>` : ''}
+                    <div class="forge-ouro ${canCraft ? 'ok' : 'no'}">${uiIcon('gold')} ${a.custoOuro}</div>
+                    <button class="forge-btn" ${canCraft ? '' : 'disabled'} onclick="handleCraftAmulet('${a.id}')">
+                        ${canCraft ? (isCrafted ? '🔨 Forjar +1' : '🔨 Forjar') : '✕ Sem recursos'}
+                    </button>
+                    ${isCrafted ? `<button class="forge-btn danger" onclick="handleDismantleAmulet((STORY_PROGRESS.craftedAmulets.find(uid => getBaseId(uid) === '${a.id}')))">🔥 Desmanchar 1</button>` : ''}
+                `;
+            }
+            return `<div class="forge-card ${isCrafted ? 'crafted amulet' : 'amulet'}"><div class="forge-card-header"><div class="forge-emoji">${a.emoji}</div><div class="forge-info"><div class="forge-name">${a.nome}</div><div class="forge-meta">Ato ${a.ato}</div></div></div><div class="forge-effects">${efHTML.join(' · ')}</div><div class="forge-recipe">${recHTML}</div><div class="forge-actions">${actionHTML}</div></div>`;
+        }).join('');
+        return `<div class="forge-grid">${cardsHTML}</div>`;
+    };
+
+    // ==============================================================
+    // 7. CSS DO NOVO BOTÃO E DA NOVA TELA
+    // ==============================================================
+    if (!document.getElementById('v400CSS')) {
+        const style = document.createElement('style');
+        style.id = 'v400CSS';
+        style.textContent = `
+            /* Botão no Card da OCA */
+            .hero-equip-btn {
+                position: absolute; top: 8px; left: 38px;
+                width: 28px; height: 28px; border-radius: 50%;
+                background: linear-gradient(135deg, #8e44ad, #5a2a70);
+                color: #e8dcc4; border: 2px solid #c39bd3;
+                font-size: 1rem; cursor: pointer;
+                display: flex; align-items: center; justify-content: center;
+                z-index: 10; box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+                transition: all 0.2s;
+            }
+            .hero-equip-btn:hover { transform: scale(1.15); background: #a55ad1; }
+
+            /* Tela de Equipar */
+            .equip-screen-overlay {
+                position: fixed; inset: 0; background: rgba(10,6,2,0.9);
+                z-index: 20000; display: flex; align-items: flex-start; justify-content: center;
+                padding: 20px; overflow-y: auto; backdrop-filter: blur(3px);
+            }
+            .equip-screen-panel {
+                background: linear-gradient(180deg, #2a1f10, #1a1208);
+                border: 2px solid #8e44ad; border-radius: 8px;
+                width: 100%; max-width: 600px; padding: 20px;
+                box-shadow: 0 10px 40px rgba(0,0,0,0.9); margin: auto;
+            }
+            .equip-screen-header {
+                display: flex; justify-content: space-between; align-items: center;
+                border-bottom: 1px solid rgba(142,68,173,0.3); padding-bottom: 15px; margin-bottom: 20px;
+            }
+            .equip-hero-title { display: flex; align-items: center; gap: 12px; }
+            .equip-hero-sprite { width: 48px; height: 48px; object-fit: contain; }
+            .equip-hero-title h2 { font-family: 'Cinzel Decorative'; color: #e8b923; margin: 0; font-size: 1.4rem; }
+            .equip-screen-close {
+                background: #6a2020; color: #f5c8c8; border: 1px solid #a83232;
+                border-radius: 50%; width: 32px; height: 32px; cursor: pointer; font-weight: bold;
+            }
+            
+            .equip-section { margin-bottom: 20px; }
+            .equip-section-title {
+                font-family: 'Cinzel', serif; color: #c39bd3; font-size: 0.85rem;
+                letter-spacing: 1px; margin-bottom: 10px; border-bottom: 1px solid rgba(142,68,173,0.2); padding-bottom: 4px;
+            }
+            
+            .equip-slot {
+                display: flex; align-items: center; gap: 15px;
+                background: rgba(10,6,2,0.5); padding: 10px; border-radius: 6px;
+                border: 1px dashed rgba(142,68,173,0.3);
+            }
+            .equip-slot.filled { border-style: solid; border-color: #8e44ad; }
+            .equip-slot.empty { color: #6a5024; font-style: italic; font-family: 'EB Garamond'; justify-content: center; }
+            .equip-slot-icon { width: 40px; height: 40px; }
+            .equip-slot-icon img { width: 100%; height: 100%; object-fit: contain; }
+            .equip-slot-info { flex: 1; }
+            .equip-slot-name { font-family: 'Cinzel'; color: #f0e2c0; font-size: 1rem; margin-bottom: 4px; }
+            .equip-slot-actions { display: flex; gap: 8px; }
+            
+            .btn-unequip, .btn-dismantle {
+                padding: 4px 10px; font-family: 'Cinzel'; font-size: 0.75rem;
+                border-radius: 4px; cursor: pointer; border: 1px solid;
+            }
+            .btn-unequip { background: rgba(201,162,39,0.1); border-color: #c9a227; color: #e8b923; }
+            .btn-dismantle { background: rgba(168,50,50,0.1); border-color: #a83232; color: #f5c8c8; }
+
+            .equip-avail-grid {
+                display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+                gap: 10px;
+            }
+            .avail-card {
+                background: rgba(10,6,2,0.6); border: 1px solid #3d2d18;
+                border-radius: 6px; padding: 10px; text-align: center;
+                display: flex; flex-direction: column; align-items: center; gap: 6px;
+                position: relative;
+            }
+            .avail-card:hover { border-color: #6a5024; }
+            .avail-icon { width: 36px; height: 36px; }
+            .avail-icon img { width: 100%; height: 100%; object-fit: contain; }
+            .avail-name { font-family: 'Cinzel'; font-size: 0.8rem; color: #d9c89a; line-height: 1.2; }
+            .btn-equip {
+                background: linear-gradient(135deg, #3d2d18, #2a1f10);
+                color: #e8b923; border: 1px solid #6a5024;
+                padding: 4px 10px; border-radius: 4px; cursor: pointer;
+                font-family: 'Cinzel'; font-size: 0.75rem; width: 100%;
+            }
+            .btn-equip:hover { background: #5a4220; color: #fff5dc; }
+            
+            .btn-dismantle-mini {
+                position: absolute; top: 4px; right: 4px;
+                background: none; border: none; cursor: pointer; font-size: 0.9rem; opacity: 0.6;
+            }
+            .btn-dismantle-mini:hover { opacity: 1; transform: scale(1.1); }
+            
+            .empty-msg { font-family: 'EB Garamond'; color: #8a7a52; font-style: italic; font-size: 0.9rem; }
+        `;
+        document.head.appendChild(style);
+    }
+
+    console.log('✅ [V40.0] Tela de equipamentos dedicada e botão desmanchar restaurados.');
+})();
+// =================================================================
+// historia.js — BLOCO 128 (V40.1 — Stats na tela de equipar e botão desmanchar)
+// =================================================================
+(function ajustesTelaEquiparV401() {
+    if (window._ajustesTelaEquiparV401) return;
+    window._ajustesTelaEquiparV401 = true;
+
+    // --- 1. ATUALIZAR A TELA DE EQUIPAR (Mostrar Stats) ---
+    window.openEquipScreen = function(heroClass) {
+        window.currentEquipHero = heroClass;
+        
+        const old = document.getElementById('equipScreenOverlay');
+        if (old) old.remove();
+
+        const heroData = STORY_HERO_CLASSES[heroClass];
+        if (!heroData) return;
+        const archetype = getArchetypeFromHeroClass(heroClass);
+        const eq = getHeroEquipment(heroClass);
+        const eqWeaponUid = eq.arma || null;
+        const eqAmuletUid = eq.amuleto || null;
+
+        const eqWeapon = window.getWeaponById(eqWeaponUid);
+        const eqAmulet = window.getAmuletById(eqAmuletUid);
+
+        const allWeapons = (STORY_PROGRESS.craftedWeapons || []).map(uid => window.getWeaponById(uid)).filter(w => w && w.tipo === archetype && w.uid !== eqWeaponUid);
+        const allAmulets = (STORY_PROGRESS.craftedAmulets || []).map(uid => window.getAmuletById(uid)).filter(a => a && a.uid !== eqAmuletUid);
+
+        const wCounts = {}; allWeapons.forEach(w => { wCounts[w.baseId] = (wCounts[w.baseId] || 0) + 1; });
+        const aCounts = {}; allAmulets.forEach(a => { aCounts[a.baseId] = (aCounts[a.baseId] || 0) + 1; });
+
+        // --- RENDER SLOT EQUIPADO ---
+        const renderSlot = (item, tipo) => {
+            if (!item) return `<div class="equip-slot empty">Nenhum item equipado</div>`;
+            const icon = tipo === 'arma' ? window.getWeaponIcon(item.uid, 'large') : window.getAmuletIcon(item.uid, 'large');
+            
+            // Stats do item equipado
+            let statsStr = '';
+            if (tipo === 'arma') {
+                statsStr = `+${item.atkBonus} ATK` + (item.elemento !== 'ANY' ? ` · ${item.elemento}` : '');
+            } else {
+                const ef = item.efeito || {};
+                let e = [];
+                if (ef.hpBonus) e.push(`+${ef.hpBonus} HP`);
+                if (ef.atkBonus) e.push(`+${ef.atkBonus} ATK`);
+                if (ef.elementOverride) e.push(ef.elementOverride);
+                statsStr = e.join(' · ') || 'Efeito Único';
+            }
+
+            return `
+                <div class="equip-slot filled">
+                    <div class="equip-slot-icon">${icon}</div>
+                    <div class="equip-slot-info">
+                        <div class="equip-slot-name">${item.nome}</div>
+                        <div class="equip-slot-stats">${statsStr}</div>
+                        <div class="equip-slot-actions">
+                            <button class="btn-unequip" onclick="desequiparItem('${heroClass.replace(/'/g, "\\'")}', '${tipo}')">Remover</button>
+                            <button class="btn-dismantle" onclick="handleDismantle${tipo === 'arma' ? 'Weapon' : 'Amulet'}('${item.uid}')">Desmanchar</button>
+                        </div>
+                    </div>
+                </div>`;
+        };
+
+        // --- RENDER ITENS DISPONÍVEIS (Mochila) ---
+        const renderAvailableWeapon = (w) => {
+            const icon = window.getWeaponIcon(w.uid, 'normal');
+            const qtd = wCounts[w.baseId] > 1 ? `<span style="color:#e8b923;">(x${wCounts[w.baseId]})</span>` : '';
+            const statsStr = `+${w.atkBonus} ATK` + (w.elemento !== 'ANY' ? ` · ${w.elemento}` : '');
+            
+            return `
+                <div class="avail-card">
+                    <div class="avail-icon">${icon}</div>
+                    <div class="avail-name">${w.nome} ${qtd}</div>
+                    <div class="avail-stats">${statsStr}</div>
+                    <button class="btn-equip" onclick="equiparItem('${heroClass.replace(/'/g, "\\'")}', '${w.uid}', 'arma')">Equipar</button>
+                    <button class="btn-dismantle-mini" onclick="handleDismantleWeapon('${w.uid}')" title="Desmanchar">🔥</button>
+                </div>`;
+        };
+
+        const renderAvailableAmulet = (a) => {
+            const icon = window.getAmuletIcon(a.uid, 'normal');
+            const qtd = aCounts[a.baseId] > 1 ? `<span style="color:#e8b923;">(x${aCounts[a.baseId]})</span>` : '';
+            
+            const ef = a.efeito || {};
+            let e = [];
+            if (ef.hpBonus) e.push(`+${ef.hpBonus} HP`);
+            if (ef.atkBonus) e.push(`+${ef.atkBonus} ATK`);
+            if (ef.elementOverride) e.push(ef.elementOverride);
+            const statsStr = e.join(' · ') || 'Efeito Único';
+
+            return `
+                <div class="avail-card">
+                    <div class="avail-icon">${icon}</div>
+                    <div class="avail-name">${a.nome} ${qtd}</div>
+                    <div class="avail-stats">${statsStr}</div>
+                    <button class="btn-equip" onclick="equiparItem('${heroClass.replace(/'/g, "\\'")}', '${a.uid}', 'amuleto')">Equipar</button>
+                    <button class="btn-dismantle-mini" onclick="handleDismantleAmulet('${a.uid}')" title="Desmanchar">🔥</button>
+                </div>`;
+        };
+
+        const weaponListHTML = allWeapons.length > 0 ? allWeapons.map(renderAvailableWeapon).join('') : `<div class="empty-msg">Nenhuma arma na mochila.</div>`;
+        const amuletListHTML = allAmulets.length > 0 ? allAmulets.map(renderAvailableAmulet).join('') : `<div class="empty-msg">Nenhum amuleto na mochila.</div>`;
+
+        const overlay = document.createElement('div');
+        overlay.id = 'equipScreenOverlay';
+        overlay.className = 'equip-screen-overlay';
+        overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+
+        overlay.innerHTML = `
+            <div class="equip-screen-panel">
+                <div class="equip-screen-header">
+                    <div class="equip-hero-title">
+                        <img src="${SPRITES[heroClass] || ''}" class="equip-hero-sprite">
+                        <h2>${heroData.displayName}</h2>
+                    </div>
+                    <button class="equip-screen-close" onclick="document.getElementById('equipScreenOverlay').remove()">✕</button>
+                </div>
+
+                <div class="equip-section">
+                    <div class="equip-section-title">⚔️ Arma Equipada</div>
+                    ${renderSlot(eqWeapon, 'arma')}
+                </div>
+
+                <div class="equip-section">
+                    <div class="equip-section-title">🧿 Amuleto Equipado</div>
+                    ${renderSlot(eqAmulet, 'amuleto')}
+                </div>
+
+                <div class="equip-section">
+                    <div class="equip-section-title">📦 Armas na Mochila (${archetype})</div>
+                    <div class="equip-avail-grid">${weaponListHTML}</div>
+                </div>
+
+                <div class="equip-section">
+                    <div class="equip-section-title">📦 Amuletos na Mochila</div>
+                    <div class="equip-avail-grid">${amuletListHTML}</div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+    };
+
+    // --- 2. ATUALIZAR A TESOURARIA (Botão Desmanchar ao lado do Forjar) ---
+    window.renderTesourariaForja = function() {
+        const allWeapons = Object.values(STORY_WEAPONS).filter(w => isWeaponAvailable(w.id));
+        if (allWeapons.length === 0) return `<div class="tesouraria-empty"><div class="tesouraria-empty-icon">⚔️</div><div class="tesouraria-empty-text">Nenhuma forja liberada.</div></div>`;
+
+        const cardsHTML = allWeapons.map(w => {
+            const uids = (STORY_PROGRESS.craftedWeapons || []).filter(id => getBaseId(id) === w.id);
+            const count = uids.length;
+            const canCraft = hasMaterials(w.receita) && (STORY_PROGRESS.gold || 0) >= w.custoOuro && count < 99;
+            const recHTML = Object.entries(w.receita).map(([matId, qty]) => {
+                const m = STORY_MATERIALS[matId];
+                if (!m) return '';
+                const has = STORY_PROGRESS.inventory[matId] || 0;
+                const ok = has >= qty ? 'ok' : 'no';
+                return `<span class="forge-recipe-mat ${ok}">${m.emoji} ${has}/${qty}</span>`;
+            }).join('');
+            const tipoLabel = { tacape:'Tacape', flecha:'Flecha', cajado:'Cajado' }[w.tipo];
+            const isCrafted = count > 0;
+            
+            let actionHTML = '';
+            if (count >= 99) {
+                actionHTML = `<div class="forge-forged-tag" style="color:#e8b923; margin-bottom:5px;">✅ Limite Máximo (99)</div>`;
+                actionHTML += `<button class="forge-btn danger" onclick="handleDismantleWeapon('${uids[0]}')">🔥 Desmanchar</button>`;
+            } else {
+                actionHTML = `
+                    ${isCrafted ? `<div class="forge-forged-tag" style="color:#8ac070; margin-bottom:5px;">✅ Forjada (${count}/99)</div>` : ''}
+                    <div class="forge-ouro ${canCraft ? 'ok' : 'no'}">${uiIcon('gold')} ${w.custoOuro}</div>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="forge-btn" style="flex:1;" ${canCraft ? '' : 'disabled'} onclick="handleCraftWeapon('${w.id}')">
+                            ${canCraft ? (isCrafted ? '🔨 Forjar +1' : '🔨 Forjar') : '✕ Sem recursos'}
+                        </button>
+                        ${isCrafted ? `<button class="forge-btn danger" style="flex:1;" onclick="handleDismantleWeapon('${uids[0]}')">🔥 Desmanchar</button>` : ''}
+                    </div>
+                `;
+            }
+            return `<div class="forge-card ${isCrafted ? 'crafted' : ''}"><div class="forge-card-header"><div class="forge-emoji">${w.emoji}</div><div class="forge-info"><div class="forge-name">${w.nome}</div><div class="forge-meta">Ato ${w.ato} · ${tipoLabel} · +${w.atkBonus} ATK</div></div></div><div class="forge-recipe">${recHTML}</div><div class="forge-actions">${actionHTML}</div></div>`;
+        }).join('');
+        return `<div class="forge-grid">${cardsHTML}</div>`;
+    };
+
+    window.renderTesourariaAmuletos = function() {
+        const allAmulets = Object.values(STORY_AMULETS).filter(a => isAmuletAvailable(a.id));
+        if (allAmulets.length === 0) return `<div class="tesouraria-empty"><div class="tesouraria-empty-icon">🧿</div><div class="tesouraria-empty-text">Nenhum amuleto liberado.</div></div>`;
+
+        const cardsHTML = allAmulets.map(a => {
+            const uids = (STORY_PROGRESS.craftedAmulets || []).filter(id => getBaseId(id) === a.id);
+            const count = uids.length;
+            const canCraft = hasMaterials(a.receita) && (STORY_PROGRESS.gold || 0) >= a.custoOuro && count < 99;
+            const recHTML = Object.entries(a.receita).map(([matId, qty]) => {
+                const m = STORY_MATERIALS[matId];
+                if (!m) return '';
+                const has = STORY_PROGRESS.inventory[matId] || 0;
+                const ok = has >= qty ? 'ok' : 'no';
+                return `<span class="forge-recipe-mat ${ok}">${m.emoji} ${has}/${qty}</span>`;
+            }).join('');
+            const ef = a.efeito;
+            let efHTML = [];
+            if (ef.elementOverride) efHTML.push(`🎨 Elemento → ${ef.elementOverride}`);
+            if (ef.hpBonus) efHTML.push(`❤️ +${ef.hpBonus} HP`);
+            if (ef.atkBonus) efHTML.push(`⚔️ +${ef.atkBonus} ATK`);
+            if (ef.healPerTurn) efHTML.push(`💚 Cura ${ef.healPerTurn} HP/turno`);
+            const isCrafted = count > 0;
+            
+            let actionHTML = '';
+            if (count >= 99) {
+                actionHTML = `<div class="forge-forged-tag" style="color:#e8b923; margin-bottom:5px;">✅ Limite Máximo (99)</div>`;
+                actionHTML += `<button class="forge-btn danger" onclick="handleDismantleAmulet('${uids[0]}')">🔥 Desmanchar</button>`;
+            } else {
+                actionHTML = `
+                    ${isCrafted ? `<div class="forge-forged-tag" style="color:#8ac070; margin-bottom:5px;">✅ Forjado (${count}/99)</div>` : ''}
+                    <div class="forge-ouro ${canCraft ? 'ok' : 'no'}">${uiIcon('gold')} ${a.custoOuro}</div>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="forge-btn" style="flex:1;" ${canCraft ? '' : 'disabled'} onclick="handleCraftAmulet('${a.id}')">
+                            ${canCraft ? (isCrafted ? '🔨 Forjar +1' : '🔨 Forjar') : '✕ Sem recursos'}
+                        </button>
+                        ${isCrafted ? `<button class="forge-btn danger" style="flex:1;" onclick="handleDismantleAmulet('${uids[0]}')">🔥 Desmanchar</button>` : ''}
+                    </div>
+                `;
+            }
+            return `<div class="forge-card ${isCrafted ? 'crafted amulet' : 'amulet'}"><div class="forge-card-header"><div class="forge-emoji">${a.emoji}</div><div class="forge-info"><div class="forge-name">${a.nome}</div><div class="forge-meta">Ato ${a.ato}</div></div></div><div class="forge-effects">${efHTML.join(' · ')}</div><div class="forge-recipe">${recHTML}</div><div class="forge-actions">${actionHTML}</div></div>`;
+        }).join('');
+        return `<div class="forge-grid">${cardsHTML}</div>`;
+    };
+
+    // Adiciona CSS extra para os novos stats
+    if (!document.getElementById('v401CSS')) {
+        const style = document.createElement('style');
+        style.id = 'v401CSS';
+        style.textContent = `
+            .equip-slot-stats {
+                font-family: 'EB Garamond', serif;
+                font-size: 0.85rem;
+                color: #e8b923;
+                margin-bottom: 8px;
+            }
+            .avail-stats {
+                font-family: 'EB Garamond', serif;
+                font-size: 0.75rem;
+                color: #8ac070;
+                margin-bottom: 4px;
+                text-align: center;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    console.log('✅ [V40.1] Tela de equipar com stats e Tesouraria com botão desmanchar.');
+})();
+// =================================================================
+// historia.js — BLOCO 129 (V40.2 — Botão Desmanchar no Inventário)
+// =================================================================
+(function botaoDesmancharInventarioV402() {
+    if (window._botaoDesmancharInventarioV402) return;
+    window._botaoDesmancharInventarioV402 = true;
+
+    window.renderTesourariaInventario = function(materialIds) {
+        if (materialIds.length === 0) return `<div class="tesouraria-empty"><div class="tesouraria-empty-icon">📦</div><div class="tesouraria-empty-text">Seu inventário está vazio.</div><div class="tesouraria-empty-hint">Derrote inimigos para coletar materiais.</div></div>`;
+        
+        materialIds.sort((a, b) => (window.getMaterialPrice ? window.getMaterialPrice(b) : 2) - (window.getMaterialPrice ? window.getMaterialPrice(a) : 2));
+        const inv_count = (id) => STORY_PROGRESS.inventory[id] || 0;
+        const totalValue = materialIds.reduce((sum, id) => sum + (window.getMaterialPrice ? window.getMaterialPrice(id) : 2) * inv_count(id), 0);
+
+        const cardsHTML = materialIds.map(id => {
+            const m = STORY_MATERIALS[id] || { emoji: '❓', name: 'Desconhecido' };
+            const qty = STORY_PROGRESS.inventory[id] || 0;
+            const price = window.getMaterialPrice ? window.getMaterialPrice(id) : 2;
+            return `<div class="tesouraria-item"><div class="tesouraria-item-icon">${m.emoji}</div><div class="tesouraria-item-name">${m.name}</div><div class="tesouraria-item-qty">×${qty}</div><div class="tesouraria-item-price">${uiIcon('gold')} ${price} / un.</div></div>`;
+        }).join('');
+
+        function getBaseId(id) { return id ? String(id).split('#')[0] : null; }
+
+        // Agrupamento
+        const wCounts = {};
+        (STORY_PROGRESS.craftedWeapons || []).forEach(uid => {
+            const baseId = getBaseId(uid);
+            wCounts[baseId] = (wCounts[baseId] || 0) + 1;
+        });
+        
+        const aCounts = {};
+        (STORY_PROGRESS.craftedAmulets || []).forEach(uid => {
+            const baseId = getBaseId(uid);
+            aCounts[baseId] = (aCounts[baseId] || 0) + 1;
+        });
+
+        const usageMap = {};
+        const eqMap = STORY_PROGRESS.heroEquipment || {};
+        for (const heroClass in eqMap) {
+            const e = eqMap[heroClass];
+            const wBase = getBaseId(e.arma);
+            const aBase = getBaseId(e.amuleto);
+            if (wBase) { if(!usageMap[wBase]) usageMap[wBase] = []; if (!usageMap[wBase].includes(heroClass)) usageMap[wBase].push(heroClass); }
+            if (aBase) { if(!usageMap[aBase]) usageMap[aBase] = []; if (!usageMap[aBase].includes(heroClass)) usageMap[aBase].push(heroClass); }
+        }
+
+        let weaponsHTML = '';
+        const uniqueWeapons = Object.keys(wCounts);
+        if (uniqueWeapons.length === 0) {
+            weaponsHTML = `<div class="inv-empty-line">Nenhuma arma forjada ainda.</div>`;
+        } else {
+            weaponsHTML = uniqueWeapons.map(baseId => {
+                const w = STORY_WEAPONS[baseId];
+                if (!w) return '';
+                const equippedBy = usageMap[baseId] || [];
+                const owner = equippedBy.length > 0 ? equippedBy.map(hc => STORY_HERO_CLASSES[hc]?.displayName || hc).join(', ') : null;
+                const icon = (typeof window.getWeaponIcon === 'function') ? window.getWeaponIcon(baseId, 'normal') : (w.emoji || '⚔️');
+                
+                // ⭐ Acha a primeira instância não equipada para desmanchar (se todas estiverem equipadas, a primeira vai ser desequipada)
+                const uids = (STORY_PROGRESS.craftedWeapons || []).filter(id => getBaseId(id) === baseId);
+                const uidToDismantle = uids.find(uid => !equippedBy.includes(uid)) || uids[0];
+
+                return `
+                    <div class="inv-equip-row">
+                        <div class="inv-equip-icon">${icon}</div>
+                        <div class="inv-equip-info">
+                            <div class="inv-equip-name">${w.nome} (x${wCounts[baseId]})</div>
+                            <div class="inv-equip-meta">+${w.atkBonus} ATK ${w.elemento === 'ANY' ? '· ✨ Abissal' : `· ${elemIcon(w.elemento)} ${w.elemento}`}</div>
+                        </div>
+                        <div class="inv-equip-owner ${owner ? 'used' : 'free'}">${owner ? `👤 ${owner}` : '— Livre —'}</div>
+                        <!-- ⭐ BOTÃO DESMANCHAR -->
+                        <button class="forge-btn danger" style="padding: 4px 8px; font-size: 0.8rem; margin-left: 8px; border-radius: 4px;" 
+                                onclick="handleDismantleWeapon('${uidToDismantle}')" title="Desmanchar 1 unidade">🔥</button>
+                    </div>`;
+            }).join('');
+        }
+
+        let amuletsHTML = '';
+        const uniqueAmulets = Object.keys(aCounts);
+        if (uniqueAmulets.length === 0) {
+            amuletsHTML = `<div class="inv-empty-line">Nenhum amuleto forjado ainda.</div>`;
+        } else {
+            amuletsHTML = uniqueAmulets.map(baseId => {
+                const a = STORY_AMULETS[baseId];
+                if (!a) return '';
+                const equippedBy = usageMap[baseId] || [];
+                const owner = equippedBy.length > 0 ? equippedBy.map(hc => STORY_HERO_CLASSES[hc]?.displayName || hc).join(', ') : null;
+                const icon = (typeof window.getAmuletIcon === 'function') ? window.getAmuletIcon(baseId, 'normal') : (a.emoji || '🧿');
+                
+                const uids = (STORY_PROGRESS.craftedAmulets || []).filter(id => getBaseId(id) === baseId);
+                const uidToDismantle = uids.find(uid => !equippedBy.includes(uid)) || uids[0];
+
+                const ef = a.efeito || {};
+                const efeitos = [];
+                if (ef.elementOverride) efeitos.push(`${elemIcon(ef.elementOverride)} ${ef.elementOverride}`);
+                if (ef.hpBonus) efeitos.push(`+${ef.hpBonus} HP`);
+                if (ef.atkBonus) efeitos.push(`+${ef.atkBonus} ATK`);
+                if (ef.healPerTurn) efeitos.push(`+${ef.healPerTurn} HP/turno`);
+                
+                return `
+                    <div class="inv-equip-row amulet">
+                        <div class="inv-equip-icon">${icon}</div>
+                        <div class="inv-equip-info">
+                            <div class="inv-equip-name">${a.nome} (x${aCounts[baseId]})</div>
+                            <div class="inv-equip-meta">${efeitos.join(' · ') || '—'}</div>
+                        </div>
+                        <div class="inv-equip-owner ${owner ? 'used' : 'free'}">${owner ? `👤 ${owner}` : '— Livre —'}</div>
+                        <!-- ⭐ BOTÃO DESMANCHAR -->
+                        <button class="forge-btn danger" style="padding: 4px 8px; font-size: 0.8rem; margin-left: 8px; border-radius: 4px;" 
+                                onclick="handleDismantleAmulet('${uidToDismantle}')" title="Desmanchar 1 unidade">🔥</button>
+                    </div>`;
+            }).join('');
+        }
+
+        const equipSection = `
+            <div class="inv-equipment-section">
+                <div class="inv-equipment-title">⚔️ ARMAS FORJADAS</div>
+                <div class="inv-equip-list">${weaponsHTML}</div>
+                <div class="inv-equipment-title" style="margin-top:16px;">🧿 AMULETOS FORJADOS</div>
+                <div class="inv-equip-list">${amuletsHTML}</div>
+                <div class="inv-equipment-hint">💡 Para equipar, abra o <b>painel de um herói</b> na <b>OCA</b> (botão <b>⚔️</b>) e escolha o item.</div>
+            </div>`;
+
+        return `
+            <div class="tesouraria-total">Valor total do inventário: <b>${uiIcon('gold')} ${totalValue}</b></div>
+            <div class="tesouraria-grid">${cardsHTML}</div>
+            <div class="tesouraria-hint">💡 Venda materiais no <b>Escambo</b> para ganhar ouro.</div>
+            ${equipSection}
+        `;
+    };
+
+    // Ajuste no CSS para alinhar o botão bonitinho na linha
+    if (!document.getElementById('v402CSS')) {
+        const style = document.createElement('style');
+        style.id = 'v402CSS';
+        style.textContent = `
+            .inv-equip-row {
+                /* Garante que o botão fique alinhado à direita */
+                align-items: center !important; 
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    console.log('✅ [V40.2] Botão Desmanchar adicionado ao Inventário.');
+})();
+// =================================================================
+// historia.js — BLOCO 130 (V41.0 — Fix Equipamentos no Evento)
+// =================================================================
+(function fixEquipamentoEventoV410() {
+    if (window._fixEquipamentoEventoV410) return;
+    window._fixEquipamentoEventoV410 = true;
+
+    const _origIniciar = window.eventoIniciarBatalha;
+    if (typeof _origIniciar === 'function') {
+        window.eventoIniciarBatalha = async function(bossId, faseId) {
+            // Chama a criação normal do evento
+            const result = await _origIniciar.apply(this, arguments);
+
+            // ⭐ APÓS o evento montar os heróis, aplica os níveis e equipamentos
+            if (typeof players !== 'undefined' && Array.isArray(players)) {
+                players.forEach(p => {
+                    if (!p._statsAplicadosNoEvento) {
+                        // O applyHeroLevelBonus já chama o applyHeroEquipment por baixo dos panos
+                        if (typeof applyHeroLevelBonus === 'function') {
+                            applyHeroLevelBonus(p);
+                        }
+                        p._statsAplicadosNoEvento = true;
+                    }
+                });
+                
+                // Atualiza a interface para mostrar a vida e o ataque corretos
+                if (typeof updateHeroCard === 'function') updateHeroCard();
+                if (typeof updateVisuals === 'function') updateVisuals();
+            }
+
+            return result;
+        };
+        console.log('✅ [V41.0] Equipamentos agora são aplicados no Evento Semanal.');
+    }
+})();
+// =================================================================
+// historia.js — BLOCO 131 (V42.0 — Stats Base vs Bônus na OCA)
+// =================================================================
+(function separarStatsOcaV420() {
+    if (window._separarStatsOcaV420) return;
+    window._separarStatsOcaV420 = true;
+
+    const _origRenderOca = window.renderOcaScreenFiltered;
+
+    window.renderOcaScreenFiltered = function() {
+        const r = _origRenderOca.apply(this, arguments);
+
+        // Espera o DOM ser montado
+        setTimeout(() => {
+            const cards = document.querySelectorAll('.story-hero-card');
+            
+            cards.forEach(card => {
+                if (card.classList.contains('locked')) return;
+                
+                const onclickAttr = card.getAttribute('onclick') || '';
+                const match = onclickAttr.match(/toggleHeroSelection\('((?:\\'|[^'])*)'\)/);
+                if (!match) return;
+                
+                const heroClass = match[1].replace(/\\'/g, "'");
+                const heroData = STORY_HERO_CLASSES[heroClass];
+                if (!heroData) return;
+
+                // 1. Valores Base
+                const baseHp = heroData.hp;
+                const baseAtk = heroData.atk;
+
+                let bonusHp = 0;
+                let bonusAtk = 0;
+
+                // 2. Bônus de Nível (do 2 ao 10)
+                if (typeof getHeroBonusFromLevel === 'function') {
+                    const lvlBonus = getHeroBonusFromLevel(heroClass);
+                    bonusHp += lvlBonus.hp || 0;
+                    bonusAtk += lvlBonus.atk || 0;
+                }
+
+                // 3. Bônus do Nível 11 (Status Aleatório)
+                if (STORY_PROGRESS.heroStat11 && STORY_PROGRESS.heroStat11[heroClass]) {
+                    const stat = STORY_PROGRESS.heroStat11[heroClass];
+                    if (stat.tipo === 'jackpot' && stat.stats) {
+                        stat.stats.forEach(s => {
+                            if (s.tipo === 'hp') bonusHp += s.valor;
+                            if (s.tipo === 'atk') bonusAtk += s.valor;
+                        });
+                    } else {
+                        if (stat.tipo === 'hp') bonusHp += stat.valor;
+                        if (stat.tipo === 'atk') bonusAtk += stat.valor;
+                    }
+                }
+
+                // 4. Bônus de Equipamentos (Arma e Amuleto)
+                if (typeof getHeroEquipment === 'function') {
+                    const eq = getHeroEquipment(heroClass);
+                    
+                    if (eq.arma && typeof getWeaponById === 'function') {
+                        const w = getWeaponById(eq.arma);
+                        if (w) bonusAtk += w.atkBonus || 0;
+                    }
+                    
+                    if (eq.amuleto && typeof getAmuletById === 'function') {
+                        const a = getAmuletById(eq.amuleto);
+                        if (a && a.efeito) {
+                            bonusHp += a.efeito.hpBonus || 0;
+                            bonusAtk += a.efeito.atkBonus || 0;
+                        }
+                    }
+                }
+
+                // 5. Bônus de Título (se houver um ativo)
+                if (typeof ACTIVE_TITLE !== 'undefined' && ACTIVE_TITLE && typeof TITLES !== 'undefined') {
+                    const title = TITLES[ACTIVE_TITLE];
+                    if (title && title.bonus) {
+                        if (title.bonus.type === 'ATK') bonusAtk += title.bonus.value || 0;
+                        if (title.bonus.type === 'MAX_HP') bonusHp += title.bonus.value || 0;
+                    }
+                }
+
+                // 6. Formatação Visual (Verde para +, Vermelho para -)
+                const formatarStat = (base, bonus) => {
+                    if (bonus === 0) return `${base}`;
+                    const cor = bonus > 0 ? '#8ac070' : '#d05050';
+                    const sinal = bonus > 0 ? '+' : '';
+                    return `${base} <span style="color:${cor}; font-weight:900; text-shadow: 0 0 4px rgba(0,0,0,0.8);">${sinal}${bonus}</span>`;
+                };
+
+                const hpText = formatarStat(baseHp, bonusHp);
+                const atkText = formatarStat(baseAtk, bonusAtk);
+
+                // Atualiza o texto do card
+                const infoDiv = card.querySelector('.story-hero-level');
+                if (infoDiv) {
+                    infoDiv.innerHTML = `${heroData.role} · HP ${hpText} · ATK ${atkText}`;
+                }
+            });
+        }, 100);
+
+        return r;
+    };
+
+    console.log('✅ [V42.0] Stats base e bônus coloridos na OCA.');
+})();
+// =================================================================
+// historia.js — BLOCO 132 (V42.1 — Ajuste visual do Check na OCA)
+// =================================================================
+(function fixCheckOcaV421() {
+    if (window._fixCheckOcaV421) return;
+    window._fixCheckOcaV421 = true;
+
+    const style = document.createElement('style');
+    style.id = 'v421CSS';
+    style.textContent = `
+        /* Move o check para baixo da raridade (estrelas) */
+        .story-hero-check {
+            top: 36px !important; 
+            right: 12px !important;
+            z-index: 10;
+        }
+    `;
+    document.head.appendChild(style);
+    console.log('✅ [V42.1] Botão de check movido para baixo das estrelas.');
+})();
+// =================================================================
+// historia.js — BLOCO 133 (V43.0 — Aura de Nível 11)
+// -----------------------------------------------------------------
+// Adiciona uma aura mágica pulsante nos sprites dos heróis Nível 11.
+// =================================================================
+(function auraNivel11V430() {
+    if (window._auraNivel11V430) return;
+    window._auraNivel11V430 = true;
+
+    // 1. Adiciona o CSS da aura
+    if (!document.getElementById('v430CSS')) {
+        const style = document.createElement('style');
+        style.id = 'v430CSS';
+        style.textContent = `
+            @keyframes auraLv11Pulse {
+                0% { filter: drop-shadow(0 0 5px #e8b923) drop-shadow(0 0 10px rgba(142, 68, 173, 0.6)); }
+                100% { filter: drop-shadow(0 0 12px #e8b923) drop-shadow(0 0 25px rgba(142, 68, 173, 1)); }
+            }
+            .lv11-glow {
+                animation: auraLv11Pulse 1.5s infinite alternate !important;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // Helper para checar se o herói é lvl 11
+    function isLvl11(heroClass) {
+        if (typeof getHeroLevel === 'function') {
+            return getHeroLevel(heroClass) >= 11;
+        }
+        return false;
+    }
+
+    // 2. Hook na OCA (Cards de Seleção)
+    const _origRenderOca = window.renderOcaScreenFiltered;
+    if (typeof _origRenderOca === 'function') {
+        window.renderOcaScreenFiltered = function() {
+            const r = _origRenderOca.apply(this, arguments);
+            setTimeout(() => {
+                document.querySelectorAll('.story-hero-card').forEach(card => {
+                    if (card.classList.contains('locked')) return;
+                    const onclickAttr = card.getAttribute('onclick') || '';
+                    const match = onclickAttr.match(/toggleHeroSelection\('((?:\\'|[^'])*)'\)/);
+                    if (!match) return;
+                    
+                    const heroClass = match[1].replace(/\\'/g, "'");
+                    if (isLvl11(heroClass)) {
+                        const sprite = card.querySelector('.story-hero-sprite');
+                        if (sprite) sprite.classList.add('lv11-glow');
+                    }
+                });
+            }, 100);
+            return r;
+        };
+    }
+
+    // 3. Hook no Tabuleiro (Tokens durante a batalha)
+    const _origUpdateHeroCard = window.updateHeroCard;
+    if (typeof _origUpdateHeroCard === 'function') {
+        window.updateHeroCard = function() {
+            const r = _origUpdateHeroCard.apply(this, arguments);
+            if (typeof players !== 'undefined' && Array.isArray(players)) {
+                players.forEach(p => {
+                    if (!p || p.dead) return;
+                    const img = document.getElementById(`imgP${p.id}`);
+                    if (img) {
+                        if (isLvl11(p.class)) {
+                            img.classList.add('lv11-glow');
+                        } else {
+                            img.classList.remove('lv11-glow');
+                        }
+                    }
+                });
+            }
+            return r;
+        };
+    }
+
+    // 4. Hook no Painel de Detalhes
+    const _origOpenDetails = window.openHeroDetails;
+    if (typeof _origOpenDetails === 'function') {
+        window.openHeroDetails = function(heroClass) {
+            _origOpenDetails.apply(this, arguments);
+            if (isLvl11(heroClass)) {
+                setTimeout(() => {
+                    const sprite = document.querySelector('.hero-details-sprite');
+                    if (sprite) sprite.classList.add('lv11-glow');
+                }, 50);
+            }
+        };
+    }
+
+    console.log('✅ [V43.0] Aura mágica para heróis Nível 11 ativada.');
+})();
+// =================================================================
+// historia.js — BLOCO 134 (V43.1 — Fix Aura do Nível 11 no Tabuleiro)
+// =================================================================
+(function fixAuraTabuleiroV431() {
+    if (window._fixAuraTabuleiroV431) return;
+    window._fixAuraTabuleiroV431 = true;
+
+    // 1. Helper para checar nível 11
+    function isLvl11(heroClass) {
+        return (typeof getHeroLevel === 'function') && getHeroLevel(heroClass) >= 11;
+    }
+
+    // 2. Corrige o brilho nos tokens do TABULEIRO (onde o problema acontece)
+    const _origUpdateAll = window.updateAllSpriteDirections;
+    if (typeof _origUpdateAll === 'function') {
+        window.updateAllSpriteDirections = function() {
+            // Chama a função original (que vai apagar a classe lv11-glow)
+            const r = _origUpdateAll.apply(this, arguments);
+            
+            // Depois que ela roda, a gente aplica o brilho de volta!
+            if (typeof players !== 'undefined' && Array.isArray(players)) {
+                players.forEach(p => {
+                    if (!p || p.dead) return;
+                    const img = document.getElementById(`imgP${p.id}`);
+                    if (img && isLvl11(p.class)) {
+                        img.classList.add('lv11-glow');
+                    }
+                });
+            }
+            return r;
+        };
+    }
+
+    // 3. Corrige o brilho na lista lateral de heróis (Painel de Status PVP/Coop)
+    const _origUpdateHeroCard = window.updateHeroCard;
+    if (typeof _origUpdateHeroCard === 'function') {
+        window.updateHeroCard = function() {
+            const r = _origUpdateHeroCard.apply(this, arguments);
+            
+            // Adiciona o brilho no sprite pequeno da lista lateral
+            if (typeof players !== 'undefined' && Array.isArray(players)) {
+                players.forEach((p, index) => {
+                    if (!p) return;
+                    const listRow = document.querySelectorAll('.hero-status-row')[index];
+                    if (listRow) {
+                        const img = listRow.querySelector('.hero-status-sprite');
+                        if (img) {
+                            if (isLvl11(p.class)) {
+                                img.classList.add('lv11-glow');
+                            } else {
+                                img.classList.remove('lv11-glow');
+                            }
+                        }
+                    }
+                });
+            }
+            return r;
+        };
+    }
+
+    // 4. Garante que a animação CSS seja aplicada
+    if (!document.getElementById('v431CSS')) {
+        const style = document.createElement('style');
+        style.id = 'v431CSS';
+        style.textContent = `
+            @keyframes auraLv11Pulse {
+                0% { filter: drop-shadow(0 0 5px #e8b923) drop-shadow(0 0 10px rgba(142, 68, 173, 0.6)); }
+                100% { filter: drop-shadow(0 0 12px #e8b923) drop-shadow(0 0 25px rgba(142, 68, 173, 1)); }
+            }
+            .lv11-glow {
+                animation: auraLv11Pulse 1.5s infinite alternate !important;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    console.log('✅ [V43.1] Aura Nível 11 forçada no tabuleiro e no painel PVP/Coop.');
+})();
