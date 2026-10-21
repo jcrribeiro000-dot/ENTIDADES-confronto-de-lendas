@@ -38866,3 +38866,122 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
 
     console.log('✅ [V43.1] Aura Nível 11 forçada no tabuleiro e no painel PVP/Coop.');
 })();
+// =================================================================
+// historia.js — BLOCO 136 (V42.0 — Faxina de Save Antigo e Anti-Crash)
+// =================================================================
+
+(function faxinaSaveAntigoV420() {
+    if (window._faxinaSaveAntigoV420) return;
+    window._faxinaSaveAntigoV420 = true;
+
+    function getBaseId(id) {
+        return id ? String(id).split('#')[0] : null;
+    }
+
+    function sanitizarDadosAntigos() {
+        if (!STORY_PROGRESS) return;
+        
+        // Garante as estruturas básicas
+        if (!STORY_PROGRESS.inventory || typeof STORY_PROGRESS.inventory !== 'object') STORY_PROGRESS.inventory = {};
+        if (!STORY_PROGRESS.heroEquipment || typeof STORY_PROGRESS.heroEquipment !== 'object') STORY_PROGRESS.heroEquipment = {};
+
+        let mudou = false;
+
+        // 1. Limpa Armas Fantasmas
+        if (Array.isArray(STORY_PROGRESS.craftedWeapons)) {
+            STORY_PROGRESS.craftedWeapons = STORY_PROGRESS.craftedWeapons.map(id => {
+                if (typeof id !== 'string') return null;
+                const base = getBaseId(id);
+                if (!STORY_WEAPONS[base]) return null; // Não existe no jogo, deleta
+                if (!id.includes('#')) { mudou = true; return base + '#' + Date.now() + Math.floor(Math.random()*1000); }
+                return id;
+            }).filter(Boolean);
+        } else {
+            STORY_PROGRESS.craftedWeapons = [];
+            mudou = true;
+        }
+
+        // 2. Limpa Amuletos Fantasmas
+        if (Array.isArray(STORY_PROGRESS.craftedAmulets)) {
+            STORY_PROGRESS.craftedAmulets = STORY_PROGRESS.craftedAmulets.map(id => {
+                if (typeof id !== 'string') return null;
+                const base = getBaseId(id);
+                if (!STORY_AMULETS[base]) return null;
+                if (!id.includes('#')) { mudou = true; return base + '#' + Date.now() + Math.floor(Math.random()*1000); }
+                return id;
+            }).filter(Boolean);
+        } else {
+            STORY_PROGRESS.craftedAmulets = [];
+            mudou = true;
+        }
+
+        // 3. Limpa Equipamentos Quebrados nos Heróis
+        for (let hc in STORY_PROGRESS.heroEquipment) {
+            let eq = STORY_PROGRESS.heroEquipment[hc];
+            if (!eq || typeof eq !== 'object') { eq = { arma: null, amuleto: null }; STORY_PROGRESS.heroEquipment[hc] = eq; mudou = true; }
+            
+            if (eq.arma && !STORY_PROGRESS.craftedWeapons.includes(eq.arma)) {
+                eq.arma = null; mudou = true;
+            }
+            if (eq.amuleto && !STORY_PROGRESS.craftedAmulets.includes(eq.amuleto)) {
+                eq.amuleto = null; mudou = true;
+            }
+        }
+
+        // 4. Garante status nível 11
+        if (!STORY_PROGRESS.heroStat11 || typeof STORY_PROGRESS.heroStat11 !== 'object') {
+            STORY_PROGRESS.heroStat11 = {}; mudou = true;
+        }
+
+        if (mudou && typeof saveStoryProgress === 'function') {
+            console.log('[V42.0] Save antigo limpo e migrado com sucesso.');
+            saveStoryProgress();
+        }
+    }
+
+    // Executa a limpeza sempre que o jogo carrega o save
+    const _origLoad = window.loadStoryProgressByName;
+    if (typeof _origLoad === 'function') {
+        window.loadStoryProgressByName = function() {
+            const r = _origLoad.apply(this, arguments);
+            sanitizarDadosAntigos();
+            return r;
+        };
+    }
+
+    // Executa a limpeza quando a Tesouraria é aberta (garantia dupla)
+    const _origRenderTesouraria = window.renderTesourariaScreen;
+    if (typeof _origRenderTesouraria === 'function') {
+        window.renderTesourariaScreen = function() {
+            sanitizarDadosAntigos(); // Limpa antes de desenhar
+            
+            try {
+                return _origRenderTesouraria.apply(this, arguments);
+            } catch (e) {
+                console.error('[V42.0] Erro na Tesouraria:', e);
+                const screen = document.getElementById('storyScreen');
+                if (screen) {
+                    screen.innerHTML = `
+                        <div class="story-container" style="text-align:center; padding: 50px 20px;">
+                            <h1 style="color:#e8b923;">Erro na Forja</h1>
+                            <p style="color:#f5c8c8; font-family:'EB Garamond'; margin-bottom: 20px;">
+                                Ocorreu um erro ao carregar os itens antigos: <br><br>
+                                <b>${e.message}</b>
+                            </p>
+                            <button class="story-back-btn" onclick="STORY_PROGRESS.craftedWeapons=[]; STORY_PROGRESS.craftedAmulets=[]; saveStoryProgress(); renderTesourariaScreen();">
+                                🧹 Deletar itens antigos e consertar
+                            </button>
+                            <br><br>
+                            <button class="story-back-btn" onclick="renderAldeiaScreen()">← VOLTAR À ALDEIA</button>
+                        </div>
+                    `;
+                }
+            }
+        };
+    }
+
+    // Roda 1 vez ao iniciar o jogo (caso o save já esteja em memória)
+    setTimeout(sanitizarDadosAntigos, 1000);
+
+    console.log('✅ [V42.0] Faxina de save antigo ativa.');
+})();
