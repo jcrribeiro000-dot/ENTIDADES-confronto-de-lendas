@@ -38867,121 +38867,126 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
     console.log('✅ [V43.1] Aura Nível 11 forçada no tabuleiro e no painel PVP/Coop.');
 })();
 // =================================================================
-// historia.js — BLOCO 136 (V42.0 — Faxina de Save Antigo e Anti-Crash)
+// 🧹 [AUTO-CLEAN V1] LIMPEZA AUTOMÁTICA DE EQUIPAMENTOS ANTIGOS
+// -----------------------------------------------------------------
+// ⚠️ BLOCO TEMPORÁRIO — REMOVA DEPOIS DE TESTAR!
+//
+// O que faz:
+//   • Zera STORY_PROGRESS.craftedWeapons (armas forjadas)
+//   • Zera STORY_PROGRESS.craftedAmulets (amuletos forjados)
+//   • Limpa as referências em STORY_PROGRESS.heroEquipment
+//   • Salva o progresso automaticamente
+//   • Mostra um alert() com o resultado (visível no mobile)
+//
+// Quando roda:
+//   • 1.2s e 3s após o script carregar (page load)
+//   • Toda vez que um save for carregado (loadStoryProgressByName)
+//   • Toda vez que um save novo for criado (createNewStorySave)
+//
+// Isso cobre 100% dos casos: se o save já está carregado no load,
+// os timeouts pegam. Se o jogador troca de save pelo modal, o hook
+// em loadStoryProgressByName pega.
+//
+// Preserva:
+//   • STORY_PROGRESS.eventoArmas (armas do Evento Semanal)
+//   • STORY_PROGRESS.inventory (materiais, incluindo nucleo_abismo)
+//   • Níveis, XP, ouro, estrelas, bestiário, tudo o mais
 // =================================================================
+(function autoCleanEquipamentosV1() {
+    if (window._autoCleanV1) return;
+    window._autoCleanV1 = true;
 
-(function faxinaSaveAntigoV420() {
-    if (window._faxinaSaveAntigoV420) return;
-    window._faxinaSaveAntigoV420 = true;
+    let jaAvisou = false;
 
-    function getBaseId(id) {
-        return id ? String(id).split('#')[0] : null;
-    }
+    function executarLimpeza() {
+        if (typeof STORY_PROGRESS === 'undefined') return false;
 
-    function sanitizarDadosAntigos() {
-        if (!STORY_PROGRESS) return;
-        
-        // Garante as estruturas básicas
-        if (!STORY_PROGRESS.inventory || typeof STORY_PROGRESS.inventory !== 'object') STORY_PROGRESS.inventory = {};
-        if (!STORY_PROGRESS.heroEquipment || typeof STORY_PROGRESS.heroEquipment !== 'object') STORY_PROGRESS.heroEquipment = {};
+        // Só age se existe save carregado (senão é fresh start, nada a limpar)
+        const temSave = (typeof STORY_CURRENT_SAVE_NAME !== 'undefined' && STORY_CURRENT_SAVE_NAME)
+                     || (STORY_PROGRESS && STORY_PROGRESS.saveName);
+        if (!temSave) return false;
 
-        let mudou = false;
+        const armasAntes = Array.isArray(STORY_PROGRESS.craftedWeapons)
+            ? STORY_PROGRESS.craftedWeapons.length : 0;
+        const amuletosAntes = Array.isArray(STORY_PROGRESS.craftedAmulets)
+            ? STORY_PROGRESS.craftedAmulets.length : 0;
 
-        // 1. Limpa Armas Fantasmas
-        if (Array.isArray(STORY_PROGRESS.craftedWeapons)) {
-            STORY_PROGRESS.craftedWeapons = STORY_PROGRESS.craftedWeapons.map(id => {
-                if (typeof id !== 'string') return null;
-                const base = getBaseId(id);
-                if (!STORY_WEAPONS[base]) return null; // Não existe no jogo, deleta
-                if (!id.includes('#')) { mudou = true; return base + '#' + Date.now() + Math.floor(Math.random()*1000); }
-                return id;
-            }).filter(Boolean);
-        } else {
-            STORY_PROGRESS.craftedWeapons = [];
-            mudou = true;
+        if (armasAntes === 0 && amuletosAntes === 0) {
+            console.log('[AUTO-CLEAN] Save já está limpo. Nada a fazer.');
+            return false;
         }
 
-        // 2. Limpa Amuletos Fantasmas
-        if (Array.isArray(STORY_PROGRESS.craftedAmulets)) {
-            STORY_PROGRESS.craftedAmulets = STORY_PROGRESS.craftedAmulets.map(id => {
-                if (typeof id !== 'string') return null;
-                const base = getBaseId(id);
-                if (!STORY_AMULETS[base]) return null;
-                if (!id.includes('#')) { mudou = true; return base + '#' + Date.now() + Math.floor(Math.random()*1000); }
-                return id;
-            }).filter(Boolean);
-        } else {
-            STORY_PROGRESS.craftedAmulets = [];
-            mudou = true;
+        // ⭐ LIMPEZA PRINCIPAL
+        STORY_PROGRESS.craftedWeapons = [];
+        STORY_PROGRESS.craftedAmulets = [];
+
+        // Limpa referências de equipamento (arma/amuleto = null)
+        let refsLimpos = 0;
+        if (STORY_PROGRESS.heroEquipment && typeof STORY_PROGRESS.heroEquipment === 'object') {
+            Object.keys(STORY_PROGRESS.heroEquipment).forEach(heroClass => {
+                const eq = STORY_PROGRESS.heroEquipment[heroClass];
+                if (!eq) return;
+                if (eq.arma)    { eq.arma = null;    refsLimpos++; }
+                if (eq.amuleto) { eq.amuleto = null; refsLimpos++; }
+            });
         }
 
-        // 3. Limpa Equipamentos Quebrados nos Heróis
-        for (let hc in STORY_PROGRESS.heroEquipment) {
-            let eq = STORY_PROGRESS.heroEquipment[hc];
-            if (!eq || typeof eq !== 'object') { eq = { arma: null, amuleto: null }; STORY_PROGRESS.heroEquipment[hc] = eq; mudou = true; }
-            
-            if (eq.arma && !STORY_PROGRESS.craftedWeapons.includes(eq.arma)) {
-                eq.arma = null; mudou = true;
-            }
-            if (eq.amuleto && !STORY_PROGRESS.craftedAmulets.includes(eq.amuleto)) {
-                eq.amuleto = null; mudou = true;
+        // Salva
+        if (typeof saveStoryProgress === 'function') {
+            try { saveStoryProgress(); } catch (e) {
+                console.warn('[AUTO-CLEAN] Erro ao salvar:', e);
             }
         }
 
-        // 4. Garante status nível 11
-        if (!STORY_PROGRESS.heroStat11 || typeof STORY_PROGRESS.heroStat11 !== 'object') {
-            STORY_PROGRESS.heroStat11 = {}; mudou = true;
+        console.log(`[AUTO-CLEAN] ✅ ${armasAntes} armas + ${amuletosAntes} amuletos removidos (${refsLimpos} refs limpas).`);
+
+        // Aviso visual (funciona no mobile)
+        if (!jaAvisou) {
+            jaAvisou = true;
+            const save = (typeof STORY_CURRENT_SAVE_NAME !== 'undefined' && STORY_CURRENT_SAVE_NAME) || '?';
+            setTimeout(() => {
+                alert(
+                    '🧹 LIMPEZA AUTOMÁTICA CONCLUÍDA\n\n' +
+                    'Save: ' + save + '\n\n' +
+                    '⚔️ Armas removidas: ' + armasAntes + '\n' +
+                    '🧿 Amuletos removidos: ' + amuletosAntes + '\n' +
+                    '🔗 Referências limpas: ' + refsLimpos + '\n\n' +
+                    '✅ O save foi atualizado.\n' +
+                    '💡 A Forja deve funcionar agora.\n' +
+                    '⚠️ Remova este patch do historia.js e recarregue.'
+                );
+            }, 600);
         }
 
-        if (mudou && typeof saveStoryProgress === 'function') {
-            console.log('[V42.0] Save antigo limpo e migrado com sucesso.');
-            saveStoryProgress();
-        }
+        return true;
     }
 
-    // Executa a limpeza sempre que o jogo carrega o save
+    // ---- 1. Roda quando a página carrega (após todos os patches) ----
+    setTimeout(executarLimpeza, 1200);
+    setTimeout(executarLimpeza, 3000);
+
+    // ---- 2. Roda quando qualquer save é carregado ----
     const _origLoad = window.loadStoryProgressByName;
     if (typeof _origLoad === 'function') {
-        window.loadStoryProgressByName = function() {
+        window.loadStoryProgressByName = function(name) {
             const r = _origLoad.apply(this, arguments);
-            sanitizarDadosAntigos();
+            if (r) setTimeout(executarLimpeza, 150);
             return r;
         };
     }
 
-    // Executa a limpeza quando a Tesouraria é aberta (garantia dupla)
-    const _origRenderTesouraria = window.renderTesourariaScreen;
-    if (typeof _origRenderTesouraria === 'function') {
-        window.renderTesourariaScreen = function() {
-            sanitizarDadosAntigos(); // Limpa antes de desenhar
-            
-            try {
-                return _origRenderTesouraria.apply(this, arguments);
-            } catch (e) {
-                console.error('[V42.0] Erro na Tesouraria:', e);
-                const screen = document.getElementById('storyScreen');
-                if (screen) {
-                    screen.innerHTML = `
-                        <div class="story-container" style="text-align:center; padding: 50px 20px;">
-                            <h1 style="color:#e8b923;">Erro na Forja</h1>
-                            <p style="color:#f5c8c8; font-family:'EB Garamond'; margin-bottom: 20px;">
-                                Ocorreu um erro ao carregar os itens antigos: <br><br>
-                                <b>${e.message}</b>
-                            </p>
-                            <button class="story-back-btn" onclick="STORY_PROGRESS.craftedWeapons=[]; STORY_PROGRESS.craftedAmulets=[]; saveStoryProgress(); renderTesourariaScreen();">
-                                🧹 Deletar itens antigos e consertar
-                            </button>
-                            <br><br>
-                            <button class="story-back-btn" onclick="renderAldeiaScreen()">← VOLTAR À ALDEIA</button>
-                        </div>
-                    `;
-                }
-            }
+    // ---- 3. Roda quando um save novo é criado (cobre o caso de o jogador apagar tudo) ----
+    const _origCreate = window.createNewStorySave;
+    if (typeof _origCreate === 'function') {
+        window.createNewStorySave = function(name) {
+            const r = _origCreate.apply(this, arguments);
+            setTimeout(executarLimpeza, 150);
+            return r;
         };
     }
 
-    // Roda 1 vez ao iniciar o jogo (caso o save já esteja em memória)
-    setTimeout(sanitizarDadosAntigos, 1000);
-
-    console.log('✅ [V42.0] Faxina de save antigo ativa.');
+    console.log('✅ [AUTO-CLEAN V1] Instalado. Vai limpar armas/amuletos automaticamente ao carregar save.');
 })();
+// =================================================================
+// FIM DO BLOCO AUTO-CLEAN — REMOVA ESTE BLOCO APÓS TESTAR
+// =================================================================
