@@ -38866,4 +38866,30 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
 
     console.log('✅ [V43.1] Aura Nível 11 forçada no tabuleiro e no painel PVP/Coop.');
 })();
+// =================================================================
+// 🔧 FIX CRÍTICO — getBaseId global (V40.1 crash)
+// -----------------------------------------------------------------
+// O V40.1 sobrescreveu renderTesourariaForja e renderTesourariaAmuletos
+// usando getBaseId() SEM definí-lo no próprio escopo (só existia
+// dentro de IIFEs anteriores, não em window).
+//
+// Resultado: 1+ item em craftedWeapons/craftedAmulets → ReferenceError
+// → Tesouraria não abre.
+//
+// Fix: expor getBaseId globalmente. É idempotente (só define uma vez).
+// =================================================================
+(function fixGetBaseIdGlobal() {
+    if (typeof window.getBaseId === 'function') {
+        console.log('✅ [FIX getBaseId] Já existe, nada a fazer.');
+        return;
+    }
+    window.getBaseId = function(id) {
+        if (!id) return null;
+        return String(id).split('#')[0];
+    };
+    console.log('✅ [FIX getBaseId] Exposto globalmente. Tesouraria volta a funcionar.');
+})();
+// =================================================================
+// FIM DO FIX
+// =================================================================
 
