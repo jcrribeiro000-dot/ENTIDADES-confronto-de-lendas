@@ -38892,4 +38892,802 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
 // =================================================================
 // FIM DO FIX
 // =================================================================
+// =================================================================
+// 🎨 PATCH V44.0 — Fix Aura Lv11 (raios SSJ2) + Refresh da OCA
+// -----------------------------------------------------------------
+// 1. AURA Lv11:
+//    - Remove o glow grande que cobria o tile
+//    - Adiciona contorno fino (2px) no sprite
+//    - Adiciona 8 raios finos girando (SSJ2) ao redor do herói
+//    - NÃO invade o tile vizinho (140% do token = ~10% extra por lado)
+//
+// 2. OCA:
+//    - Após equipar/desequipar, re-renderiza a OCA visível
+//    - Assim o bônus (verde) de arma/amuleto aparece IMEDIATAMENTE
+//    - Sem precisar sair e voltar
+// =================================================================
 
+// -----------------------------------------------------------------
+// PARTE 1 — CSS (substitui o .lv11-glow antigo e adiciona .lv11-rays)
+// -----------------------------------------------------------------
+(function injectAuraLv11CSS() {
+    // Remove o CSS antigo do V43.1
+    const old = document.getElementById('v431CSS');
+    if (old) old.remove();
+
+    const style = document.createElement('style');
+    style.id = 'v44AuraCSS';
+    style.textContent = `
+        /* ============ CONTORNO FINO NO SPRITE (não cobre tile) ============ */
+        .lv11-glow {
+            animation: lv11OutlinePulse 1.6s ease-in-out infinite alternate !important;
+        }
+
+        @keyframes lv11OutlinePulse {
+            0% {
+                filter:
+                    drop-shadow(0 0 1px #e8b923)
+                    drop-shadow(0 0 1px #e8b923)
+                    drop-shadow(0 0 1px #8e44ad)
+                    drop-shadow(0 0 1px #8e44ad);
+            }
+            100% {
+                filter:
+                    drop-shadow(0 0 2px #e8b923)
+                    drop-shadow(0 0 2px #e8b923)
+                    drop-shadow(0 0 2px #c39bd3)
+                    drop-shadow(0 0 2px #c39bd3);
+            }
+        }
+
+        /* ============ RAIOS SSJ2 EM VOLTA DO HERÓI ============ */
+        /* O token (não o sprite) recebe a classe .lv11-rays           */
+        .token.lv11-rays {
+            overflow: visible !important;
+        }
+
+        .token.lv11-rays::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 145%;
+            height: 145%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+
+            /* 8 feixes finos (2-3px) a cada 45° */
+            background: conic-gradient(
+                from 0deg,
+                transparent 0deg,
+                rgba(232, 185, 35, 0.95) 2deg,
+                #fff5dc 3deg,
+                rgba(232, 185, 35, 0.95) 4deg,
+                transparent 6deg,
+
+                transparent 45deg,
+                rgba(232, 185, 35, 0.95) 47deg,
+                #fff5dc 48deg,
+                rgba(232, 185, 35, 0.95) 49deg,
+                transparent 51deg,
+
+                transparent 90deg,
+                rgba(232, 185, 35, 0.95) 92deg,
+                #fff5dc 93deg,
+                rgba(232, 185, 35, 0.95) 94deg,
+                transparent 96deg,
+
+                transparent 135deg,
+                rgba(232, 185, 35, 0.95) 137deg,
+                #fff5dc 138deg,
+                rgba(232, 185, 35, 0.95) 139deg,
+                transparent 141deg,
+
+                transparent 180deg,
+                rgba(232, 185, 35, 0.95) 182deg,
+                #fff5dc 183deg,
+                rgba(232, 185, 35, 0.95) 184deg,
+                transparent 186deg,
+
+                transparent 225deg,
+                rgba(232, 185, 35, 0.95) 227deg,
+                #fff5dc 228deg,
+                rgba(232, 185, 35, 0.95) 229deg,
+                transparent 231deg,
+
+                transparent 270deg,
+                rgba(232, 185, 35, 0.95) 272deg,
+                #fff5dc 273deg,
+                rgba(232, 185, 35, 0.95) 274deg,
+                transparent 276deg,
+
+                transparent 315deg,
+                rgba(232, 185, 35, 0.95) 317deg,
+                #fff5dc 318deg,
+                rgba(232, 185, 35, 0.95) 319deg,
+                transparent 321deg,
+
+                transparent 360deg
+            );
+
+            /* Corta o centro (sprite aparece) e as pontas (não invade vizinho) */
+            -webkit-mask-image: radial-gradient(
+                circle,
+                transparent 38%,
+                black 55%,
+                black 82%,
+                transparent 92%
+            );
+            mask-image: radial-gradient(
+                circle,
+                transparent 38%,
+                black 55%,
+                black 82%,
+                transparent 92%
+            );
+
+            z-index: -1; /* atrás do sprite, na frente do tile */
+            opacity: 0.9;
+            animation:
+                lv11RaysSpin 4s linear infinite,
+                lv11RaysPulse 1.2s ease-in-out infinite alternate;
+        }
+
+        @keyframes lv11RaysSpin {
+            from { transform: translate(-50%, -50%) rotate(0deg); }
+            to   { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+
+        @keyframes lv11RaysPulse {
+            from { opacity: 0.5; }
+            to   { opacity: 1; }
+        }
+
+        /* Em mobile, encolhe um pouco pra caber no board */
+        @media (max-width: 600px) {
+            .token.lv11-rays::before {
+                width: 135%;
+                height: 135%;
+            }
+        }
+    `;
+    document.head.appendChild(style);
+    console.log('✅ [V44.0] CSS da aura Lv11 (contorno + raios) injetado.');
+})();
+
+// -----------------------------------------------------------------
+// PARTE 2 — JS (aplica .lv11-rays no token do board)
+// -----------------------------------------------------------------
+(function aplicarAuraRaiosLv11() {
+    if (window._auraRaiosLv11) return;
+    window._auraRaiosLv11 = true;
+
+    function isLvl11(heroClass) {
+        return (typeof getHeroLevel === 'function') && getHeroLevel(heroClass) >= 11;
+    }
+
+    function aplicar() {
+        if (typeof players === 'undefined' || !Array.isArray(players)) return;
+
+        players.forEach(p => {
+            if (!p || !p.class) return;
+            const tokenEl = document.getElementById(`tokenP${p.id}`);
+            if (!tokenEl) return;
+
+            // Remove a classe antiga de raios se o herói não é mais Lv11 ou morreu
+            if (p.dead || !isLvl11(p.class)) {
+                tokenEl.classList.remove('lv11-rays');
+                const img = tokenEl.querySelector('img.lv11-glow');
+                if (img) img.classList.remove('lv11-glow');
+                return;
+            }
+
+            // Adiciona raios no token
+            tokenEl.classList.add('lv11-rays');
+
+            // Adiciona contorno no sprite do board
+            const img = tokenEl.querySelector('img');
+            if (img && !img.classList.contains('lv11-glow')) {
+                img.classList.add('lv11-glow');
+            }
+        });
+    }
+
+    // Roda depois dos updates existentes
+    ['updateAllSpriteDirections', 'updateHeroCard', 'updateVisuals', 'updateBossCard'].forEach(fnName => {
+        const _orig = window[fnName];
+        if (typeof _orig === 'function') {
+            window[fnName] = function() {
+                const r = _orig.apply(this, arguments);
+                setTimeout(aplicar, 0);
+                return r;
+            };
+        }
+    });
+
+    // Rodadas iniciais
+    setTimeout(aplicar, 400);
+    setTimeout(aplicar, 1200);
+    setTimeout(aplicar, 2500);
+
+    // Monitor leve (caso algum patch de FX quebre a classe)
+    setInterval(() => {
+        if (!window._storyMode && !window._eventoAtivo && !window._coopMode && !window._pvpMode) return;
+        aplicar();
+    }, 3000);
+
+    console.log('✅ [V44.0] Aura Lv11 aplicada como raios rotativos (não cobre tile).');
+})();
+
+// -----------------------------------------------------------------
+// PARTE 3 — Refresh da OCA após equipar/desequipar
+// -----------------------------------------------------------------
+(function fixRefreshOcaPosEquip() {
+    if (window._fixRefreshOcaPosEquip) return;
+    window._fixRefreshOcaPosEquip = true;
+
+    function isOcaVisible() {
+        const ss = document.getElementById('storyScreen');
+        if (!ss || !ss.classList.contains('active')) return false;
+        const titleEl = ss.querySelector('.story-title');
+        if (!titleEl) return false;
+        return titleEl.textContent.toUpperCase().includes('OCA');
+    }
+
+    function refreshOca() {
+        if (!isOcaVisible()) return;
+        if (typeof renderOcaScreenFiltered !== 'function') return;
+        try {
+            renderOcaScreenFiltered();
+            console.log('[V44.0] OCA re-renderizada após equip.');
+        } catch (e) {
+            console.warn('[V44.0] Erro ao re-renderizar OCA:', e);
+        }
+    }
+
+    // Hook em equipWeapon (primitive — cobre tanto o equip screen quanto o card click)
+    const _origEquipW = window.equipWeapon;
+    if (typeof _origEquipW === 'function') {
+        window.equipWeapon = function() {
+            const r = _origEquipW.apply(this, arguments);
+            if (r && r.ok) setTimeout(refreshOca, 150);
+            return r;
+        };
+    }
+
+    // Hook em equipAmulet
+    const _origEquipA = window.equipAmulet;
+    if (typeof _origEquipA === 'function') {
+        window.equipAmulet = function() {
+            const r = _origEquipA.apply(this, arguments);
+            if (r && r.ok) setTimeout(refreshOca, 150);
+            return r;
+        };
+    }
+
+    // Hook em unequipWeapon / unequipAmulet
+    const _origUnequipW = window.unequipWeapon;
+    if (typeof _origUnequipW === 'function') {
+        window.unequipWeapon = function() {
+            const r = _origUnequipW.apply(this, arguments);
+            setTimeout(refreshOca, 150);
+            return r;
+        };
+    }
+
+    const _origUnequipA = window.unequipAmulet;
+    if (typeof _origUnequipA === 'function') {
+        window.unequipAmulet = function() {
+            const r = _origUnequipA.apply(this, arguments);
+            setTimeout(refreshOca, 150);
+            return r;
+        };
+    }
+
+    console.log('✅ [V44.0] OCA agora atualiza automaticamente após equipar/desequipar.');
+})();
+// =================================================================
+// FIM DO PATCH V44.0
+// =================================================================
+
+// =================================================================
+// 🎨 PATCH V45.0 — Aura Lv11 SSJ2 (raios elétricos no sprite)
+// -----------------------------------------------------------------
+// Remove o V44.0/V43.x. Instala:
+//   • Contorno sutil estático no sprite (2px, não animado, não cobre tile)
+//   • 8 raios elétricos por token (atrás do sprite), cada um com crackle
+//     rápido e delay individual = sensação de eletricidade
+//   • Os raios começam no CENTRO do token e saem pra fora → ficam
+//     escondidos atrás do sprite por ~30%, só a ponta aparece
+// =================================================================
+
+// -----------------------------------------------------------------
+// PARTE 1 — Remove CSS antigos e instala o novo
+// -----------------------------------------------------------------
+(function injectAuraV45CSS() {
+    ['v44AuraCSS', 'v431CSS', 'v430CSS'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.remove();
+    });
+
+    const style = document.createElement('style');
+    style.id = 'v45AuraCSS';
+    style.textContent = `
+        /* ============ CONTORNO ESTÁTICO SUTIL NO SPRITE ============ */
+        /* 4 drop-shadows de 2px = ~2px de borda nítida (sem blur grande) */
+        img.lv11-glow {
+            filter:
+                drop-shadow(0 0 2px #e8b923)
+                drop-shadow(0 0 2px #e8b923)
+                drop-shadow(0 0 2px #c39bd3)
+                drop-shadow(0 0 2px #c39bd3) !important;
+        }
+
+        /* ============ CONTAINER DOS RAIOS ============ */
+        .token.lv11-rays {
+            overflow: visible !important;
+        }
+
+        .lv11-bolts {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;             /* atrás do sprite */
+            pointer-events: none;
+            overflow: visible;
+        }
+
+        /* ============ CADA RAIO ============ */
+        .lv11-bolt {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 4px;
+            height: 70%;              /* sai do centro e vai além do tile */
+            margin-left: -2px;
+            transform-origin: center top;
+            transform: rotate(var(--angle, 0deg));
+
+            background: linear-gradient(180deg,
+                transparent 0%,
+                #fff5dc 12%,
+                #e8b923 30%,
+                #e8b923 60%,
+                rgba(232, 185, 35, 0.6) 85%,
+                transparent 100%
+            );
+
+            /* ponta fina (efeito de raio/solar) */
+            border-radius: 2px 2px 50% 50% / 4px 4px 100% 100%;
+
+            filter:
+                drop-shadow(0 0 4px rgba(232, 185, 35, 0.95))
+                drop-shadow(0 0 8px rgba(232, 185, 35, 0.5));
+
+            opacity: 0;
+            animation: lv11BoltCrackle var(--dur, 0.45s) ease-out infinite;
+            animation-delay: var(--delay, 0s);
+        }
+
+        @keyframes lv11BoltCrackle {
+            0%   { opacity: 0;   transform: rotate(var(--angle)) scaleY(0.3); }
+            15%  { opacity: 1;   transform: rotate(var(--angle)) scaleY(1); }
+            30%  { opacity: 0.5; transform: rotate(var(--angle)) scaleY(0.7); }
+            45%  { opacity: 1;   transform: rotate(var(--angle)) scaleY(0.95); }
+            60%  { opacity: 0.2; transform: rotate(var(--angle)) scaleY(0.55); }
+            75%  { opacity: 0.9; transform: rotate(var(--angle)) scaleY(0.9); }
+            90%  { opacity: 0.3; transform: rotate(var(--angle)) scaleY(0.6); }
+            100% { opacity: 0;   transform: rotate(var(--angle)) scaleY(0.3); }
+        }
+
+        @media (max-width: 600px) {
+            .lv11-bolt { width: 3px; margin-left: -1.5px; }
+        }
+    `;
+    document.head.appendChild(style);
+    console.log('✅ [V45.0] CSS da aura (raios elétricos) injetado.');
+})();
+
+// -----------------------------------------------------------------
+// PARTE 2 — Aplica os raios nos tokens
+// -----------------------------------------------------------------
+(function aplicarAuraV45() {
+    if (window._auraV45) return;
+    window._auraV45 = true;
+
+    function isLvl11(heroClass) {
+        return (typeof getHeroLevel === 'function') && getHeroLevel(heroClass) >= 11;
+    }
+
+    function aplicar() {
+        if (typeof players === 'undefined' || !Array.isArray(players)) return;
+
+        players.forEach(p => {
+            if (!p || !p.class) return;
+            const tokenEl = document.getElementById(`tokenP${p.id}`);
+            if (!tokenEl) return;
+
+            // Herói morto ou não-Lv11 → limpa tudo
+            if (p.dead || !isLvl11(p.class)) {
+                tokenEl.classList.remove('lv11-rays');
+                const bolts = tokenEl.querySelector('.lv11-bolts');
+                if (bolts) bolts.remove();
+                const img = tokenEl.querySelector('img');
+                if (img) img.classList.remove('lv11-glow');
+                return;
+            }
+
+            tokenEl.classList.add('lv11-rays');
+
+            // Contorno no sprite
+            const img = tokenEl.querySelector('img');
+            if (img && !img.classList.contains('lv11-glow')) {
+                img.classList.add('lv11-glow');
+            }
+
+            // Raios (só cria uma vez)
+            if (!tokenEl.querySelector('.lv11-bolts')) {
+                const container = document.createElement('div');
+                container.className = 'lv11-bolts';
+
+                for (let i = 0; i < 8; i++) {
+                    const bolt = document.createElement('div');
+                    bolt.className = 'lv11-bolt';
+                    bolt.style.setProperty('--angle', (i * 45) + 'deg');
+                    bolt.style.setProperty('--delay', (i * 0.055) + 's');
+                    bolt.style.setProperty('--dur', (0.38 + Math.random() * 0.18) + 's');
+                    container.appendChild(bolt);
+                }
+
+                tokenEl.appendChild(container);
+            }
+        });
+    }
+
+    // Hooks nos updates existentes (idempotentes)
+    ['updateAllSpriteDirections', 'updateHeroCard', 'updateVisuals'].forEach(fnName => {
+        const _orig = window[fnName];
+        if (typeof _orig === 'function' && !_orig._auraV45Hooked) {
+            window[fnName] = function() {
+                const r = _orig.apply(this, arguments);
+                setTimeout(aplicar, 0);
+                return r;
+            };
+            window[fnName]._auraV45Hooked = true;
+        }
+    });
+
+    // Rodadas iniciais
+    setTimeout(aplicar, 400);
+    setTimeout(aplicar, 1200);
+    setTimeout(aplicar, 2500);
+
+    // Monitor leve (recupera se algum patch de FX remover)
+    setInterval(() => {
+        if (!window._storyMode && !window._eventoAtivo && !window._coopMode && !window._pvpMode) return;
+        aplicar();
+    }, 3000);
+
+    // Limpa qualquer classe residual do V44.0
+    document.querySelectorAll('.token.lv11-rays').forEach(t => {
+        if (!t.querySelector('.lv11-bolts')) return; // ok
+    });
+
+    console.log('✅ [V45.0] Raios elétricos Lv11 ativados.');
+})();
+// =================================================================
+// FIM DO PATCH V45.0
+// =================================================================
+// =================================================================
+// ⚡ PATCH V46.0 — Aura Lv11 SSJ2 REAL (SVG Lightning)
+// -----------------------------------------------------------------
+// Substitui o V45.0. Usa SVG com paths irregulares e ramificados
+// para simular a eletricidade do Super Saiyan 2.
+//
+// Características:
+//   • Núcleo branco brilhante + aura amarela/dourada
+//   • Formas irregulares (zigue-zague), não linhas retas
+//   • Ramificações (raios dividindo no meio do caminho)
+//   • Animação de "flicker" (pisca rápido e irregular)
+//   • Fica ATRÁS do sprite → não tampa o rosto do herói
+//   • Não cobre o tile embaixo (z-index correto)
+// =================================================================
+
+// -----------------------------------------------------------------
+// PARTE 1 — Remove CSS antigos e instala o novo
+// -----------------------------------------------------------------
+(function injectAuraV46CSS() {
+    // Remove versões anteriores
+    ['v45AuraCSS', 'v44AuraCSS', 'v431CSS', 'v430CSS'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.remove();
+    });
+
+    const style = document.createElement('style');
+    style.id = 'v46AuraCSS';
+    style.textContent = `
+        /* ============ CONTORNO FINO NO SPRITE ============ */
+        img.lv11-glow {
+            filter:
+                drop-shadow(0 0 2px #fff5dc)
+                drop-shadow(0 0 3px #e8b923)
+                drop-shadow(0 0 6px rgba(232, 185, 35, 0.6)) !important;
+        }
+
+        /* ============ CONTAINER DE RAIOS ============ */
+        .token.lv11-lightning {
+            overflow: visible !important;
+        }
+
+        .lv11-lightning-svg {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 130%;              /* Um pouco maior que o token */
+            height: 130%;
+            transform: translate(-50%, -50%);
+            z-index: -1;              /* ATRÁS do sprite */
+            pointer-events: none;
+            overflow: visible;
+        }
+
+        /* ============ CAMADAS DE RAIO ============ */
+        /* Camada externa (glow dourado largo) */
+        .lv11-bolt-glow {
+            stroke: #e8b923;
+            stroke-width: 6;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            fill: none;
+            filter: blur(4px);
+            opacity: 0;
+            animation: lv11Flicker var(--dur, 0.15s) steps(2, end) infinite;
+            animation-delay: var(--delay, 0s);
+        }
+
+        /* Camada média (amarelo forte) */
+        .lv11-bolt-mid {
+            stroke: #ffd700;
+            stroke-width: 3;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            fill: none;
+            filter: drop-shadow(0 0 3px #ffd700);
+            opacity: 0;
+            animation: lv11Flicker var(--dur, 0.15s) steps(2, end) infinite;
+            animation-delay: var(--delay, 0s);
+        }
+
+        /* Camada interna (núcleo branco) */
+        .lv11-bolt-core {
+            stroke: #ffffff;
+            stroke-width: 1.5;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            fill: none;
+            filter: drop-shadow(0 0 2px #ffffff);
+            opacity: 0;
+            animation: lv11Flicker var(--dur, 0.15s) steps(2, end) infinite;
+            animation-delay: var(--delay, 0s);
+        }
+
+        /* Flicker irregular: pisca rápido, some, volta */
+        @keyframes lv11Flicker {
+            0%, 100% { opacity: 0; }
+            10%      { opacity: 1; }
+            20%      { opacity: 0.3; }
+            30%      { opacity: 1; }
+            40%      { opacity: 0.1; }
+            50%      { opacity: 0.9; }
+            60%      { opacity: 0.4; }
+            70%      { opacity: 1; }
+            80%      { opacity: 0.2; }
+            90%      { opacity: 0.8; }
+        }
+
+        /* Cada raio tem um delay e duração próprios (aleatoriedade visual) */
+        .lv11-lightning-svg g:nth-child(1) { --delay: 0s;     --dur: 0.18s; }
+        .lv11-lightning-svg g:nth-child(2) { --delay: 0.07s;  --dur: 0.22s; }
+        .lv11-lightning-svg g:nth-child(3) { --delay: 0.15s;  --dur: 0.15s; }
+        .lv11-lightning-svg g:nth-child(4) { --delay: 0.03s;  --dur: 0.25s; }
+        .lv11-lightning-svg g:nth-child(5) { --delay: 0.11s;  --dur: 0.17s; }
+        .lv11-lightning-svg g:nth-child(6) { --delay: 0.19s;  --dur: 0.20s; }
+    `;
+    document.head.appendChild(style);
+    console.log('✅ [V46.0] CSS SSJ2 Lightning injetado.');
+})();
+
+// -----------------------------------------------------------------
+// PARTE 2 — Gerador de SVG e aplicação nos tokens
+// -----------------------------------------------------------------
+(function aplicarAuraV46() {
+    if (window._auraV46) return;
+    window._auraV46 = true;
+
+    function isLvl11(heroClass) {
+        return (typeof getHeroLevel === 'function') && getHeroLevel(heroClass) >= 11;
+    }
+
+    // Gera um path de raio com zigue-zague irregular
+    // Começa no centro (50,50) e vai em direção ao ângulo/direção
+    function gerarRaio(anguloDeg, comprimento, ramificacoes = 0) {
+        const cx = 50, cy = 50;
+        const ang = (anguloDeg * Math.PI) / 180;
+
+        // Ponto inicial levemente deslocado do centro (pra não ficar tudo num só ponto)
+        const offsetInicial = 10;
+        let x = cx + Math.cos(ang) * offsetInicial;
+        let y = cy + Math.sin(ang) * offsetInicial;
+
+        let path = `M ${x.toFixed(1)} ${y.toFixed(1)}`;
+
+        const segmentos = 5;
+        const passo = comprimento / segmentos;
+
+        let ramificacaoPaths = '';
+
+        for (let i = 0; i < segmentos; i++) {
+            // Direção principal + ruído perpendicular
+            const progresso = i / segmentos;
+            const desvioPerp = (Math.random() - 0.5) * 12; // zigue-zague
+            const desvioAng = (Math.random() - 0.5) * 0.4; // leve desvio no ângulo
+
+            const angAtual = ang + desvioAng;
+            const dx = Math.cos(angAtual) * passo + Math.cos(ang + Math.PI/2) * desvioPerp;
+            const dy = Math.sin(angAtual) * passo + Math.sin(ang + Math.PI/2) * desvioPerp;
+
+            x += dx;
+            y += dy;
+
+            path += ` L ${x.toFixed(1)} ${y.toFixed(1)}`;
+
+            // Ramificação (galho saindo do meio do raio)
+            if (i === 2 && ramificacoes > 0) {
+                const angRam = ang + (Math.random() > 0.5 ? 0.6 : -0.6);
+                let rx = x, ry = y;
+                ramificacaoPaths += `M ${x.toFixed(1)} ${y.toFixed(1)}`;
+                for (let j = 0; j < 3; j++) {
+                    const passinho = comprimento * 0.15;
+                    const desv = (Math.random() - 0.5) * 8;
+                    rx += Math.cos(angRam) * passinho + Math.cos(angRam + Math.PI/2) * desv;
+                    ry += Math.sin(angRam) * passinho + Math.sin(angRam + Math.PI/2) * desv;
+                    ramificacaoPaths += ` L ${rx.toFixed(1)} ${ry.toFixed(1)}`;
+                }
+            }
+        }
+
+        return { principal: path, ramificacao: ramificacaoPaths };
+    }
+
+    // Cria o SVG completo com 6 raios em ângulos diferentes
+    function criarSVG() {
+        const svgNS = 'http://www.w3.org/2000/svg';
+        const svg = document.createElementNS(svgNS, 'svg');
+        svg.setAttribute('viewBox', '0 0 100 100');
+        svg.setAttribute('class', 'lv11-lightning-svg');
+        svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+
+        // Ângulos distribuídos: topo-esquerda, topo-direita, esquerda, direita,
+        // baixo-esquerda, baixo-direita
+        const angulos = [
+            { ang: -120, comp: 65, ram: 1 },  // topo-esquerda
+            { ang: -60,  comp: 65, ram: 1 },  // topo-direita
+            { ang: 180,  comp: 55, ram: 1 },  // esquerda
+            { ang: 0,    comp: 55, ram: 1 },  // direita
+            { ang: 135,  comp: 50, ram: 0 },  // baixo-esquerda
+            { ang: 45,   comp: 50, ram: 0 },  // baixo-direita
+        ];
+
+        angulos.forEach(({ ang, comp, ram }) => {
+            const { principal, ramificacao } = gerarRaio(ang, comp, ram);
+
+            const g = document.createElementNS(svgNS, 'g');
+
+            // As 3 camadas (glow, mid, core) usam o MESMO path
+            const pathGlow = document.createElementNS(svgNS, 'path');
+            pathGlow.setAttribute('d', principal + (ramificacao ? ' ' + ramificacao : ''));
+            pathGlow.setAttribute('class', 'lv11-bolt-glow');
+
+            const pathMid = document.createElementNS(svgNS, 'path');
+            pathMid.setAttribute('d', principal + (ramificacao ? ' ' + ramificacao : ''));
+            pathMid.setAttribute('class', 'lv11-bolt-mid');
+
+            const pathCore = document.createElementNS(svgNS, 'path');
+            pathCore.setAttribute('d', principal + (ramificacao ? ' ' + ramificacao : ''));
+            pathCore.setAttribute('class', 'lv11-bolt-core');
+
+            g.appendChild(pathGlow);
+            g.appendChild(pathMid);
+            g.appendChild(pathCore);
+            svg.appendChild(g);
+        });
+
+        return svg;
+    }
+
+    function aplicar() {
+        if (typeof players === 'undefined' || !Array.isArray(players)) return;
+
+        players.forEach(p => {
+            if (!p || !p.class) return;
+            const tokenEl = document.getElementById(`tokenP${p.id}`);
+            if (!tokenEl) return;
+
+            // Herói morto ou não-Lv11 → limpa
+            if (p.dead || !isLvl11(p.class)) {
+                tokenEl.classList.remove('lv11-lightning');
+                const svgEl = tokenEl.querySelector('.lv11-lightning-svg');
+                if (svgEl) svgEl.remove();
+                const img = tokenEl.querySelector('img');
+                if (img) img.classList.remove('lv11-glow');
+                return;
+            }
+
+            tokenEl.classList.add('lv11-lightning');
+
+            // Contorno no sprite
+            const img = tokenEl.querySelector('img');
+            if (img && !img.classList.contains('lv11-glow')) {
+                img.classList.add('lv11-glow');
+            }
+
+            // SVG de raios (recria a cada ~2s pra ter formas diferentes,
+            // simulando eletricidade que se move e muda de forma)
+            if (!tokenEl.querySelector('.lv11-lightning-svg')) {
+                const svg = criarSVG();
+                tokenEl.appendChild(svg);
+
+                // ⚡ A cada 1.5s, recria o SVG pra dar sensação de movimento
+                // (raios reais mudam de forma constantemente)
+                if (!tokenEl._lv11RegenTimer) {
+                    tokenEl._lv11RegenTimer = setInterval(() => {
+                        const antigo = tokenEl.querySelector('.lv11-lightning-svg');
+                        if (antigo) antigo.remove();
+                        if (tokenEl.classList.contains('lv11-lightning')) {
+                            tokenEl.appendChild(criarSVG());
+                        }
+                    }, 1500);
+                }
+            }
+        });
+
+        // Limpa timers de tokens que não existem mais
+        document.querySelectorAll('.token').forEach(tok => {
+            if (!tok.classList.contains('lv11-lightning') && tok._lv11RegenTimer) {
+                clearInterval(tok._lv11RegenTimer);
+                tok._lv11RegenTimer = null;
+            }
+        });
+    }
+
+    // Hooks idempotentes nos updates existentes
+    ['updateAllSpriteDirections', 'updateHeroCard', 'updateVisuals'].forEach(fnName => {
+        const _orig = window[fnName];
+        if (typeof _orig === 'function' && !_orig._auraV46Hooked) {
+            window[fnName] = function() {
+                const r = _orig.apply(this, arguments);
+                setTimeout(aplicar, 0);
+                return r;
+            };
+            window[fnName]._auraV46Hooked = true;
+        }
+    });
+
+    // Rodadas iniciais
+    setTimeout(aplicar, 400);
+    setTimeout(aplicar, 1200);
+    setTimeout(aplicar, 2500);
+
+    // Monitor leve
+    setInterval(() => {
+        if (!window._storyMode && !window._eventoAtivo && !window._coopMode && !window._pvpMode) return;
+        aplicar();
+    }, 3000);
+
+    console.log('✅ [V46.0] Raios SSJ2 (SVG lightning) ativados.');
+})();
+// =================================================================
+// FIM DO PATCH V46.0
+// =================================================================
