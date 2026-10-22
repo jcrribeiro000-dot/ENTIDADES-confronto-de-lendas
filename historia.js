@@ -3740,30 +3740,30 @@ async function applyStorySkill(enemy, skill){
 // 🔊 SISTEMA DE SOM POR ARQUÉTIPO
 // =================================================================
 const STORY_SKILL_SOUNDS = {
-    porco_espinho_espinhos:'',porco_espinho_bote:'',jacare_bocada:'',jacare_giro:'',
-    cervo_investida:'',cervo_chifrada:'',onca_garra_dupla:'',onca_salto:'',
-    tamandua_garras:'',tamandua_bicada:'',anta_pisada:'',anta_atropelamento:'',
-    queixada_mordida:'',queixada_estouro:'',sucuri_bocarra:'',sucuri_caudada:'',
-    piranha_cardume:'',piranha_frenesi:'',lontra_garras:'',lontra_nado:'',
-    ariranha_matilha:'',ariranha_bote:'',pirarucu_bocarra:'',pirarucu_caudada:'',
-    cascavel_chocalho:'',cascavel_bote:'',coral_aneis:'',coral_peconha:'',
-    jararaca_bote:'',jararaca_enrolar:'',tartaruga_casco:'',tartaruga_pancada:'',
-    bode_cornada:'',bode_marrada:'',carneiro_trombada:'',carneiro_pisada:'',
-    cavalo_coice:'',cavalo_relincho:'',touro_cornada:'',touro_pisoteada:'',
-    urubu_voo:'',urubu_bicada:'',carcaara_garras:'',carcaara_mergulho:'',
-    tatu_casco:'',tatu_cavar:'',lobo_guara_uivo:'',lobo_guara_bote:'',
-    cachorro_mordida:'',cachorro_rosnado:'',raposa_astucia:'',raposa_bote:'',
+    porco_espinho_espinhos:'',porco_espinho_bote:'',jacare_bocada:'',jacare_giro:'splash',
+    cervo_investida:'chifre',cervo_chifrada:'chifre',onca_garra_dupla:'',onca_salto:'felino',
+    tamandua_garras:'',tamandua_bicada:'',anta_pisada:'coice',anta_atropelamento:'chifre',
+    queixada_mordida:'',queixada_estouro:'chifre',sucuri_bocarra:'',sucuri_caudada:'',
+    piranha_cardume:'splash',piranha_frenesi:'splash',lontra_garras:'',lontra_nado:'splash',
+    ariranha_matilha:'',ariranha_bote:'',pirarucu_bocarra:'',pirarucu_caudada:'splash',
+    cascavel_chocalho:'chocalho',cascavel_bote:'bote',coral_aneis:'',coral_peconha:'bote',
+    jararaca_bote:'bote',jararaca_enrolar:'',tartaruga_casco:'coice',tartaruga_pancada:'coice',
+    bode_cornada:'chifre',bode_marrada:'',carneiro_trombada:'chifre',carneiro_pisada:'coice',
+    cavalo_coice:'coice',cavalo_relincho:'horse',touro_cornada:'chifre',touro_pisoteada:'coice',
+    urubu_voo:'asas',urubu_bicada:'',carcaara_garras:'',carcaara_mergulho:'asas',
+    tatu_casco:'',tatu_cavar:'',lobo_guara_uivo:'urro',lobo_guara_bote:'',
+    cachorro_mordida:'',cachorro_rosnado:'rosnado',raposa_astucia:'',raposa_bote:'',
     guaxinim_garras:'',guaxinim_surpresa:'',jaguatirica_garras:'',jaguatirica_salto:'',
-    morcego_voo:'',morcego_eco:'',coruja_garras:'',coruja_voo:'',
-    sapo_veneno:'',sapo_lingua:'',seriema_bicada:'',seriema_grito:'',
-    tucunare_bote:'',tucunare_cardume:'',piraiba_bocarra:'',piraiba_caudada:'',
-    dourada_escamas:'',dourada_nado:'',peixe_boi_corpulencia:'',peixe_boi_pancada:'',
-    bufalo_marrada:'',bufalo_pisoteada:'',vaca_coice:'',vaca_mugido:'',
-    cabra_cornada:'',cabra_bote:'',zebu_marrada:'',zebu_pisada:'',
-    gato_mato_garras:'',gato_mato_salto:'',mariposa_po:'',mariposa_voo:'',
-    quati_garras:'',quati_bote:'',sucuarana_garra:'',sucuarana_salto:'',
-    gaviao_voo:'',gaviao_garras:'',falcao_mergulho:'',falcao_garras:'',
-    urutau_canto:'',urutau_voo:'',aguia_garras:'',aguia_mergulho:'',
+    morcego_voo:'asas',morcego_eco:'',coruja_garras:'',coruja_voo:'asas',
+    sapo_veneno:'bote',sapo_lingua:'',seriema_bicada:'',seriema_grito:'',
+    tucunare_bote:'',tucunare_cardume:'splash',piraiba_bocarra:'',piraiba_caudada:'splash',
+    dourada_escamas:'',dourada_nado:'splash',peixe_boi_corpulencia:'',peixe_boi_pancada:'',
+    bufalo_marrada:'chifre',bufalo_pisoteada:'coice',vaca_coice:'coice',vaca_mugido:'coice',
+    cabra_cornada:'chifre',cabra_bote:'chifre',zebu_marrada:'chifre',zebu_pisada:'coice',
+    gato_mato_garras:'',gato_mato_salto:'felino',mariposa_po:'mariposa',mariposa_voo:'mariposa',
+    quati_garras:'',quati_bote:'chifre',sucuarana_garra:'',sucuarana_salto:'felino',
+    gaviao_voo:'aguia',gaviao_garras:'',falcao_mergulho:'asas',falcao_garras:'',
+    urutau_canto:'',urutau_voo:'asas',aguia_garras:'',aguia_mergulho:'aguia',
 };
 
 const STORY_ARCHETYPE_SOUNDS = {
@@ -39957,4 +39957,51 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
     }
 
     console.log('✅ [V10.31] OCA corrigida definitivamente.');
+})();
+// =================================================================
+// 🔨 V10.35 — TROCA DO SOM DE FORJA (De Vitória para Martelada)
+// -----------------------------------------------------------------
+// Remove o som de 'win' e coloca um som de impacto (atkg) quando
+// uma arma ou amuleto é forjado.
+// =================================================================
+
+(function mudarSomForjaV1035() {
+    if (window._mudarSomForjaV1035) return;
+    window._mudarSomForjaV1035 = true;
+
+    console.log('✅ [V10.35] Trocando o som de forja...');
+
+    // Função auxiliar para interceptar o som antigo e tocar o novo
+    function interceptarSom(origFunc) {
+        return function() {
+            const _origPlay = window.playSfx;
+            // Impede o som de vitória de tocar
+            window.playSfx = function(name) {
+                if (name !== 'win') _origPlay(name);
+            };
+            
+            // Roda a forja
+            const r = origFunc.apply(this, arguments);
+            
+            // Restaura a função de som original
+            window.playSfx = _origPlay;
+            
+            // Toca o som de impacto (martelada)
+            try { window.playSfx('forja'); } catch(e) {}
+            
+            return r;
+        };
+    }
+
+    // Aplica na forja de Armas
+    if (typeof window.handleCraftWeapon === 'function') {
+        window.handleCraftWeapon = interceptarSom(window.handleCraftWeapon);
+    }
+
+    // Aplica na forja de Amuletos
+    if (typeof window.handleCraftAmulet === 'function') {
+        window.handleCraftAmulet = interceptarSom(window.handleCraftAmulet);
+    }
+
+    console.log('✅ [V10.35] Som de forja alterado para atkg.');
 })();

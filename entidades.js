@@ -426,8 +426,21 @@ const sfx = {
     anhanga_skill1: null,
     anhanga_skill2: null,
     anhangatema: new Audio("anhanga.mp3"),
+    horse: new Audio("horse.mp3"),
+    coice: new Audio("coice.mp3"),
+    aguia: new Audio("aguia.mp3"),
+    asas: new Audio("asas.mp3"),
+    mariposa: new Audio("mariposa.mp3"),
+    rosnado: new Audio("rosnado.mp3"),
+    urro: new Audio("urro.mp3"),
+    chocalho: new Audio("chocalho.mp3"),
+    splash: new Audio("splash.mp3"),
+    chifre: new Audio("chifre.mp3"),
+    bote: new Audio("bote.mp3"),
+    felino: new Audio("felino.mp3"),
     intro: new Audio("intro.mp3"),
-    purificacao: new Audio("purificacao.mp3")
+    purificacao: new Audio("purificacao.mp3"),
+    forja: new Audio("forja.mp3")
 };
 
 sfx.boto_skill2 = sfx.iara2;
