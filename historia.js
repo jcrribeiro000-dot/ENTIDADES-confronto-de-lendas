@@ -40005,3 +40005,3507 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
 
     console.log('✅ [V10.35] Som de forja alterado para atkg.');
 })();
+// =================================================================
+// 🧪 V10.36 — POPUP DE INFORMAÇÕES DO MATERIAL (Tesouraria)
+// -----------------------------------------------------------------
+// 1. Torna os ícones de materiais na forja clicáveis.
+// 2. Abre um modal bonito mostrando onde conseguir o material.
+// =================================================================
+
+(function materialPopupV1036() {
+    if (window._materialPopupV1036) return;
+    window._materialPopupV1036 = true;
+
+    console.log('✅ [V10.36] Instalando sistema de informações do material...');
+
+    // --- FUNÇÃO QUE ABRE O MODAL ---
+    window.openMaterialInfoModal = function(matId) {
+        const m = STORY_MATERIALS[matId];
+        if (!m) return;
+
+        // 1. Descobrir quais inimigos dropam esse material
+        const inimigosQueDropam = [];
+        if (typeof STORY_DROP_TABLE !== 'undefined') {
+            for (const enemyId in STORY_DROP_TABLE) {
+                const drop = STORY_DROP_TABLE[enemyId];
+                if ((drop.comum && drop.comum.id === matId) || (drop.raro && drop.raro.id === matId)) {
+                    inimigosQueDropam.push(enemyId);
+                }
+            }
+        }
+
+        // 2. Montar a lista de drops com as fases
+        let dropsHTML = '';
+        if (inimigosQueDropam.length === 0) {
+            dropsHTML = '<div class="mat-no-drops">Este material não é dropado por inimigos comuns. Pode ser obtido no Evento, Loja ou é um item especial.</div>';
+        } else {
+            dropsHTML = inimigosQueDropam.map(eid => {
+                const enemy = STORY_ENEMIES[eid];
+                if (!enemy) return '';
+                
+                // Procurar as fases onde o inimigo aparece
+                const fases = [];
+                if (typeof STORY_CHAPTERS !== 'undefined') {
+                    for (const cid in STORY_CHAPTERS) {
+                        const ch = STORY_CHAPTERS[cid];
+                        ch.phases.forEach(ph => {
+                            if (ph.enemies.includes(eid)) {
+                                fases.push(ph.name);
+                            }
+                        });
+                    }
+                }
+
+                const sprite = SPRITES_STORY[eid] 
+                    ? `<img src="${SPRITES_STORY[eid]}" style="width:30px;height:30px;object-fit:contain;vertical-align:middle;">` 
+                    : `<span style="font-size:1.2rem;">${EMOJI_STORY[eid]||'👹'}</span>`;
+
+                return `
+                    <div class="mat-drop-enemy">
+                        <div class="mat-drop-enemy-header">
+                            ${sprite} <span>${enemy.name}</span>
+                        </div>
+                        <div class="mat-drop-enemy-phases">
+                            <span style="color:#8a7a52; font-size:0.8rem; font-family:'Cinzel',serif;">Fases:</span> 
+                            ${fases.join(', ') || 'Eventos / Especiais'}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // 3. Criar o Modal
+        const old = document.getElementById('matInfoModal');
+        if (old) old.remove();
+
+        const ov = document.createElement('div');
+        ov.id = 'matInfoModal';
+        ov.className = 'mat-info-overlay';
+        ov.innerHTML = `
+            <div class="mat-info-panel">
+                <div class="mat-info-header">
+                    <h2>${m.name}</h2>
+                    <button class="mat-info-close" onclick="document.getElementById('matInfoModal').remove()">✕</button>
+                </div>
+                <div class="mat-info-body">
+                    <div class="mat-info-icon-wrap">
+                        ${typeof getMaterialIcon === 'function' ? getMaterialIcon(matId, 'large') : m.emoji}
+                    </div>
+                    <div class="mat-info-drops">
+                        <div class="mat-info-title">ONDE OBTER:</div>
+                        ${dropsHTML}
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(ov);
+    };
+
+    // --- OBSERVADOR PARA TORNAR OS ITENS CLICÁVEIS ---
+    const observer = new MutationObserver(() => {
+        // Só age se a Tesouraria estiver aberta
+        const screen = document.getElementById('storyScreen');
+        if (!screen || !screen.classList.contains('active')) return;
+        
+        const recipeMats = document.querySelectorAll('.forge-recipe-mat');
+        if (recipeMats.length === 0) return;
+
+        // Precisamos de uma lista de materiais para procurar pelo emoji
+        const allMats = Object.values(STORY_MATERIALS);
+
+        recipeMats.forEach(span => {
+            if (span.dataset.clickable === '1') return; // Já foi processado
+
+            const text = span.textContent.trim();
+            const emoji = text.split(' ')[0]; // Pega o primeiro caractere (emoji)
+            
+            // Acha o ID do material pelo emoji
+            const mat = allMats.find(m => m.emoji === emoji);
+            if (mat) {
+                span.style.cursor = 'pointer';
+                span.style.textDecoration = 'underline';
+                span.title = `Clique para ver onde conseguir ${mat.name}`;
+                span.dataset.clickable = '1';
+                
+                span.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    window.openMaterialInfoModal(mat.id);
+                });
+            }
+        });
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    // --- CSS DO MODAL ---
+    if (!document.getElementById('matInfoCSS')) {
+        const style = document.createElement('style');
+        style.id = 'matInfoCSS';
+        style.textContent = `
+            .mat-info-overlay {
+                position: fixed; inset: 0; background: rgba(10,6,2,0.9);
+                z-index: 30000; display: flex; align-items: center; justify-content: center;
+                padding: 20px; animation: fadeIn 0.3s ease; backdrop-filter: blur(4px);
+            }
+            .mat-info-panel {
+                background: linear-gradient(180deg, #2a1f10, #1a1208);
+                border: 2px solid #c9a227; border-radius: 8px;
+                width: 100%; max-width: 450px; box-shadow: 0 10px 40px rgba(0,0,0,0.9);
+                overflow: hidden;
+            }
+            .mat-info-header {
+                display: flex; justify-content: space-between; align-items: center;
+                padding: 15px 20px; border-bottom: 1px solid rgba(201,162,39,0.3);
+                background: rgba(10,6,2,0.5);
+            }
+            .mat-info-header h2 {
+                margin: 0; font-family: 'Cinzel', serif; color: #e8b923; font-size: 1.2rem;
+                letter-spacing: 1px;
+            }
+            .mat-info-close {
+                background: #6a2020; color: #f5c8c8; border: 1px solid #a83232;
+                border-radius: 50%; width: 28px; height: 28px; cursor: pointer;
+                display: flex; align-items: center; justify-content: center;
+                font-family: 'Cinzel', serif; font-weight: 700; transition: all 0.2s;
+            }
+            .mat-info-close:hover { background: #8a3030; transform: scale(1.1); }
+            
+            .mat-info-body {
+                padding: 20px; display: flex; flex-direction: column; align-items: center; gap: 20px;
+            }
+            .mat-info-icon-wrap {
+                width: 100px; height: 100px; display: flex; align-items: center; justify-content: center;
+                background: radial-gradient(circle, rgba(232,185,35,0.15), transparent 70%);
+                border-radius: 50%; border: 2px dashed rgba(201,162,39,0.4);
+            }
+            .mat-info-icon-wrap img {
+                width: 80px; height: 80px; object-fit: contain;
+                filter: drop-shadow(0 0 15px rgba(232,185,35,0.5));
+            }
+            .mat-info-icon-wrap span { font-size: 4rem; }
+            
+            .mat-info-drops { width: 100%; }
+            .mat-info-title {
+                font-family: 'Cinzel', serif; color: #8a7a52; font-size: 0.8rem;
+                letter-spacing: 2px; margin-bottom: 12px; text-align: center;
+                border-bottom: 1px solid rgba(201,162,39,0.2); padding-bottom: 6px;
+            }
+            .mat-drop-enemy {
+                background: rgba(10,6,2,0.6); border: 1px solid rgba(201,162,39,0.25);
+                border-radius: 6px; padding: 12px; margin-bottom: 8px;
+            }
+            .mat-drop-enemy:last-child { margin-bottom: 0; }
+            .mat-drop-enemy-header {
+                font-family: 'Cinzel', serif; color: #f0e2c0; font-size: 1rem;
+                display: flex; align-items: center; gap: 10px; margin-bottom: 6px;
+            }
+            .mat-drop-enemy-phases {
+                font-family: 'EB Garamond', serif; color: #b8a577;
+                font-size: 0.9rem; font-style: italic; line-height: 1.4;
+            }
+            .mat-no-drops {
+                text-align: center; font-family: 'EB Garamond', serif;
+                color: #8a7a52; font-style: italic; padding: 10px;
+                background: rgba(10,6,2,0.4); border-radius: 6px;
+            }
+            @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        `;
+        document.head.appendChild(style);
+    }
+
+    console.log('✅ [V10.36] Popup de material instalado com sucesso.');
+})();
+// =================================================================
+// 🧪 V10.37 — POPUP DE MATERIAL (Injeção direta no HTML)
+// -----------------------------------------------------------------
+// O V10.36 falhou porque tentou ler o texto. Agora, a gente
+// reescreve o render da Forja para injetar o clique direto.
+// =================================================================
+
+(function materialPopupV1037() {
+    if (window._materialPopupV1037) return;
+    window._materialPopupV1037 = true;
+
+    console.log('✅ [V10.37] Instalando popup de material (método direto)...');
+
+    // --- 1. FUNÇÃO QUE ABRE O MODAL ---
+    window.openMaterialInfoModal = function(matId) {
+        const m = STORY_MATERIALS[matId];
+        if (!m) return;
+
+        // Descobrir quais inimigos dropam
+        const inimigosQueDropam = [];
+        if (typeof STORY_DROP_TABLE !== 'undefined') {
+            for (const enemyId in STORY_DROP_TABLE) {
+                const drop = STORY_DROP_TABLE[enemyId];
+                if ((drop.comum && drop.comum.id === matId) || (drop.raro && drop.raro.id === matId)) {
+                    inimigosQueDropam.push(enemyId);
+                }
+            }
+        }
+
+        // Montar a lista
+        let dropsHTML = '';
+        if (inimigosQueDropam.length === 0) {
+            dropsHTML = '<div class="mat-no-drops">Este material não é dropado por inimigos comuns. Pode ser obtido no Evento, Loja ou é um item especial.</div>';
+        } else {
+            dropsHTML = inimigosQueDropam.map(eid => {
+                const enemy = STORY_ENEMIES[eid];
+                if (!enemy) return '';
+                
+                const fases = [];
+                if (typeof STORY_CHAPTERS !== 'undefined') {
+                    for (const cid in STORY_CHAPTERS) {
+                        const ch = STORY_CHAPTERS[cid];
+                        ch.phases.forEach(ph => {
+                            if (ph.enemies.includes(eid)) fases.push(ph.name);
+                        });
+                    }
+                }
+
+                const sprite = SPRITES_STORY[eid] 
+                    ? `<img src="${SPRITES_STORY[eid]}" style="width:30px;height:30px;object-fit:contain;vertical-align:middle;">` 
+                    : `<span style="font-size:1.2rem;">${EMOJI_STORY[eid]||'👹'}</span>`;
+
+                return `
+                    <div class="mat-drop-enemy">
+                        <div class="mat-drop-enemy-header">
+                            ${sprite} <span>${enemy.name}</span>
+                        </div>
+                        <div class="mat-drop-enemy-phases">
+                            <span style="color:#8a7a52; font-size:0.8rem; font-family:'Cinzel',serif;">Fases:</span> 
+                            ${fases.join(', ') || 'Eventos / Especiais'}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Criar Modal
+        const old = document.getElementById('matInfoModal');
+        if (old) old.remove();
+
+        const ov = document.createElement('div');
+        ov.id = 'matInfoModal';
+        ov.className = 'mat-info-overlay';
+        ov.innerHTML = `
+            <div class="mat-info-panel">
+                <div class="mat-info-header">
+                    <h2>${m.name}</h2>
+                    <button class="mat-info-close" onclick="document.getElementById('matInfoModal').remove()">✕</button>
+                </div>
+                <div class="mat-info-body">
+                    <div class="mat-info-icon-wrap">
+                        ${typeof getMaterialIcon === 'function' ? getMaterialIcon(matId, 'large') : m.emoji}
+                    </div>
+                    <div class="mat-info-drops">
+                        <div class="mat-info-title">ONDE OBTER:</div>
+                        ${dropsHTML}
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(ov);
+    };
+
+    // --- 2. REESCREVER O RENDER PARA INJETAR O CLIQUE ---
+    
+    // Função auxiliar para gerar a receita clicável
+    function gerarReceitaHTML(receita) {
+        return Object.entries(receita).map(([matId, qty]) => {
+            const m = STORY_MATERIALS[matId];
+            if (!m) return '';
+            const has = STORY_PROGRESS.inventory[matId] || 0;
+            const ok = has >= qty ? 'ok' : 'no';
+            
+            return `<span class="forge-recipe-mat ${ok}" 
+                          style="cursor:pointer; text-decoration:underline; text-decoration-style:dotted;"
+                          title="Clique para ver onde conseguir ${m.name}"
+                          onclick="event.stopPropagation(); window.openMaterialInfoModal('${matId}')">
+                          ${m.emoji} ${has}/${qty}
+                    </span>`;
+        }).join('');
+    }
+
+    // Forja de Armas
+    const _origForja = window.renderTesourariaForja;
+    if (typeof _origForja === 'function') {
+        window.renderTesourariaForja = function() {
+            const allWeapons = Object.values(STORY_WEAPONS).filter(w => isWeaponAvailable(w.id));
+            if (allWeapons.length === 0) return `<div class="tesouraria-empty"><div class="tesouraria-empty-icon">⚔️</div><div class="tesouraria-empty-text">Nenhuma forja liberada.</div></div>`;
+
+            const cardsHTML = allWeapons.map(w => {
+                const uids = (STORY_PROGRESS.craftedWeapons || []).filter(id => getBaseId(id) === w.id);
+                const count = uids.length;
+                const canCraft = hasMaterials(w.receita) && (STORY_PROGRESS.gold || 0) >= w.custoOuro && count < 99;
+                const tipoLabel = { tacape:'Tacape', flecha:'Flecha', cajado:'Cajado' }[w.tipo];
+                const isCrafted = count > 0;
+                
+                let actionHTML = '';
+                if (count >= 99) {
+                    actionHTML = `<div class="forge-forged-tag" style="color:#e8b923; margin-bottom:5px;">✅ Limite Máximo (99)</div>
+                                  <button class="forge-btn danger" onclick="handleDismantleWeapon('${uids[0]}')">🔥 Desmanchar</button>`;
+                } else {
+                    actionHTML = `
+                        ${isCrafted ? `<div class="forge-forged-tag" style="color:#8ac070; margin-bottom:5px;">✅ Forjada (${count}/99)</div>` : ''}
+                        <div class="forge-ouro ${canCraft ? 'ok' : 'no'}">${uiIcon('gold')} ${w.custoOuro}</div>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="forge-btn" style="flex:1;" ${canCraft ? '' : 'disabled'} onclick="handleCraftWeapon('${w.id}')">
+                                ${canCraft ? (isCrafted ? '🔨 Forjar +1' : '🔨 Forjar') : '✕ Sem recursos'}
+                            </button>
+                            ${isCrafted ? `<button class="forge-btn danger" style="flex:1;" onclick="handleDismantleWeapon('${uids[0]}')">🔥 Desmanchar</button>` : ''}
+                        </div>
+                    `;
+                }
+                return `<div class="forge-card ${isCrafted ? 'crafted' : ''}"><div class="forge-card-header"><div class="forge-emoji">${w.emoji}</div><div class="forge-info"><div class="forge-name">${w.nome}</div><div class="forge-meta">Ato ${w.ato} · ${tipoLabel} · +${w.atkBonus} ATK</div></div></div><div class="forge-recipe">${gerarReceitaHTML(w.receita)}</div><div class="forge-actions">${actionHTML}</div></div>`;
+            }).join('');
+            return `<div class="forge-grid">${cardsHTML}</div>`;
+        };
+    }
+
+    // Forja de Amuletos
+    const _origAmuletos = window.renderTesourariaAmuletos;
+    if (typeof _origAmuletos === 'function') {
+        window.renderTesourariaAmuletos = function() {
+            const allAmulets = Object.values(STORY_AMULETS).filter(a => isAmuletAvailable(a.id));
+            if (allAmulets.length === 0) return `<div class="tesouraria-empty"><div class="tesouraria-empty-icon">🧿</div><div class="tesouraria-empty-text">Nenhum amuleto liberado.</div></div>`;
+
+            const cardsHTML = allAmulets.map(a => {
+                const uids = (STORY_PROGRESS.craftedAmulets || []).filter(id => getBaseId(id) === a.id);
+                const count = uids.length;
+                const canCraft = hasMaterials(a.receita) && (STORY_PROGRESS.gold || 0) >= a.custoOuro && count < 99;
+                const ef = a.efeito;
+                let efHTML = [];
+                if (ef.elementOverride) efHTML.push(`🎨 Elemento → ${ef.elementOverride}`);
+                if (ef.hpBonus) efHTML.push(`❤️ +${ef.hpBonus} HP`);
+                if (ef.atkBonus) efHTML.push(`⚔️ +${ef.atkBonus} ATK`);
+                if (ef.healPerTurn) efHTML.push(`💚 Cura ${ef.healPerTurn} HP/turno`);
+                const isCrafted = count > 0;
+                
+                let actionHTML = '';
+                if (count >= 99) {
+                    actionHTML = `<div class="forge-forged-tag" style="color:#e8b923; margin-bottom:5px;">✅ Limite Máximo (99)</div>
+                                  <button class="forge-btn danger" onclick="handleDismantleAmulet('${uids[0]}')">🔥 Desmanchar</button>`;
+                } else {
+                    actionHTML = `
+                        ${isCrafted ? `<div class="forge-forged-tag" style="color:#8ac070; margin-bottom:5px;">✅ Forjado (${count}/99)</div>` : ''}
+                        <div class="forge-ouro ${canCraft ? 'ok' : 'no'}">${uiIcon('gold')} ${a.custoOuro}</div>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="forge-btn" style="flex:1;" ${canCraft ? '' : 'disabled'} onclick="handleCraftAmulet('${a.id}')">
+                                ${canCraft ? (isCrafted ? '🔨 Forjar +1' : '🔨 Forjar') : '✕ Sem recursos'}
+                            </button>
+                            ${isCrafted ? `<button class="forge-btn danger" style="flex:1;" onclick="handleDismantleAmulet('${uids[0]}')">🔥 Desmanchar</button>` : ''}
+                        </div>
+                    `;
+                }
+                return `<div class="forge-card ${isCrafted ? 'crafted amulet' : 'amulet'}"><div class="forge-card-header"><div class="forge-emoji">${a.emoji}</div><div class="forge-info"><div class="forge-name">${a.nome}</div><div class="forge-meta">Ato ${a.ato}</div></div></div><div class="forge-effects">${efHTML.join(' · ')}</div><div class="forge-recipe">${gerarReceitaHTML(a.receita)}</div><div class="forge-actions">${actionHTML}</div></div>`;
+            }).join('');
+            return `<div class="forge-grid">${cardsHTML}</div>`;
+        };
+    }
+
+    // --- 3. CSS DO MODAL ---
+    if (!document.getElementById('matInfoCSS')) {
+        const style = document.createElement('style');
+        style.id = 'matInfoCSS';
+        style.textContent = `
+            .mat-info-overlay {
+                position: fixed; inset: 0; background: rgba(10,6,2,0.9);
+                z-index: 30000; display: flex; align-items: center; justify-content: center;
+                padding: 20px; animation: fadeIn 0.3s ease; backdrop-filter: blur(4px);
+            }
+            .mat-info-panel {
+                background: linear-gradient(180deg, #2a1f10, #1a1208);
+                border: 2px solid #c9a227; border-radius: 8px;
+                width: 100%; max-width: 450px; box-shadow: 0 10px 40px rgba(0,0,0,0.9);
+                overflow: hidden;
+            }
+            .mat-info-header {
+                display: flex; justify-content: space-between; align-items: center;
+                padding: 15px 20px; border-bottom: 1px solid rgba(201,162,39,0.3);
+                background: rgba(10,6,2,0.5);
+            }
+            .mat-info-header h2 {
+                margin: 0; font-family: 'Cinzel', serif; color: #e8b923; font-size: 1.2rem;
+                letter-spacing: 1px;
+            }
+            .mat-info-close {
+                background: #6a2020; color: #f5c8c8; border: 1px solid #a83232;
+                border-radius: 50%; width: 28px; height: 28px; cursor: pointer;
+                display: flex; align-items: center; justify-content: center;
+                font-family: 'Cinzel', serif; font-weight: 700; transition: all 0.2s;
+            }
+            .mat-info-close:hover { background: #8a3030; transform: scale(1.1); }
+            
+            .mat-info-body {
+                padding: 20px; display: flex; flex-direction: column; align-items: center; gap: 20px;
+            }
+            .mat-info-icon-wrap {
+                width: 100px; height: 100px; display: flex; align-items: center; justify-content: center;
+                background: radial-gradient(circle, rgba(232,185,35,0.15), transparent 70%);
+                border-radius: 50%; border: 2px dashed rgba(201,162,39,0.4);
+            }
+            .mat-info-icon-wrap img {
+                width: 80px; height: 80px; object-fit: contain;
+                filter: drop-shadow(0 0 15px rgba(232,185,35,0.5));
+            }
+            .mat-info-icon-wrap span { font-size: 4rem; }
+            
+            .mat-info-drops { width: 100%; }
+            .mat-info-title {
+                font-family: 'Cinzel', serif; color: #8a7a52; font-size: 0.8rem;
+                letter-spacing: 2px; margin-bottom: 12px; text-align: center;
+                border-bottom: 1px solid rgba(201,162,39,0.2); padding-bottom: 6px;
+            }
+            .mat-drop-enemy {
+                background: rgba(10,6,2,0.6); border: 1px solid rgba(201,162,39,0.25);
+                border-radius: 6px; padding: 12px; margin-bottom: 8px;
+            }
+            .mat-drop-enemy:last-child { margin-bottom: 0; }
+            .mat-drop-enemy-header {
+                font-family: 'Cinzel', serif; color: #f0e2c0; font-size: 1rem;
+                display: flex; align-items: center; gap: 10px; margin-bottom: 6px;
+            }
+            .mat-drop-enemy-phases {
+                font-family: 'EB Garamond', serif; color: #b8a577;
+                font-size: 0.9rem; font-style: italic; line-height: 1.4;
+            }
+            .mat-no-drops {
+                text-align: center; font-family: 'EB Garamond', serif;
+                color: #8a7a52; font-style: italic; padding: 10px;
+                background: rgba(10,6,2,0.4); border-radius: 6px;
+            }
+            @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        `;
+        document.head.appendChild(style);
+    }
+
+    console.log('✅ [V10.37] Popup e cliques instalados diretamente no HTML.');
+})();
+// =================================================================
+// 🖤 V10.42 — LOJA DAS SOMBRAS (Status, Sprites e Descrições)
+// =================================================================
+
+(function eventoShopV1042() {
+    if (window._eventoShopV1042) return;
+    window._eventoShopV1042 = true;
+
+    console.log('✅ [V10.42] Instalando Loja das Sombras (Premium)...');
+
+    const ESSENCIA_ID = 'essencia_sombria';
+    const CORACAO_ID = 'coracao_vazio';
+
+    // --- 1. REGISTRAR ITENS BASE ---
+    if (typeof STORY_MATERIALS !== 'undefined') {
+        STORY_MATERIALS[ESSENCIA_ID] = { id: ESSENCIA_ID, name: 'Essência Sombria', emoji: '🌑' };
+        STORY_MATERIALS['nucleo_abismo'] = { id: 'nucleo_abismo', name: 'Núcleo do Abismo', emoji: '💀' };
+    }
+    if (typeof STORY_AMULETS !== 'undefined' && !STORY_AMULETS[CORACAO_ID]) {
+        STORY_AMULETS[CORACAO_ID] = {
+            id: CORACAO_ID,
+            nome: 'Coração do Vazio',
+            ato: 13,
+            custoOuro: 0,
+            emoji: '🖤',
+            receita: {},
+            efeito: { hpBonus: 5, atkBonus: 5, voidSurvival: true }
+        };
+    }
+
+    // --- 2. CONSTRUÇÃO DA LOJA COM STATUS E DESCRIÇÕES ---
+    let LOJA_ITENS = [
+        { 
+            id: 'chave_evento', tipo: 'chave', preco: 100, nome: 'Chave do Evento', emoji: '🔑',
+            desc: 'Abre a luta contra o Boss do dia.', stats: ''
+        },
+        { 
+            id: 'nucleo_abismo', tipo: 'material', preco: 1500, nome: 'Núcleo do Abismo', emoji: '💀',
+            desc: 'Usado no Ritual de Ascensão (Nv 11).', stats: ''
+        },
+        { 
+            id: CORACAO_ID, tipo: 'amuleto_unico', preco: 10000, nome: 'Coração do Vazio', emoji: '🖤',
+            desc: 'Sobrevive com 1 HP (1x/batalha).', stats: '+5 HP · +5 ATK'
+        }
+    ];
+
+    // ⭐ PUXA AS 21 ARMAS E SEUS STATUS/SPRITES
+    const armasEvento = (typeof EVENTO_ARMAS !== 'undefined') ? EVENTO_ARMAS : {};
+    Object.values(armasEvento).forEach(w => {
+        let emoji = '⚔️';
+        if (w.tipo === 'tacape') emoji = '🪓';
+        if (w.tipo === 'flecha') emoji = '🏹';
+        if (w.tipo === 'cajado') emoji = '🪄';
+
+        // Formata o elemento bonitinho
+        let elemTexto = w.elemento;
+        if (elemTexto === 'FOGO') elemTexto = '🔥 Fogo';
+        if (elemTexto === 'AGUA') elemTexto = '💧 Água';
+        if (elemTexto === 'TERRA') elemTexto = '⛰️ Terra';
+        if (elemTexto === 'AR') elemTexto = '🌪️ Ar';
+
+        LOJA_ITENS.push({
+            id: w.id,
+            tipo: 'arma',
+            preco: 1000,
+            nome: w.nome,
+            emoji: emoji,
+            desc: `Elemento: ${elemTexto}`,
+            stats: `+${w.atkBonus} ATK · +${w.elementoBonus} Elemento`,
+            sprite: (typeof EVENTO_SPRITES !== 'undefined' && EVENTO_SPRITES[w.id]) ? EVENTO_SPRITES[w.id] : ''
+        });
+    });
+
+    // --- 3. LÓGICA DE DURABILIDADE ---
+    if (!STORY_PROGRESS.itemDurability) STORY_PROGRESS.itemDurability = {};
+
+    window.getDurabilidade = (itemId) => {
+        if (itemId === CORACAO_ID && STORY_PROGRESS.itemDurability[itemId] === undefined) return 100;
+        return STORY_PROGRESS.itemDurability[itemId] || 0;
+    };
+
+    window.quebrarItem = (itemId) => {
+        if (typeof showToast === 'function') showToast('💔', 'O Coração do Vazio se despedaçou!', '💔');
+        for (const hc in STORY_PROGRESS.heroEquipment || {}) {
+            if (STORY_PROGRESS.heroEquipment[hc].amuleto === itemId) STORY_PROGRESS.heroEquipment[hc].amuleto = null;
+        }
+        if (Array.isArray(STORY_PROGRESS.craftedAmulets)) {
+            STORY_PROGRESS.craftedAmulets = STORY_PROGRESS.craftedAmulets.filter(id => id !== itemId);
+        }
+        delete STORY_PROGRESS.itemDurability[itemId];
+        if (typeof saveStoryProgress === 'function') saveStoryProgress();
+    };
+
+    // --- 4. COMBATE E DROPS (Mantidos) ---
+    const _origApplyDmg = window.applyDmg;
+    if (typeof _origApplyDmg === 'function') {
+        window.applyDmg = function(target, amount) {
+            if (target && players.includes(target) && !target.dead && (target.hp - amount <= 0)) {
+                const eq = (typeof getHeroEquipment === 'function') ? getHeroEquipment(target.class) : null;
+                if (eq && eq.amuleto === CORACAO_ID) {
+                    const dur = window.getDurabilidade(CORACAO_ID);
+                    if (dur > 0 && !target._voidUsedThisBattle) {
+                        target._voidUsedThisBattle = true;
+                        target.hp = 1;
+                        
+                        const novaDur = Math.max(0, dur - 10);
+                        STORY_PROGRESS.itemDurability[CORACAO_ID] = novaDur;
+                        if (typeof saveStoryProgress === 'function') saveStoryProgress();
+                        
+                        if (typeof showToast === 'function') showToast('🖤', `Sobreviveu! (${novaDur}% restante)`, '🖤');
+                        if (typeof spawnFxAt === 'function') spawnFxAt('impact', 'fx-impact', target.x, target.y, { duration: 800, scale: 1.5 });
+                        
+                        if (novaDur <= 0) window.quebrarItem(CORACAO_ID);
+                        if (typeof updateVisuals === 'function') updateVisuals();
+                        if (typeof updateHeroCard === 'function') updateHeroCard();
+                        return; 
+                    }
+                }
+            }
+            return _origApplyDmg.apply(this, arguments);
+        };
+    }
+
+    const _origInitBattle = window.initStoryBattle;
+    if (typeof _origInitBattle === 'function') {
+        window.initStoryBattle = async function() {
+            if (typeof players !== 'undefined' && players) {
+                players.forEach(p => { if (p) p._voidUsedThisBattle = false; });
+            }
+            return _origInitBattle.apply(this, arguments);
+        };
+    }
+
+    const _origFinalizar = window.eventoFinalizarPartida;
+    if (typeof _origFinalizar === 'function') {
+        window.eventoFinalizarPartida = async function(vitoria, saindo) {
+            if (vitoria && !saindo && window._eventoBatalha) {
+                let qtd = 0;
+                const fase = window._eventoBatalha.faseId;
+                const isBoss = fase === 'boss';
+                const isPesadelo = window._eventoBatalha.isPesadelo;
+
+                if (isPesadelo) qtd = Math.floor(Math.random() * 31) + 50;
+                else if (isBoss) qtd = Math.floor(Math.random() * 11) + 20;
+                else {
+                    const f = parseInt(fase);
+                    if (f === 1) qtd = Math.floor(Math.random() * 4) + 2;
+                    if (f === 2) qtd = Math.floor(Math.random() * 4) + 4;
+                    if (f === 3) qtd = Math.floor(Math.random() * 4) + 6;
+                    if (f === 4) qtd = Math.floor(Math.random() * 5) + 8;
+                }
+                if (qtd > 0) {
+                    STORY_PROGRESS.inventory[ESSENCIA_ID] = (STORY_PROGRESS.inventory[ESSENCIA_ID] || 0) + qtd;
+                    if (typeof saveStoryProgress === 'function') saveStoryProgress();
+                    if (typeof showToast === 'function') showToast('🌑', `+${qtd} Essências Sombrias!`, '🌑');
+                }
+            }
+            return _origFinalizar.apply(this, arguments);
+        };
+    }
+
+    // --- 5. RENDERIZAÇÃO DA LOJA COM STATUS ---
+    function getItemIconHTML(item) {
+        if (item.sprite && item.sprite.trim() !== '') {
+            return `<img src="${item.sprite}" style="width:64px; height:64px; object-fit:contain; filter:drop-shadow(0 0 10px rgba(142,68,173,0.6));" alt="${item.nome}">`;
+        }
+        if (typeof getWeaponIcon === 'function' && item.tipo === 'arma') {
+            return getWeaponIcon(item.id, 'large');
+        }
+        return `<span style="font-size:3rem; line-height:1; filter:drop-shadow(0 0 10px rgba(142,68,173,0.6));">${item.emoji}</span>`;
+    }
+
+    window.renderEventoShopScreen = function() {
+        const screen = document.getElementById('storyScreen');
+        if (!screen) return;
+
+        const qtdEssencia = STORY_PROGRESS.inventory[ESSENCIA_ID] || 0;
+        
+        let cardsHTML = LOJA_ITENS.map(item => {
+            const podeComprar = qtdEssencia >= item.preco;
+            let extraInfo = '';
+            if (item.tipo === 'amuleto_unico') {
+                const jaTem = (STORY_PROGRESS.craftedAmulets || []).includes(item.id);
+                if (jaTem) {
+                    const dur = window.getDurabilidade(item.id);
+                    extraInfo = `<div class="evento-shop-durability">Durabilidade: ${dur}%</div>`;
+                }
+            }
+
+            // Monta o bloco de status se existir
+            const statsHTML = item.stats ? `<div class="evento-shop-stats">${item.stats}</div>` : '';
+            const descHTML = item.desc ? `<div class="evento-shop-desc">${item.desc}</div>` : '';
+
+            return `
+                <div class="evento-shop-card ${podeComprar ? '' : 'disabled'}">
+                    <div class="evento-shop-emoji">${getItemIconHTML(item)}</div>
+                    <div class="evento-shop-name">${item.nome}</div>
+                    
+                    ${statsHTML}
+                    ${descHTML}
+                    
+                    ${extraInfo}
+                    <div class="evento-shop-price">🌑 ${item.preco}</div>
+                    
+                    <button class="evento-shop-btn" ${podeComprar ? '' : 'disabled'} onclick="comprarEventoItem('${item.id}', ${item.preco}, '${item.tipo}')">
+                        ${podeComprar ? 'COMPRAR' : 'FALTA ESSÊNCIA'}
+                    </button>
+                </div>
+            `;
+        }).join('');
+
+        screen.innerHTML = `
+            <div class="story-container">
+                <div class="story-header">
+                    <h1 class="story-title">🌑 LOJA DAS SOMBRAS</h1>
+                    <div style="margin-top:15px; font-family:'Cinzel',serif; font-size:1.2rem; color:#c39bd3;">
+                        Saldo: <span style="color:#e8b923;">🌑 ${qtdEssencia}</span> Essências
+                    </div>
+                </div>
+                <div class="evento-shop-grid">${cardsHTML}</div>
+                <div class="story-footer"><button class="story-back-btn" onclick="renderEventoSemanalScreen()">← VOLTAR AO EVENTO</button></div>
+            </div>
+        `;
+    };
+
+    window.comprarEventoItem = function(itemId, preco, tipo) {
+        const qtdAtual = STORY_PROGRESS.inventory[ESSENCIA_ID] || 0;
+        if (qtdAtual < preco) {
+            if (typeof showToast === 'function') showToast('❌', 'Essências insuficientes.', '❌');
+            return;
+        }
+        if (tipo === 'amuleto_unico' && (STORY_PROGRESS.craftedAmulets || []).includes(itemId)) {
+            if (typeof showToast === 'function') showToast('❌', 'Você já possui este item.', '❌');
+            return;
+        }
+        if (!confirm(`Comprar este item por ${preco} Essências?`)) return;
+
+        STORY_PROGRESS.inventory[ESSENCIA_ID] -= preco;
+        
+        if (tipo === 'chave') {
+            if (typeof getChaveData === 'function') {
+                const data = getChaveData();
+                data.quantidade = (data.quantidade || 0) + 1;
+                if (typeof salvarChaveData === 'function') salvarChaveData(data);
+            }
+        } else if (tipo === 'material') {
+            STORY_PROGRESS.inventory[itemId] = (STORY_PROGRESS.inventory[itemId] || 0) + 1;
+        } else if (tipo === 'arma' || tipo === 'amuleto_unico') {
+            if (!Array.isArray(STORY_PROGRESS.craftedAmulets)) STORY_PROGRESS.craftedAmulets = [];
+            if (!Array.isArray(STORY_PROGRESS.craftedWeapons)) STORY_PROGRESS.craftedWeapons = [];
+            
+            if (tipo === 'arma') STORY_PROGRESS.craftedWeapons.push(itemId);
+            else {
+                STORY_PROGRESS.craftedAmulets.push(itemId);
+                STORY_PROGRESS.itemDurability[CORACAO_ID] = 100;
+            }
+        }
+
+        if (typeof saveStoryProgress === 'function') saveStoryProgress();
+        if (typeof showToast === 'function') showToast('✅', 'Compra realizada!', '🛒');
+        if (typeof playSfx === 'function') playSfx('atkg');
+        window.renderEventoShopScreen();
+    };
+
+    // --- 6. INJEÇÃO DO BOTÃO E CSS ---
+    const observer = new MutationObserver(() => {
+        const screen = document.getElementById('storyScreen');
+        if (!screen || !screen.classList.contains('active')) return;
+
+        const titleEl = screen.querySelector('.story-title');
+        if (!titleEl || !titleEl.textContent.includes('SEMANA DAS SOMBRAS')) return;
+
+        const header = screen.querySelector('.story-header');
+        if (header && !document.getElementById('btnLojaEvento')) {
+            const qtd = STORY_PROGRESS.inventory[ESSENCIA_ID] || 0;
+            const btn = document.createElement('button');
+            btn.id = 'btnLojaEvento';
+            btn.className = 'evento-shop-trigger';
+            btn.innerHTML = `🌑 LOJA DAS SOMBRAS (${qtd})`;
+            btn.onclick = () => window.renderEventoShopScreen();
+            header.appendChild(btn);
+        }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    if (!document.getElementById('eventoShopCSS')) {
+        const style = document.createElement('style');
+        style.id = 'eventoShopCSS';
+        style.textContent = `
+            .evento-shop-trigger {
+                margin-top: 15px; padding: 12px 24px;
+                background: linear-gradient(180deg, rgba(142,68,173,0.3), transparent 45%),
+                            linear-gradient(135deg, #5a2a70, #2a1538);
+                color: #f0e0ff; border: 2px solid #8e44ad; border-radius: 6px;
+                font-family: 'Cinzel', serif; font-weight: 700; font-size: 1rem;
+                letter-spacing: 1px; cursor: pointer; transition: all 0.2s;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.5), 0 0 15px rgba(142,68,173,0.4);
+            }
+            .evento-shop-trigger:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 6px 20px rgba(0,0,0,0.6), 0 0 25px rgba(142,68,173,0.6);
+            }
+            .evento-shop-grid {
+                display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+                gap: 20px; margin: 30px 0; padding: 0 10px;
+            }
+            .evento-shop-card {
+                background: linear-gradient(180deg, rgba(142,68,173,0.1), transparent 40%),
+                            linear-gradient(180deg, #2a1f10, #1a1208);
+                border: 2px solid #4a2a5a; border-radius: 8px; padding: 20px 15px;
+                text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px;
+                transition: all 0.3s; box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            }
+            .evento-shop-card:hover:not(.disabled) {
+                border-color: #8e44ad; transform: translateY(-5px);
+                box-shadow: 0 8px 25px rgba(142,68,173,0.3);
+            }
+            .evento-shop-card.disabled { opacity: 0.6; filter: grayscale(0.8); }
+            
+            .evento-shop-emoji {
+                height: 70px; display: flex; align-items: center; justify-content: center; margin-bottom: 5px;
+            }
+            .evento-shop-name {
+                font-family: 'Cinzel', serif; color: #f0e2c0; font-size: 1.05rem;
+                font-weight: 700; letter-spacing: 1px; line-height: 1.2;
+            }
+            
+            /* ⭐ NOVOS ESTILOS DE STATUS E DESCRIÇÃO */
+            .evento-shop-stats {
+                font-family: 'Cinzel', serif; font-size: 0.85rem; color: #8ac070;
+                font-weight: 700; background: rgba(107,163,92,0.1);
+                padding: 3px 10px; border-radius: 12px; border: 1px solid rgba(107,163,92,0.3);
+                margin-top: 4px;
+            }
+            .evento-shop-desc {
+                font-family: 'EB Garamond', serif; color: #b8a577; font-size: 0.9rem;
+                font-style: italic; min-height: 35px; display: flex; align-items: center; justify-content: center;
+            }
+            .evento-shop-durability {
+                font-family: 'Cinzel', serif; font-size: 0.85rem; color: #e8b923;
+                font-weight: 700; background: rgba(232,185,35,0.1);
+                padding: 3px 10px; border-radius: 12px; border: 1px solid rgba(232,185,35,0.3);
+            }
+            
+            .evento-shop-price {
+                font-family: 'Cinzel', serif; color: #c39bd3; font-size: 1.1rem;
+                font-weight: 700; background: rgba(10,6,2,0.5); padding: 4px 15px;
+                border-radius: 20px; border: 1px solid rgba(142,68,173,0.4);
+                margin-top: auto; margin-bottom: 5px;
+            }
+            .evento-shop-btn {
+                padding: 10px; width: 100%;
+                background: linear-gradient(135deg, #3d2d18, #2a1f10);
+                color: #e8b923; border: 1px solid #8e44ad; border-radius: 4px;
+                font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.85rem;
+                letter-spacing: 1px; cursor: pointer; transition: all 0.2s;
+            }
+            .evento-shop-btn:hover:not(:disabled) {
+                background: #5a2a70; color: #fff; box-shadow: 0 0 15px rgba(142,68,173,0.5);
+            }
+            .evento-shop-btn:disabled {
+                background: #1a1208; color: #4a2a5a; border-color: #3d2d18; cursor: not-allowed;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    console.log('✅ [V10.42] Loja das Sombras com Sprites, Status e Descrições.');
+})();
+// =================================================================
+// 🖤 V10.43 — PASSIVA DO CORAÇÃO NO PVP E COOP
+// =================================================================
+
+(function coracaoVazioPvpCoopV1043() {
+    if (window._coracaoVazioPvpCoopV1043) return;
+    window._coracaoVazioPvpCoopV1043 = true;
+
+    console.log('✅ [V10.43] Ativando passiva do Coração no PVP e Coop...');
+
+    const CORACAO_ID = 'coracao_vazio';
+
+    // Função central que checa a passiva (evita repetir código)
+    function checarPassivaCoração(target, amt) {
+        if (!target || target.dead || !players.includes(target)) return false;
+        if (target.hp - amt > 0) return false; // Não é dano letal
+
+        const eq = (typeof getHeroEquipment === 'function') ? getHeroEquipment(target.class) : null;
+        if (!eq || eq.amuleto !== CORACAO_ID) return false;
+
+        const dur = (typeof window.getDurabilidade === 'function') ? window.getDurabilidade(CORACAO_ID) : 0;
+        if (dur <= 0 || target._voidUsedThisBattle) return false;
+
+        // ⭐ ATIVA A PASSIVA
+        target._voidUsedThisBattle = true;
+        target.hp = 1;
+
+        const novaDur = Math.max(0, dur - 10);
+        if (!STORY_PROGRESS.itemDurability) STORY_PROGRESS.itemDurability = {};
+        STORY_PROGRESS.itemDurability[CORACAO_ID] = novaDur;
+        
+        if (typeof saveStoryProgress === 'function') saveStoryProgress();
+        if (typeof showToast === 'function') showToast('🖤', `Sobreviveu! (${novaDur}% restante)`, '🖤');
+        if (typeof spawnFxAt === 'function') spawnFxAt('impact', 'fx-impact', target.x, target.y, { duration: 800, scale: 1.5 });
+
+        if (novaDur <= 0 && typeof window.quebrarItem === 'function') {
+            window.quebrarItem(CORACAO_ID);
+        }
+
+        if (typeof updateVisuals === 'function') updateVisuals();
+        if (typeof updateHeroCard === 'function') updateHeroCard();
+
+        return true; // Impede o dano original
+    }
+
+    // 1. Hook no PVP
+    const _origPvpDmg = window.pvpApplyDmg;
+    if (typeof _origPvpDmg === 'function') {
+        window.pvpApplyDmg = function(t, amt) {
+            if (checarPassivaCoração(t, amt)) return;
+            return _origPvpDmg.apply(this, arguments);
+        };
+    }
+
+    // 2. Hook no Coop
+    const _origCoopDmg = window.coopApplyDmg;
+    if (typeof _origCoopDmg === 'function') {
+        window.coopApplyDmg = function(t, amt) {
+            if (checarPassivaCoração(t, amt)) return;
+            return _origCoopDmg.apply(this, arguments);
+        };
+    }
+
+    // 3. Reset da flag no PVP (quando inicia o jogo)
+    const _origInitGame = window.initGame;
+    if (typeof _origInitGame === 'function') {
+        window.initGame = async function() {
+            if (typeof players !== 'undefined' && players) {
+                players.forEach(p => { if (p) p._voidUsedThisBattle = false; });
+            }
+            return _origInitGame.apply(this, arguments);
+        };
+    }
+
+    console.log('✅ [V10.43] Coração do Vazio operando em todos os modos.');
+})();
+// =================================================================
+// 🖤 V10.46 — PASSIVA DO CORAÇÃO DO VAZIO (BLINDADO CONTRA CRASH)
+// =================================================================
+
+(function coracaoVazioV1046() {
+    if (window._coracaoVazioV1046) return;
+    window._coracaoVazioV1046 = true;
+
+    const CORACAO_ID = 'coracao_vazio';
+
+    // 1. Garante que a estrutura existe desde o início
+    if (typeof STORY_PROGRESS !== 'undefined' && !STORY_PROGRESS.itemDurability) {
+        STORY_PROGRESS.itemDurability = {};
+    }
+
+    function getBaseId(id) {
+        return id ? String(id).split('#')[0] : null;
+    }
+
+    // 2. Funções de Durabilidade e Quebra (Blindadas)
+    window.getDurabilidade = (itemId) => {
+        if (!itemId) return 0;
+        const baseId = getBaseId(itemId);
+        if (typeof STORY_PROGRESS === 'undefined' || !STORY_PROGRESS.itemDurability) return 100;
+        if (baseId === CORACAO_ID && STORY_PROGRESS.itemDurability[baseId] === undefined) return 100;
+        return STORY_PROGRESS.itemDurability[baseId] || 0;
+    };
+
+    window.quebrarItem = (itemId) => {
+        const baseId = getBaseId(itemId);
+        if (typeof showToast === 'function') showToast('💔', 'O Coração do Vazio se despedaçou!', '💔');
+        
+        if (typeof STORY_PROGRESS !== 'undefined' && STORY_PROGRESS.heroEquipment) {
+            for (const hc in STORY_PROGRESS.heroEquipment) {
+                if (getBaseId(STORY_PROGRESS.heroEquipment[hc].amuleto) === baseId) {
+                    STORY_PROGRESS.heroEquipment[hc].amuleto = null;
+                }
+            }
+        }
+        if (typeof STORY_PROGRESS !== 'undefined' && Array.isArray(STORY_PROGRESS.craftedAmulets)) {
+            STORY_PROGRESS.craftedAmulets = STORY_PROGRESS.craftedAmulets.filter(id => getBaseId(id) !== baseId);
+        }
+        if (typeof STORY_PROGRESS !== 'undefined' && STORY_PROGRESS.itemDurability) {
+            delete STORY_PROGRESS.itemDurability[baseId];
+        }
+        if (typeof saveStoryProgress === 'function') saveStoryProgress();
+    };
+
+    // 3. O "Anjo da Guarda"
+    window.tentarSalvarComCoracao = function() {
+        if (typeof players === 'undefined' || !Array.isArray(players)) return false;
+        let salvou = false;
+        
+        for (const p of players) {
+            if (!p.dead && p.hp > 0) continue; 
+            
+            const eq = (typeof getHeroEquipment === 'function') ? getHeroEquipment(p.class) : null;
+            if (!eq || !eq.amuleto) continue;
+            if (getBaseId(eq.amuleto) !== CORACAO_ID) continue;
+            
+            const dur = window.getDurabilidade(CORACAO_ID);
+            if (dur <= 0 || p._voidUsedThisBattle) continue;
+            
+            p._voidUsedThisBattle = true;
+            p.hp = 1;
+            p.dead = false;
+            salvou = true;
+            
+            const novaDur = Math.max(0, dur - 10);
+            if (!STORY_PROGRESS.itemDurability) STORY_PROGRESS.itemDurability = {};
+            STORY_PROGRESS.itemDurability[CORACAO_ID] = novaDur;
+            if (typeof saveStoryProgress === 'function') saveStoryProgress();
+            
+            if (typeof showToast === 'function') showToast('🖤', `Sobreviveu! (${novaDur}% restante)`, '🖤');
+            if (typeof spawnFxAt === 'function') spawnFxAt('impact', 'fx-impact', p.x, p.y, { duration: 800, scale: 1.5 });
+            
+            if (novaDur <= 0) window.quebrarItem(CORACAO_ID);
+            
+            if (typeof updateVisuals === 'function') updateVisuals();
+            if (typeof updateHeroCard === 'function') updateHeroCard();
+            if (typeof coopRenderTudo === 'function') coopRenderTudo();
+            if (typeof pvpRenderTudo === 'function') pvpRenderTudo();
+        }
+        
+        return salvou;
+    };
+
+    // 4. Interceptadores de Tela (Destravando o jogo se salvar)
+    const _origShowEndGame = window.showEndGame;
+    if (typeof _origShowEndGame === 'function') {
+        window.showEndGame = function(msg, isWin) {
+            if (!isWin && window.tentarSalvarComCoracao()) {
+                console.log('[V10.46] Game Over bloqueado: Coração salvou.');
+                if (typeof isExecutingAction !== 'undefined') isExecutingAction = false;
+                if (typeof arcadeBossTransition !== 'undefined') arcadeBossTransition = false;
+                return; 
+            }
+            return _origShowEndGame.apply(this, arguments);
+        };
+    }
+
+    const _origStoryDefeat = window.handleStoryDefeat;
+    if (typeof _origStoryDefeat === 'function') {
+        window.handleStoryDefeat = function() {
+            if (window.tentarSalvarComCoracao()) {
+                console.log('[V10.46] Derrota bloqueada: Coração salvou.');
+                if (typeof isExecutingAction !== 'undefined') isExecutingAction = false;
+                if (typeof arcadeBossTransition !== 'undefined') arcadeBossTransition = false;
+                return;
+            }
+            return _origStoryDefeat.apply(this, arguments);
+        };
+    }
+
+    const _origEventoFinish = window.finishStoryPhase;
+    if (typeof _origEventoFinish === 'function') {
+        window.finishStoryPhase = function(victory) {
+            if (!victory && window.tentarSalvarComCoracao()) {
+                console.log('[V10.46] Fim de fase bloqueado: Coração salvou.');
+                if (typeof isExecutingAction !== 'undefined') isExecutingAction = false;
+                if (typeof arcadeBossTransition !== 'undefined') arcadeBossTransition = false;
+                return;
+            }
+            return _origEventoFinish.apply(this, arguments);
+        };
+    }
+
+    const _origPvpFinalizar = window.pvpFinalizar;
+    if (typeof _origPvpFinalizar === 'function') {
+        window.pvpFinalizar = function(euVenco) {
+            if (!euVenco && window.tentarSalvarComCoracao()) {
+                console.log('[V10.46] PVP: Coração salvou.');
+                return;
+            }
+            return _origPvpFinalizar.apply(this, arguments);
+        };
+    }
+
+    const _origCoopFinalizar = window.coopFinalizar;
+    if (typeof _origCoopFinalizar === 'function') {
+        window.coopFinalizar = async function(vitoria) {
+            if (!vitoria && window.tentarSalvarComCoracao()) {
+                console.log('[V10.46] Coop: Coração salvou.');
+                return;
+            }
+            return _origCoopFinalizar.apply(this, arguments);
+        };
+    }
+
+    console.log('✅ [V10.46] Passiva do Coração blindada instalada.');
+})();
+// =================================================================
+// 🌪️ V10.50 — CORRUPÇÃO DO TABULEIRO (Monitor e Visual Blindados)
+// =================================================================
+
+(function corrupcaoTabuleiroV1050() {
+    if (window._corrupcaoTabuleiroV1050) return;
+    window._corrupcaoTabuleiroV1050 = true;
+
+    console.log('✅ [V10.50] Instalando Corrupção do Tabuleiro (Blindada)...');
+
+    // Array global para guardar os tiles corrompidos
+    window._corruptedTiles = [];
+
+    // 1. Função que aplica a corrupção
+    window.triggerTabuleiroCorrompido = function() {
+        if (!boss || boss.dead) return;
+        if (boss._corruptedTriggered) return;
+        boss._corruptedTriggered = true;
+
+        if (typeof addLog === 'function') addLog(`⚠️ O TABULEIRO FOI CORROMPIDO! Use Solo Sagrado para limpar.`);
+        if (typeof playSfx === 'function') playSfx('minoa2');
+        
+        const board = document.getElementById('board');
+        if (board) {
+            board.style.animation = 'earthquakeAnim 0.8s ease-out';
+            setTimeout(() => board.style.animation = '', 800);
+        }
+
+        let tentativas = 0;
+        let adicionados = 0;
+        const tilesLivresAtuais = 64 - window._corruptedTiles.length;
+
+        while (adicionados < 12 && (tilesLivresAtuais - adicionados) > 35 && tentativas < 200) {
+            tentativas++;
+            const idx = Math.floor(Math.random() * 64);
+            
+            if (window._corruptedTiles.includes(idx)) continue;
+
+            // Não corrompe a posição do boss ou dos heróis
+            if (typeof isOccupied === 'function' && isOccupied(idx % 8, Math.floor(idx / 8), -1)) continue;
+
+            window._corruptedTiles.push(idx);
+            adicionados++;
+
+            const tile = document.querySelectorAll('#grid .tile')[idx];
+            if (tile) {
+                tile.classList.add('tile-corrupted');
+                tile.innerHTML = `<div class="corruption-fx"></div>`;
+            }
+        }
+        console.log(`[V10.50] ${adicionados} tiles corrompidos.`);
+    };
+
+    // 2. MONITOR CONTÍNUO DE HP (Bypassa o problema do applyDmg)
+    setInterval(() => {
+        if (!window._storyMode && !window._eventoAtivo) return;
+        if (!boss || boss.dead) return;
+        if (boss._corruptedTriggered) return;
+
+        // Se a vida chegou a 50% ou menos
+        if (boss.hp > 0 && boss.hp <= boss.maxHp * 0.5) {
+            window.triggerTabuleiroCorrompido();
+        }
+    }, 300);
+
+    // 3. PRESERVAR O VISUAL DO TILE CORROMPIDO
+    // Ensinamos o createTile a manter a classe preta mesmo quando o tabuleiro atualiza
+    const _origCreateTile = window.createTile;
+    if (typeof _origCreateTile === 'function') {
+        window.createTile = function(idx) {
+            const tile = _origCreateTile.apply(this, arguments);
+            if (window._corruptedTiles && window._corruptedTiles.includes(idx)) {
+                tile.classList.add('tile-corrupted');
+                tile.innerHTML = `<div class="corruption-fx"></div>`;
+            }
+            return tile;
+        };
+    }
+
+    // 4. INTERCEPTAR O CLIQUE NO TILE
+    const _origSelect = window.handleSelect;
+    if (typeof _origSelect === 'function') {
+        window.handleSelect = function(idx) {
+            if (window._corruptedTiles && window._corruptedTiles.includes(idx)) {
+                const p = players[currentPlayerIdx];
+                
+                // ⭐ Se o jogador ativou o Solo Sagrado, LIMPA o tile
+                if (p && skillActive) {
+                    window._corruptedTiles = window._corruptedTiles.filter(i => i !== idx);
+                    p.skillUsed = true;
+                    skillActive = false;
+                    document.querySelectorAll('#grid .tile').forEach(t => t.classList.remove('skill-mode'));
+                    
+                    if (typeof addLog === 'function') addLog(`✨ SOLO SAGRADO: Corrupção limpa!`);
+                    
+                    const gridEl = document.getElementById('grid');
+                    if (gridEl && gridEl.childNodes[idx] && typeof createTile === 'function') {
+                        gridEl.replaceChild(createTile(idx), gridEl.childNodes[idx]);
+                    }
+                    if (typeof saveAndRefresh === 'function') saveAndRefresh();
+                    return; 
+                }
+                
+                // Se tentou andar sem Solo Sagrado, bloqueia
+                if (typeof addLog === 'function') addLog(`⛔ Este tile está corrompido! Ative o Solo Sagrado para limpá-lo.`);
+                return;
+            }
+            return _origSelect.apply(this, arguments);
+        };
+    }
+
+    // 5. RESETAR A CORRUPÇÃO QUANDO O BOSS MORRE OU TROCA
+    const _origAdvance = window.advanceStoryEnemy;
+    if (typeof _origAdvance === 'function') {
+        window.advanceStoryEnemy = async function() {
+            window._corruptedTiles = [];
+            if (boss) boss._corruptedTriggered = false;
+            return _origAdvance.apply(this, arguments);
+        };
+    }
+
+    const _origInitBattle = window.initStoryBattle;
+    if (typeof _origInitBattle === 'function') {
+        window.initStoryBattle = async function() {
+            window._corruptedTiles = [];
+            if (boss) boss._corruptedTriggered = false;
+            return _origInitBattle.apply(this, arguments);
+        };
+    }
+
+    // 6. CSS DOS TILES CORROMPIDOS
+    if (!document.getElementById('corruptionCSS')) {
+        const style = document.createElement('style');
+        style.id = 'corruptionCSS';
+        style.textContent = `
+            .tile.tile-corrupted {
+                background: linear-gradient(135deg, #1a0a1a, #050205) !important;
+                box-shadow: inset 0 0 15px rgba(142,68,173,0.8), 0 0 10px rgba(0,0,0,1) !important;
+                border: 2px solid #6a1090 !important;
+                cursor: not-allowed !important;
+                position: relative;
+                overflow: hidden;
+            }
+            .tile.tile-corrupted::before {
+                content: '⛧';
+                position: absolute;
+                top: 50%; left: 50%;
+                transform: translate(-50%, -50%);
+                font-size: 2rem;
+                color: rgba(142,68,173,0.4);
+                animation: corruptPulse 2s infinite alternate;
+            }
+            @keyframes corruptPulse {
+                from { opacity: 0.3; transform: translate(-50%, -50%) scale(1); }
+                to { opacity: 0.8; transform: translate(-50%, -50%) scale(1.2); }
+            }
+            .corruption-fx {
+                position: absolute; inset: 0;
+                background: radial-gradient(circle, rgba(142,68,173,0.3), transparent 70%);
+                animation: pulseSkill 2s infinite;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    console.log('✅ [V10.50] Corrupção do tabuleiro BLINDADA pronta.');
+})();
+// =================================================================
+// 🌪️ V10.53 — CORRUPÇÃO DO TABULEIRO (Reset Ativo + Aviso Visual)
+// =================================================================
+
+(function corrupcaoTabuleiroV1053() {
+    if (window._corrupcaoTabuleiroV1053) return;
+    window._corrupcaoTabuleiroV1053 = true;
+
+    console.log('✅ [V10.53] Instalando Corrupção do Tabuleiro (Reset Ativo)...');
+
+    window._corruptedTiles = [];
+
+    const BOSS_IDS = [
+        'saci', 'mapinguari', 'iara', 'boitata', 'mula', 'corpo_seco', 
+        'lobisomem', 'cuca', 'boto', 'boi', 'jaci', 'guaraci', 'anhanga', 
+        'pesadelo', 'espectro_saci', 'espectro_mapinguari', 'espectro_iara', 
+        'espectro_boitata', 'espectro_mula', 'espectro_corposeco', 
+        'espectro_lobisomem', 'espectro_cuca', 'espectro_boto', 
+        'espectro_boi', 'espectro_jaci', 'espectro_guaraci'
+    ];
+
+    function restaurarTile(idx) {
+        const gridEl = document.getElementById('grid');
+        if (gridEl && gridEl.childNodes[idx] && typeof createTile === 'function') {
+            gridEl.replaceChild(createTile(idx), gridEl.childNodes[idx]);
+        }
+    }
+
+    // Função central para limpar a corrupção (Ativada quando o Boss morre)
+    window.limparCorrupcao = function() {
+        if (window._corruptedTiles.length > 0) {
+            console.log('[V10.53] Limpando tabuleiro corrompido...');
+            window._corruptedTiles.forEach(idx => restaurarTile(idx));
+            window._corruptedTiles = [];
+        }
+        if (boss) boss._corruptedTriggered = false;
+    };
+
+    // Função que aplica a corrupção
+    window.triggerTabuleiroCorrompido = function() {
+        if (!boss || boss.dead) return;
+        if (boss._corruptedTriggered) return;
+        boss._corruptedTriggered = true;
+
+        if (typeof addLog === 'function') addLog(`⚠️ O TABULEIRO FOI CORROMPIDO! Use Solo Sagrado para limpar.`);
+        if (typeof playSfx === 'function') playSfx('minoa2');
+        
+        const board = document.getElementById('board');
+        if (board) {
+            board.style.animation = 'earthquakeAnim 0.8s ease-out';
+            setTimeout(() => board.style.animation = '', 800);
+        }
+
+        // ⭐ BANNER DE AVISO CENTRAL ⭐
+        const oldBanner = document.getElementById('corruptionWarning');
+        if (oldBanner) oldBanner.remove();
+
+        const warning = document.createElement('div');
+        warning.id = 'corruptionWarning';
+        warning.innerHTML = `
+            <div style="font-family:'Cinzel Decorative', serif; color:#c39bd3; font-size:1.5rem; text-shadow: 0 0 15px #8e44ad;">O BOSS ESTÁ ENFURECIDO!</div>
+            <div style="font-family:'EB Garamond', serif; color:#d9c89a; font-size:1rem; font-style:italic; margin-top:5px;">O tabuleiro foi corrompido. Use o Solo Sagrado (✨) nos tiles negros para limpá-los.</div>
+        `;
+        warning.style.cssText = `
+            position: absolute; top: 20%; left: 50%; transform: translate(-50%, -50%);
+            background: linear-gradient(180deg, rgba(40,15,50,0.95), rgba(20,5,20,0.95));
+            border: 2px solid #8e44ad; border-radius: 8px; padding: 15px 30px;
+            text-align: center; z-index: 1000; box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            pointer-events: none; animation: fadeInOut 4s ease forwards;
+        `;
+        document.body.appendChild(warning);
+        
+        setTimeout(() => { if (warning.parentNode) warning.remove(); }, 4000);
+
+        // Aplica a corrupção nos tiles
+        let tentativas = 0;
+        let adicionados = 0;
+
+        while (adicionados < 12 && (64 - window._corruptedTiles.length - adicionados) > 35 && tentativas < 200) {
+            tentativas++;
+            const idx = Math.floor(Math.random() * 64);
+            
+            if (window._corruptedTiles.includes(idx)) continue;
+            if (typeof isOccupied === 'function' && isOccupied(idx % 8, Math.floor(idx / 8), -1)) continue;
+
+            window._corruptedTiles.push(idx);
+            adicionados++;
+
+            const tile = document.querySelectorAll('#grid .tile')[idx];
+            if (tile) {
+                tile.classList.add('tile-corrupted');
+                tile.innerHTML = `<div class="corruption-fx"></div>`;
+            }
+        }
+    };
+
+    // 1. MONITOR DE VIDA (Só checa o HP)
+    setInterval(() => {
+        if (!window._storyMode && !window._eventoAtivo) return;
+        if (!boss || boss.dead) return;
+
+        const enemyId = (typeof storyEnemiesRemaining !== 'undefined' && storyEnemiesRemaining.length > 0) 
+            ? storyEnemiesRemaining[0] : null;
+        const isBoss = enemyId && (BOSS_IDS.includes(enemyId) || (typeof STORY_ENEMIES !== 'undefined' && STORY_ENEMIES[enemyId]?.isBoss));
+
+        if (isBoss && boss.hp > 0 && boss.hp <= boss.maxHp * 0.5) {
+            window.triggerTabuleiroCorrompido();
+        }
+    }, 300);
+
+    // 2. ⭐ RESET ATIVO: Escuta a morte do boss e a troca de fase
+    const _origAdvance = window.advanceStoryEnemy;
+    if (typeof _origAdvance === 'function') {
+        window.advanceStoryEnemy = async function() {
+            window.limparCorrupcao(); // Limpa ANTES de spawnar o próximo
+            return _origAdvance.apply(this, arguments);
+        };
+    }
+
+    const _origHandleDefeat = window.handleStoryBossDefeat;
+    if (typeof _origHandleDefeat === 'function') {
+        window.handleStoryBossDefeat = async function() {
+            window.limparCorrupcao(); // Limpa no momento da morte
+            return _origHandleDefeat.apply(this, arguments);
+        };
+    }
+
+    const _origInitBattle = window.initStoryBattle;
+    if (typeof _origInitBattle === 'function') {
+        window.initStoryBattle = async function() {
+            window.limparCorrupcao(); // Limpa ao começar a batalha
+            return _origInitBattle.apply(this, arguments);
+        };
+    }
+
+    // 3. PRESERVAR O VISUAL DO TILE
+    const _origCreateTile = window.createTile;
+    if (typeof _origCreateTile === 'function') {
+        window.createTile = function(idx) {
+            const tile = _origCreateTile.apply(this, arguments);
+            if (window._corruptedTiles && window._corruptedTiles.includes(idx)) {
+                tile.classList.add('tile-corrupted');
+                tile.innerHTML = `<div class="corruption-fx"></div>`;
+            }
+            return tile;
+        };
+    }
+
+    // 4. CLIQUE NO TILE (Solo Sagrado limpa, clique normal bloqueia)
+    const _origSelect = window.handleSelect;
+    if (typeof _origSelect === 'function') {
+        window.handleSelect = function(idx) {
+            if (window._corruptedTiles && window._corruptedTiles.includes(idx)) {
+                const p = players[currentPlayerIdx];
+                
+                if (p && skillActive) {
+                    window._corruptedTiles = window._corruptedTiles.filter(i => i !== idx);
+                    p.skillUsed = true;
+                    skillActive = false;
+                    document.querySelectorAll('#grid .tile').forEach(t => t.classList.remove('skill-mode'));
+                    
+                    if (typeof addLog === 'function') addLog(`✨ SOLO SAGRADO: Corrupção limpa!`);
+                    if (typeof playSfx === 'function') playSfx('skill1');
+                    if (typeof spawnFxAt === 'function') spawnFxAt('impact', 'fx-impact', idx % 8, Math.floor(idx / 8), { duration: 600 });
+
+                    restaurarTile(idx);
+                    if (typeof saveAndRefresh === 'function') saveAndRefresh();
+                    return; 
+                } else {
+                    if (typeof addLog === 'function') addLog(`⛔ Este tile está corrompido! Ative o Solo Sagrado para limpá-lo.`);
+                    return;
+                }
+            }
+            return _origSelect.apply(this, arguments);
+        };
+    }
+
+    // 5. CSS
+    if (!document.getElementById('corruptionCSS')) {
+        const style = document.createElement('style');
+        style.id = 'corruptionCSS';
+        style.textContent = `
+            .tile.tile-corrupted {
+                background: linear-gradient(135deg, #1a0a1a, #050205) !important;
+                box-shadow: inset 0 0 15px rgba(142,68,173,0.8), 0 0 10px rgba(0,0,0,1) !important;
+                border: 2px solid #6a1090 !important;
+                cursor: not-allowed !important;
+                position: relative;
+                overflow: hidden;
+            }
+            .tile.tile-corrupted::before {
+                content: '⛧';
+                position: absolute;
+                top: 50%; left: 50%;
+                transform: translate(-50%, -50%);
+                font-size: 2rem;
+                color: rgba(142,68,173,0.4);
+                animation: corruptPulse 2s infinite alternate;
+            }
+            @keyframes corruptPulse {
+                from { opacity: 0.3; transform: translate(-50%, -50%) scale(1); }
+                to { opacity: 0.8; transform: translate(-50%, -50%) scale(1.2); }
+            }
+            .corruption-fx {
+                position: absolute; inset: 0;
+                background: radial-gradient(circle, rgba(142,68,173,0.3), transparent 70%);
+                animation: pulseSkill 2s infinite;
+            }
+            @keyframes fadeInOut {
+                0% { opacity: 0; transform: translate(-50%, -30%) scale(0.9); }
+                10% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+                90% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+                100% { opacity: 0; transform: translate(-50%, -70%) scale(0.9); }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    console.log('✅ [V10.53] Corrupção Pronta (Reset Ativo + Banner).');
+})();
+// =================================================================
+// historia.js — BLOCO V10.54 (FIX DEFINITIVO: corrupção ao morrer boss)
+// -----------------------------------------------------------------
+// BUG: limparCorrupcao() restaurava os tiles via createTile()
+// enquanto _corruptedTiles ainda continha os índices. O hook em
+// createTile re-adicionava .tile-corrupted durante a iteração.
+//
+// RESULTADO: após o boss morrer, os tiles negros permaneciam.
+//
+// FIX: limpar o array ANTES de iterar. Mesmo padrão do Solo Sagrado
+// (que já funcionava corretamente).
+// =================================================================
+
+(function fixCorrupcaoV1054() {
+    if (window._fixCorrupcaoV1054) return;
+    window._fixCorrupcaoV1054 = true;
+
+    // =============================================================
+    // 1. REDEFINE limparCorrupcao com a ORDEM CORRETA
+    // =============================================================
+    window.limparCorrupcao = function() {
+        if (!window._corruptedTiles || window._corruptedTiles.length === 0) {
+            if (typeof boss !== 'undefined' && boss) boss._corruptedTriggered = false;
+            return;
+        }
+
+        const qtd = window._corruptedTiles.length;
+        console.log(`[V10.54] Limpando ${qtd} tiles corrompidos...`);
+
+        // ⭐ PASSO 1: SALVA a lista, LIMPA o array ANTES
+        // (evita que createTile re-corrompa durante o replaceChild)
+        const tilesParaRestaurar = [...window._corruptedTiles];
+        window._corruptedTiles = [];
+
+        // ⭐ PASSO 2: agora restaura (createTile NÃO re-adiciona classe)
+        const gridEl = document.getElementById('grid');
+        if (gridEl && typeof createTile === 'function') {
+            tilesParaRestaurar.forEach(idx => {
+                if (gridEl.childNodes[idx]) {
+                    gridEl.replaceChild(createTile(idx), gridEl.childNodes[idx]);
+                }
+            });
+        }
+
+        if (typeof boss !== 'undefined' && boss) {
+            boss._corruptedTriggered = false;
+        }
+
+        console.log('[V10.54] Corrupção limpa com sucesso.');
+    };
+
+    // =============================================================
+    // 2. REFORÇA hook em handleStoryBossDefeat
+    //    (V10.53 já hookou, mas com a função nova agora funciona)
+    // =============================================================
+    const _currDefeat = window.handleStoryBossDefeat;
+    if (typeof _currDefeat === 'function' && !_currDefeat._v1054) {
+        const _innerDefeat = _currDefeat;
+        window.handleStoryBossDefeat = async function() {
+            // Limpa ANTES de qualquer animação/purificação
+            window.limparCorrupcao();
+            return _innerDefeat.apply(this, arguments);
+        };
+        window.handleStoryBossDefeat._v1054 = true;
+        console.log('[V10.54] Hook handleStoryBossDefeat reforçado.');
+    }
+
+    // =============================================================
+    // 3. REFORÇA hook em advanceStoryEnemy (backup)
+    //    (chamado tanto pela morte normal quanto por Coop/sync)
+    // =============================================================
+    const _currAdvance = window.advanceStoryEnemy;
+    if (typeof _currAdvance === 'function' && !_currAdvance._v1054) {
+        const _innerAdvance = _currAdvance;
+        window.advanceStoryEnemy = async function() {
+            // Garante limpeza ANTES de spawnar o próximo boss
+            window.limparCorrupcao();
+            return _innerAdvance.apply(this, arguments);
+        };
+        window.advanceStoryEnemy._v1054 = true;
+        console.log('[V10.54] Hook advanceStoryEnemy reforçado.');
+    }
+
+    // =============================================================
+    // 4. Reforço em initStoryBattle (começo de fase)
+    // =============================================================
+    const _currInit = window.initStoryBattle;
+    if (typeof _currInit === 'function' && !_currInit._v1054) {
+        const _innerInit = _currInit;
+        window.initStoryBattle = async function() {
+            window.limparCorrupcao();
+            return _innerInit.apply(this, arguments);
+        };
+        window.initStoryBattle._v1054 = true;
+    }
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V10.54] Corrupção ao morrer boss — CORRIGIDA');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• limparCorrupcao agora limpa o array ANTES de restaurar');
+    console.log('• createTile não re-corrompe mais durante a limpeza');
+    console.log('• Reset duplo: handleStoryBossDefeat + advanceStoryEnemy');
+    console.log('• Solo Sagrado continua funcionando (mesmo padrão)');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — V10.55 (FX CINEMATOGRÁFICO DA PURIFICAÇÃO)
+// -----------------------------------------------------------------
+// Quando os tiles corrompidos são limpos (morte do boss, troca de
+// fase, ou Solo Sagrado em massa), dispara um efeito de purificação:
+//
+//   • Flash roxo no board inteiro
+//   • Anel de choque expandindo do centro
+//   • Fumaça roxa em cada tile (sobe e dissipa)
+//   • Tile dissolve (brilha → escala → some)
+//   • Cascata do centro pra fora (delay escalonado)
+//   • Som: 'purificacao' + 'skill1' (camada dupla)
+//
+// ⚠️ Mantém a lógica do V10.54 intacta (limpa array ANTES de restaurar)
+// =================================================================
+
+(function limparCorrupcaoComFXV1055() {
+    if (window._limparCorrupcaoComFXV1055) return;
+    window._limparCorrupcaoComFXV1055 = true;
+
+    // =============================================================
+    // CSS
+    // =============================================================
+    if (!document.getElementById('corruptionPurgeCSS')) {
+        const style = document.createElement('style');
+        style.id = 'corruptionPurgeCSS';
+        style.textContent = `
+            /* ============ FLASH GLOBAL ROXO ============ */
+            .corruption-purge-flash {
+                position: absolute;
+                inset: 0;
+                pointer-events: none;
+                z-index: 55;
+                background: radial-gradient(circle at center,
+                    rgba(200, 130, 230, 0.40) 0%,
+                    rgba(142, 68, 173, 0.25) 35%,
+                    rgba(90, 42, 112, 0.12) 60%,
+                    transparent 80%);
+                animation: corruptionPurgeFlash 1.4s ease-out forwards;
+                mix-blend-mode: screen;
+            }
+            @keyframes corruptionPurgeFlash {
+                0%   { opacity: 0; }
+                12%  { opacity: 1; }
+                100% { opacity: 0; }
+            }
+
+            /* ============ ANEL DE CHOQUE ============ */
+            .corruption-purge-ring {
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                width: 0;
+                height: 0;
+                border: 6px solid rgba(200, 130, 230, 0.95);
+                border-radius: 50%;
+                transform: translate(-50%, -50%);
+                z-index: 54;
+                pointer-events: none;
+                box-shadow:
+                    0 0 30px rgba(180, 100, 220, 0.9),
+                    0 0 60px rgba(142, 68, 173, 0.6),
+                    inset 0 0 30px rgba(180, 100, 220, 0.5);
+                animation: corruptionPurgeRing 1.2s cubic-bezier(0.25, 0.8, 0.3, 1) forwards;
+            }
+            @keyframes corruptionPurgeRing {
+                0% {
+                    width: 0;
+                    height: 0;
+                    opacity: 1;
+                    border-width: 10px;
+                }
+                40% {
+                    opacity: 0.9;
+                    border-width: 5px;
+                }
+                100% {
+                    width: 1200px;
+                    height: 1200px;
+                    opacity: 0;
+                    border-width: 1px;
+                }
+            }
+
+            /* ============ FUMAÇA ROXA (uma por tile) ============ */
+            .corruption-smoke-fx {
+                position: absolute;
+                pointer-events: none;
+                z-index: 65;
+                border-radius: 50%;
+                background: radial-gradient(circle,
+                    rgba(210, 140, 240, 0.95) 0%,
+                    rgba(142, 68, 173, 0.85) 25%,
+                    rgba(90, 42, 112, 0.55) 55%,
+                    rgba(40, 10, 60, 0.0) 85%);
+                box-shadow:
+                    0 0 30px rgba(180, 100, 220, 0.9),
+                    0 0 60px rgba(142, 68, 173, 0.5);
+                filter: blur(2px);
+                animation: corruptionSmokeDissipate 1.2s cubic-bezier(0.25, 0.8, 0.3, 1) forwards;
+                mix-blend-mode: screen;
+            }
+            @keyframes corruptionSmokeDissipate {
+                0% {
+                    transform: scale(0.5) translateY(0);
+                    opacity: 0;
+                    filter: blur(0);
+                }
+                15% {
+                    transform: scale(1.15) translateY(-6px);
+                    opacity: 1;
+                    filter: blur(3px);
+                }
+                55% {
+                    transform: scale(1.7) translateY(-28px);
+                    opacity: 0.85;
+                    filter: blur(7px);
+                }
+                100% {
+                    transform: scale(2.9) translateY(-80px);
+                    opacity: 0;
+                    filter: blur(16px);
+                }
+            }
+
+            /* ============ TILE DISSOLVE (brilha e some) ============ */
+            .corruption-tile-dissolve {
+                animation: corruptionTileDissolve 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+            }
+            @keyframes corruptionTileDissolve {
+                0% {
+                    filter: brightness(1) hue-rotate(0deg);
+                    transform: scale(1);
+                    opacity: 1;
+                }
+                35% {
+                    filter: brightness(4) hue-rotate(30deg);
+                    transform: scale(1.15);
+                    opacity: 1;
+                }
+                100% {
+                    filter: brightness(6) hue-rotate(60deg);
+                    transform: scale(1.5);
+                    opacity: 0;
+                }
+            }
+        `;
+        document.head.appendChild(style);
+        console.log('[V10.55] CSS da purificação injetado.');
+    }
+
+    // =============================================================
+    // SOBRESCREVE limparCorrupcao (mantendo a ordem correta do V10.54)
+    // =============================================================
+    window.limparCorrupcao = function() {
+        if (!window._corruptedTiles || window._corruptedTiles.length === 0) {
+            if (typeof boss !== 'undefined' && boss) boss._corruptedTriggered = false;
+            return;
+        }
+
+        const tilesParaRestaurar = [...window._corruptedTiles];
+        const qtd = tilesParaRestaurar.length;
+
+        // ⭐ ORDEM CRÍTICA (V10.54): limpa o array ANTES de restaurar
+        window._corruptedTiles = [];
+        if (typeof boss !== 'undefined' && boss) boss._corruptedTriggered = false;
+
+        const gridEl = document.getElementById('grid');
+        const board = document.getElementById('board');
+        if (!gridEl || !board || typeof createTile !== 'function') return;
+
+        console.log(`[V10.55] Purificando ${qtd} tiles corrompidos (cascata).`);
+
+        // ============== EFEITOS GLOBAIS ==============
+
+        // 1. Flash roxo cobrindo o board
+        const flash = document.createElement('div');
+        flash.className = 'corruption-purge-flash';
+        board.appendChild(flash);
+        setTimeout(() => flash.remove(), 1400);
+
+        // 2. Anel de choque expandindo do centro
+        const ring = document.createElement('div');
+        ring.className = 'corruption-purge-ring';
+        board.appendChild(ring);
+        setTimeout(() => ring.remove(), 1200);
+
+        // 3. Som duplo (purificação + skill)
+        if (typeof playSfx === 'function') {
+            try { playSfx('purificacao'); } catch (e) {}
+            setTimeout(() => {
+                try { playSfx('skill1'); } catch (e) {}
+            }, 250);
+        }
+
+        // ============== EFEITOS POR TILE ==============
+        const s = (typeof getStep === 'function') ? getStep() : 59;
+
+        // Ordena por distância do centro do board (cascata do meio pra fora)
+        const cx = 3.5, cy = 3.5;
+        const ordenados = tilesParaRestaurar.slice().sort((a, b) => {
+            const ax = a % 8, ay = Math.floor(a / 8);
+            const bx = b % 8, by = Math.floor(b / 8);
+            const da = Math.hypot(ax - cx, ay - cy);
+            const db = Math.hypot(bx - cx, by - cy);
+            return da - db;
+        });
+
+        ordenados.forEach((idx, i) => {
+            const delay = i * 55;   // cascata de ~55ms entre tiles
+            const x = idx % 8;
+            const y = Math.floor(idx / 8);
+
+            // Fumaça roxa (no BOARD, não no tile — sobrevive à substituição)
+            const smoke = document.createElement('div');
+            smoke.className = 'corruption-smoke-fx';
+            smoke.style.left   = (x * s + 8) + 'px';
+            smoke.style.top    = (y * s + 8) + 'px';
+            smoke.style.width  = s + 'px';
+            smoke.style.height = s + 'px';
+            smoke.style.animationDelay = delay + 'ms';
+            board.appendChild(smoke);
+            setTimeout(() => smoke.remove(), 1500 + delay);
+
+            // Tile dissolve
+            const tile = gridEl.childNodes[idx];
+            if (tile) {
+                setTimeout(() => {
+                    if (gridEl.childNodes[idx] === tile) {
+                        tile.classList.add('corruption-tile-dissolve');
+                    }
+                }, delay);
+            }
+
+            // Substitui após o fade (~500ms + delay)
+            setTimeout(() => {
+                if (gridEl.childNodes[idx]) {
+                    gridEl.replaceChild(createTile(idx), gridEl.childNodes[idx]);
+                }
+            }, 500 + delay);
+        });
+    };
+
+    // =============================================================
+    // Log
+    // =============================================================
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V10.55] Purificação cinematográfica — ATIVA');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Flash roxo no board');
+    console.log('• Anel de choque expandindo do centro');
+    console.log('• Fumaça roxa em cada tile');
+    console.log('• Tile dissolve (brilha → escala → some)');
+    console.log('• Cascata escalonada (~55ms entre tiles)');
+    console.log('• Som: purificacao + skill1');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — V10.56 (FIX DEFINITIVO: duplo som em skills de boss)
+// -----------------------------------------------------------------
+// Três correções:
+//
+//  1. bossIsStoryBoss agora reconhece pesadelo + 12 espectros
+//     → applyStorySkill NÃO toca playSkillSound duplicado
+//
+//  2. Sons mapeados para os handlers dos Atos 8-12
+//     → animais não caem mais no fallback skill1
+//
+//  3. limparCorrupcao (V10.55) NÃO toca skill1 depois da purificação
+//     → transição pós-morte fica limpa (só purificacao)
+// =================================================================
+
+(function fixDuploSomV1056() {
+    if (window._fixDuploSomV1056) return;
+    window._fixDuploSomV1056 = true;
+
+    // =============================================================
+    // 1. RECONHECER PESADELO + ESPECTROS COMO BOSS
+    // =============================================================
+    const _bossesHistoria = [
+        'saci', 'mapinguari', 'iara', 'boitata', 'mula', 'corpo_seco',
+        'lobisomem', 'cuca', 'boto', 'boi', 'jaci', 'guaraci', 'anhanga',
+        // ⭐ NOVOS
+        'pesadelo',
+        'espectro_saci', 'espectro_mapinguari', 'espectro_iara', 'espectro_boitata',
+        'espectro_mula', 'espectro_corposeco', 'espectro_lobisomem', 'espectro_cuca',
+        'espectro_boto', 'espectro_boi', 'espectro_jaci', 'espectro_guaraci',
+    ];
+
+    window.bossIsStoryBoss = function(enemyId) {
+        return _bossesHistoria.includes(enemyId);
+    };
+    // Compatibilidade — alguns patches chamam como função local
+    if (typeof bossIsStoryBoss !== 'undefined') {
+        try { bossIsStoryBoss = window.bossIsStoryBoss; } catch(e) {}
+    }
+
+    console.log('[V10.56] bossIsStoryBoss atualizado:', _bossesHistoria.length, 'bosses reconhecidos.');
+
+    // =============================================================
+    // 2. MAPEAR SONS DOS ATOS 8-12 (animais)
+    // =============================================================
+    if (typeof STORY_SKILL_SOUNDS !== 'undefined') {
+        Object.assign(STORY_SKILL_SOUNDS, {
+            // Ato 8
+            morcego_voo: 'asas', morcego_eco: 'skill1',
+            coruja_garras: 'garras', coruja_voo: 'asas',
+            sapo_veneno: 'bote', sapo_lingua: 'bote',
+            seriema_bicada: 'atkg', seriema_grito: 'minoa2',
+
+            // Ato 9
+            tucunare_bote: 'splash', tucunare_cardume: 'splash',
+            piraiba_bocarra: 'iara2', piraiba_caudada: 'splash',
+            dourada_escamas: 'iara1', dourada_nado: 'splash',
+            peixe_boi_corpulencia: 'minoa2', peixe_boi_pancada: 'splash',
+
+            // Ato 10
+            bufalo_marrada: 'chifre', bufalo_pisoteada: 'coice',
+            vaca_coice: 'coice', vaca_mugido: 'minoa2',
+            cabra_cornada: 'chifre', cabra_bote: 'bote',
+            zebu_marrada: 'chifre', zebu_pisada: 'minoa2',
+
+            // Ato 11
+            gato_mato_garras: 'garras', gato_mato_salto: 'felino',
+            mariposa_po: 'mariposa', mariposa_voo: 'mariposa',
+            quati_garras: 'garras', quati_bote: 'bote',
+            sucuarana_garra: 'garras', sucuarana_salto: 'felino',
+
+            // Ato 12
+            gaviao_voo: 'aguia', gaviao_garras: 'garras',
+            falcao_mergulho: 'aguia', falcao_garras: 'garras',
+            urutau_canto: 'skill1', urutau_voo: 'asas',
+            aguia_garras: 'garras', aguia_mergulho: 'aguia',
+        });
+        console.log('[V10.56] Sons dos Atos 8-12 mapeados (48 handlers).');
+    }
+
+    // =============================================================
+    // 3. limparCorrupcao SEM o skill1 extra (V10.55 mutado)
+    // -------------------------------------------------------------
+    // Mantém o FX cinematográfico, só remove o segundo som
+    // =============================================================
+    const _currLimpar = window.limparCorrupcao;
+    if (typeof _currLimpar === 'function' && !_currLimpar._v1056) {
+        // Preservamos o comportamento visual, mas substituindo o som
+        const _origLimpar = _currLimpar;
+
+        window.limparCorrupcao = function() {
+            const tinhaCorrupcao = window._corruptedTiles && window._corruptedTiles.length > 0;
+            if (!tinhaCorrupcao) {
+                return _origLimpar.apply(this, arguments);
+            }
+
+            // Toca SOMENTE purificacao (não skill1)
+            if (typeof playSfx === 'function') {
+                try { playSfx('purificacao'); } catch(e) {}
+            }
+
+            // ⚠️ Temporariamente removemos o skill1 do setTimeout original.
+            // Não temos controle dele, então executamos a lógica com flag.
+            const _origPlaySfx = window.playSfx;
+            let _bloqueado = false;
+
+            window.playSfx = function(name) {
+                if (_bloqueado && name === 'skill1') return;
+                return _origPlaySfx.apply(this, arguments);
+            };
+
+            // Executa limpar (com FX + skill1 que V10.55 dispara em 250ms)
+            const r = _origLimpar.apply(this, arguments);
+
+            // Bloqueia skill1 por 500ms (janela do setTimeout 250 do V10.55)
+            _bloqueado = true;
+            setTimeout(() => {
+                _bloqueado = false;
+                window.playSfx = _origPlaySfx;
+            }, 500);
+
+            return r;
+        };
+        window.limparCorrupcao._v1056 = true;
+        console.log('[V10.56] limparCorrupcao: skill1 extra bloqueado.');
+    }
+
+    // =============================================================
+    // 4. Diagnóstico no console
+    // =============================================================
+    setTimeout(() => {
+        console.log('');
+        console.log('═══════════════════════════════════════════════════');
+        console.log('✅ [V10.56] Fix do duplo som ativado');
+        console.log('═══════════════════════════════════════════════════');
+        console.log('• bossIsStoryBoss reconhece:', _bossesHistoria.length, 'bosses');
+        console.log('   (inclui pesadelo + 12 espectros)');
+        console.log('• Atos 8-12 mapeados (48 handlers)');
+        console.log('• limparCorrupcao toca só purificacao');
+        console.log('');
+        console.log('💡 Teste rápido:');
+        console.log('   bossIsStoryBoss("espectro_boitata") → true');
+        console.log('   bossIsStoryBoss("saci")             → true');
+        console.log('   bossIsStoryBoss("porco_espinho")    → false');
+        console.log('═══════════════════════════════════════════════════');
+    }, 1000);
+
+    console.log('✅ [V10.56] Fix do duplo som instalado.');
+})();
+// =================================================================
+// historia.js — V10.57 (Coração do Vazio: solo-only + FX cinemático)
+// -----------------------------------------------------------------
+// 1. Guard: passiva desativada em PvP e Coop
+// 2. Escudo cinemático (hexágono roxo + flash + partículas + shake)
+// 3. Descrição avisa: "apenas Solo e Modo História"
+// =================================================================
+
+(function coracaoVazioV1057() {
+    if (window._coracaoVazioV1057) return;
+    window._coracaoVazioV1057 = true;
+
+    const CORACAO_ID = 'coracao_vazio';
+
+    // =============================================================
+    // 1. CSS
+    // =============================================================
+    if (!document.getElementById('coracaoShieldCSS')) {
+        const style = document.createElement('style');
+        style.id = 'coracaoShieldCSS';
+        style.textContent = `
+            .coracao-vazio-overlay {
+                position: absolute;
+                top: 0; left: 0; width: 100%; height: 100%;
+                pointer-events: none;
+                z-index: 250;
+                overflow: hidden;
+            }
+
+            .coracao-shield {
+                position: absolute;
+                width: 70px; height: 70px;
+                border-radius: 50%;
+                transform: translate(-50%, -50%) scale(0);
+                background: radial-gradient(circle,
+                    rgba(180, 100, 240, 0.05) 0%,
+                    rgba(142, 68, 173, 0.30) 35%,
+                    rgba(90, 42, 112, 0.75) 65%,
+                    rgba(40, 10, 60, 0.95) 100%);
+                border: 3px solid #c39bd3;
+                box-shadow:
+                    0 0 30px rgba(180, 100, 240, 0.9),
+                    0 0 60px rgba(142, 68, 173, 0.6),
+                    inset 0 0 30px rgba(255, 240, 255, 0.3);
+                animation: coracaoShieldExpand 1.8s cubic-bezier(0.25, 0.8, 0.3, 1) forwards;
+            }
+            @keyframes coracaoShieldExpand {
+                0%   { transform: translate(-50%, -50%) scale(0);   opacity: 0; }
+                15%  { transform: translate(-50%, -50%) scale(1.3); opacity: 1; }
+                40%  { transform: translate(-50%, -50%) scale(1.5); opacity: 0.9; }
+                100% { transform: translate(-50%, -50%) scale(2.2); opacity: 0; }
+            }
+
+            .coracao-flash {
+                position: absolute; inset: 0;
+                background: radial-gradient(circle at center,
+                    rgba(200, 130, 240, 0.35) 0%,
+                    rgba(142, 68, 173, 0.15) 40%,
+                    transparent 70%);
+                animation: coracaoFlash 0.8s ease-out forwards;
+            }
+            @keyframes coracaoFlash {
+                0%   { opacity: 0; }
+                15%  { opacity: 1; }
+                100% { opacity: 0; }
+            }
+
+            .coracao-texto {
+                position: absolute;
+                transform: translate(-50%, -50%);
+                font-family: 'Cinzel Decorative', serif;
+                font-size: 1.3rem; font-weight: 900;
+                letter-spacing: 3px;
+                color: #e0c8f0;
+                text-shadow:
+                    0 0 15px rgba(180, 100, 240, 1),
+                    0 0 30px rgba(142, 68, 173, 0.8),
+                    0 2px 4px rgba(0, 0, 0, 0.9);
+                animation: coracaoTextoFloat 2.2s ease-out forwards;
+                white-space: nowrap; pointer-events: none;
+            }
+            @keyframes coracaoTextoFloat {
+                0%   { opacity: 0; transform: translate(-50%, -30%); }
+                20%  { opacity: 1; transform: translate(-50%, -50%); }
+                80%  { opacity: 1; transform: translate(-50%, -50%); }
+                100% { opacity: 0; transform: translate(-50%, -120%); }
+            }
+
+            .coracao-particula {
+                position: absolute;
+                width: 6px; height: 6px;
+                border-radius: 50%;
+                transform: translate(-50%, -50%);
+                background: radial-gradient(circle, #fff5dc 0%, #c39bd3 60%, transparent 100%);
+                box-shadow: 0 0 10px rgba(180, 100, 240, 0.9);
+                animation: coracaoParticula 1.2s ease-out forwards;
+            }
+            @keyframes coracaoParticula {
+                0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.3); }
+                20%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+                100% { opacity: 0; transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.4); }
+            }
+
+            @keyframes coracaoShake {
+                0%, 100% { transform: translateX(0); }
+                25%      { transform: translateX(-5px); }
+                50%      { transform: translateX(5px); }
+                75%      { transform: translateX(-3px); }
+            }
+        `;
+        document.head.appendChild(style);
+        console.log('[V10.57] CSS do escudo injetado.');
+    }
+
+    // =============================================================
+    // 2. Função do escudo cinemático
+    // =============================================================
+    window.mostrarEscudoCoracao = async function(target) {
+        const board = document.getElementById('board');
+        if (!board || !target) return;
+
+        const s = (typeof getStep === 'function') ? getStep() : 59;
+        const cx = target.x * s + s / 2 + 8;
+        const cy = target.y * s + s / 2 + 8;
+
+        const container = document.createElement('div');
+        container.className = 'coracao-vazio-overlay';
+
+        const flash = document.createElement('div');
+        flash.className = 'coracao-flash';
+        container.appendChild(flash);
+
+        const shield = document.createElement('div');
+        shield.className = 'coracao-shield';
+        shield.style.left = cx + 'px';
+        shield.style.top  = cy + 'px';
+        container.appendChild(shield);
+
+        const texto = document.createElement('div');
+        texto.className = 'coracao-texto';
+        texto.textContent = '🖤 SOBREVIVEU';
+        texto.style.left = cx + 'px';
+        texto.style.top  = (cy - 60) + 'px';
+        container.appendChild(texto);
+
+        for (let i = 0; i < 16; i++) {
+            const p = document.createElement('div');
+            p.className = 'coracao-particula';
+            const angle = (i / 16) * Math.PI * 2;
+            const dist = 40 + Math.random() * 40;
+            p.style.left = cx + 'px';
+            p.style.top  = cy + 'px';
+            p.style.setProperty('--dx', (Math.cos(angle) * dist).toFixed(1) + 'px');
+            p.style.setProperty('--dy', (Math.sin(angle) * dist).toFixed(1) + 'px');
+            p.style.animationDelay = (Math.random() * 0.15).toFixed(2) + 's';
+            container.appendChild(p);
+        }
+
+        board.appendChild(container);
+
+        if (typeof playSfx === 'function') {
+            try { playSfx('purificacao'); } catch (e) {}
+        }
+        board.style.animation = 'coracaoShake 0.5s ease-out';
+        setTimeout(() => { board.style.animation = ''; }, 500);
+
+        setTimeout(() => { if (container.parentNode) container.remove(); }, 2200);
+    };
+
+    // =============================================================
+    // 3. Guard + escudo no tentarSalvarComCoracao
+    // =============================================================
+    const _origSalvar = window.tentarSalvarComCoracao;
+
+    window.tentarSalvarComCoracao = function() {
+        // ⭐ Guard: NÃO funciona em PvP nem Coop
+        if (window._pvpMode || window._coopMode) {
+            console.log('[V10.57] Coração do Vazio desativado em PvP/Coop.');
+            return false;
+        }
+
+        const salvou = _origSalvar ? _origSalvar.apply(this, arguments) : false;
+
+        if (salvou && typeof players !== 'undefined' && Array.isArray(players)) {
+            const heroiSalvo = players.find(p => {
+                if (!p || p.dead) return false;
+                if (p.hp !== 1) return false;
+                const eq = (typeof getHeroEquipment === 'function') ? getHeroEquipment(p.class) : null;
+                return eq && eq.amuleto && String(eq.amuleto).split('#')[0] === CORACAO_ID;
+            });
+            if (heroiSalvo) window.mostrarEscudoCoracao(heroiSalvo);
+        }
+
+        return salvou;
+    };
+
+    // =============================================================
+    // 4. Guard nos hooks V10.43 (pvpApplyDmg / coopApplyDmg)
+    // =============================================================
+    const _instalarGuards = () => {
+        if (typeof window.pvpApplyDmg === 'function' && !window.pvpApplyDmg._guardV1057) {
+            const _orig = window.pvpApplyDmg;
+            window.pvpApplyDmg = function(t, amt) { return _orig.apply(this, arguments); };
+            window.pvpApplyDmg._guardV1057 = true;
+        }
+        if (typeof window.coopApplyDmg === 'function' && !window.coopApplyDmg._guardV1057) {
+            const _orig = window.coopApplyDmg;
+            window.coopApplyDmg = function(t, amt) { return _orig.apply(this, arguments); };
+            window.coopApplyDmg._guardV1057 = true;
+        }
+    };
+
+    _instalarGuards();
+    setTimeout(_instalarGuards, 300);
+    setTimeout(_instalarGuards, 1000);
+
+    // =============================================================
+    // 5. Atualizar descrição no card do Event Shop (MutationObserver)
+    // =============================================================
+    const _obs = new MutationObserver(() => {
+        document.querySelectorAll('.evento-shop-card').forEach(card => {
+            const nameEl = card.querySelector('.evento-shop-name');
+            if (!nameEl || !nameEl.textContent.includes('Coração do Vazio')) return;
+            const descEl = card.querySelector('.evento-shop-desc');
+            if (descEl && !descEl.innerHTML.includes('Solo')) {
+                descEl.innerHTML = 'Sobrevive com 1 HP.<br><span style="color:#d05050; font-size:0.8rem;">⚠️ Apenas Solo e Modo História</span>';
+            }
+        });
+    });
+    _obs.observe(document.body, { childList: true, subtree: true });
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V10.57] Coração do Vazio — Solo-Only + FX');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Guard em PvP/Coop (passiva não ativa)');
+    console.log('• Escudo cinemático no herói salvo');
+    console.log('• Descrição avisa: apenas Solo e Modo História');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — V10.58 (Guard REAL da passiva em PvP/Coop)
+// -----------------------------------------------------------------
+// PROBLEMA:
+//   O _instalarGuards do V10.57 apenas re-embrulha pvpApplyDmg/
+//   coopApplyDmg. Se o hook V10.43 (checarPassivaCoração) estiver
+//   ativo, a passiva ainda dispara — a proteção atual depende só
+//   da ordem de carregamento (historia.js roda antes de pvp.js).
+//
+// SOLUÇÃO:
+//   Wrapper que marca t._voidUsedThisBattle = true em PvP/Coop.
+//   É o MESMO mecanismo que o checarPassivaCoração já usa como
+//   "já gastou o Coração nesta batalha" — a passiva falha sozinha.
+//
+//   Não duplica lógica de dano. Não toca no V3.1 original.
+//   Não afeta os STATS (+5 HP / +5 ATK continuam valendo).
+// =================================================================
+
+(function guardRealPassivaV1058() {
+    if (window._guardRealPassivaV1058) return;
+    window._guardRealPassivaV1058 = true;
+
+    let instaladoPvp = false;
+    let instaladoCoop = false;
+
+    function instalar() {
+        // ---- PvP ----
+        const curPvp = window.pvpApplyDmg;
+        if (typeof curPvp === 'function' && !curPvp._guardRealV1058) {
+            const wrapped = function(t, amt) {
+                if ((window._pvpMode || window._coopMode) && t) {
+                    t._voidUsedThisBattle = true;
+                }
+                return curPvp.apply(this, arguments);
+            };
+            wrapped._guardRealV1058 = true;
+            window.pvpApplyDmg = wrapped;
+            if (!instaladoPvp) {
+                instaladoPvp = true;
+                console.log('[V10.58] Guard instalado em pvpApplyDmg.');
+            }
+        }
+
+        // ---- Coop ----
+        const curCoop = window.coopApplyDmg;
+        if (typeof curCoop === 'function' && !curCoop._guardRealV1058) {
+            const wrapped = function(t, amt) {
+                if ((window._pvpMode || window._coopMode) && t) {
+                    t._voidUsedThisBattle = true;
+                }
+                return curCoop.apply(this, arguments);
+            };
+            wrapped._guardRealV1058 = true;
+            window.coopApplyDmg = wrapped;
+            if (!instaladoCoop) {
+                instaladoCoop = true;
+                console.log('[V10.58] Guard instalado em coopApplyDmg.');
+            }
+        }
+    }
+
+    // Instalação retroativa (cobre ordem de carregamento)
+    instalar();
+    setTimeout(instalar, 200);
+    setTimeout(instalar, 600);
+    setTimeout(instalar, 1500);
+    setTimeout(instalar, 3500);
+
+    // Monitor: se algum patch substituir os wrappers, reinstala
+    setInterval(() => {
+        if (!window._pvpMode && !window._coopMode) return;
+        instalar();
+    }, 2000);
+
+    // =============================================================
+    // Diagnóstico: expõe função para debug manual
+    // =============================================================
+    window._debugPassivaBloqueada = function() {
+        const emPvp = !!window._pvpMode;
+        const emCoop = !!window._coopMode;
+        const pvpGuard = window.pvpApplyDmg?._guardRealV1058 === true;
+        const coopGuard = window.coopApplyDmg?._guardRealV1058 === true;
+
+        console.log('═══ [V10.58] Status da passiva ═══');
+        console.log('Modo PvP: ', emPvp);
+        console.log('Modo Coop:', emCoop);
+        console.log('Guard em pvpApplyDmg: ', pvpGuard);
+        console.log('Guard em coopApplyDmg:', coopGuard);
+        console.log('Passiva bloqueada:', (emPvp || emCoop) && (pvpGuard || coopGuard));
+        console.log('═══════════════════════════════════');
+
+        if (typeof players !== 'undefined' && Array.isArray(players)) {
+            players.forEach(p => {
+                if (!p) return;
+                const eq = typeof getHeroEquipment === 'function'
+                    ? getHeroEquipment(p.class) : null;
+                const temCoracao = eq && eq.amuleto
+                    && String(eq.amuleto).split('#')[0] === 'coracao_vazio';
+                if (temCoracao) {
+                    console.log(`🖤 ${p.name || p.class}: _voidUsedThisBattle = ${p._voidUsedThisBattle}`);
+                }
+            });
+        }
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V10.58] Guard REAL da passiva ativado');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Usa o mesmo flag interno do checarPassivaCoração');
+    console.log('• Não duplica lógica de dano (não injeta HP=0)');
+    console.log('• Não afeta os STATS (+5 HP / +5 ATK)');
+    console.log('• Instala retroativamente (cobre ordem de carregamento)');
+    console.log('• Monitor de 2s em 2s (recupera se substituído)');
+    console.log('');
+    console.log('💡 Debug: window._debugPassivaBloqueada()');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — V10.60 (ATK de Nível para heróis base no História)
+// -----------------------------------------------------------------
+// PROBLEMA:
+//   • Heróis novos (Kanarott, Eru, ...) → V36.0 aplica bonus.atk ✓
+//   • Heróis base (Tupã, Sumé, Caipora) → ninguém aplica ✗
+//   • PvP/Coop → V10.25 aplica ✓
+//
+// SOLUÇÃO:
+//   Wrapper em executeAction que aplica bonus.atk em active.bonusAtk
+//   para heróis base no Modo História (e Evento).
+//
+//   Não afeta PvP/Coop (V10.25 já cuidou — guard de entrada).
+//   Não duplica heróis novos (V36.0 já cuidou — guard !isBaseHero).
+// =================================================================
+
+(function fixLevelAtkBaseHeroesV1060() {
+    if (window._fixLevelAtkBaseHeroesV1060) return;
+    window._fixLevelAtkBaseHeroesV1060 = true;
+
+    const _exec = window.executeAction;
+    if (typeof _exec !== 'function') {
+        console.warn('[V10.60] executeAction não encontrado.');
+        return;
+    }
+
+    window.executeAction = async function() {
+        const isStory = !!window._storyMode;
+        const isPvp   = !!window._pvpMode;
+        const isCoop  = !!window._coopMode;
+
+        // PvP/Coop: V10.25 já aplicou bonus.atk em initGame
+        if (isPvp || isCoop) return _exec.apply(this, arguments);
+
+        // Fora do história/evento (arcade, tutorial): não interfere
+        // (o evento seta _storyMode = true, então é coberto)
+        if (!isStory) return _exec.apply(this, arguments);
+
+        const active = (typeof players !== 'undefined' && players)
+            ? players[currentPlayerIdx] : null;
+        if (!active) return _exec.apply(this, arguments);
+
+        const heroData = (typeof STORY_HERO_CLASSES !== 'undefined')
+            ? STORY_HERO_CLASSES[active.class] : null;
+
+        // Só heróis base (Tupã, Sumé, Caipora). Heróis novos: V36.0 cuida.
+        const isBaseHero = !heroData || !heroData.paKey
+                        || heroData.paKey.startsWith('base_');
+        if (!isBaseHero) return _exec.apply(this, arguments);
+
+        // Pega bônus de nível
+        const bonus = (typeof getHeroBonusFromLevel === 'function')
+            ? getHeroBonusFromLevel(active.class) : null;
+        if (!bonus || !bonus.atk || bonus.atk <= 0) {
+            return _exec.apply(this, arguments);
+        }
+
+        // Aplica temporariamente em bonusAtk (que executeAction lê)
+        const origBonusAtk = active.bonusAtk || 0;
+        active.bonusAtk = origBonusAtk + bonus.atk;
+        try {
+            return await _exec.apply(this, arguments);
+        } finally {
+            active.bonusAtk = origBonusAtk;
+        }
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V10.60] ATK de Nível — heróis base');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Cobre: Tupã, Sumé, Caipora (no Modo História + Evento)');
+    console.log('• Não duplica: heróis novos (V36.0 já aplica)');
+    console.log('• Não afeta: PvP/Coop (V10.25 já aplica)');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — V10.61 (Corrupção só em bosses — fix no trigger)
+// -----------------------------------------------------------------
+// PROBLEMA:
+//   V10.50 tem monitor sem filtro de boss, chamando trigger
+//   a cada 300ms para QUALQUER inimigo abaixo de 50% HP.
+//   V10.53 corrigiu só o próprio monitor, mas o de V10.50
+//   continuou rodando e disparando corrupção em animais.
+//
+// SOLUÇÃO:
+//   Guard DENTRO do triggerTabuleiroCorrompido. Nenhum monitor
+//   consegue burlar — a validação está no ponto de entrada.
+//
+//   Para não spammar logs, quando bloqueado marcamos
+//   boss._corruptedTriggered = true (o flag é resetado pelo
+//   limparCorrupcao no advanceStoryEnemy).
+// =================================================================
+
+(function fixCorrupcaoSomenteBossV1061() {
+    if (window._fixCorrupcaoSomenteBossV1061) return;
+    window._fixCorrupcaoSomenteBossV1061 = true;
+
+    // ⭐ Whitelist — só estes inimigos podem corromper o tabuleiro
+    const BOSS_IDS = [
+        // Story bosses (13 atos)
+        'saci', 'mapinguari', 'iara', 'boitata', 'mula', 'corpo_seco',
+        'lobisomem', 'cuca', 'boto', 'boi', 'jaci', 'guaraci', 'anhanga',
+        // Espectros (Ato 13)
+        'espectro_saci', 'espectro_mapinguari', 'espectro_iara', 'espectro_boitata',
+        'espectro_mula', 'espectro_corposeco', 'espectro_lobisomem', 'espectro_cuca',
+        'espectro_boto', 'espectro_boi', 'espectro_jaci', 'espectro_guaraci',
+        // Evento semanal
+        'teju_jagua', 'mboi_tui', 'monai', 'jasy_jatere', 'kurupi', 'ao_ao', 'luison',
+        'pesadelo',
+    ];
+
+    function isBossAtual() {
+        const enemyId = (typeof storyEnemiesRemaining !== 'undefined'
+                         && storyEnemiesRemaining.length > 0)
+            ? storyEnemiesRemaining[0] : null;
+
+        if (!enemyId) return false;
+
+        // 1. Whitelist
+        if (BOSS_IDS.includes(enemyId)) return true;
+
+        // 2. Fallback: tabela STORY_ENEMIES com isBoss = true
+        if (typeof STORY_ENEMIES !== 'undefined' && STORY_ENEMIES[enemyId]) {
+            const e = STORY_ENEMIES[enemyId];
+            // Mini-bosses (isMiniBoss: true) NÃO contam — só isBoss
+            if (e.isBoss === true) return true;
+        }
+
+        return false;
+    }
+
+    // =============================================================
+    // Sobrescreve triggerTabuleiroCorrompido com o guard
+    // =============================================================
+    const _origTrigger = window.triggerTabuleiroCorrompido;
+
+    window.triggerTabuleiroCorrompido = function() {
+        if (!_origTrigger) {
+            console.warn('[V10.61] triggerTabuleiroCorrompido original ausente.');
+            return;
+        }
+
+        const enemyId = (typeof storyEnemiesRemaining !== 'undefined'
+                         && storyEnemiesRemaining.length > 0)
+            ? storyEnemiesRemaining[0] : '(nenhum)';
+
+        if (!isBossAtual()) {
+            // Marca para o monitor parar de chamar (resetado em advanceStoryEnemy)
+            if (typeof boss !== 'undefined' && boss) {
+                boss._corruptedTriggered = true;
+            }
+            console.log(`[V10.61] Corrupção bloqueada: "${enemyId}" não é boss.`);
+            return;
+        }
+
+        // É boss → comportamento original
+        return _origTrigger.apply(this, arguments);
+    };
+
+    // =============================================================
+    // Diagnóstico
+    // =============================================================
+    window._debugCorrupcaoBoss = function() {
+        const enemyId = (typeof storyEnemiesRemaining !== 'undefined'
+                         && storyEnemiesRemaining.length > 0)
+            ? storyEnemiesRemaining[0] : null;
+        const e = (typeof STORY_ENEMIES !== 'undefined' && enemyId)
+            ? STORY_ENEMIES[enemyId] : null;
+
+        console.log('═══ [V10.61] Status da corrupção ═══');
+        console.log('Inimigo atual:      ', enemyId);
+        console.log('Na whitelist:       ', BOSS_IDS.includes(enemyId));
+        console.log('isBoss na tabela:   ', e?.isBoss);
+        console.log('isMiniBoss:         ', e?.isMiniBoss);
+        console.log('Pode corromper:     ', isBossAtual());
+        console.log('_corruptedTriggered:', boss?._corruptedTriggered);
+        console.log('HP do boss:         ', boss ? `${boss.hp}/${boss.maxHp}` : '-');
+        console.log('════════════════════════════════════');
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V10.61] Corrupção — só bosses');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Guard dentro de triggerTabuleiroCorrompido');
+    console.log('• Cobre: 13 bosses + 12 espectros + 8 do evento');
+    console.log('• Exclui: animais normais + mini-bosses');
+    console.log('');
+    console.log('💡 Debug: window._debugCorrupcaoBoss()');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — V10.62 (Preview bar: tiles, forma, PA, dano estimado)
+// -----------------------------------------------------------------
+// Leitor passivo do estado. Nunca modifica nada.
+// PvP/Coop: nunca aparece (guard).
+// Se quebrar: barra some, jogo continua.
+// =================================================================
+
+(function previewBarV1062() {
+    if (window._previewBarV1062) return;
+    window._previewBarV1062 = true;
+
+    // =============================================================
+    // CSS
+    // =============================================================
+    if (!document.getElementById('previewBarCSS')) {
+        const style = document.createElement('style');
+        style.id = 'previewBarCSS';
+        style.textContent = `
+            .story-preview-bar {
+                display: none;
+                gap: 6px;
+                justify-content: center;
+                align-items: center;
+                flex-wrap: wrap;
+                width: 100%;
+                max-width: calc((var(--tile-size) * 8) + (var(--gap) * 7) + 16px);
+                margin: 0 auto;
+                padding: 6px 10px;
+                box-sizing: border-box;
+                background: rgba(10, 6, 2, 0.7);
+                border: 1px solid rgba(201, 162, 39, 0.35);
+                border-radius: 6px;
+                font-family: 'Cinzel', serif;
+                font-size: 0.72rem;
+                letter-spacing: 1px;
+                min-height: 32px;
+                animation: previewFadeIn 0.2s ease-out;
+            }
+            @keyframes previewFadeIn {
+                from { opacity: 0; transform: translateY(4px); }
+                to   { opacity: 1; transform: translateY(0); }
+            }
+            .story-preview-bar .preview-chip {
+                padding: 3px 9px;
+                border-radius: 12px;
+                background: rgba(10, 6, 2, 0.5);
+                border: 1px solid rgba(201, 162, 39, 0.3);
+                color: #e8dcc4;
+                white-space: nowrap;
+                display: inline-flex;
+                align-items: center;
+                gap: 3px;
+            }
+            .story-preview-bar .preview-chip.tiles {
+                color: #c8b787;
+            }
+            .story-preview-bar .preview-chip.shape {
+                background: rgba(58, 124, 165, 0.15);
+            }
+            .story-preview-bar .preview-chip.dano {
+                color: #f0a8a8;
+                border-color: rgba(168, 50, 50, 0.5);
+                background: rgba(168, 50, 50, 0.12);
+                font-weight: 700;
+            }
+            .story-preview-bar .preview-chip.heal {
+                color: #8ac070;
+                border-color: rgba(107, 163, 92, 0.5);
+                background: rgba(107, 163, 92, 0.12);
+            }
+            .story-preview-bar .preview-chip.recarrega {
+                color: #c39bd3;
+                border-color: rgba(142, 68, 173, 0.5);
+                background: rgba(142, 68, 173, 0.12);
+            }
+            .story-preview-bar .preview-chip.pa {
+                color: #e8b923;
+                border-color: #e8b923;
+                background: rgba(232, 185, 35, 0.15);
+                font-weight: 700;
+                animation: previewPAPulse 1s ease-in-out infinite alternate;
+            }
+            @keyframes previewPAPulse {
+                from { box-shadow: 0 0 4px rgba(232, 185, 35, 0.4); }
+                to   { box-shadow: 0 0 12px rgba(232, 185, 35, 0.9); }
+            }
+            .story-preview-bar .preview-chip.dim {
+                color: #8a7a52;
+                border-color: rgba(138, 122, 82, 0.4);
+                font-style: italic;
+            }
+            .story-preview-bar .preview-chip.help {
+                cursor: help;
+                color: #b8a577;
+                padding: 2px 7px;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // =============================================================
+    // ESTIMATIVA (só lê — nunca muta)
+    // =============================================================
+    function estimarPreview() {
+        if (window._pvpMode || window._coopMode) return null;
+        if (typeof path === 'undefined' || !path || path.length === 0) return null;
+        if (typeof players === 'undefined' || !Array.isArray(players)) return null;
+
+        const active = players[currentPlayerIdx];
+        if (!active || active.dead) return null;
+
+        const info = (typeof CLASS_DB !== 'undefined' && CLASS_DB[active.class])
+            ? CLASS_DB[active.class] : { atk: 2, min: 0 };
+        const heroData = (typeof STORY_HERO_CLASSES !== 'undefined' && STORY_HERO_CLASSES[active.class])
+            ? STORY_HERO_CLASSES[active.class] : { role: 'Guerreiro', paKey: 'base_coluna' };
+        const isBaseHero = !heroData.paKey || heroData.paKey.startsWith('base_');
+
+        const usedPath = [...path];
+        const threshold = parseInt(document.getElementById('bravely_tiles')?.value) || 9;
+        const isBravely = usedPath.length >= threshold;
+        const shape = (typeof detectShape === 'function') ? detectShape(usedPath) : null;
+
+        // Bônus de nível
+        let levelAtk = 0;
+        if (typeof getHeroBonusFromLevel === 'function') {
+            const b = getHeroBonusFromLevel(active.class);
+            levelAtk = b?.atk || 0;
+        }
+
+        // Bônus de arma + elemento
+        let weaponAtk = 0, weaponElem = 0;
+        if (typeof getHeroEquipment === 'function' && typeof getWeaponById === 'function') {
+            const eq = getHeroEquipment(active.class);
+            if (eq?.arma) {
+                const w = getWeaponById(eq.arma);
+                if (w) {
+                    weaponAtk = w.atkBonus || 0;
+                    if (usedPath.length > 0) {
+                        const tileEl = grid[usedPath[0]];
+                        if (w.elemento === 'ANY') {
+                            if (tileEl === active.element) weaponElem = w.elementoBonus || 0;
+                        } else if (tileEl === w.elemento) {
+                            weaponElem = w.elementoBonus || 0;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Bônus de tile
+        const tileBonus = (usedPath.length > 0 && grid[usedPath[0]] === active.element) ? 1 : 0;
+
+        // Forma
+        let shapeAtk = 0, heal = 0, recarrega = false;
+        if (shape === 'LINHA')       { shapeAtk = 2; heal = 1; }
+        else if (shape === 'L')      { heal = 2; }
+        else if (shape === 'ZIGZAG') { shapeAtk = 3; }
+        else if (shape === 'QUADRADO') { recarrega = true; }
+
+        const titleAtk = active.titleBonus?.ATK || 0;
+        const totalAtk = info.atk + (active.bonusAtk || 0) + levelAtk
+                       + tileBonus + shapeAtk + titleAtk + weaponAtk + weaponElem;
+
+        // Dano estimado
+        let dano = 0, nota = '';
+        if (heroData.role === 'Guerreiro') {
+            dano = totalAtk;
+            nota = 'por golpe adjacente';
+        } else {
+            if (usedPath.length >= (info.min || 0)) {
+                const extra = usedPath.length - (info.min || 0);
+                let extraDmg;
+                if (isBaseHero) {
+                    if (active.class === 'Sume') extraDmg = extra;
+                    else if (active.class === 'Caipora') extraDmg = Math.floor(extra / 2);
+                    else extraDmg = extra;
+                } else {
+                    extraDmg = extra;
+                }
+                dano = totalAtk + extraDmg;
+            } else {
+                const falta = (info.min || 0) - usedPath.length;
+                nota = `precisa +${falta} tile${falta > 1 ? 's' : ''}`;
+            }
+        }
+
+        return {
+            tiles: usedPath.length, threshold, shape, isBravely,
+            totalAtk, dano, nota, heal, recarrega, role: heroData.role,
+        };
+    }
+
+    // =============================================================
+    // RENDER
+    // =============================================================
+    const SHAPE_COLORS = {
+        LINHA: '#3a7ca5', L: '#4a7a3a', ZIGZAG: '#c9a227', QUADRADO: '#8e44ad',
+    };
+
+    function renderPreviewBar() {
+        const boardArea = document.querySelector('.board-area');
+        if (!boardArea) return;
+
+        let bar = document.getElementById('storyPreviewBar');
+        if (!bar) {
+            bar = document.createElement('div');
+            bar.id = 'storyPreviewBar';
+            bar.className = 'story-preview-bar';
+            const actionsBar = boardArea.querySelector('.action-buttons-bar');
+            if (actionsBar) boardArea.insertBefore(bar, actionsBar);
+            else boardArea.appendChild(bar);
+        }
+
+        if (window._pvpMode || window._coopMode) { bar.style.display = 'none'; return; }
+
+        let data;
+        try { data = estimarPreview(); } catch (e) {
+            console.warn('[V10.62] Erro na estimativa:', e);
+            bar.style.display = 'none';
+            return;
+        }
+
+        if (!data) { bar.style.display = 'none'; return; }
+        bar.style.display = 'flex';
+
+        const chips = [];
+        chips.push(`<span class="preview-chip tiles">🎯 ${data.tiles} tile${data.tiles > 1 ? 's' : ''}</span>`);
+
+        if (data.shape) {
+            const cor = SHAPE_COLORS[data.shape] || '#c8b787';
+            chips.push(`<span class="preview-chip shape" style="color:${cor}; border-color:${cor};">🟩 ${data.shape}</span>`);
+        }
+
+        if (data.isBravely) {
+            chips.push(`<span class="preview-chip pa">⚡ PA ${data.tiles}/${data.threshold}</span>`);
+        } else if (data.tiles >= Math.max(4, data.threshold - 3)) {
+            chips.push(`<span class="preview-chip dim">⚡ ${data.tiles}/${data.threshold}</span>`);
+        }
+
+        if (data.dano > 0) {
+            chips.push(`<span class="preview-chip dano">⚔️ ~${data.dano} dano</span>`);
+            if (data.role === 'Guerreiro') {
+                chips.push(`<span class="preview-chip dim">${data.nota}</span>`);
+            }
+        } else if (data.nota) {
+            chips.push(`<span class="preview-chip dim">${data.nota}</span>`);
+        }
+
+        if (data.heal > 0)       chips.push(`<span class="preview-chip heal">💚 +${data.heal} HP</span>`);
+        if (data.recarrega)      chips.push(`<span class="preview-chip recarrega">♻️ Recarrega</span>`);
+
+        // Tooltip com o breakdown (desktop)
+        const breakdown = `ATK base ${data.totalAtk}`;
+        chips.push(`<span class="preview-chip help" title="${breakdown} · estimativa sujeita a ±2">?</span>`);
+
+        bar.innerHTML = chips.join('');
+    }
+
+    // =============================================================
+    // HOOKS
+    // =============================================================
+    const _installHook = () => {
+        if (typeof window.renderPath !== 'function') return false;
+        if (window.renderPath._previewV1062) return true;
+
+        const _orig = window.renderPath;
+        window.renderPath = function() {
+            const r = _orig.apply(this, arguments);
+            try { renderPreviewBar(); } catch (e) {}
+            return r;
+        };
+        window.renderPath._previewV1062 = true;
+        console.log('[V10.62] Hook em renderPath instalado.');
+        return true;
+    };
+
+    if (!_installHook()) {
+        const t = setInterval(() => { if (_installHook()) clearInterval(t); }, 200);
+    }
+
+    // Safety net: garante que a barra reflita mudanças mesmo se renderPath
+    // for bypassado (ex: skills consumindo path sem chamar renderPath)
+    setInterval(() => {
+        try { renderPreviewBar(); } catch (e) {}
+    }, 400);
+
+    // Debug
+    window._debugPreview = function() {
+        console.log('═══ [V10.62] Preview ═══');
+        console.log('Estimativa:', estimarPreview());
+        console.log('Modo PvP:', window._pvpMode, '| Modo Coop:', window._coopMode);
+        console.log('path:', path);
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V10.62] Barra de Preview instalada');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Mostra: tiles, forma, PA, dano estimado, cura, recarga');
+    console.log('• Guard: invisível em PvP e Coop');
+    console.log('• Não toca em executeAction nem no cálculo real');
+    console.log('• Se quebrar: barra some, jogo continua');
+    console.log('');
+    console.log('💡 Debug: window._debugPreview()');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — V10.63 (Preview bar v2: guerreiro conta golpes)
+// -----------------------------------------------------------------
+// SUBSTITUI o V10.62. Cole APÓS o V10.62 (a barra dele é escondida
+// automaticamente) ou APAGUE o V10.62 e use só este.
+//
+// Melhorias sobre V10.62:
+//   • Guerreiro: N golpes × dano = total
+//   • Guerreiro: detecta "mata" se o total ≥ HP do boss
+//   • Guerreiro: detecta "não alcança o boss" se o path longe
+// =================================================================
+
+(function previewBarV2_V1063() {
+    if (window._previewBarV1063) return;
+    window._previewBarV1063 = true;
+
+    // =============================================================
+    // CSS
+    // =============================================================
+    if (!document.getElementById('previewBarV2CSS')) {
+        const style = document.createElement('style');
+        style.id = 'previewBarV2CSS';
+        style.textContent = `
+            /* Esconde a barra do V10.62 (se estiver instalado) */
+            #storyPreviewBar { display: none !important; }
+
+            .story-preview-bar {
+                display: none;
+                gap: 6px;
+                justify-content: center;
+                align-items: center;
+                flex-wrap: wrap;
+                width: 100%;
+                max-width: calc((var(--tile-size) * 8) + (var(--gap) * 7) + 16px);
+                margin: 0 auto;
+                padding: 6px 10px;
+                box-sizing: border-box;
+                background: rgba(10, 6, 2, 0.7);
+                border: 1px solid rgba(201, 162, 39, 0.35);
+                border-radius: 6px;
+                font-family: 'Cinzel', serif;
+                font-size: 0.72rem;
+                letter-spacing: 1px;
+                min-height: 32px;
+            }
+            .story-preview-bar .preview-chip {
+                padding: 3px 9px;
+                border-radius: 12px;
+                background: rgba(10, 6, 2, 0.5);
+                border: 1px solid rgba(201, 162, 39, 0.3);
+                color: #e8dcc4;
+                white-space: nowrap;
+                display: inline-flex;
+                align-items: center;
+                gap: 3px;
+            }
+            .story-preview-bar .preview-chip.tiles { color: #c8b787; }
+            .story-preview-bar .preview-chip.shape { background: rgba(58, 124, 165, 0.15); }
+            .story-preview-bar .preview-chip.dano {
+                color: #f0a8a8;
+                border-color: rgba(168, 50, 50, 0.5);
+                background: rgba(168, 50, 50, 0.12);
+                font-weight: 700;
+            }
+            .story-preview-bar .preview-chip.heal {
+                color: #8ac070;
+                border-color: rgba(107, 163, 92, 0.5);
+                background: rgba(107, 163, 92, 0.12);
+            }
+            .story-preview-bar .preview-chip.recarrega {
+                color: #c39bd3;
+                border-color: rgba(142, 68, 173, 0.5);
+                background: rgba(142, 68, 173, 0.12);
+            }
+            .story-preview-bar .preview-chip.pa {
+                color: #e8b923;
+                border-color: #e8b923;
+                background: rgba(232, 185, 35, 0.15);
+                font-weight: 700;
+                animation: previewPAPulseV2 1s ease-in-out infinite alternate;
+            }
+            @keyframes previewPAPulseV2 {
+                from { box-shadow: 0 0 4px rgba(232, 185, 35, 0.4); }
+                to   { box-shadow: 0 0 12px rgba(232, 185, 35, 0.9); }
+            }
+            .story-preview-bar .preview-chip.dim {
+                color: #8a7a52;
+                border-color: rgba(138, 122, 82, 0.4);
+                font-style: italic;
+            }
+            .story-preview-bar .preview-chip.kill {
+                color: #d05050;
+                border-color: rgba(208, 80, 80, 0.5);
+                background: rgba(208, 80, 80, 0.15);
+                font-weight: 700;
+            }
+            .story-preview-bar .preview-chip.help {
+                cursor: help;
+                color: #b8a577;
+                padding: 2px 7px;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // =============================================================
+    // Helper: conta golpes do guerreiro (mesma lógica do executeAction)
+    // =============================================================
+    function contarGolpesGuerreiro(active, usedPath) {
+        if (typeof boss === 'undefined' || !boss || boss.dead) return 0;
+        if (!active) return 0;
+
+        const bAdj = (px, py) =>
+            Math.abs(px - boss.x) + Math.abs(py - boss.y) <= 1;
+
+        let golpes = 0;
+
+        // Ataque inicial (antes de mover) — mesma chamada do executeAction
+        if (bAdj(active.x, active.y)) golpes++;
+
+        // Ataques ao longo do path
+        let px = active.x, py = active.y;
+        for (const idx of usedPath) {
+            px = idx % 8;
+            py = Math.floor(idx / 8);
+            if (typeof isOccupied === 'function' && isOccupied(px, py, active.id)) break;
+            if (bAdj(px, py)) golpes++;
+        }
+
+        return golpes;
+    }
+
+    // =============================================================
+    // Estimativa (leitor passivo — nunca muta)
+    // =============================================================
+    function estimarPreview() {
+        if (window._pvpMode || window._coopMode) return null;
+        if (typeof path === 'undefined' || !path || path.length === 0) return null;
+        if (typeof players === 'undefined' || !Array.isArray(players)) return null;
+
+        const active = players[currentPlayerIdx];
+        if (!active || active.dead) return null;
+
+        const info = (typeof CLASS_DB !== 'undefined' && CLASS_DB[active.class])
+            ? CLASS_DB[active.class] : { atk: 2, min: 0 };
+        const heroData = (typeof STORY_HERO_CLASSES !== 'undefined' && STORY_HERO_CLASSES[active.class])
+            ? STORY_HERO_CLASSES[active.class] : { role: 'Guerreiro', paKey: 'base_coluna' };
+        const isBaseHero = !heroData.paKey || heroData.paKey.startsWith('base_');
+
+        const usedPath = [...path];
+        const threshold = parseInt(document.getElementById('bravely_tiles')?.value) || 9;
+        const isBravely = usedPath.length >= threshold;
+        const shape = (typeof detectShape === 'function') ? detectShape(usedPath) : null;
+
+        let levelAtk = 0;
+        if (typeof getHeroBonusFromLevel === 'function') {
+            const b = getHeroBonusFromLevel(active.class);
+            levelAtk = b?.atk || 0;
+        }
+
+        let weaponAtk = 0, weaponElem = 0;
+        if (typeof getHeroEquipment === 'function' && typeof getWeaponById === 'function') {
+            const eq = getHeroEquipment(active.class);
+            if (eq?.arma) {
+                const w = getWeaponById(eq.arma);
+                if (w) {
+                    weaponAtk = w.atkBonus || 0;
+                    if (usedPath.length > 0) {
+                        const tileEl = grid[usedPath[0]];
+                        if (w.elemento === 'ANY') {
+                            if (tileEl === active.element) weaponElem = w.elementoBonus || 0;
+                        } else if (tileEl === w.elemento) {
+                            weaponElem = w.elementoBonus || 0;
+                        }
+                    }
+                }
+            }
+        }
+
+        const tileBonus = (usedPath.length > 0 && grid[usedPath[0]] === active.element) ? 1 : 0;
+
+        let shapeAtk = 0, heal = 0, recarrega = false;
+        if (shape === 'LINHA') { shapeAtk = 2; heal = 1; }
+        else if (shape === 'L') { heal = 2; }
+        else if (shape === 'ZIGZAG') { shapeAtk = 3; }
+        else if (shape === 'QUADRADO') { recarrega = true; }
+
+        const titleAtk = active.titleBonus?.ATK || 0;
+        const totalAtk = info.atk + (active.bonusAtk || 0) + levelAtk
+                       + tileBonus + shapeAtk + titleAtk + weaponAtk + weaponElem;
+
+        let dano = 0, nota = '', mata = false;
+
+        if (heroData.role === 'Guerreiro') {
+            const golpes = contarGolpesGuerreiro(active, usedPath);
+            const totalBruto = totalAtk * golpes;
+            const bHp = (typeof boss !== 'undefined' && boss) ? boss.hp : Infinity;
+            mata = golpes > 0 && totalBruto >= bHp;
+
+            if (golpes === 0) {
+                dano = 0;
+                nota = 'não alcança o boss';
+            } else {
+                dano = mata ? bHp : totalBruto;
+                if (golpes === 1) {
+                    nota = mata ? 'mata' : '1 golpe';
+                } else {
+                    nota = `${golpes}×${totalAtk}`;
+                    if (mata) nota += ' · mata';
+                }
+            }
+        } else {
+            if (usedPath.length >= (info.min || 0)) {
+                const extra = usedPath.length - (info.min || 0);
+                let extraDmg;
+                if (isBaseHero) {
+                    if (active.class === 'Sume') extraDmg = extra;
+                    else if (active.class === 'Caipora') extraDmg = Math.floor(extra / 2);
+                    else extraDmg = extra;
+                } else {
+                    extraDmg = extra;
+                }
+                dano = totalAtk + extraDmg;
+            } else {
+                const falta = (info.min || 0) - usedPath.length;
+                nota = `precisa +${falta} tile${falta > 1 ? 's' : ''}`;
+            }
+        }
+
+        return {
+            tiles: usedPath.length, threshold, shape, isBravely,
+            totalAtk, dano, nota, heal, recarrega, role: heroData.role, mata,
+        };
+    }
+
+    // =============================================================
+    // Render
+    // =============================================================
+    const SHAPE_COLORS = {
+        LINHA: '#3a7ca5', L: '#4a7a3a', ZIGZAG: '#c9a227', QUADRADO: '#8e44ad',
+    };
+
+    function renderPreviewBarV2() {
+        const boardArea = document.querySelector('.board-area');
+        if (!boardArea) return;
+
+        let bar = document.getElementById('storyPreviewBarV2');
+        if (!bar) {
+            bar = document.createElement('div');
+            bar.id = 'storyPreviewBarV2';
+            bar.className = 'story-preview-bar';
+            const actionsBar = boardArea.querySelector('.action-buttons-bar');
+            if (actionsBar) boardArea.insertBefore(bar, actionsBar);
+            else boardArea.appendChild(bar);
+        }
+
+        if (window._pvpMode || window._coopMode) {
+            bar.style.display = 'none';
+            return;
+        }
+
+        let data;
+        try { data = estimarPreview(); } catch (e) {
+            console.warn('[V10.63] Erro na estimativa:', e);
+            bar.style.display = 'none';
+            return;
+        }
+        if (!data) { bar.style.display = 'none'; return; }
+
+        bar.style.display = 'flex';
+
+        const chips = [];
+        chips.push(`<span class="preview-chip tiles">🎯 ${data.tiles} tile${data.tiles > 1 ? 's' : ''}</span>`);
+
+        if (data.shape) {
+            const cor = SHAPE_COLORS[data.shape] || '#c8b787';
+            chips.push(`<span class="preview-chip shape" style="color:${cor}; border-color:${cor};">🟩 ${data.shape}</span>`);
+        }
+
+        if (data.isBravely) {
+            chips.push(`<span class="preview-chip pa">⚡ PA ${data.tiles}/${data.threshold}</span>`);
+        } else if (data.tiles >= Math.max(4, data.threshold - 3)) {
+            chips.push(`<span class="preview-chip dim">⚡ ${data.tiles}/${data.threshold}</span>`);
+        }
+
+        if (data.dano > 0) {
+            chips.push(`<span class="preview-chip dano">⚔️ ~${data.dano} dano</span>`);
+        }
+        if (data.nota) {
+            const cls = data.mata ? 'kill' : 'dim';
+            chips.push(`<span class="preview-chip ${cls}">${data.nota}</span>`);
+        }
+
+        if (data.heal > 0)  chips.push(`<span class="preview-chip heal">💚 +${data.heal} HP</span>`);
+        if (data.recarrega) chips.push(`<span class="preview-chip recarrega">♻️ Recarrega</span>`);
+
+        chips.push(`<span class="preview-chip help" title="ATK base ${data.totalAtk} · estimativa">?</span>`);
+
+        bar.innerHTML = chips.join('');
+    }
+
+    // =============================================================
+    // Hooks
+    // =============================================================
+    const _installHook = () => {
+        if (typeof window.renderPath !== 'function') return false;
+        if (window.renderPath._previewV1063) return true;
+
+        const _orig = window.renderPath;
+        window.renderPath = function() {
+            const r = _orig.apply(this, arguments);
+            try { renderPreviewBarV2(); } catch (e) {}
+            return r;
+        };
+        window.renderPath._previewV1063 = true;
+        console.log('[V10.63] Hook em renderPath instalado.');
+        return true;
+    };
+
+    if (!_installHook()) {
+        const t = setInterval(() => { if (_installHook()) clearInterval(t); }, 200);
+    }
+
+    setInterval(() => { try { renderPreviewBarV2(); } catch (e) {} }, 400);
+
+    // Debug
+    window._debugPreviewV2 = function() {
+        console.log('═══ [V10.63] Preview v2 ═══');
+        console.log('Estimativa:', estimarPreview());
+        const golpes = (typeof players !== 'undefined' && players[currentPlayerIdx])
+            ? contarGolpesGuerreiro(players[currentPlayerIdx], path || [])
+            : 0;
+        console.log('Golpes do guerreiro:', golpes);
+        console.log('Path:', path);
+        console.log('Boss:', boss ? `${boss.x},${boss.y} HP=${boss.hp}` : 'sem boss');
+        console.log('PvP:', window._pvpMode, '| Coop:', window._coopMode);
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V10.63] Preview bar v2 — guerreiro com golpes');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Guerreiro: mostra N golpes × dano = total');
+    console.log('• Guerreiro: detecta "mata" e "não alcança"');
+    console.log('• V10.62 (se presente) é escondido via CSS');
+    console.log('');
+    console.log('💡 Debug: window._debugPreviewV2()');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — V10.64 (Formas piscam + cores distintas dos tiles)
+// -----------------------------------------------------------------
+// Complementa o V10.63 (não substitui):
+//   • Troca as cores das formas (linha/L/zigzag/quadrado)
+//   • Adiciona animação pulsante no chip .shape
+//   • Chip .pa continua pulsando (já era do V10.63)
+//   • Não afeta PvP/Coop (barra nem aparece lá)
+// =================================================================
+
+(function previewShapePulseV1064() {
+    if (window._previewShapePulseV1064) return;
+    window._previewShapePulseV1064 = true;
+
+    const SHAPE_COLORS_V1064 = {
+        LINHA:    '#c39bd3',  // lilás   — distinto do azul (AGUA)
+        L:        '#e67e22',  // laranja — distinto do amarelo (AR) e vermelho (FOGO)
+        ZIGZAG:   '#1abc9c',  // turquesa— distinto do verde (TERRA) e azul (AGUA)
+        QUADRADO: '#e84393',  // magenta — distinto de tudo
+    };
+
+    // =============================================================
+    // CSS
+    // =============================================================
+    if (!document.getElementById('previewShapePulseCSS')) {
+        const style = document.createElement('style');
+        style.id = 'previewShapePulseCSS';
+        style.textContent = `
+            /* Chip da forma: pulso suave */
+            .story-preview-bar .preview-chip.shape {
+                animation: shapePulseV1064 1.1s ease-in-out infinite alternate !important;
+                font-weight: 700;
+                transition: transform 0.2s;
+            }
+            @keyframes shapePulseV1064 {
+                from {
+                    box-shadow:
+                        0 0 4px currentColor,
+                        inset 0 0 3px rgba(255, 255, 255, 0.05);
+                    transform: scale(1);
+                }
+                to {
+                    box-shadow:
+                        0 0 14px currentColor,
+                        0 0 24px currentColor,
+                        inset 0 0 8px rgba(255, 255, 255, 0.15);
+                    transform: scale(1.07);
+                }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // =============================================================
+    // Patch: reaplica as cores no chip .shape toda vez que bar renderiza
+    // =============================================================
+    const _patchShapeChip = () => {
+        const bar = document.getElementById('storyPreviewBarV2');
+        if (!bar) return;
+        const chip = bar.querySelector('.preview-chip.shape');
+        if (!chip) return;
+
+        // Extrai o nome da forma do texto (ex: "🟩 LINHA" → "LINHA")
+        const raw = chip.textContent.replace('🟩', '').trim();
+        if (!raw) return;
+
+        const cor = SHAPE_COLORS_V1064[raw];
+        if (!cor) return;
+
+        // Evita reaplicar (que dispararia loop de mutations)
+        if (chip.getAttribute('data-shape') === raw) return;
+
+        chip.style.color = cor;
+        chip.style.borderColor = cor;
+        chip.setAttribute('data-shape', raw);
+    };
+
+    // MutationObserver — dispara quando o V10.63 re-renderiza a barra
+    try {
+        const obs = new MutationObserver(() => {
+            try { _patchShapeChip(); } catch (e) {}
+        });
+        obs.observe(document.body, { childList: true, subtree: true });
+    } catch (e) {
+        console.warn('[V10.64] MutationObserver falhou:', e);
+    }
+
+    // Rodadas iniciais (garantia)
+    setTimeout(_patchShapeChip, 500);
+    setTimeout(_patchShapeChip, 1500);
+    setTimeout(_patchShapeChip, 3000);
+
+    // =============================================================
+    // Debug
+    // =============================================================
+    window._debugPreviewCores = function() {
+        const bar = document.getElementById('storyPreviewBarV2');
+        const chip = bar?.querySelector('.preview-chip.shape');
+        console.log('═══ [V10.64] Cores do preview ═══');
+        console.log('Chip da forma:', chip);
+        console.log('data-shape:', chip?.getAttribute('data-shape'));
+        console.log('Cor aplicada:', chip?.style.color);
+        console.log('Cores esperadas:', SHAPE_COLORS_V1064);
+        console.log('═══════════════════════════════════');
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V10.64] Formas piscando com cores novas');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('Cores (distintas dos tiles):');
+    console.log('  LINHA    →', SHAPE_COLORS_V1064.LINHA, '(lilás)');
+    console.log('  L        →', SHAPE_COLORS_V1064.L, '(laranja)');
+    console.log('  ZIGZAG   →', SHAPE_COLORS_V1064.ZIGZAG, '(turquesa)');
+    console.log('  QUADRADO →', SHAPE_COLORS_V1064.QUADRADO, '(magenta)');
+    console.log('');
+    console.log('• Só a forma pisca (dano/heal/PA continuam como antes)');
+    console.log('• Chip do PA mantém o pulso dourado do V10.63');
+    console.log('');
+    console.log('💡 Debug: window._debugPreviewCores()');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — V10.64 (Forma pisca em prata — cor neutra)
+// -----------------------------------------------------------------
+// Aplica em CIMA do V10.63 (não substitui):
+//   • Chip .shape pulsa em branco-prateado (neutro)
+//   • Não usa cores de elemento (fogo/água/terra/ar)
+//   • Não usa dourado (reservado pro PA)
+//   • Não usa roxo (reservado pra corrupção)
+//   • Glow suave — não ofusca os tiles ao redor
+// =================================================================
+
+(function previewShapePulseNeutralV1064() {
+    if (window._previewShapePulseNeutralV1064) return;
+    window._previewShapePulseNeutralV1064 = true;
+
+    const NEUTRAL_COLOR = '#e8e8f0';  // prata (UI, não elemento)
+
+    if (!document.getElementById('previewShapePulseNeutralCSS')) {
+        const style = document.createElement('style');
+        style.id = 'previewShapePulseNeutralCSS';
+        style.textContent = `
+            .story-preview-bar .preview-chip.shape {
+                color: ${NEUTRAL_COLOR} !important;
+                border-color: rgba(232, 232, 240, 0.45) !important;
+                background: rgba(232, 232, 240, 0.06) !important;
+                font-weight: 700;
+                animation: shapePulseNeutral 1.1s ease-in-out infinite alternate !important;
+                transition: transform 0.2s;
+            }
+            @keyframes shapePulseNeutral {
+                from {
+                    box-shadow: 0 0 3px rgba(232, 232, 240, 0.25);
+                    transform: scale(1);
+                }
+                to {
+                    box-shadow:
+                        0 0 10px rgba(232, 232, 240, 0.7),
+                        inset 0 0 4px rgba(232, 232, 240, 0.15);
+                    transform: scale(1.06);
+                }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V10.64] Forma pulsa em prata (neutro)');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Cor única:', NEUTRAL_COLOR, '(branco-prateado)');
+    console.log('• Glow suave — não ofusca os tiles');
+    console.log('• PA mantém o dourado pulsante (distinto)');
+    console.log('• Sem conflito com FOGO/AGUA/TERRA/AR');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — V10.65 (Tiles da forma piscam no TABULEIRO)
+// -----------------------------------------------------------------
+// Aplica em CIMA do V10.63 (o chip de preview continua lá).
+//
+// Comportamento:
+//   • path === 4 e forma válida → os 4 tiles do path piscam em prata
+//   • path !== 4 (0, 1, 2, 3, 5, 9...) → nenhum tile pisca
+//   • PvP/Coop → nunca pisca (guard)
+//
+// Visual:
+//   • Anel prateado ao redor do tile (pulsa)
+//   • Brilho suave no interior (brightness 1 → 1.3)
+//   • Não toca no background (elemento continua visível)
+//   • Não conflita com .selected (gold do caminho) nem .bravely-ready
+// =================================================================
+
+(function tilesFlashFormaV1065() {
+    if (window._tilesFlashFormaV1065) return;
+    window._tilesFlashFormaV1065 = true;
+
+    // =============================================================
+    // CSS
+    // =============================================================
+    if (!document.getElementById('tilesFlashFormaCSS')) {
+        const style = document.createElement('style');
+        style.id = 'tilesFlashFormaCSS';
+        style.textContent = `
+            /* Brilho suave no tile (não muda o background) */
+            .tile.shape-flash {
+                animation: shapeFlashBrightness 0.9s ease-in-out infinite alternate;
+            }
+            @keyframes shapeFlashBrightness {
+                from { filter: brightness(1); }
+                to   { filter: brightness(1.35); }
+            }
+
+            /* Anel prateado pulsando por FORA do tile */
+            .tile.shape-flash::after {
+                content: '';
+                position: absolute;
+                inset: -4px;
+                border: 2px solid rgba(232, 232, 240, 0.85);
+                border-radius: 7px;
+                pointer-events: none;
+                box-shadow:
+                    0 0 8px rgba(232, 232, 240, 0.6),
+                    0 0 16px rgba(232, 232, 240, 0.3);
+                animation: shapeFlashRing 0.9s ease-in-out infinite alternate;
+                z-index: 4;
+            }
+            @keyframes shapeFlashRing {
+                from { opacity: 0.4; transform: scale(1); }
+                to   { opacity: 1;   transform: scale(1.05); }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // =============================================================
+    // Aplicar / remover flash nos tiles
+    // =============================================================
+    function atualizarFlashForma() {
+        const gridEl = document.getElementById('grid');
+        if (!gridEl) return;
+
+        // 1. Remove de todos
+        gridEl.querySelectorAll('.tile.shape-flash').forEach(t => {
+            t.classList.remove('shape-flash');
+        });
+
+        // 2. Guards
+        if (window._pvpMode || window._coopMode) return;
+        if (typeof path === 'undefined' || !path || path.length !== 4) return;
+        if (typeof detectShape !== 'function') return;
+
+        // 3. Forma válida?
+        let shape = null;
+        try { shape = detectShape(path); } catch (e) { return; }
+        if (!shape) return;
+
+        // 4. Aplica nos 4 tiles
+        const tiles = gridEl.querySelectorAll('.tile');
+        path.forEach(idx => {
+            if (tiles[idx]) tiles[idx].classList.add('shape-flash');
+        });
+    }
+
+    // =============================================================
+    // Hook em renderPath (cobre todos os cliques / undo / reset)
+    // =============================================================
+    const _installHook = () => {
+        if (typeof window.renderPath !== 'function') return false;
+        if (window.renderPath._tilesFlashV1065) return true;
+
+        const _orig = window.renderPath;
+        window.renderPath = function() {
+            const r = _orig.apply(this, arguments);
+            try { atualizarFlashForma(); } catch (e) {}
+            return r;
+        };
+        window.renderPath._tilesFlashV1065 = true;
+        console.log('[V10.65] Hook em renderPath instalado.');
+        return true;
+    };
+
+    if (!_installHook()) {
+        const t = setInterval(() => { if (_installHook()) clearInterval(t); }, 200);
+    }
+
+    // Safety net — cobre casos em que renderPath não roda mas o path mudou
+    // (ex: boss atacou, troca de turno, phase acabou)
+    setInterval(() => {
+        try { atualizarFlashForma(); } catch (e) {}
+    }, 400);
+
+    // =============================================================
+    // Debug
+    // =============================================================
+    window._debugFlashForma = function() {
+        const gridEl = document.getElementById('grid');
+        const flashing = gridEl
+            ? gridEl.querySelectorAll('.tile.shape-flash').length
+            : 0;
+        let shape = null;
+        try { shape = (typeof path !== 'undefined' && path && path.length === 4) ? detectShape(path) : null; }
+        catch (e) {}
+        console.log('═══ [V10.65] Flash da forma ═══');
+        console.log('Path length:', path?.length || 0);
+        console.log('Forma detectada:', shape || '(nenhuma)');
+        console.log('Tiles piscando:', flashing);
+        console.log('PvP:', window._pvpMode, '| Coop:', window._coopMode);
+        console.log('═════════════════════════════════');
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V10.65] Tiles da forma piscam no tabuleiro');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Anel prateado ao redor dos tiles');
+    console.log('• Brilho suave (brightness 1 → 1.35)');
+    console.log('• Background do elemento intacto (FOGO/AGUA/.../AR)');
+    console.log('• Só path === 4 + forma válida (comportamento do jogo)');
+    console.log('• PvP/Coop: nunca pisca');
+    console.log('');
+    console.log('💡 Debug: window._debugFlashForma()');
+    console.log('═══════════════════════════════════════════════════');
+})();
