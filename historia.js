@@ -44384,3 +44384,1727 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
     console.log('💡 Debug: window._debugPreviewV4()');
     console.log('═══════════════════════════════════════════════════');
 })();
+// =================================================================
+// historia.js — V10.69 (Anhanga-Mirim: fix bug + 150% + clear corrupção)
+// -----------------------------------------------------------------
+// Bug:
+//   V9.4 execute() convertia cruz no PRIMEIRO tile AR do board
+//   V23.2 triggerBravelyChain convertia cruz no ALVO
+//   → 2 cruzes (30 tiles), 2 danos (1× + 1.5×)
+//
+// Fix:
+//   • execute() vira no-op (V23.2 cuida de tudo)
+//   • triggerBravelyChain boosta totalAtk para 1.5×
+//   • Pós-processo limpa corrupção DENTRO da cruz
+// =================================================================
+
+(function fixAnhangaMirimV1069() {
+    if (window._fixAnhangaMirimV1069) return;
+    window._fixAnhangaMirimV1069 = true;
+
+    // =============================================================
+    // 1. Substituir execute por no-op
+    // =============================================================
+    const _aplicarExecuteNoOp = () => {
+        if (typeof STORY_HERO_PA === 'undefined') return false;
+        STORY_HERO_PA['anhanga_mirim_raio'] = {
+            desc: 'Cruz completa (15 tiles) — 150% de dano. Purifica corrupção dentro da cruz.',
+            execute: async () => { /* V23.2 cuida do dano e da conversão */ },
+        };
+        return true;
+    };
+    _aplicarExecuteNoOp();
+    setTimeout(_aplicarExecuteNoOp, 800);
+    setTimeout(_aplicarExecuteNoOp, 2000);
+
+    // =============================================================
+    // 2. Wrapper em triggerBravelyChain
+    // =============================================================
+    const _cur = window.triggerBravelyChain;
+    if (typeof _cur !== 'function') {
+        console.warn('[V10.69] triggerBravelyChain ausente.');
+        return;
+    }
+    if (_cur._v1069) return;
+
+    window.triggerBravelyChain = async function(active, target, totalAtk) {
+        const heroData = (typeof STORY_HERO_CLASSES !== 'undefined' && active)
+            ? STORY_HERO_CLASSES[active.class] : null;
+        const isAnhanga = heroData && heroData.paKey === 'anhanga_mirim_raio';
+
+        if (!isAnhanga) {
+            return _cur.apply(this, arguments);
+        }
+
+        const boostedAtk = Math.floor((totalAtk || 0) * 1.5);
+        console.log('[V10.69] Anhanga-Mirim: dano 150% =', boostedAtk);
+
+        const result = await _cur.call(this, active, target, boostedAtk);
+
+        // Pós-processo: limpar corrupção DENTRO da cruz
+        if (target && typeof target.x === 'number') {
+            const paTiles = [];
+            for (let i = 0; i < 8; i++) {
+                if (!paTiles.includes(i * 8 + target.x)) paTiles.push(i * 8 + target.x);
+                if (!paTiles.includes(target.y * 8 + i)) paTiles.push(target.y * 8 + i);
+            }
+
+            if (Array.isArray(window._corruptedTiles) && window._corruptedTiles.length > 0) {
+                const corruptedInCross = paTiles.filter(idx =>
+                    window._corruptedTiles.includes(idx)
+                );
+
+                if (corruptedInCross.length > 0) {
+                    // Remove do array (evita re-corromper via createTile hook)
+                    window._corruptedTiles = window._corruptedTiles.filter(
+                        idx => !corruptedInCross.includes(idx)
+                    );
+
+                    const board = document.getElementById('board');
+                    const s = (typeof getStep === 'function') ? getStep() : 59;
+
+                    corruptedInCross.forEach((idx, i) => {
+                        setTimeout(() => {
+                            if (board) {
+                                const smoke = document.createElement('div');
+                                smoke.className = 'corruption-smoke-fx';
+                                smoke.style.left = ((idx % 8) * s + 8) + 'px';
+                                smoke.style.top = (Math.floor(idx / 8) * s + 8) + 'px';
+                                smoke.style.width = s + 'px';
+                                smoke.style.height = s + 'px';
+                                board.appendChild(smoke);
+                                setTimeout(() => smoke.remove(), 1500);
+                            }
+                        }, i * 60);
+                    });
+
+                    if (typeof addLog === 'function') {
+                        addLog(`⚡ Anhanga-Mirim purificou ${corruptedInCross.length} corrupç${corruptedInCross.length === 1 ? 'ão' : 'ões'}!`);
+                    }
+                    if (typeof playSfx === 'function') {
+                        try { playSfx('purificacao'); } catch (e) {}
+                    }
+                    console.log('[V10.69] Corrupção limpa na cruz:', corruptedInCross);
+                }
+            }
+        }
+
+        return result;
+    };
+    window.triggerBravelyChain._v1069 = true;
+
+    // =============================================================
+    // Debug
+    // =============================================================
+    window._debugAnhanga = function() {
+        console.log('═══ [V10.69] Anhanga-Mirim ═══');
+        console.log('execute é no-op?', STORY_HERO_PA?.['anhanga_mirim_raio']?.execute?.toString().includes('V23.2'));
+        console.log('triggerBravelyChain wrapped?', window.triggerBravelyChain?._v1069);
+        console.log('Corrupção atual:', window._corruptedTiles?.length || 0);
+        console.log('══════════════════════════');
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V10.69] Anhanga-Mirim corrigido');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• execute() = no-op (V23.2 cuida de dano + conversão)');
+    console.log('• Dano boostado para 150% no triggerBravelyChain');
+    console.log('• Pós-processo limpa corrupção DENTRO da cruz');
+    console.log('• Sem dupla conversão de tiles');
+    console.log('');
+    console.log('💡 Debug: window._debugAnhanga()');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — V10.70 (Mãe da Mata 3×3 + cura all + passiva +1)
+// -----------------------------------------------------------------
+// Mudanças:
+//   1. Mãe da Mata: promoção 3⭐ → 4⭐
+//   2. Mãe da Mata: passiva "+1 em toda cura"
+//   3. Mãe da Mata: PA 5×5 → 3×3, cura em si + aliados
+//   4. Regra global: Anduré e Negrinho curam em si + aliados
+//   5. Helper aplicarCuraComPassiva (extensível)
+//
+// Nota PvP/Coop: execute() funciona nos três modos, mas
+// tile-pattern de PvP/Coop continua 5×5 (não tocado).
+// =================================================================
+
+(function fixMaeDaMataV1070() {
+    if (window._fixMaeDaMataV1070) return;
+    window._fixMaeDaMataV1070 = true;
+
+    // =============================================================
+    // 1. HELPER: aplicar cura com passiva
+    // =============================================================
+    window.aplicarCuraComPassiva = function(player, amount) {
+        if (!player || player.dead) return 0;
+
+        let bonus = 0;
+        const heroData = (typeof STORY_HERO_CLASSES !== 'undefined')
+            ? STORY_HERO_CLASSES[player.class] : null;
+        if (heroData?.passive === 'mae_da_mata_cura_plus') {
+            bonus = 1;
+        }
+
+        const total = amount + bonus;
+        const hpAntes = player.hp;
+        player.hp = Math.min(player.maxHp, player.hp + total);
+        const curado = player.hp - hpAntes;
+
+        if (curado > 0) {
+            if (typeof showHealEffect === 'function') {
+                showHealEffect(player.x, player.y, curado);
+            }
+        }
+        if (typeof updateHeroCard === 'function') updateHeroCard();
+        return curado;
+    };
+
+    // =============================================================
+    // 2. PROMOÇÃO + PASSIVA
+    // =============================================================
+    const _registrarPassiva = () => {
+        if (typeof STORY_HERO_CLASSES === 'undefined') return false;
+        const mae = STORY_HERO_CLASSES['Mãe da Mata'];
+        if (!mae) return false;
+        mae.rarity = 4;
+        mae.passive = 'mae_da_mata_cura_plus';
+        return true;
+    };
+    if (_registrarPassiva()) {
+        console.log('[V10.70] Mãe da Mata promovida a 4⭐ com passiva +1 cura.');
+    }
+    setTimeout(_registrarPassiva, 500);
+    setTimeout(_registrarPassiva, 1500);
+
+    // =============================================================
+    // 3. REESCREVER OS 3 PAs DE CURA (execute function)
+    // =============================================================
+    function aplicarCuraEmArea(active, tiles, valorCura, nome) {
+        if (typeof players === 'undefined' || !Array.isArray(players)) return 0;
+        let curasFeitas = 0;
+        players.forEach(p => {
+            if (p.dead) return;
+            if (tiles.some(t => t.x === p.x && t.y === p.y)) {
+                const curado = window.aplicarCuraComPassiva(p, valorCura);
+                if (curado > 0) curasFeitas++;
+            }
+        });
+        if (curasFeitas > 0 && typeof addLog === 'function') {
+            addLog(`💚 ${nome}: curou ${curasFeitas} herói(s) em ${tiles.length} tiles.`);
+        }
+        return curasFeitas;
+    }
+
+    const _substituirPAs = () => {
+        if (typeof STORY_HERO_PA === 'undefined') return false;
+
+        // --- Mãe da Mata ---
+        STORY_HERO_PA['maedamata_area3x3_cura'] = {
+            desc: 'Área 3×3 ao redor. Cura 4 HP (+1 passivo) em si + aliados. Converte pra TERRA.',
+            execute: async (active) => {
+                if (!active) return;
+
+                const tiles = [];
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dy = -1; dy <= 1; dy++) {
+                        const nx = active.x + dx, ny = active.y + dy;
+                        if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) {
+                            tiles.push({ x: nx, y: ny, idx: ny * 8 + nx });
+                        }
+                    }
+                }
+
+                // FX heal orbs em cada tile
+                tiles.forEach((t, i) => {
+                    setTimeout(() => {
+                        if (typeof spawnHealOrb === 'function') {
+                            spawnHealOrb(t.x, t.y);
+                        }
+                    }, i * 60);
+                });
+
+                await sleep(500);
+
+                // Cura em si + aliados
+                aplicarCuraEmArea(active, tiles, 4, 'Mãe da Mata');
+
+                // Converte pra TERRA
+                tiles.forEach(t => {
+                    if (typeof grid !== 'undefined') grid[t.idx] = 'TERRA';
+                    const el = document.querySelectorAll('#grid .tile')[t.idx];
+                    if (el) el.className = 'tile bg-TERRA';
+                });
+
+                if (typeof addLog === 'function') {
+                    addLog(`🌳 Mãe da Mata: Floração Ancestral!`);
+                }
+                if (typeof updateVisuals === 'function') updateVisuals();
+            }
+        };
+
+        // --- Anduré (regra global: cura si + aliados) ---
+        STORY_HERO_PA['andure_area2x2_cura'] = {
+            desc: 'Área 3×3 ao redor. Cura 3 HP em si + aliados.',
+            execute: async (active) => {
+                if (!active) return;
+
+                const tiles = [];
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dy = -1; dy <= 1; dy++) {
+                        const nx = active.x + dx, ny = active.y + dy;
+                        if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) {
+                            tiles.push({ x: nx, y: ny, idx: ny * 8 + nx });
+                        }
+                    }
+                }
+
+                tiles.forEach((t, i) => {
+                    setTimeout(() => {
+                        if (typeof spawnHealOrb === 'function') {
+                            spawnHealOrb(t.x, t.y);
+                        }
+                    }, i * 60);
+                });
+
+                await sleep(400);
+
+                aplicarCuraEmArea(active, tiles, 3, 'Anduré');
+                if (typeof updateVisuals === 'function') updateVisuals();
+            }
+        };
+
+        // --- Negrinho (regra global: self sempre + aliados no cross) ---
+        STORY_HERO_PA['negrinho_cruz_cura'] = {
+            desc: 'Cruz no boss + dano PA. Cura 5 HP em si + aliados na cruz.',
+            execute: async (active, target, totalAtk) => {
+                if (!target) return;
+
+                const tiles = [];
+                for (let i = 0; i < 8; i++) {
+                    if (!tiles.includes(i * 8 + target.x)) tiles.push(i * 8 + target.x);
+                    if (!tiles.includes(target.y * 8 + i)) tiles.push(target.y * 8 + i);
+                }
+
+                // FX
+                tiles.forEach((idx, i) => {
+                    setTimeout(() => {
+                        if (typeof spawnFxAt === 'function') {
+                            const tx = idx % 8, ty = Math.floor(idx / 8);
+                            spawnFxAt('impact', 'fx-impact', tx, ty, { duration: 500, scale: 0.7 });
+                        }
+                    }, i * 30);
+                });
+
+                // Converte pra AGUA
+                tiles.forEach(idx => {
+                    if (typeof grid !== 'undefined') grid[idx] = 'AGUA';
+                    const el = document.querySelectorAll('#grid .tile')[idx];
+                    if (el) el.className = 'tile bg-AGUA';
+                });
+                await sleep(500);
+
+                // Dano no boss (V23.2 vai dar dano de novo — bug conhecido)
+                if (typeof applyDmg === 'function') applyDmg(target, totalAtk);
+
+                // Cura: self SEMPRE + aliados na cruz
+                if (typeof players !== 'undefined' && Array.isArray(players)) {
+                    players.forEach(p => {
+                        if (p.dead) return;
+                        const idx = p.y * 8 + p.x;
+                        if (p.id === active.id || tiles.includes(idx)) {
+                            window.aplicarCuraComPassiva(p, 5);
+                        }
+                    });
+                }
+
+                if (typeof addLog === 'function') {
+                    addLog(`💧 Negrinho: cruz + cura 5 HP (si + aliados)!`);
+                }
+                if (typeof updateVisuals === 'function') updateVisuals();
+            }
+        };
+
+        return true;
+    };
+    if (_substituirPAs()) {
+        console.log('[V10.70] PAs de cura (Mãe da Mata, Anduré, Negrinho) reescritos.');
+    }
+    setTimeout(_substituirPAs, 500);
+    setTimeout(_substituirPAs, 1500);
+
+    // =============================================================
+    // 4. WRAPPER EM triggerBravelyChain (só para Mãe da Mata)
+    // -------------------------------------------------------------
+    // Pula V23.2 inteiro (sem damage/convert 5×5). Chama execute
+    // (que já faz heal + convert 3×3).
+    // =============================================================
+    const _cur = window.triggerBravelyChain;
+    if (typeof _cur === 'function' && !_cur._v1070) {
+        const _inner = _cur;
+
+        window.triggerBravelyChain = async function(active, target, totalAtk) {
+            // PvP/Coop: não mexe (usa fluxo próprio)
+            if (window._pvpMode || window._coopMode) {
+                return _inner.apply(this, arguments);
+            }
+
+            const heroData = (typeof STORY_HERO_CLASSES !== 'undefined' && active)
+                ? STORY_HERO_CLASSES[active.class] : null;
+            const isMaeDaMata = heroData && heroData.paKey === 'maedamata_area3x3_cura';
+
+            if (!isMaeDaMata) {
+                return _inner.apply(this, arguments);
+            }
+
+            // Fluxo customizado só pra Mãe da Mata
+            if (typeof showPoderAncestralEffect === 'function') {
+                try { showPoderAncestralEffect(); } catch (e) {}
+            }
+            await sleep(300);
+            try { if (typeof playSfx === 'function') playSfx('skill1'); } catch (e) {}
+
+            const paFn = STORY_HERO_PA['maedamata_area3x3_cura'];
+            if (paFn && typeof paFn.execute === 'function') {
+                try { await paFn.execute(active, target, totalAtk); }
+                catch (e) { console.warn('[V10.70] Erro em execute:', e); }
+            }
+
+            if (typeof updateTitleStats === 'function') updateTitleStats('bravely_chain');
+        };
+        window.triggerBravelyChain._v1070 = true;
+    }
+
+    // =============================================================
+    // Debug
+    // =============================================================
+    window._debugMaeDaMata = function() {
+        const mae = (typeof STORY_HERO_CLASSES !== 'undefined')
+            ? STORY_HERO_CLASSES['Mãe da Mata'] : null;
+        console.log('═══ [V10.70] Mãe da Mata ═══');
+        console.log('rarity:', mae?.rarity);
+        console.log('passive:', mae?.passive);
+        console.log('aplicarCuraComPassiva?', typeof window.aplicarCuraComPassiva);
+        console.log('triggerBravelyChain wrapped?', window.triggerBravelyChain?._v1070);
+        console.log('══════════════════════════');
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V10.70] Mãe da Mata + regra global de cura');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Mãe da Mata: 4⭐ + passiva +1 cura + PA 3×3');
+    console.log('• Anduré: cura self + aliados (era só self)');
+    console.log('• Negrinho: cura self sempre + aliados na cruz');
+    console.log('');
+    console.log('⚠️ PvP/Coop: cura em 3×3, mas tile-pattern ainda 5×5');
+    console.log('⚠️ Negrinho: dano 2× (bug conhecido, não corrigido)');
+    console.log('');
+    console.log('💡 Debug: window._debugMaeDaMata()');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — V10.71 (Curupira: PA rework + passiva adjacente)
+// -----------------------------------------------------------------
+// Mudanças:
+//   1. PA: seleção manual de até 10 tiles AR/AGUA/TERRA (não FOGO)
+//      em qualquer lugar do board → viram TERRA
+//   2. Passiva: 150% de dano em inimigos adjacentes
+//   3. Rarity: 4⭐ (já era) + passive registrada
+// =================================================================
+
+(function fixCurupiraV1071() {
+    if (window._fixCurupiraV1071) return;
+    window._fixCurupiraV1071 = true;
+
+    // =============================================================
+    // 1. Passiva na tabela
+    // =============================================================
+    const _reg = () => {
+        if (typeof STORY_HERO_CLASSES === 'undefined') return false;
+        const c = STORY_HERO_CLASSES['Curupira'];
+        if (!c) return false;
+        c.rarity = 4;
+        c.passive = 'curupira_adjacente';
+        return true;
+    };
+    _reg();
+    setTimeout(_reg, 500);
+    setTimeout(_reg, 1500);
+
+    // =============================================================
+    // 2. PA — execute vira no-op (V10.71 wrapper cuida)
+    // =============================================================
+    const _subPA = () => {
+        if (typeof STORY_HERO_PA === 'undefined') return false;
+        STORY_HERO_PA['curupira_chuva_flechas'] = {
+            desc: 'Escolha até 10 tiles AR/AGUA/TERRA → viram TERRA. Boss neles toma dano PA.',
+            execute: async () => { /* V10.71 wrapper cuida */ }
+        };
+        return true;
+    };
+    _subPA();
+    setTimeout(_subPA, 800);
+    setTimeout(_subPA, 2000);
+
+    // =============================================================
+    // 3. Selection UI (promise-based)
+    // =============================================================
+    let _curupiraResolve = null;
+    window._curupiraSelecting = false;
+
+    function abrirSelecaoCurupira() {
+        return new Promise((resolve) => {
+            _curupiraResolve = resolve;
+
+            const elegiveis = [];
+            for (let i = 0; i < 64; i++) {
+                if (['AR', 'AGUA', 'TERRA'].includes(grid[i])) {
+                    elegiveis.push({ x: i % 8, y: Math.floor(i / 8), idx: i });
+                }
+            }
+
+            if (elegiveis.length === 0) {
+                if (typeof showToast === 'function')
+                    showToast('🏹', 'Nenhum tile AR/AGUA/TERRA no board!', '🏹');
+                _curupiraResolve = null;
+                resolve({ cancelado: true });
+                return;
+            }
+
+            window._curupiraSelecting = true;
+            window._curupiraSelectedTiles = [];
+
+            elegiveis.forEach(t => {
+                const el = document.querySelectorAll('#grid .tile')[t.idx];
+                if (el) el.classList.add('curupira-eligible');
+            });
+
+            let bar = document.getElementById('curupiraBar');
+            if (bar) bar.remove();
+            bar = document.createElement('div');
+            bar.id = 'curupiraBar';
+            bar.className = 'curupira-bar';
+            bar.innerHTML = `
+                <span class="curupira-bar-icon">🏹</span>
+                <span class="curupira-bar-text">CHUVA DE FLECHAS: até 10 tiles AR/AGUA/TERRA
+                    <b id="curupiraCount">0/10</b>
+                </span>
+                <button class="curupira-bar-btn confirm" id="curupiraConfirmBtn" disabled>CONFIRMAR</button>
+                <button class="curupira-bar-btn cancel" id="curupiraCancelBtn">CANCELAR</button>
+            `;
+            const main = document.querySelector('.game-main');
+            if (main) main.parentNode.insertBefore(bar, main);
+
+            document.getElementById('curupiraConfirmBtn').onclick = () => finalizarCurupira(false);
+            document.getElementById('curupiraCancelBtn').onclick = () => finalizarCurupira(true);
+
+            if (typeof addLog === 'function') addLog('🏹 Curupira: escolha até 10 tiles AR/AGUA/TERRA');
+        });
+    }
+
+    function finalizarCurupira(cancelado) {
+        document.querySelectorAll('.curupira-eligible, .curupira-selected')
+            .forEach(el => el.classList.remove('curupira-eligible', 'curupira-selected'));
+        const bar = document.getElementById('curupiraBar');
+        if (bar) bar.remove();
+
+        window._curupiraSelecting = false;
+        const selected = window._curupiraSelectedTiles.slice();
+        window._curupiraSelectedTiles = [];
+
+        if (_curupiraResolve) {
+            const r = _curupiraResolve;
+            _curupiraResolve = null;
+            if (cancelado) r({ cancelado: true });
+            else r({ cancelado: false, tiles: selected });
+        }
+    }
+
+    // =============================================================
+    // 4. Hook handleSelect
+    // =============================================================
+    const _hs = window.handleSelect;
+    if (typeof _hs === 'function' && !_hs._v1071) {
+        const _innerHs = _hs;
+        window.handleSelect = function(idx) {
+            if (!window._curupiraSelecting) return _innerHs.apply(this, arguments);
+
+            const el = document.querySelectorAll('#grid .tile')[idx];
+            if (!el || !el.classList.contains('curupira-eligible')) {
+                return _innerHs.apply(this, arguments);
+            }
+
+            const pos = window._curupiraSelectedTiles.findIndex(t => t.idx === idx);
+            if (pos >= 0) {
+                window._curupiraSelectedTiles.splice(pos, 1);
+                el.classList.remove('curupira-selected');
+            } else {
+                if (window._curupiraSelectedTiles.length >= 10) {
+                    if (typeof showToast === 'function')
+                        showToast('🏹', 'Máximo de 10 tiles!', '🏹');
+                    return;
+                }
+                window._curupiraSelectedTiles.push({
+                    x: idx % 8, y: Math.floor(idx / 8), idx
+                });
+                el.classList.add('curupira-selected');
+            }
+
+            const count = document.getElementById('curupiraCount');
+            if (count) count.textContent = `${window._curupiraSelectedTiles.length}/10`;
+            const confirmBtn = document.getElementById('curupiraConfirmBtn');
+            if (confirmBtn) confirmBtn.disabled = window._curupiraSelectedTiles.length === 0;
+        };
+        window.handleSelect._v1071 = true;
+    }
+
+    // =============================================================
+    // 5. Wrapper triggerBravelyChain (skip V23.2, roda tudo custom)
+    // =============================================================
+    const _brav = window.triggerBravelyChain;
+    if (typeof _brav === 'function' && !_brav._v1071) {
+        const _innerBrav = _brav;
+        window.triggerBravelyChain = async function(active, target, totalAtk) {
+            if (window._pvpMode || window._coopMode) return _innerBrav.apply(this, arguments);
+
+            const heroData = STORY_HERO_CLASSES[active?.class];
+            if (!heroData || heroData.paKey !== 'curupira_chuva_flechas') {
+                return _innerBrav.apply(this, arguments);
+            }
+
+            if (typeof showPoderAncestralEffect === 'function') {
+                try { showPoderAncestralEffect(); } catch(e) {}
+            }
+            await sleep(300);
+            try { playSfx('skill1'); } catch(e) {}
+
+            const chosen = await abrirSelecaoCurupira();
+            if (chosen.cancelado) {
+                if (typeof addLog === 'function') addLog('🏹 Curupira: PA cancelado.');
+                return;
+            }
+
+            const selected = chosen.tiles;
+
+            selected.forEach(t => {
+                grid[t.idx] = 'TERRA';
+                const el = document.querySelectorAll('#grid .tile')[t.idx];
+                if (el) el.className = 'tile bg-TERRA';
+            });
+
+            selected.forEach((t, i) => {
+                setTimeout(() => {
+                    if (typeof spawnFxAt === 'function') {
+                        spawnFxAt('impact', 'fx-impact', t.x, t.y, { duration: 500, scale: 0.7 });
+                    }
+                }, i * 60);
+            });
+
+            await sleep(600);
+
+            if (target && !target.dead) {
+                const bossIdx = target.y * 8 + target.x;
+                if (selected.some(t => t.idx === bossIdx)) {
+                    const dmg = Math.floor(totalAtk * 2);
+                    if (typeof applyDmg === 'function') applyDmg(target, dmg);
+                    if (typeof addLog === 'function')
+                        addLog(`🏹 Curupira: dano crítico ×2! (${dmg})`);
+                }
+            }
+
+            if (typeof addLog === 'function')
+                addLog(`🏹 Curupira: ${selected.length} tiles → TERRA.`);
+            if (typeof updateVisuals === 'function') updateVisuals();
+            if (typeof updateTitleStats === 'function') updateTitleStats('bravely_chain');
+        };
+        window.triggerBravelyChain._v1071 = true;
+    }
+
+    window._debugCurupira = function() {
+        console.log('═══ [V10.71] Curupira ═══');
+        console.log('passive:', STORY_HERO_CLASSES?.['Curupira']?.passive);
+        console.log('execute é no-op?', STORY_HERO_PA?.['curupira_chuva_flechas']?.execute?.toString().includes('V10.71'));
+        console.log('selecting agora?', window._curupiraSelecting);
+    };
+
+    console.log('✅ [V10.71] Curupira: seleção manual AR/AGUA/TERRA + passiva 150% adjacente.');
+})();
+// =================================================================
+// historia.js — V10.72 (Sistema de passivas + Mãe-do-Ouro + Matinta)
+// =================================================================
+
+(function sistemaPassivasV1072() {
+    if (window._sistemaPassivasV1072) return;
+    window._sistemaPassivasV1072 = true;
+
+    // =============================================================
+    // 1. Tabela central de passivas (display + metadata)
+    // =============================================================
+    window.PASSIVE_DISPLAY = window.PASSIVE_DISPLAY || {};
+    Object.assign(window.PASSIVE_DISPLAY, {
+        'mae_da_mata_cura_plus':     { name: 'Cura Plus',         desc: 'Toda cura que ela aplica é aumentada em +1 HP.' },
+        'mae_do_ouro_rota_explosiva':{ name: 'Rota Explosiva',    desc: 'Se o PA tiver menos de 4 tiles, vira área 3×3 no boss.' },
+        'matinta_medo':              { name: 'Aura de Medo',      desc: 'Enquanto viva e adjacente ao boss, o boss causa -1 de dano.' },
+        'tupinamba_resistencia':     { name: 'Resistência Tribal',desc: 'Reduz em 1 todo dano recebido.' },
+        'negrinho_revive':           { name: 'Ressurreição',      desc: '50% de chance de reviver com 1 HP (1x por batalha).' },
+        'curupira_adjacente':        { name: 'Instinto Selvagem', desc: '150% de dano em inimigos adjacentes.' },
+        'kianumanka_fogo':           { name: 'Chama Ancestral',   desc: '150% de dano se o inimigo estiver em tile de FOGO.' },
+        'ruda_ar_regen':             { name: 'Toque do Amor',     desc: 'Recupera 1 HP ao terminar turno em tile de AR.' },
+    });
+
+    // =============================================================
+    // 2. Promoção + passiva de Mãe-do-Ouro e Matinta
+    // =============================================================
+    const _reg = () => {
+        if (typeof STORY_HERO_CLASSES === 'undefined') return;
+        if (STORY_HERO_CLASSES['Mãe-do-Ouro']) {
+            STORY_HERO_CLASSES['Mãe-do-Ouro'].rarity = 4;
+            STORY_HERO_CLASSES['Mãe-do-Ouro'].passive = 'mae_do_ouro_rota_explosiva';
+        }
+        if (STORY_HERO_CLASSES['Matinta Pereira']) {
+            STORY_HERO_CLASSES['Matinta Pereira'].rarity = 4;
+            STORY_HERO_CLASSES['Matinta Pereira'].passive = 'matinta_medo';
+        }
+    };
+    _reg();
+    setTimeout(_reg, 500);
+    setTimeout(_reg, 1500);
+
+    // =============================================================
+    // 3. Matinta — damage reduction hook
+    // =============================================================
+    const _applyDmg = window.applyDmg;
+    if (typeof _applyDmg === 'function' && !_applyDmg._v1072Matinta) {
+        const _inner = _applyDmg;
+        window.applyDmg = function(target, amount) {
+            if (!window._storyMode && !window._eventoAtivo) return _inner.apply(this, arguments);
+            if (window._pvpMode || window._coopMode) return _inner.apply(this, arguments);
+
+            // Matinta aura: boss -1 ATK enquanto adjacente a ela
+            if (target && players && players.includes(target) && !target.dead) {
+                const matinta = players.find(p => p && !p.dead && p.class === 'Matinta Pereira');
+                if (matinta && boss && !boss.dead) {
+                    const dist = Math.abs(matinta.x - boss.x) + Math.abs(matinta.y - boss.y);
+                    if (dist <= 1) {
+                        amount = Math.max(1, amount - 1);
+                    }
+                }
+            }
+
+            return _inner.call(this, target, amount);
+        };
+        window.applyDmg._v1072Matinta = true;
+    }
+
+    // =============================================================
+    // 4. Mãe-do-Ouro — Rota Explosiva
+    // =============================================================
+    const _brav = window.triggerBravelyChain;
+    if (typeof _brav === 'function' && !_brav._v1072MaeOuro) {
+        const _innerBrav = _brav;
+        window.triggerBravelyChain = async function(active, target, totalAtk) {
+            if (window._pvpMode || window._coopMode) return _innerBrav.apply(this, arguments);
+
+            const heroData = STORY_HERO_CLASSES[active?.class];
+            if (!heroData || heroData.paKey !== 'maedouro_caminho') {
+                return _innerBrav.apply(this, arguments);
+            }
+
+            // Path >= 4: fluxo normal
+            const pathLen = (typeof path !== 'undefined' && path) ? path.length : 0;
+            if (pathLen >= 4) return _innerBrav.apply(this, arguments);
+
+            // Rota Explosiva: 3×3 ao redor do boss
+            if (typeof showPoderAncestralEffect === 'function') {
+                try { showPoderAncestralEffect(); } catch(e) {}
+            }
+            await sleep(300);
+            try { playSfx('skill1'); } catch(e) {}
+
+            if (!target || target.dead) return;
+
+            const tiles = [];
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dy = -1; dy <= 1; dy++) {
+                    const nx = target.x + dx, ny = target.y + dy;
+                    if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) tiles.push(ny * 8 + nx);
+                }
+            }
+
+            tiles.forEach((idx, i) => {
+                setTimeout(() => {
+                    if (typeof spawnFxAt === 'function') {
+                        spawnFxAt('rock', 'rock-projectile',
+                            idx % 8, Math.floor(idx / 8),
+                            { duration: 500, scale: 0.6 });
+                    }
+                }, i * 40);
+            });
+
+            await sleep(500);
+
+            tiles.forEach(idx => {
+                grid[idx] = 'TERRA';
+                const el = document.querySelectorAll('#grid .tile')[idx];
+                if (el) el.className = 'tile bg-TERRA';
+            });
+
+            if (typeof applyDmg === 'function') applyDmg(target, totalAtk);
+            if (typeof addLog === 'function') addLog(`🌍 Mãe-do-Ouro: ROTA EXPLOSIVA (3×3)!`);
+            if (typeof updateVisuals === 'function') updateVisuals();
+            if (typeof updateTitleStats === 'function') updateTitleStats('bravely_chain');
+        };
+        window.triggerBravelyChain._v1072MaeOuro = true;
+    }
+
+    window._debugPassivasV1072 = function() {
+        console.log('═══ [V10.72] Passivas ═══');
+        console.log('Mãe-do-Ouro:', STORY_HERO_CLASSES?.['Mãe-do-Ouro']?.passive);
+        console.log('Matinta:', STORY_HERO_CLASSES?.['Matinta Pereira']?.passive);
+        console.log('PASSIVE_DISPLAY total:', Object.keys(window.PASSIVE_DISPLAY || {}).length);
+    };
+
+    console.log('✅ [V10.72] Sistema base + Mãe-do-Ouro + Matinta.');
+})();
+// =================================================================
+// historia.js — V10.73 (Tupinambá + Negrinho + Kianumanka + Rudá)
+// =================================================================
+
+(function pacoteV1073() {
+    if (window._pacoteV1073) return;
+    window._pacoteV1073 = true;
+
+    // =============================================================
+    // 1. Promoções + passivas
+    // =============================================================
+    const _reg = () => {
+        if (typeof STORY_HERO_CLASSES === 'undefined') return;
+        if (STORY_HERO_CLASSES['Tupinambá']) {
+            STORY_HERO_CLASSES['Tupinambá'].rarity = 4;
+            STORY_HERO_CLASSES['Tupinambá'].passive = 'tupinamba_resistencia';
+        }
+        if (STORY_HERO_CLASSES['Negrinho do Pastoreio']) {
+            STORY_HERO_CLASSES['Negrinho do Pastoreio'].rarity = 4;
+            STORY_HERO_CLASSES['Negrinho do Pastoreio'].passive = 'negrinho_revive';
+        }
+        if (STORY_HERO_CLASSES['Kianumanka-Manã']) {
+            STORY_HERO_CLASSES['Kianumanka-Manã'].passive = 'kianumanka_fogo';
+        }
+        if (STORY_HERO_CLASSES['Rudá']) {
+            STORY_HERO_CLASSES['Rudá'].passive = 'ruda_ar_regen';
+        }
+    };
+    _reg();
+    setTimeout(_reg, 500);
+    setTimeout(_reg, 1500);
+
+    // =============================================================
+    // 2. Tupinambá — damage reduction
+    // =============================================================
+    const _applyDmg = window.applyDmg;
+    if (typeof _applyDmg === 'function' && !_applyDmg._v1073Tup) {
+        const _inner = _applyDmg;
+        window.applyDmg = function(target, amount) {
+            if (!window._storyMode && !window._eventoAtivo) return _inner.apply(this, arguments);
+            if (window._pvpMode || window._coopMode) return _inner.apply(this, arguments);
+
+            if (target && target.class === 'Tupinambá' && !target.dead) {
+                amount = Math.max(1, amount - 1);
+            }
+
+            return _inner.call(this, target, amount);
+        };
+        window.applyDmg._v1073Tup = true;
+    }
+
+    // =============================================================
+    // 3. Negrinho — revive 50% (solo-only)
+    // =============================================================
+    const _defeat = window.handleStoryDefeat;
+    if (typeof _defeat === 'function' && !_defeat._v1073Negrinho) {
+        const _innerDefeat = _defeat;
+        window.handleStoryDefeat = function() {
+            if (window._pvpMode || window._coopMode) {
+                return _innerDefeat.apply(this, arguments);
+            }
+
+            if (players && Array.isArray(players)) {
+                const negrinho = players.find(p =>
+                    p && p.class === 'Negrinho do Pastoreio' &&
+                    p.dead && !p._negrinhoReviveUsed
+                );
+                if (negrinho && Math.random() < 0.5) {
+                    negrinho.dead = false;
+                    negrinho.hp = 1;
+                    negrinho._negrinhoReviveUsed = true;
+
+                    if (typeof showHealEffect === 'function')
+                        showHealEffect(negrinho.x, negrinho.y, 1);
+                    if (typeof updateVisuals === 'function') updateVisuals();
+                    if (typeof updateHeroCard === 'function') updateHeroCard();
+                    if (typeof addLog === 'function')
+                        addLog(`💚 Negrinho do Pastoreio reviveu com 1 HP!`);
+                    if (typeof playSfx === 'function') {
+                        try { playSfx('purificacao'); } catch(e) {}
+                    }
+                    if (typeof spawnFxAt === 'function') {
+                        spawnFxAt('impact', 'fx-impact', negrinho.x, negrinho.y,
+                            { duration: 800, scale: 1.5 });
+                    }
+                    return;
+                }
+            }
+
+            return _innerDefeat.apply(this, arguments);
+        };
+        window.handleStoryDefeat._v1073Negrinho = true;
+    }
+
+    // Reset do flag de revive quando nova batalha começa
+    const _init = window.initStoryBattle;
+    if (typeof _init === 'function' && !_init._v1073Reset) {
+        const _innerInit = _init;
+        window.initStoryBattle = async function() {
+            if (players && Array.isArray(players)) {
+                players.forEach(p => { if (p) p._negrinhoReviveUsed = false; });
+            }
+            return _innerInit.apply(this, arguments);
+        };
+        window.initStoryBattle._v1073Reset = true;
+    }
+
+    // =============================================================
+    // 4. Curupira + Kianumanka — damage multiplier (via executeAction)
+    // =============================================================
+    const _exec = window.executeAction;
+    if (typeof _exec === 'function' && !_exec._v1073Mult) {
+        const _innerExec = _exec;
+        window.executeAction = async function() {
+            if (!window._storyMode && !window._eventoAtivo) {
+                return _innerExec.apply(this, arguments);
+            }
+
+            const active = players?.[currentPlayerIdx];
+            let mult = 1;
+            let reason = '';
+
+            if (active && boss && !boss.dead) {
+                // Curupira: 1.5x se adjacente ao boss
+                if (active.class === 'Curupira') {
+                    const dist = Math.abs(active.x - boss.x) + Math.abs(active.y - boss.y);
+                    if (dist <= 1) { mult = 1.5; reason = 'Instinto Selvagem'; }
+                }
+                // Kianumanka: 1.5x se boss em FOGO
+                if (active.class === 'Kianumanka-Manã') {
+                    const bossIdx = boss.y * 8 + boss.x;
+                    if (grid[bossIdx] === 'FOGO') { mult = 1.5; reason = 'Chama Ancestral'; }
+                }
+            }
+
+            if (mult > 1) {
+                window._passiveAtkMultiplier = mult;
+                if (reason && typeof addLog === 'function') addLog(`⭐ ${reason}!`);
+            }
+
+            try {
+                return await _innerExec.apply(this, arguments);
+            } finally {
+                window._passiveAtkMultiplier = 1;
+            }
+        };
+        window.executeAction._v1073Mult = true;
+    }
+
+    // Aplicar multiplicador no applyDmg (boss only)
+    if (typeof window.applyDmg === 'function' && !window.applyDmg._v1073Mult) {
+        const _innerApply = window.applyDmg;
+        window.applyDmg = function(target, amount) {
+            if (target === boss && window._passiveAtkMultiplier > 1) {
+                amount = Math.floor(amount * window._passiveAtkMultiplier);
+            }
+            return _innerApply.call(this, target, amount);
+        };
+        window.applyDmg._v1073Mult = true;
+    }
+
+    // =============================================================
+    // 5. Rudá — nova PA (cross escolhida) + passiva AR
+    // =============================================================
+    const _subPA = () => {
+        if (typeof STORY_HERO_PA === 'undefined') return;
+        STORY_HERO_PA['ruda_flecha_amor'] = {
+            desc: 'Cruz 15 tiles em tile escolhido. Dano PA. Passiva: +1 HP ao terminar turno em AR.',
+            execute: async () => { /* V10.73 wrapper cuida */ }
+        };
+    };
+    _subPA();
+    setTimeout(_subPA, 800);
+    setTimeout(_subPA, 2000);
+
+    // Selection UI
+    let _rudaResolve = null;
+    window._rudaSelecting = false;
+
+    function abrirSelecaoRuda() {
+        return new Promise((resolve) => {
+            _rudaResolve = resolve;
+            window._rudaSelecting = true;
+
+            for (let i = 0; i < 64; i++) {
+                const el = document.querySelectorAll('#grid .tile')[i];
+                if (el) el.classList.add('ruda-eligible');
+            }
+
+            let bar = document.getElementById('rudaBar');
+            if (bar) bar.remove();
+            bar = document.createElement('div');
+            bar.id = 'rudaBar';
+            bar.className = 'curupira-bar';
+            bar.innerHTML = `
+                <span class="curupira-bar-icon">🏹</span>
+                <span class="curupira-bar-text">FLECHA DO AMOR: escolha um tile para a cruz</span>
+                <button class="curupira-bar-btn cancel" id="rudaCancelBtn">CANCELAR</button>
+            `;
+            const main = document.querySelector('.game-main');
+            if (main) main.parentNode.insertBefore(bar, main);
+            document.getElementById('rudaCancelBtn').onclick = () => finalizarRuda(true);
+        });
+    }
+
+    function finalizarRuda(cancelado) {
+        document.querySelectorAll('.ruda-eligible, .ruda-selected')
+            .forEach(el => el.classList.remove('ruda-eligible', 'ruda-selected'));
+        const bar = document.getElementById('rudaBar');
+        if (bar) bar.remove();
+        window._rudaSelecting = false;
+
+        if (_rudaResolve) {
+            const r = _rudaResolve;
+            _rudaResolve = null;
+            if (cancelado) r({ cancelado: true });
+            // Else it's handled by handleSelect
+        }
+    }
+
+    const _hs = window.handleSelect;
+    if (typeof _hs === 'function' && !_hs._v1073Ruda) {
+        const _innerHs = _hs;
+        window.handleSelect = function(idx) {
+            if (!window._rudaSelecting) return _innerHs.apply(this, arguments);
+
+            const el = document.querySelectorAll('#grid .tile')[idx];
+            if (!el || !el.classList.contains('ruda-eligible')) {
+                return _innerHs.apply(this, arguments);
+            }
+
+            document.querySelectorAll('.ruda-eligible').forEach(e => e.classList.remove('ruda-eligible'));
+            const bar = document.getElementById('rudaBar');
+            if (bar) bar.remove();
+            window._rudaSelecting = false;
+
+            if (_rudaResolve) {
+                const r = _rudaResolve;
+                _rudaResolve = null;
+                r({ cancelado: false, tile: { x: idx % 8, y: Math.floor(idx / 8) } });
+            }
+        };
+        window.handleSelect._v1073Ruda = true;
+    }
+
+    // Wrapper triggerBravelyChain para Rudá
+    const _brav = window.triggerBravelyChain;
+    if (typeof _brav === 'function' && !_brav._v1073Ruda) {
+        const _innerBrav = _brav;
+        window.triggerBravelyChain = async function(active, target, totalAtk) {
+            if (window._pvpMode || window._coopMode) return _innerBrav.apply(this, arguments);
+
+            const heroData = STORY_HERO_CLASSES[active?.class];
+            if (!heroData || heroData.paKey !== 'ruda_flecha_amor') {
+                return _innerBrav.apply(this, arguments);
+            }
+
+            if (typeof showPoderAncestralEffect === 'function') {
+                try { showPoderAncestralEffect(); } catch(e) {}
+            }
+            await sleep(300);
+            try { playSfx('skill1'); } catch(e) {}
+
+            const chosen = await abrirSelecaoRuda();
+            if (chosen.cancelado) {
+                if (typeof addLog === 'function') addLog('🏹 Rudá: PA cancelado.');
+                return;
+            }
+
+            const tiles = [];
+            for (let i = 0; i < 8; i++) {
+                if (!tiles.includes(i * 8 + chosen.tile.x)) tiles.push(i * 8 + chosen.tile.x);
+                if (!tiles.includes(chosen.tile.y * 8 + i)) tiles.push(chosen.tile.y * 8 + i);
+            }
+
+            tiles.forEach((idx, i) => {
+                setTimeout(() => {
+                    if (typeof spawnFxAt === 'function') {
+                        spawnFxAt('impact', 'fx-impact',
+                            idx % 8, Math.floor(idx / 8),
+                            { duration: 500, scale: 0.7 });
+                    }
+                }, i * 30);
+            });
+
+            await sleep(500);
+
+            if (target && !target.dead) {
+                const bossIdx = target.y * 8 + target.x;
+                if (tiles.includes(bossIdx)) {
+                    if (typeof applyDmg === 'function') applyDmg(target, totalAtk);
+                }
+            }
+
+            tiles.forEach(idx => {
+                grid[idx] = 'AR';
+                const el = document.querySelectorAll('#grid .tile')[idx];
+                if (el) el.className = 'tile bg-AR';
+            });
+
+            if (typeof addLog === 'function')
+                addLog(`🏹 Rudá: Cruz de Ar em (${chosen.tile.x},${chosen.tile.y})!`);
+            if (typeof updateVisuals === 'function') updateVisuals();
+            if (typeof updateTitleStats === 'function') updateTitleStats('bravely_chain');
+        };
+        window.triggerBravelyChain._v1073Ruda = true;
+    }
+
+    // Rudá passiva: +1 HP ao terminar turno em AR
+    const _execPassiva = window.executeAction;
+    if (typeof _execPassiva === 'function' && !_execPassiva._v1073RudaPass) {
+        const _innerExec = _execPassiva;
+        window.executeAction = async function() {
+            const r = await _innerExec.apply(this, arguments);
+
+            if (!window._pvpMode && !window._coopMode) {
+                const active = players?.[currentPlayerIdx];
+                if (active?.class === 'Rudá' && !active.dead) {
+                    const idx = active.y * 8 + active.x;
+                    if (grid[idx] === 'AR') {
+                        active.hp = Math.min(active.maxHp, active.hp + 1);
+                        if (typeof showHealEffect === 'function')
+                            showHealEffect(active.x, active.y, 1);
+                        if (typeof updateHeroCard === 'function') updateHeroCard();
+                    }
+                }
+            }
+
+            return r;
+        };
+        window.executeAction._v1073RudaPass = true;
+    }
+
+    window._debugV1073 = function() {
+        console.log('═══ [V10.73] Passivas ═══');
+        ['Tupinambá', 'Negrinho do Pastoreio', 'Kianumanka-Manã', 'Rudá'].forEach(n => {
+            console.log(`${n}:`, STORY_HERO_CLASSES?.[n]?.passive || '(sem)');
+        });
+    };
+
+    console.log('✅ [V10.73] Tupinambá + Negrinho + Kianumanka + Rudá.');
+})();
+// =================================================================
+// historia.js — V10.74 (UI: passiva no "?" + botão na batalha)
+// =================================================================
+
+(function uiPassivasV1074() {
+    if (window._uiPassivasV1074) return;
+    window._uiPassivasV1074 = true;
+
+    // =============================================================
+    // 1. CSS
+    // =============================================================
+    if (!document.getElementById('uiPassivasV1074CSS')) {
+        const style = document.createElement('style');
+        style.id = 'uiPassivasV1074CSS';
+        style.textContent = `
+            .hero-details-section.hero-details-passive {
+                background: rgba(142, 68, 173, 0.08);
+                border-left: 3px solid #8e44ad;
+            }
+            .hero-details-passive .hero-details-pa-name {
+                color: #c39bd3;
+                font-size: 1rem;
+            }
+            .hero-battle-details-btn {
+                width: 22px; height: 22px;
+                padding: 0;
+                margin-left: auto;
+                border-radius: 50%;
+                background: linear-gradient(135deg, #3a7ca5, #1e4a70);
+                color: #d0e8f5;
+                border: 1px solid #4a8cb5;
+                font-family: 'Cinzel', serif;
+                font-weight: 900;
+                font-size: 0.7rem;
+                cursor: pointer;
+                display: flex; align-items: center; justify-content: center;
+                flex-shrink: 0;
+                transition: all 0.15s;
+            }
+            .hero-battle-details-btn:hover {
+                transform: scale(1.15);
+                background: linear-gradient(135deg, #4a8cb5, #2a5570);
+                box-shadow: 0 0 10px rgba(74, 140, 181, 0.6);
+            }
+            .battle-hero-modal-overlay {
+                position: fixed; inset: 0;
+                background: rgba(10, 6, 2, 0.92);
+                z-index: 21000;
+                display: flex; align-items: center; justify-content: center;
+                padding: 20px;
+                animation: fadeInBH 0.2s;
+            }
+            @keyframes fadeInBH { from { opacity: 0; } to { opacity: 1; } }
+            .battle-hero-modal-panel {
+                background: linear-gradient(180deg, #2a1f10, #1a1208);
+                border: 2px solid #c9a227;
+                border-radius: 8px;
+                max-width: 460px; width: 100%;
+                max-height: 85vh; overflow-y: auto;
+                box-shadow: 0 20px 60px rgba(0,0,0,0.9);
+            }
+            .battle-hero-modal-header {
+                display: flex; align-items: center; gap: 12px;
+                padding: 16px 20px;
+                border-bottom: 2px solid rgba(201, 162, 39, 0.3);
+                background: rgba(10, 6, 2, 0.5);
+            }
+            .battle-hero-modal-sprite { width: 48px; height: 48px; object-fit: contain; }
+            .battle-hero-modal-name {
+                font-family: 'Cinzel', serif;
+                color: #e8b923; font-size: 1.1rem;
+                letter-spacing: 1px; flex: 1;
+            }
+            .battle-hero-modal-close {
+                width: 28px; height: 28px;
+                background: #6a2020; color: #f5c8c8;
+                border: 1px solid #a83232; border-radius: 50%;
+                cursor: pointer; font-weight: 700;
+            }
+            .battle-hero-modal-body { padding: 16px 20px; }
+            .battle-hero-modal-section {
+                margin-bottom: 16px;
+                padding-bottom: 12px;
+                border-bottom: 1px solid rgba(201, 162, 39, 0.15);
+            }
+            .battle-hero-modal-section:last-child { border-bottom: none; }
+            .battle-hero-modal-section-title {
+                font-family: 'Cinzel', serif;
+                color: #8a7a52; font-size: 0.75rem;
+                letter-spacing: 2px; text-transform: uppercase;
+                margin-bottom: 8px;
+            }
+            .battle-hero-modal-line {
+                font-family: 'EB Garamond', serif;
+                color: #d9c89a; font-size: 0.95rem;
+                margin-bottom: 6px; line-height: 1.4;
+            }
+            .battle-hero-modal-line b { color: #e8b923; }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // =============================================================
+    // 2. Injeta passiva no painel "?" do herói
+    // =============================================================
+    const _openDetails = window.openHeroDetails;
+    if (typeof _openDetails === 'function' && !_openDetails._v1074) {
+        const _inner = _openDetails;
+        window.openHeroDetails = function(heroClass) {
+            _inner.apply(this, arguments);
+
+            setTimeout(() => {
+                const panel = document.querySelector('.hero-details-panel');
+                if (!panel || panel.querySelector('.hero-details-passive')) return;
+
+                const heroData = STORY_HERO_CLASSES[heroClass];
+                if (!heroData?.passive) return;
+
+                const meta = window.PASSIVE_DISPLAY?.[heroData.passive];
+                if (!meta) return;
+
+                const section = document.createElement('div');
+                section.className = 'hero-details-section hero-details-passive';
+                section.innerHTML = `
+                    <div class="hero-details-section-title">⭐ PASSIVA</div>
+                    <div class="hero-details-pa-name">${meta.name}</div>
+                    <div class="hero-details-pa-desc">${meta.desc}</div>
+                `;
+
+                const notas = panel.querySelector('.hero-details-notes');
+                if (notas) notas.parentNode.insertBefore(section, notas);
+                else panel.appendChild(section);
+            }, 150);
+        };
+        window.openHeroDetails._v1074 = true;
+    }
+
+    // =============================================================
+    // 3. Botão "?" nos heróis durante a batalha
+    // =============================================================
+    function injetarBotoesBatalha() {
+        const rows = document.querySelectorAll('.hero-status-row');
+        rows.forEach((row, idx) => {
+            if (row.querySelector('.hero-battle-details-btn')) return;
+            const p = players?.[idx];
+            if (!p) return;
+
+            const btn = document.createElement('button');
+            btn.className = 'hero-battle-details-btn';
+            btn.textContent = '?';
+            btn.title = 'Ver detalhes do herói';
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                window.openBattleHeroDetails(idx);
+            };
+            row.appendChild(btn);
+        });
+    }
+
+    window.openBattleHeroDetails = function(idx) {
+        const p = players?.[idx];
+        if (!p) return;
+
+        const heroData = STORY_HERO_CLASSES[p.class];
+        if (!heroData) return;
+
+        const meta = window.PASSIVE_DISPLAY?.[heroData.passive];
+        const equip = (typeof getHeroEquipment === 'function') ? getHeroEquipment(p.class) : null;
+        const weapon = (equip?.arma && typeof getWeaponById === 'function') ? getWeaponById(equip.arma) : null;
+        const amulet = (equip?.amuleto && typeof getAmuletById === 'function') ? getAmuletById(equip.amuleto) : null;
+
+        const old = document.getElementById('battleHeroModal');
+        if (old) old.remove();
+
+        const overlay = document.createElement('div');
+        overlay.id = 'battleHeroModal';
+        overlay.className = 'battle-hero-modal-overlay';
+        overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+
+        const paDesc = (typeof STORY_HERO_PA !== 'undefined' && heroData.paKey)
+            ? (STORY_HERO_PA[heroData.paKey]?.desc || '')
+            : '';
+
+        overlay.innerHTML = `
+            <div class="battle-hero-modal-panel">
+                <div class="battle-hero-modal-header">
+                    <img src="${SPRITES[p.class] || ''}" class="battle-hero-modal-sprite">
+                    <div class="battle-hero-modal-name">${heroData.displayName || p.class}</div>
+                    <button class="battle-hero-modal-close" onclick="document.getElementById('battleHeroModal').remove()">✕</button>
+                </div>
+                <div class="battle-hero-modal-body">
+                    <div class="battle-hero-modal-section">
+                        <div class="battle-hero-modal-section-title">📊 Atributos</div>
+                        <div class="battle-hero-modal-line">
+                            HP: <b>${p.hp}</b> / ${p.maxHp}
+                        </div>
+                        <div class="battle-hero-modal-line">
+                            Papel: <b>${heroData.role}</b>
+                        </div>
+                        <div class="battle-hero-modal-line">
+                            Elemento: <b>${p.element || '—'}</b>
+                        </div>
+                    </div>
+
+                    ${weapon ? `
+                    <div class="battle-hero-modal-section">
+                        <div class="battle-hero-modal-section-title">⚔️ Arma</div>
+                        <div class="battle-hero-modal-line">${weapon.nome}</div>
+                        <div class="battle-hero-modal-line">
+                            +${weapon.atkBonus} ATK · ${weapon.elemento === 'ANY' ? '✨ Abissal' : weapon.elemento}
+                        </div>
+                    </div>` : ''}
+
+                    ${amulet ? `
+                    <div class="battle-hero-modal-section">
+                        <div class="battle-hero-modal-section-title">🧿 Amuleto</div>
+                        <div class="battle-hero-modal-line">${amulet.nome}</div>
+                    </div>` : ''}
+
+                    ${paDesc ? `
+                    <div class="battle-hero-modal-section">
+                        <div class="battle-hero-modal-section-title">⚡ Poder Ancestral</div>
+                        <div class="battle-hero-modal-line">${paDesc}</div>
+                    </div>` : ''}
+
+                    ${meta ? `
+                    <div class="battle-hero-modal-section">
+                        <div class="battle-hero-modal-section-title">⭐ Passiva — ${meta.name}</div>
+                        <div class="battle-hero-modal-line">${meta.desc}</div>
+                    </div>` : ''}
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+    };
+
+    // Observer para injetar botões quando a lista de heróis re-renderizar
+    try {
+        const obs = new MutationObserver(() => {
+            if (window._pvpMode || window._coopMode) return;
+            const list = document.getElementById('heroesStatusList');
+            if (list && list.children.length > 0) {
+                injetarBotoesBatalha();
+            }
+        });
+        obs.observe(document.body, { childList: true, subtree: true });
+    } catch (e) {}
+
+    // Rodadas iniciais
+    setTimeout(injetarBotoesBatalha, 800);
+    setTimeout(injetarBotoesBatalha, 2000);
+    setTimeout(injetarBotoesBatalha, 4000);
+
+    window._debugUIV1074 = function() {
+        console.log('═══ [V10.74] UI ═══');
+        console.log('Botões na batalha:', document.querySelectorAll('.hero-battle-details-btn').length);
+        console.log('openBattleHeroDetails?', typeof window.openBattleHeroDetails);
+        console.log('PASSIVE_DISPLAY total:', Object.keys(window.PASSIVE_DISPLAY || {}).length);
+    };
+
+    console.log('✅ [V10.74] UI: passiva no "?" + botão na batalha.');
+})();
+// =================================================================
+// historia.js — V10.75 (Cards OCA + Batalha unificados)
+// -----------------------------------------------------------------
+// Problema:
+//   • STORY_HERO_DETAILS ainda tem descrições antigas (5×5, só self)
+//   • renderPAMiniGrid mostra tiles antigos
+//   • Battle modal tinha conteúdo próprio (parcialmente atualizado)
+//
+// Fix:
+//   1. Atualiza STORY_HERO_DETAILS para os 10 heróis alterados
+//   2. Corrige renderPAMiniGrid para as PAs novas
+//   3. Battle modal REUSA o mesmo conteúdo da OCA (fonte única)
+// =================================================================
+
+(function fixOCACardsV1075() {
+    if (window._fixOCACardsV1075) return;
+    window._fixOCACardsV1075 = true;
+
+    // =============================================================
+    // 1. STORY_HERO_DETAILS — mutação (Object.assign)
+    // =============================================================
+    if (typeof STORY_HERO_DETAILS !== 'undefined') {
+        Object.assign(STORY_HERO_DETAILS, {
+            'Mãe da Mata': {
+                paName: 'Floração Ancestral',
+                paDesc: 'Mãe da Mata abre os braços e o chão floresce em uma área 3×3 ao seu redor. Flores, trepadeiras e cogumelos luminosos brotam do solo enquanto ela cura as feridas de si mesma e de todos os aliados na área.',
+                paExtra: 'Área 3×3 (9 tiles). Cura 4 HP em si + aliados.',
+                tactical: 'Alcance: 4 (ataca à distância).',
+                notes: 'Passiva: +1 em toda cura. Todos os PAs de cura afetam ela e aliados.'
+            },
+            'Anduré': {
+                paName: 'Esfera Curativa',
+                paDesc: 'Anduré levita e uma esfera de água pura se forma ao seu redor. A energia sagrada cura suas feridas e as de todos os aliados próximos.',
+                paExtra: 'Área 3×3 (9 tiles). Cura 3 HP em si + aliados.',
+                tactical: 'Alcance: 4 (ataca à distância).',
+                notes: 'Todos os PAs de cura afetam ela e aliados.'
+            },
+            'Negrinho do Pastoreio': {
+                paName: 'Cruz Curativa',
+                paDesc: 'Negrinho invoca uma cruz de água pura a partir do alvo. O dano PA atinge o boss, e uma luz sagrada cura ele e todos os aliados na cruz.',
+                paExtra: 'Cruz inteira (15 tiles). Cura 5 HP em si + aliados na cruz.',
+                tactical: 'Alcance: 4 (ataca à distância).',
+                notes: 'Passiva: 50% de chance de reviver com 1 HP (só solo/história).'
+            },
+            'Curupira': {
+                paName: 'Chuva de Flechas',
+                paDesc: 'Curupira escolhe até 10 tiles AR/AGUA/TERRA no tabuleiro. Cada um se transforma em TERRA, e flechas caem sobre eles. Se o boss estiver em um deles, o dano é dobrado.',
+                paExtra: 'Até 10 tiles AR/AGUA/TERRA à sua escolha. Convertem pra TERRA. Dano ×2 se boss neles.',
+                tactical: 'Alcance: 3 (ataca à distância).',
+                notes: 'Passiva: 150% de dano contra inimigos adjacentes.'
+            },
+            'Anhanga-Mirim': {
+                paName: 'Raio na Cruz',
+                paDesc: 'Anhanga-Mirim concentra o poder das trevas e invoca uma cruz completa de raios a partir do alvo. O dano é devastador (150%) e a energia purifica qualquer corrupção dentro da cruz.',
+                paExtra: 'Cruz completa (15 tiles) no alvo. Dano 150% PA. Purifica corrupção na cruz.',
+                tactical: 'Alcance: 4 (ataca à distância). Herói de 5⭐.',
+                notes: 'Difícil de conseguir (zerar Pesadelo). PA com utilidade única.'
+            },
+            'Rudá': {
+                paName: 'Flecha do Amor',
+                paDesc: 'Rudá dispara uma flecha de luz pura que escolhe qualquer tile do tabuleiro. Uma cruz completa de raios atinge tudo. Se o boss estiver nela, sofre dano PA.',
+                paExtra: 'Cruz completa (15 tiles) em qualquer tile escolhido. Dano PA no boss se atingido.',
+                tactical: 'Alcance: 3 (ataca à distância).',
+                notes: 'Passiva: recupera 1 HP ao terminar turno em tile de AR.'
+            },
+            'Mãe-do-Ouro': {
+                paName: 'Caminho Explosivo',
+                paDesc: 'Mãe-do-Ouro traça um caminho de terra até o boss, explodindo tudo no percurso. Se o caminho for curto (< 4 tiles), o poder se concentra em uma explosão 3×3 ao redor do boss.',
+                paExtra: 'Caminho herói→boss. Se path < 4: 3×3 no boss (passiva Rota Explosiva).',
+                tactical: 'Alcance: 4 (ataca à distância).',
+                notes: 'Passiva: Rota Explosiva ativa quando path é curto.'
+            },
+            'Kianumanka-Manã': {
+                paName: 'Meteoro',
+                paDesc: 'Kianumanka invoca um meteoro que cai sobre o boss. A área 3×3 ao redor dele é consumida por chamas, convertendo os tiles pra FOGO.',
+                paExtra: 'Área 3×3 no boss. Converte pra FOGO. Dano PA.',
+                tactical: 'Alcance: 1 (corpo a corpo). 16 HP.',
+                notes: 'Passiva: 150% de dano se o boss estiver em tile de FOGO.'
+            },
+            'Tupinambá': {
+                paName: 'Avalanche Tribal',
+                paDesc: 'Tupinambá bate no chão e uma avalanche de pedras e terra desce sobre o boss em forma de cruz. O impacto empurra o inimigo pra longe.',
+                paExtra: 'Cruz (linha + coluna do boss). Empurra 2 tiles. Dano PA.',
+                tactical: 'Alcance: 1 (corpo a corpo). 20 HP.',
+                notes: 'Passiva: reduz 1 de todo dano recebido.'
+            },
+            'Matinta Pereira': {
+                paName: 'Rajada Fantasma',
+                paDesc: 'Matinta Pereira usa sua natureza assombrada pra empurrar o inimigo de uma borda a outra do tabuleiro, causando dano PA em cada colisão.',
+                paExtra: 'Empurra boss 2× (bordas opostas). Dano PA em cada colisão.',
+                tactical: 'Alcance: 3 (ataca à distância).',
+                notes: 'Passiva: enquanto viva e adjacente ao boss, boss causa -1 de dano.'
+            }
+        });
+        console.log('[V10.75] STORY_HERO_DETAILS atualizado (10 heróis).');
+    }
+
+    // =============================================================
+    // 2. renderPAMiniGrid — corrigido para as PAs novas
+    // =============================================================
+    const _origRenderPA = window.renderPAMiniGrid;
+    if (typeof _origRenderPA === 'function' && !_origRenderPA._v1075) {
+        window.renderPAMiniGrid = function(heroClass) {
+            const heroData = (typeof STORY_HERO_CLASSES !== 'undefined')
+                ? STORY_HERO_CLASSES[heroClass] : null;
+            if (!heroData) return _origRenderPA.apply(this, arguments);
+
+            const paKey = heroData.paKey;
+            const gridSize = 8;
+            const CX = 3, CY = 4;
+            const targetMock = { x: 3, y: 2 };
+            const afetados = Array.from({ length: gridSize }, () => Array(gridSize).fill(false));
+            const mark = (x, y) => {
+                if (x >= 0 && x < gridSize && y >= 0 && y < gridSize) afetados[y][x] = true;
+            };
+
+            let custom = false;
+
+            if (paKey === 'maedamata_area3x3_cura') {
+                custom = true;
+                for (let dx = -1; dx <= 1; dx++)
+                    for (let dy = -1; dy <= 1; dy++) mark(CX + dx, CY + dy);
+            }
+            else if (paKey === 'andure_area2x2_cura') {
+                custom = true;
+                for (let dx = -1; dx <= 1; dx++)
+                    for (let dy = -1; dy <= 1; dy++) mark(CX + dx, CY + dy);
+            }
+            else if (paKey === 'negrinho_cruz_cura' ||
+                     paKey === 'anhanga_mirim_raio' ||
+                     paKey === 'ruda_flecha_amor' ||
+                     paKey === 'tupinamba_avalanche') {
+                custom = true;
+                for (let x = 0; x < gridSize; x++) mark(x, targetMock.y);
+                for (let y = 0; y < gridSize; y++) mark(targetMock.x, y);
+            }
+            else if (paKey === 'curupira_chuva_flechas') {
+                custom = true;
+                // Espalhados pelo tabuleiro (amostra visual)
+                [
+                    {x:0,y:0},{x:2,y:1},{x:5,y:1},{x:7,y:2},
+                    {x:1,y:3},{x:4,y:3},{x:6,y:4},{x:0,y:5},
+                    {x:3,y:6},{x:5,y:6}
+                ].forEach(t => mark(t.x, t.y));
+            }
+            else if (paKey === 'maedouro_caminho') {
+                custom = true;
+                // Caminho herói → alvo
+                for (let x = CX; x <= targetMock.x; x++) mark(x, CY);
+                for (let y = targetMock.y; y <= CY; y++) mark(targetMock.x, y);
+                // Rota Explosiva (3×3 no alvo)
+                for (let dx = -1; dx <= 1; dx++)
+                    for (let dy = -1; dy <= 1; dy++) mark(targetMock.x + dx, targetMock.y + dy);
+            }
+            else if (paKey === 'kianumanka_meteoro') {
+                custom = true;
+                for (let dx = -1; dx <= 1; dx++)
+                    for (let dy = -1; dy <= 1; dy++) mark(targetMock.x + dx, targetMock.y + dy);
+            }
+            else if (paKey === 'matinta_rajada') {
+                custom = true;
+                for (let x = 0; x < gridSize; x++) mark(x, CY);
+            }
+
+            if (!custom) return _origRenderPA.apply(this, arguments);
+
+            const heroElement = heroData.element || 'FOGO';
+            const ELEMENT_COLORS = { FOGO:'bg-FOGO', AGUA:'bg-AGUA', TERRA:'bg-TERRA', AR:'bg-AR' };
+            const baseClass = ELEMENT_COLORS[heroElement] || 'bg-FOGO';
+
+            let html = '<div class="pa-mini-grid">';
+            for (let y = 0; y < gridSize; y++) {
+                for (let x = 0; x < gridSize; x++) {
+                    const isHero = (x === CX && y === CY);
+                    const isAfetado = afetados[y][x];
+                    let cls = 'pa-mini-tile';
+                    if (isHero) cls += ' pa-mini-hero ' + baseClass;
+                    else if (isAfetado) cls += ' pa-mini-afetado ' + baseClass;
+                    else cls += ' pa-mini-vazio';
+                    html += `<div class="${cls}">${isHero ? '⭐' : ''}</div>`;
+                }
+            }
+            html += '</div>';
+            return html;
+        };
+        window.renderPAMiniGrid._v1075 = true;
+        console.log('[V10.75] renderPAMiniGrid atualizado.');
+    }
+
+    // =============================================================
+    // 3. CSS unificado
+    // =============================================================
+    if (!document.getElementById('v1075CSS')) {
+        const style = document.createElement('style');
+        style.id = 'v1075CSS';
+        style.textContent = `
+            /* Battle modal: usa as classes .hero-details-* sem duplicar padding */
+            .battle-hero-modal-body { padding: 0 !important; }
+            .battle-hero-modal-body .hero-details-section { border-bottom: 1px solid rgba(201, 162, 39, 0.15); }
+            .battle-hero-modal-body .hero-details-section:last-child { border-bottom: none; }
+            .battle-hero-modal-body .hero-details-stat-value { font-size: 1rem; }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // =============================================================
+    // 4. openBattleHeroDetails — unificado com OCA
+    // =============================================================
+    window.openBattleHeroDetails = function(idx) {
+        const p = players?.[idx];
+        if (!p) return;
+
+        const heroClass = p.class;
+        const heroData = (typeof STORY_HERO_CLASSES !== 'undefined')
+            ? STORY_HERO_CLASSES[heroClass] : null;
+        if (!heroData) return;
+
+        const details = STORY_HERO_DETAILS[heroClass] || {};
+        const meta = window.PASSIVE_DISPLAY?.[heroData.passive];
+        const equip = (typeof getHeroEquipment === 'function') ? getHeroEquipment(heroClass) : null;
+        const weapon = (equip?.arma && typeof getWeaponById === 'function') ? getWeaponById(equip.arma) : null;
+        const amulet = (equip?.amuleto && typeof getAmuletById === 'function') ? getAmuletById(equip.amuleto) : null;
+
+        const old = document.getElementById('battleHeroModal');
+        if (old) old.remove();
+
+        const overlay = document.createElement('div');
+        overlay.id = 'battleHeroModal';
+        overlay.className = 'battle-hero-modal-overlay';
+        overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+
+        const spriteSrc = (typeof SPRITES !== 'undefined' && SPRITES[heroClass]) || '';
+        const elColor = { FOGO:'#e74c3c', AGUA:'#3498db', TERRA:'#27ae60', AR:'#f1c40f' }[p.element] || '#c8b787';
+
+        const statsHTML = `
+            <div class="hero-details-stats">
+                <div class="hero-details-stat">
+                    <div class="hero-details-stat-label">HP</div>
+                    <div class="hero-details-stat-value">${p.hp}/${p.maxHp}</div>
+                </div>
+                <div class="hero-details-stat">
+                    <div class="hero-details-stat-label">ATK</div>
+                    <div class="hero-details-stat-value">${(typeof CLASS_DB !== 'undefined' && CLASS_DB[heroClass]?.atk) ?? '?'}</div>
+                </div>
+                <div class="hero-details-stat">
+                    <div class="hero-details-stat-label">Alcance</div>
+                    <div class="hero-details-stat-value">${(heroData.range === 0) ? '1 (corpo)' : (heroData.range || '?')}</div>
+                </div>
+                <div class="hero-details-stat">
+                    <div class="hero-details-stat-label">Papel</div>
+                    <div class="hero-details-stat-value">${heroData.role}</div>
+                </div>
+            </div>
+        `;
+
+        const miniGrid = (typeof window.renderPAMiniGrid === 'function')
+            ? window.renderPAMiniGrid(heroClass) : '';
+
+        const equipHTML = (weapon || amulet) ? `
+            <div class="hero-details-section">
+                <div class="hero-details-section-title">⚔️ EQUIPAMENTO</div>
+                ${weapon ? `<div class="battle-hero-modal-line">⚔️ <b>${weapon.nome}</b> — +${weapon.atkBonus} ATK · ${weapon.elemento === 'ANY' ? '✨ Abissal' : weapon.elemento}</div>` : ''}
+                ${amulet ? `<div class="battle-hero-modal-line">🧿 <b>${amulet.nome}</b></div>` : ''}
+            </div>
+        ` : '';
+
+        const paHTML = details.paName ? `
+            <div class="hero-details-section">
+                <div class="hero-details-section-title">⚡ PODER ANCESTRAL</div>
+                <div class="hero-details-pa-name">${details.paName}</div>
+                <div class="hero-details-pa-desc">${details.paDesc || ''}</div>
+                ${details.paExtra ? `<div class="hero-details-pa-extra">${details.paExtra}</div>` : ''}
+            </div>
+        ` : '';
+
+        const areaHTML = miniGrid ? `
+            <div class="hero-details-section">
+                <div class="hero-details-section-title">🎯 ÁREA AFETADA</div>
+                <div class="hero-details-pa-image-wrap">${miniGrid}</div>
+                <div class="hero-details-legend">
+                    <span class="hero-details-legend-item"><span class="hero-details-legend-mark pa-mini-hero-mark">⭐</span> Herói</span>
+                    <span class="hero-details-legend-item"><span class="hero-details-legend-mark pa-mini-afetado-mark"></span> Tile afetado</span>
+                </div>
+            </div>
+        ` : '';
+
+        const passiveHTML = meta ? `
+            <div class="hero-details-section hero-details-passive">
+                <div class="hero-details-section-title">⭐ PASSIVA — ${meta.name}</div>
+                <div class="hero-details-pa-desc">${meta.desc}</div>
+            </div>
+        ` : '';
+
+        const notesHTML = details.notes ? `
+            <div class="hero-details-section hero-details-notes">
+                <div class="hero-details-section-title">📝 NOTAS</div>
+                <div class="hero-details-note">${details.notes}</div>
+            </div>
+        ` : '';
+
+        overlay.innerHTML = `
+            <div class="battle-hero-modal-panel">
+                <div class="battle-hero-modal-header">
+                    <img src="${spriteSrc}" class="battle-hero-modal-sprite" onerror="this.style.display='none'">
+                    <div class="battle-hero-modal-name">
+                        ${heroData.displayName || heroClass}
+                        <span style="font-size:0.75rem; color:${elColor}; margin-left:6px;">${p.element || ''}</span>
+                    </div>
+                    <button class="battle-hero-modal-close" onclick="document.getElementById('battleHeroModal').remove()">✕</button>
+                </div>
+                <div class="battle-hero-modal-body">
+                    <div class="hero-details-section">
+                        <div class="hero-details-section-title">📊 ATRIBUTOS</div>
+                        ${statsHTML}
+                    </div>
+                    ${equipHTML}
+                    ${paHTML}
+                    ${areaHTML}
+                    ${passiveHTML}
+                    ${notesHTML}
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V10.75] Cards OCA + Batalha unificados');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• STORY_HERO_DETAILS: 10 heróis atualizados');
+    console.log('• renderPAMiniGrid: 8 PAs corrigidas (3×3, cruz, etc.)');
+    console.log('• Battle modal usa o mesmo conteúdo da OCA');
+    console.log('═══════════════════════════════════════════════════');
+})();

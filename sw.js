@@ -7,7 +7,7 @@
 //    instalar a nova versão e apagar o cache antigo.
 // =================================================================
 
-const CACHE_VERSION = 'v21'; // ← MUDE A CADA DEPLOY
+const CACHE_VERSION = 'v22'; // ← MUDE A CADA DEPLOY
 const CACHE_NAME    = `entidades-cache-${CACHE_VERSION}`;
 
 // =================================================================
@@ -23,6 +23,7 @@ const PRECACHE_URLS = [
     './manifest.json',
     './entidades.js',
     './historia.js',
+    './fx.js',
     './coop.js',
     './pvp.js',
     './icon-192.png',
