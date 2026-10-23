@@ -1037,3 +1037,552 @@
     console.log('   _debugAldeiaResp()        → status');
     console.log('═══════════════════════════════════════════════════');
 })();
+// =================================================================
+// aldeia.js — PATCH V1.3 (Posições Independentes Desktop/Mobile)
+// -----------------------------------------------------------------
+// 1. Adiciona xMobile e yMobile na configuração
+// 2. Remove a grade automática do mobile (ícones voltam a flutuar)
+// 3. Calibração salva separadamente para cada tela
+// =================================================================
+
+(function aldeiaPosicoesV1_3() {
+    if (window._aldeiaPosicoesV1_3) return;
+    window._aldeiaPosicoesV1_3 = true;
+
+    // =============================================================
+    // 1. INJETAR COORDENADAS MOBILE NA CONFIGURAÇÃO
+    // -------------------------------------------------------------
+    // Baseado numa imagem vertical 9:16 (ex: 1080x1920).
+    // Ajuste esses valores iniciais se necessário.
+    // =============================================================
+    const posicoesMobilePadrao = {
+        evento:     { xMobile: 50, yMobile: 10 },
+        coop:       { xMobile: 30, yMobile: 22 },
+        pvp:        { xMobile: 70, yMobile: 22 },
+        tesouraria: { xMobile: 25, yMobile: 38 },
+        ritual:     { xMobile: 50, yMobile: 50 },
+        bestiario:  { xMobile: 75, yMobile: 38 },
+        atos:       { xMobile: 25, yMobile: 65 },
+        loja:       { xMobile: 50, yMobile: 78 },
+        oca:        { xMobile: 75, yMobile: 65 },
+    };
+
+    if (typeof window.ALDEIA_CONFIG !== 'undefined' && window.ALDEIA_CONFIG.locations) {
+        window.ALDEIA_CONFIG.locations.forEach(loc => {
+            if (posicoesMobilePadrao[loc.id]) {
+                // Só adiciona se ainda não existir (para não sobrescrever saves antigos)
+                if (loc.xMobile === undefined) {
+                    loc.xMobile = posicoesMobilePadrao[loc.id].xMobile;
+                    loc.yMobile = posicoesMobilePadrao[loc.id].yMobile;
+                }
+            }
+        });
+    }
+
+    // =============================================================
+    // 2. SOBRESCREVER O CSS PADRÃO (Remover a Grade Mobile)
+    // -------------------------------------------------------------
+    // O V1 original forçava grid no mobile. Agora vamos permitir
+    // que os ícones flutuem usando as coordenadas xMobile/yMobile.
+    // =============================================================
+    if (!document.getElementById('aldeiaV13CSS')) {
+        const style = document.createElement('style');
+        style.id = 'aldeiaV13CSS';
+        style.textContent = `
+            /* Força os ícones a flutuarem em qualquer tela */
+            @media (max-width: 700px) {
+                .aldeia-icones-wrap {
+                    display: block !important; /* Remove o flex/grid */
+                    min-height: 100vh !important;
+                    padding: 0 !important;
+                }
+                .aldeia-icone {
+                    position: absolute !important;
+                    transform: translate(-50%, -50%) !important;
+                    width: auto !important;
+                    margin: 0 !important;
+                    max-width: none !important;
+                }
+                .aldeia-icone:hover {
+                    transform: translate(-50%, -50%) scale(1.15) !important;
+                }
+                .aldeia-icone-icon {
+                    width: 60px; /* Ícones um pouco menores no celular */
+                    height: 60px;
+                    font-size: 2.5rem;
+                }
+                .aldeia-icone-label {
+                    font-size: 0.65rem;
+                }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // =============================================================
+    // 3. HELPER PARA SABER SE É MOBILE
+    // =============================================================
+    function isMobile() {
+        return window.matchMedia('(max-width: 700px)').matches
+            || window.matchMedia('(orientation: portrait)').matches;
+    }
+
+    // =============================================================
+    // 4. HOOK NO RENDER (Usar x/y ou xMobile/yMobile)
+    // =============================================================
+    const _installRenderHook = () => {
+        if (typeof window.renderAldeiaScreen !== 'function') return false;
+        if (window.renderAldeiaScreen._aldeiaV13) return true;
+
+        const _orig = window.renderAldeiaScreen;
+        window.renderAldeiaScreen = function() {
+            const r = _orig.apply(this, arguments);
+            
+            // Após o render, corrige as posições dos ícones
+            setTimeout(() => {
+                const mob = isMobile();
+                const icones = document.querySelectorAll('.aldeia-icone');
+                
+                icones.forEach(el => {
+                    const id = el.getAttribute('data-id');
+                    const loc = window.ALDEIA_CONFIG?.locations?.find(l => l.id === id);
+                    if (!loc) return;
+
+                    const px = (mob && loc.xMobile !== undefined) ? loc.xMobile : loc.x;
+                    const py = (mob && loc.yMobile !== undefined) ? loc.yMobile : loc.y;
+
+                    el.style.left = px + '%';
+                    el.style.top = py + '%';
+                });
+            }, 10);
+            
+            return r;
+        };
+        window.renderAldeiaScreen._aldeiaV13 = true;
+        return true;
+    };
+    if (!_installRenderHook()) {
+        const t = setInterval(() => { if (_installRenderHook()) clearInterval(t); }, 200);
+    }
+
+    // =============================================================
+    // 5. ATUALIZAR A CALIBRAÇÃO (Salvar Desktop e Mobile Sep.)
+    // =============================================================
+    const _origCalibrar = window.calibrarAldeia;
+    if (typeof _origCalibrar === 'function') {
+        window.calibrarAldeia = function(enable) {
+            // Se estiver ativando a calibração
+            const ativar = (enable !== undefined) ? !!enable : !document.body.classList.contains('aldeia-calib-mode');
+            
+            if (ativar) {
+                const mob = isMobile();
+                console.log(`[calibração] Modo: ${mob ? 'MOBILE' : 'DESKTOP'}. Arraste e salve.`);
+                
+                // Modifica o drag para salvar na propriedade correta
+                const _ativarDrag = () => {
+                    const icones = document.querySelectorAll('.aldeia-icone');
+                    icones.forEach(el => {
+                        const id = el.getAttribute('data-id');
+                        const loc = window.ALDEIA_CONFIG?.locations?.find(l => l.id === id);
+                        if (!loc) return;
+
+                        let badge = el.querySelector('.aldeia-calib-badge');
+                        if (!badge) {
+                            badge = document.createElement('div');
+                            badge.className = 'aldeia-calib-badge';
+                            el.appendChild(badge);
+                        }
+
+                        const px = (mob && loc.xMobile !== undefined) ? loc.xMobile : loc.x;
+                        const py = (mob && loc.yMobile !== undefined) ? loc.yMobile : loc.y;
+                        badge.textContent = `${px.toFixed(1)}%, ${py.toFixed(1)}%`;
+
+                        el.onmousedown = null;
+                        el.ontouchstart = null;
+
+                        const iniciar = (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const wrap = document.getElementById('aldeiaIconesWrap');
+                            if (!wrap) return;
+                            const rect = wrap.getBoundingClientRect();
+
+                            const mover = (ev) => {
+                                ev.preventDefault();
+                                const point = ev.touches?.[0] || ev;
+                                const x = Math.max(2, Math.min(98, ((point.clientX - rect.left) / rect.width) * 100));
+                                const y = Math.max(2, Math.min(98, ((point.clientY - rect.top) / rect.height) * 100));
+
+                                if (mob) {
+                                    loc.xMobile = x;
+                                    loc.yMobile = y;
+                                } else {
+                                    loc.x = x;
+                                    loc.y = y;
+                                }
+
+                                el.style.left = x + '%';
+                                el.style.top = y + '%';
+                                badge.textContent = `${x.toFixed(1)}%, ${y.toFixed(1)}%`;
+                            };
+
+                            const soltar = () => {
+                                document.removeEventListener('mousemove', mover);
+                                document.removeEventListener('mouseup', soltar);
+                                document.removeEventListener('touchmove', mover);
+                                document.removeEventListener('touchend', soltar);
+                            };
+
+                            document.addEventListener('mousemove', mover);
+                            document.addEventListener('mouseup', soltar);
+                            document.addEventListener('touchmove', mover, { passive: false });
+                            document.addEventListener('touchend', soltar);
+                        };
+
+                        el.addEventListener('mousedown', iniciar);
+                        el.addEventListener('touchstart', iniciar, { passive: false });
+                    });
+                };
+
+                // Chama o método original (que ativa o CSS e cria a barra)
+                _origCalibrar.apply(this, arguments);
+                // Sobrescreve os eventos de drag para o modo atual
+                setTimeout(_ativarDrag, 150);
+            } else {
+                _origCalibrar.apply(this, arguments);
+            }
+        };
+    }
+
+    // Atualizar o salvamento para incluir xMobile/yMobile
+    if (typeof window._aldeiaSalvarCoords === 'function') {
+        const _origSalvar = window._aldeiaSalvarCoords;
+        window._aldeiaSalvarCoords = function() {
+            const data = {};
+            window.ALDEIA_CONFIG.locations.forEach(loc => {
+                data[loc.id] = { 
+                    x: loc.x, y: loc.y,
+                    xMobile: loc.xMobile, yMobile: loc.yMobile
+                };
+            });
+            try {
+                localStorage.setItem('aldeia_custom_coords', JSON.stringify(data));
+                console.log('[calibração] Salvo (Desktop + Mobile):', data);
+                if (typeof showToast === 'function') showToast('💾', 'Posições salvas!', '💾');
+            } catch (e) {}
+        };
+    }
+
+    // Atualizar o carregamento para restaurar xMobile/yMobile
+    const _carregarCoordsOrig = () => {
+        try {
+            const raw = localStorage.getItem('aldeia_custom_coords');
+            if (!raw) return;
+            const salvas = JSON.parse(raw);
+            window.ALDEIA_CONFIG.locations.forEach(loc => {
+                if (salvas[loc.id]) {
+                    if (salvas[loc.id].x !== undefined) loc.x = salvas[loc.id].x;
+                    if (salvas[loc.id].y !== undefined) loc.y = salvas[loc.id].y;
+                    if (salvas[loc.id].xMobile !== undefined) loc.xMobile = salvas[loc.id].xMobile;
+                    if (salvas[loc.id].yMobile !== undefined) loc.yMobile = salvas[loc.id].yMobile;
+                }
+            });
+            console.log('[calibração] Coordenadas restauradas (Desktop + Mobile).');
+        } catch (e) {}
+    };
+    
+    // Executa o carregamento assim que o patch rodar
+    _carregarCoordsOrig();
+
+    // Diagnóstico atualizado
+    window._debugPosicoes = function() {
+        const mob = isMobile();
+        console.log(`═══ [V1.3] Posições (${mob ? 'MOBILE' : 'DESKTOP'}) ═══`);
+        window.ALDEIA_CONFIG.locations.forEach(loc => {
+            const px = (mob && loc.xMobile !== undefined) ? loc.xMobile : loc.x;
+            const py = (mob && loc.yMobile !== undefined) ? loc.yMobile : loc.y;
+            console.log(`  ${loc.id.padEnd(12)} → ${px.toFixed(1)}%, ${py.toFixed(1)}%`);
+        });
+        console.log('═══════════════════════════════════');
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [aldeia V1.3] Posições Independentes (PC / Mobile)');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Desktop usa x / y');
+    console.log('• Mobile usa xMobile / yMobile');
+    console.log('• Calibração agora salva os dois separadamente!');
+    console.log('• Debug: window._debugPosicoes()');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// aldeia.js — PATCH V1.4 (O Conserto Definitivo da Calibração)
+// =================================================================
+
+(function aldeiaFixCalibracaoV1_4() {
+    if (window._aldeiaFixCalibracaoV1_4) return;
+    window._aldeiaFixCalibracaoV1_4 = true;
+
+    const CFG = window.ALDEIA_CONFIG;
+
+    // =============================================================
+    // 1. RESTAURAR AS POSIÇÕES DO DESKTOP (Caso tenham sido bagunçadas)
+    // =============================================================
+    const padraoDesktop = {
+        evento:     { x: 20, y: 22 },
+        coop:       { x: 49, y: 20 },
+        pvp:        { x: 77, y: 24 },
+        tesouraria: { x: 20, y: 46 },
+        ritual:     { x: 49, y: 45 },
+        bestiario:  { x: 76, y: 46 },
+        atos:       { x: 23, y: 76 },
+        loja:       { x: 49, y: 76 },
+        oca:        { x: 77, y: 74 },
+    };
+
+    if (CFG && CFG.locations) {
+        CFG.locations.forEach(loc => {
+            if (padraoDesktop[loc.id]) {
+                loc.x = padraoDesktop[loc.id].x;
+                loc.y = padraoDesktop[loc.id].y;
+            }
+        });
+        
+        // Salva o estado limpo de volta no localStorage
+        try {
+            const data = {};
+            CFG.locations.forEach(loc => {
+                data[loc.id] = { 
+                    x: loc.x, y: loc.y,
+                    xMobile: loc.xMobile !== undefined ? loc.xMobile : loc.x, 
+                    yMobile: loc.yMobile !== undefined ? loc.yMobile : loc.y
+                };
+            });
+            localStorage.setItem('aldeia_custom_coords', JSON.stringify(data));
+            console.log('[V1.4] Desktop restaurado ao padrão original.');
+        } catch(e) {}
+    }
+
+    // =============================================================
+    // 2. DESATIVAR O SISTEMA DE CALIBRAÇÃO ANTIGO
+    // =============================================================
+    window._aldeiaSalvarCoords = function() {};
+    window._aldeiaResetCoords = function() {};
+    
+    // Remove a barra antiga se ela estiver na tela
+    const barraAntiga = document.getElementById('aldeiaCalibBar');
+    if (barraAntiga) barraAntiga.remove();
+
+    // =============================================================
+    // 3. CRIAR O NOVO SISTEMA DE CALIBRAÇÃO (BLINDADO)
+    // =============================================================
+    let modoAtivo = false;
+
+    window.calibrarAldeia = function(ativar) {
+        const isMobile = window.matchMedia('(max-width: 700px)').matches || window.matchMedia('(orientation: portrait)').matches;
+        
+        if (ativar === false || (ativar === undefined && modoAtivo)) {
+            // --- DESATIVAR ---
+            modoAtivo = false;
+            document.body.classList.remove('aldeia-calib-mode');
+            const b = document.getElementById('aldeiaCalibBarV14');
+            if (b) b.remove();
+            if (typeof renderAldeiaScreen === 'function') renderAldeiaScreen();
+            return;
+        }
+
+        // --- ATIVAR ---
+        modoAtivo = true;
+        document.body.classList.add('aldeia-calib-mode');
+        if (typeof renderAldeiaScreen === 'function') renderAldeiaScreen();
+
+        setTimeout(() => {
+            // Cria a barra nova
+            const bar = document.createElement('div');
+            bar.id = 'aldeiaCalibBarV14';
+            bar.className = 'aldeia-calib-bar'; // Usa o CSS que já criamos
+            bar.innerHTML = `
+                <span class="calib-info">🎯 Editando: <b>${isMobile ? 'CELULAR' : 'DESKTOP'}</b></span>
+                <button class="btn-save" onclick="window._v14Salvar()">💾 SALVAR</button>
+                <button class="btn-exit" onclick="window.calibrarAldeia(false)">✕ SAIR</button>
+            `;
+            document.body.appendChild(bar);
+
+            // Ativa o arrastar
+            const icones = document.querySelectorAll('.aldeia-icone');
+            icones.forEach(el => {
+                const id = el.getAttribute('data-id');
+                const loc = CFG.locations.find(l => l.id === id);
+                if (!loc) return;
+
+                // Badge com as coordenadas
+                let badge = el.querySelector('.aldeia-calib-badge');
+                if (!badge) {
+                    badge = document.createElement('div');
+                    badge.className = 'aldeia-calib-badge';
+                    el.appendChild(badge);
+                }
+                
+                const px = (isMobile && loc.xMobile !== undefined) ? loc.xMobile : loc.x;
+                const py = (isMobile && loc.yMobile !== undefined) ? loc.yMobile : loc.y;
+                badge.textContent = `${px.toFixed(1)}%, ${py.toFixed(1)}%`;
+
+                // Limpa qualquer evento antigo (isso resolve o bug)
+                el.onmousedown = null;
+                el.ontouchstart = null;
+
+                // Adiciona o evento novo exclusivo
+                const iniciarDrag = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    const wrap = document.getElementById('aldeiaIconesWrap');
+                    if (!wrap) return;
+                    const rect = wrap.getBoundingClientRect();
+
+                    const mover = (ev) => {
+                        ev.preventDefault();
+                        const point = ev.touches?.[0] || ev;
+                        const x = Math.max(2, Math.min(98, ((point.clientX - rect.left) / rect.width) * 100));
+                        const y = Math.max(2, Math.min(98, ((point.clientY - rect.top) / rect.height) * 100));
+
+                        // Atualiza apenas o lado correto
+                        if (isMobile) {
+                            loc.xMobile = x;
+                            loc.yMobile = y;
+                        } else {
+                            loc.x = x;
+                            loc.y = y;
+                        }
+
+                        el.style.left = x + '%';
+                        el.style.top = y + '%';
+                        badge.textContent = `${x.toFixed(1)}%, ${y.toFixed(1)}%`;
+                    };
+
+                    const soltar = () => {
+                        document.removeEventListener('mousemove', mover);
+                        document.removeEventListener('mouseup', soltar);
+                        document.removeEventListener('touchmove', mover);
+                        document.removeEventListener('touchend', soltar);
+                    };
+
+                    document.addEventListener('mousemove', mover);
+                    document.addEventListener('mouseup', soltar);
+                    document.addEventListener('touchmove', mover, { passive: false });
+                    document.addEventListener('touchend', soltar);
+                };
+
+                el.addEventListener('mousedown', iniciarDrag);
+                el.addEventListener('touchstart', iniciarDrag, { passive: false });
+            });
+        }, 50);
+    };
+
+    // Função de Salvar do V1.4
+    window._v14Salvar = function() {
+        const data = {};
+        CFG.locations.forEach(loc => {
+            data[loc.id] = { 
+                x: loc.x, y: loc.y,
+                xMobile: loc.xMobile, yMobile: loc.yMobile
+            };
+        });
+        try {
+            localStorage.setItem('aldeia_custom_coords', JSON.stringify(data));
+            if (typeof showToast === 'function') showToast('💾', 'Posições salvas!', '💾');
+            console.log('[V1.4] Posições salvas:', data);
+        } catch(e) {}
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [aldeia.js V1.4] Calibração Blindada');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Desktop foi restaurado para as posições corretas.');
+    console.log('• O bug de alterar os dois ao mesmo tempo foi consertado.');
+    console.log('• Use window.calibrarAldeia() para ajustar.');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// aldeia.js — PATCH V1.5 (Injeção Direta de Coordenadas via Print)
+// -----------------------------------------------------------------
+// Cole este código NO FINAL do seu aldeia.js
+// =================================================================
+
+(function aldeiaInjectCoordsV1_5() {
+    if (window._aldeiaInjectCoordsV1_5) return;
+    window._aldeiaInjectCoordsV1_5 = true;
+
+    // Coordenadas extraídas exatamente do print enviado
+    const coordsPrint = {
+        evento:     { x: 60.8, y: 7.2 },
+        coop:       { x: 13.8, y: 15.4 },
+        pvp:        { x: 82.0, y: 21.4 },
+        tesouraria: { x: 25.0, y: 38.0 },
+        ritual:     { x: 48.8, y: 45.8 },
+        bestiario:  { x: 85.5, y: 48.6 },
+        atos:       { x: 12.3, y: 52.1 },
+        loja:       { x: 42.5, y: 64.3 }, // ESCAMBO
+        oca:        { x: 70.8, y: 80.9 }
+    };
+
+    const aplicarPosicoes = () => {
+        const CFG = window.ALDEIA_CONFIG;
+        
+        // Se o jogo ainda não carregou a config, espera 200ms e tenta de novo
+        if (!CFG || !CFG.locations) {
+            setTimeout(aplicarPosicoes, 200);
+            return;
+        }
+
+        // 1. Atualiza a memória do jogo com as posições do print
+        CFG.locations.forEach(loc => {
+            if (coordsPrint[loc.id]) {
+                // Aplica tanto no Desktop quanto no Mobile
+                loc.x = coordsPrint[loc.id].x;
+                loc.y = coordsPrint[loc.id].y;
+                loc.xMobile = coordsPrint[loc.id].x;
+                loc.yMobile = coordsPrint[loc.id].y;
+            }
+        });
+
+        // 2. Salva no localStorage para blindar contra os patches antigos
+        try {
+            const data = {};
+            CFG.locations.forEach(loc => {
+                data[loc.id] = { 
+                    x: loc.x, 
+                    y: loc.y,
+                    xMobile: loc.xMobile, 
+                    yMobile: loc.yMobile
+                };
+            });
+            localStorage.setItem('aldeia_custom_coords', JSON.stringify(data));
+        } catch(e) {}
+
+        // 3. Limpa qualquer sujeira do modo de calibração antigo
+        document.body.classList.remove('aldeia-calib-mode');
+        const b1 = document.getElementById('aldeiaCalibBarV14');
+        const b2 = document.getElementById('aldeiaCalibBar');
+        if (b1) b1.remove();
+        if (b2) b2.remove();
+        document.querySelectorAll('.aldeia-calib-badge').forEach(b => b.remove());
+
+        // 4. Força a tela a atualizar com as novas posições
+        if (typeof window.renderAldeiaScreen === 'function') {
+            const screen = document.getElementById('storyScreen');
+            // Só re-renderiza se a tela da aldeia estiver aberta
+            if (screen && screen.style.display !== 'none') {
+                window.renderAldeiaScreen();
+            }
+        }
+        
+        console.log('✅ [aldeia V1.5] Posições do print injetadas com sucesso!');
+    };
+
+    // Executa assim que o script for lido
+    aplicarPosicoes();
+    
+})();
