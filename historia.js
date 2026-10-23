@@ -43509,3 +43509,878 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
     console.log('💡 Debug: window._debugFlashForma()');
     console.log('═══════════════════════════════════════════════════');
 })();
+// =================================================================
+// historia.js — V10.66 (Preview dano CORRIGIDO + debug purificação)
+// -----------------------------------------------------------------
+// Fix do bug: weaponAtk era contado 2× (já estava em active.bonusAtk)
+// Fix extra: weaponElem só para heróis novos (base não recebe)
+//
+// Substitui V10.63:
+//   • Esconde storyPreviewBarV2 via CSS
+//   • Nova barra storyPreviewBarV3 com cálculo correto
+//   • V10.62/V10.63 continuam rodando (escondidos), sem conflito
+// =================================================================
+
+(function previewBarV3_V1066() {
+    if (window._previewBarV1066) return;
+    window._previewBarV1066 = true;
+
+    // Esconde versões antigas
+    if (!document.getElementById('previewV3CSS')) {
+        const style = document.createElement('style');
+        style.id = 'previewV3CSS';
+        style.textContent = `
+            #storyPreviewBar, #storyPreviewBarV2 { display: none !important; }
+
+            .story-preview-bar-v3 {
+                display: none;
+                gap: 6px;
+                justify-content: center;
+                align-items: center;
+                flex-wrap: wrap;
+                width: 100%;
+                max-width: calc((var(--tile-size) * 8) + (var(--gap) * 7) + 16px);
+                margin: 0 auto;
+                padding: 6px 10px;
+                box-sizing: border-box;
+                background: rgba(10, 6, 2, 0.7);
+                border: 1px solid rgba(201, 162, 39, 0.35);
+                border-radius: 6px;
+                font-family: 'Cinzel', serif;
+                font-size: 0.72rem;
+                letter-spacing: 1px;
+                min-height: 32px;
+            }
+            .story-preview-bar-v3 .preview-chip {
+                padding: 3px 9px;
+                border-radius: 12px;
+                background: rgba(10, 6, 2, 0.5);
+                border: 1px solid rgba(201, 162, 39, 0.3);
+                color: #e8dcc4;
+                white-space: nowrap;
+                display: inline-flex;
+                align-items: center;
+                gap: 3px;
+            }
+            .story-preview-bar-v3 .preview-chip.tiles { color: #c8b787; }
+            .story-preview-bar-v3 .preview-chip.shape {
+                color: #e8e8f0 !important;
+                border-color: rgba(232, 232, 240, 0.45) !important;
+                background: rgba(232, 232, 240, 0.06) !important;
+                font-weight: 700;
+                animation: shapePulseV3 1.1s ease-in-out infinite alternate;
+            }
+            @keyframes shapePulseV3 {
+                from { box-shadow: 0 0 3px rgba(232,232,240,0.25); transform: scale(1); }
+                to   { box-shadow: 0 0 10px rgba(232,232,240,0.7); transform: scale(1.06); }
+            }
+            .story-preview-bar-v3 .preview-chip.dano {
+                color: #f0a8a8;
+                border-color: rgba(168, 50, 50, 0.5);
+                background: rgba(168, 50, 50, 0.12);
+                font-weight: 700;
+            }
+            .story-preview-bar-v3 .preview-chip.heal {
+                color: #8ac070;
+                border-color: rgba(107, 163, 92, 0.5);
+                background: rgba(107, 163, 92, 0.12);
+            }
+            .story-preview-bar-v3 .preview-chip.recarrega {
+                color: #c39bd3;
+                border-color: rgba(142, 68, 173, 0.5);
+                background: rgba(142, 68, 173, 0.12);
+            }
+            .story-preview-bar-v3 .preview-chip.pa {
+                color: #e8b923;
+                border-color: #e8b923;
+                background: rgba(232, 185, 35, 0.15);
+                font-weight: 700;
+                animation: previewPAV3 1s ease-in-out infinite alternate;
+            }
+            @keyframes previewPAV3 {
+                from { box-shadow: 0 0 4px rgba(232,185,35,0.4); }
+                to   { box-shadow: 0 0 12px rgba(232,185,35,0.9); }
+            }
+            .story-preview-bar-v3 .preview-chip.dim {
+                color: #8a7a52;
+                border-color: rgba(138, 122, 82, 0.4);
+                font-style: italic;
+            }
+            .story-preview-bar-v3 .preview-chip.kill {
+                color: #d05050;
+                border-color: rgba(208, 80, 80, 0.5);
+                background: rgba(208, 80, 80, 0.15);
+                font-weight: 700;
+            }
+            .story-preview-bar-v3 .preview-chip.help {
+                cursor: help;
+                color: #b8a577;
+                padding: 2px 7px;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // =============================================================
+    // Contar golpes do guerreiro
+    // =============================================================
+    function contarGolpesGuerreiro(active, usedPath) {
+        if (typeof boss === 'undefined' || !boss || boss.dead) return 0;
+        if (!active) return 0;
+        const bAdj = (px, py) =>
+            Math.abs(px - boss.x) + Math.abs(py - boss.y) <= 1;
+        let golpes = 0;
+        if (bAdj(active.x, active.y)) golpes++;
+        let px = active.x, py = active.y;
+        for (const idx of usedPath) {
+            px = idx % 8;
+            py = Math.floor(idx / 8);
+            if (typeof isOccupied === 'function' && isOccupied(px, py, active.id)) break;
+            if (bAdj(px, py)) golpes++;
+        }
+        return golpes;
+    }
+
+    // =============================================================
+    // Estimativa CORRIGIDA
+    // -------------------------------------------------------------
+    // FIX: NÃO soma weaponAtk (já está em active.bonusAtk)
+    // FIX: weaponElem só para heróis novos (V9.0-B2 pula base)
+    // =============================================================
+    function estimarPreviewV3() {
+        if (window._pvpMode || window._coopMode) return null;
+        if (typeof path === 'undefined' || !path || path.length === 0) return null;
+        if (typeof players === 'undefined' || !Array.isArray(players)) return null;
+
+        const active = players[currentPlayerIdx];
+        if (!active || active.dead) return null;
+
+        const info = (typeof CLASS_DB !== 'undefined' && CLASS_DB[active.class])
+            ? CLASS_DB[active.class] : { atk: 2, min: 0 };
+        const heroData = (typeof STORY_HERO_CLASSES !== 'undefined' && STORY_HERO_CLASSES[active.class])
+            ? STORY_HERO_CLASSES[active.class] : { role: 'Guerreiro', paKey: 'base_coluna' };
+        const isBaseHero = !heroData.paKey || heroData.paKey.startsWith('base_');
+
+        const usedPath = [...path];
+        const threshold = parseInt(document.getElementById('bravely_tiles')?.value) || 9;
+        const isBravely = usedPath.length >= threshold;
+        const shape = (typeof detectShape === 'function') ? detectShape(usedPath) : null;
+
+        let levelAtk = 0;
+        if (typeof getHeroBonusFromLevel === 'function') {
+            const b = getHeroBonusFromLevel(active.class);
+            levelAtk = b?.atk || 0;
+        }
+
+        // weaponElem: SÓ heróis novos (V9.0-B2 pula base). NÃO soma atkBonus.
+        let weaponElem = 0;
+        if (!isBaseHero && typeof getHeroEquipment === 'function' && typeof getWeaponById === 'function') {
+            const eq = getHeroEquipment(active.class);
+            if (eq?.arma && usedPath.length > 0) {
+                const w = getWeaponById(eq.arma);
+                if (w) {
+                    const tileEl = grid[usedPath[0]];
+                    if (w.elemento === 'ANY') {
+                        if (tileEl === active.element) weaponElem = w.elementoBonus || 0;
+                    } else if (tileEl === w.elemento) {
+                        weaponElem = w.elementoBonus || 0;
+                    }
+                }
+            }
+        }
+
+        const tileBonus = (usedPath.length > 0 && grid[usedPath[0]] === active.element) ? 1 : 0;
+
+        let shapeAtk = 0, heal = 0, recarrega = false;
+        if (shape === 'LINHA') { shapeAtk = 2; heal = 1; }
+        else if (shape === 'L') { heal = 2; }
+        else if (shape === 'ZIGZAG') { shapeAtk = 3; }
+        else if (shape === 'QUADRADO') { recarrega = true; }
+
+        const titleAtk = active.titleBonus?.ATK || 0;
+
+        // ⭐ FIX: sem weaponAtk (já em active.bonusAtk)
+        const totalAtk = info.atk + (active.bonusAtk || 0) + levelAtk
+                       + tileBonus + shapeAtk + titleAtk + weaponElem;
+
+        let dano = 0, nota = '', mata = false;
+
+        if (heroData.role === 'Guerreiro') {
+            const golpes = contarGolpesGuerreiro(active, usedPath);
+            const totalBruto = totalAtk * golpes;
+            const bHp = (typeof boss !== 'undefined' && boss) ? boss.hp : Infinity;
+            mata = golpes > 0 && totalBruto >= bHp;
+
+            if (golpes === 0) {
+                dano = 0;
+                nota = 'não alcança o boss';
+            } else {
+                dano = mata ? bHp : totalBruto;
+                if (golpes === 1) {
+                    nota = mata ? 'mata' : '1 golpe';
+                } else {
+                    nota = `${golpes}×${totalAtk}`;
+                    if (mata) nota += ' · mata';
+                }
+            }
+        } else {
+            if (usedPath.length >= (info.min || 0)) {
+                const extra = usedPath.length - (info.min || 0);
+                let extraDmg;
+                if (isBaseHero) {
+                    if (active.class === 'Sume') extraDmg = extra;
+                    else if (active.class === 'Caipora') extraDmg = Math.floor(extra / 2);
+                    else extraDmg = extra;
+                } else {
+                    extraDmg = extra;
+                }
+                dano = totalAtk + extraDmg;
+            } else {
+                const falta = (info.min || 0) - usedPath.length;
+                nota = `precisa +${falta} tile${falta > 1 ? 's' : ''}`;
+            }
+        }
+
+        return {
+            tiles: usedPath.length, threshold, shape, isBravely,
+            totalAtk, dano, nota, heal, recarrega, role: heroData.role, mata,
+        };
+    }
+
+    // =============================================================
+    // Render
+    // =============================================================
+    function renderBarV3() {
+        const boardArea = document.querySelector('.board-area');
+        if (!boardArea) return;
+
+        let bar = document.getElementById('storyPreviewBarV3');
+        if (!bar) {
+            bar = document.createElement('div');
+            bar.id = 'storyPreviewBarV3';
+            bar.className = 'story-preview-bar-v3';
+            const actionsBar = boardArea.querySelector('.action-buttons-bar');
+            if (actionsBar) boardArea.insertBefore(bar, actionsBar);
+            else boardArea.appendChild(bar);
+        }
+
+        if (window._pvpMode || window._coopMode) {
+            bar.style.display = 'none';
+            return;
+        }
+
+        let data;
+        try { data = estimarPreviewV3(); } catch (e) {
+            console.warn('[V10.66] Erro na estimativa:', e);
+            bar.style.display = 'none';
+            return;
+        }
+        if (!data) { bar.style.display = 'none'; return; }
+
+        bar.style.display = 'flex';
+
+        const chips = [];
+        chips.push(`<span class="preview-chip tiles">🎯 ${data.tiles} tile${data.tiles > 1 ? 's' : ''}</span>`);
+
+        if (data.shape) {
+            chips.push(`<span class="preview-chip shape">🟩 ${data.shape}</span>`);
+        }
+
+        if (data.isBravely) {
+            chips.push(`<span class="preview-chip pa">⚡ PA ${data.tiles}/${data.threshold}</span>`);
+        } else if (data.tiles >= Math.max(4, data.threshold - 3)) {
+            chips.push(`<span class="preview-chip dim">⚡ ${data.tiles}/${data.threshold}</span>`);
+        }
+
+        if (data.dano > 0) {
+            chips.push(`<span class="preview-chip dano">⚔️ ~${data.dano} dano</span>`);
+        }
+        if (data.nota) {
+            const cls = data.mata ? 'kill' : 'dim';
+            chips.push(`<span class="preview-chip ${cls}">${data.nota}</span>`);
+        }
+
+        if (data.heal > 0)  chips.push(`<span class="preview-chip heal">💚 +${data.heal} HP</span>`);
+        if (data.recarrega) chips.push(`<span class="preview-chip recarrega">♻️ Recarrega</span>`);
+
+        chips.push(`<span class="preview-chip help" title="ATK base ${data.totalAtk} · estimativa">?</span>`);
+
+        bar.innerHTML = chips.join('');
+    }
+
+    // Hooks
+    const _install = () => {
+        if (typeof window.renderPath !== 'function') return false;
+        if (window.renderPath._previewV1066) return true;
+        const _orig = window.renderPath;
+        window.renderPath = function() {
+            const r = _orig.apply(this, arguments);
+            try { renderBarV3(); } catch (e) {}
+            return r;
+        };
+        window.renderPath._previewV1066 = true;
+        console.log('[V10.66] Hook renderPath instalado.');
+        return true;
+    };
+    if (!_install()) {
+        const t = setInterval(() => { if (_install()) clearInterval(t); }, 200);
+    }
+
+    setInterval(() => { try { renderBarV3(); } catch (e) {} }, 400);
+
+    // =============================================================
+    // Debug da purificação
+    // =============================================================
+    window._debugPurificacao = function() {
+        console.log('═══ [Debug] Purificação ═══');
+        console.log('_storyMode:        ', window._storyMode);
+        console.log('_cinemaFila:       ', window._cinemaFila);
+        console.log('_gifPAEmAndamento: ', window._gifPAEmAndamento);
+        console.log('_processingBossDefeat:', window._processingBossDefeat);
+        console.log('_storyPurificationShowing:', window._storyPurificationShowing);
+        console.log('PvP:', window._pvpMode, '| Coop:', window._coopMode);
+        console.log('Boss:', boss ? `type=${boss.type}, hp=${boss.hp}/${boss.maxHp}, dead=${boss.dead}` : 'null');
+        console.log('storyEnemiesRemaining:', window.storyEnemiesRemaining);
+        console.log('══════════════════════════');
+    };
+
+    window._debugPreviewV3 = function() {
+        console.log('═══ [V10.66] Preview v3 ═══');
+        const active = players?.[currentPlayerIdx];
+        console.log('Estimativa:', estimarPreviewV3());
+        console.log('active.bonusAtk:', active?.bonusAtk);
+        console.log('active.equippedWeapon:', active?.equippedWeapon?.nome);
+        console.log('══════════════════════════');
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V10.66] Preview v3 — dano CORRIGIDO');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• weaponAtk removido (já em bonusAtk)');
+    console.log('• weaponElem só para heróis novos');
+    console.log('• Barra V10.62/V10.63 escondidas via CSS');
+    console.log('');
+    console.log('💡 Debug:');
+    console.log('   window._debugPreviewV3()    → ver dano calculado');
+    console.log('   window._debugPurificacao()  → ver estado da purificação');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — V10.67 (Purificação reescrita — fix do ReferenceError)
+// -----------------------------------------------------------------
+// Bug confirmado:
+//   V16.1 chama enfileirarCinema() (bare) → ReferenceError
+//   → capturado silenciosamente pelo V17.0 → animação nunca cria
+//
+// Solução:
+//   Substitui TODA a cadeia por uma versão única, robusta,
+//   com try/catch defensivo e suporte ao toggle skipBravelyAnimations.
+//
+//   Mantém a mesma API (bossType, tileX, tileY, isFinalBoss).
+//   Compatível com todos os call sites existentes.
+// =================================================================
+
+(function fixPurificacaoV1067() {
+    if (window._fixPurificacaoV1067) return;
+    window._fixPurificacaoV1067 = true;
+
+    // =============================================================
+    // Garantia de CSS (fallback se o index não carregou)
+    // =============================================================
+    if (!document.getElementById('purificacao-fallback-css')) {
+        // Só injeta se o CSS existente não definir a animação
+        const testEl = document.createElement('div');
+        testEl.className = 'purificacao-feixe';
+        document.body.appendChild(testEl);
+        const hasAnim = getComputedStyle(testEl).animationName !== 'none';
+        document.body.removeChild(testEl);
+
+        if (!hasAnim) {
+            console.warn('[V10.67] CSS de purificação ausente — injetando fallback.');
+            const style = document.createElement('style');
+            style.id = 'purificacao-fallback-css';
+            style.textContent = `
+                .purificacao-overlay {
+                    position: absolute; inset: 0;
+                    pointer-events: none;
+                    opacity: 0;
+                    transition: opacity 0.4s ease;
+                    z-index: 300;
+                }
+                .purificacao-overlay.active { opacity: 1; }
+                .purificacao-darken {
+                    position: absolute; inset: 0;
+                    background: radial-gradient(ellipse at center,
+                        rgba(10,6,2,0.3) 0%,
+                        rgba(10,6,2,0.75) 100%);
+                    animation: purifDarken 2.6s ease-in-out forwards;
+                }
+                @keyframes purifDarken {
+                    0% { opacity: 0; } 15% { opacity: 1; }
+                    85% { opacity: 1; } 100% { opacity: 0; }
+                }
+                .purificacao-feixe {
+                    position: absolute; top: 0;
+                    background: linear-gradient(180deg,
+                        rgba(255,245,220,0) 0%,
+                        rgba(255,245,220,0.5) 15%,
+                        rgba(232,185,35,0.85) 45%,
+                        rgba(255,245,220,0.95) 75%,
+                        rgba(255,245,220,0) 100%);
+                    filter: blur(6px);
+                    transform-origin: top center;
+                    animation: purifFeixe 2.6s cubic-bezier(0.3,0,0.4,1) forwards;
+                    mix-blend-mode: screen;
+                }
+                @keyframes purifFeixe {
+                    0% { transform: translateX(-50%) scaleY(0); opacity: 0; }
+                    15% { transform: translateX(-50%) scaleY(1); opacity: 1; }
+                    75% { transform: translateX(-50%) scaleY(1); opacity: 1; }
+                    100% { transform: translateX(-50%) scaleY(1); opacity: 0; }
+                }
+                .purificacao-halo {
+                    position: absolute;
+                    width: 160px; height: 160px;
+                    border-radius: 50%;
+                    transform: translate(-50%, -50%) scale(0.3);
+                    background: radial-gradient(circle,
+                        rgba(255,250,235,0.95) 0%,
+                        rgba(255,235,180,0.7) 25%,
+                        rgba(232,185,35,0.5) 50%,
+                        rgba(232,185,35,0) 75%);
+                    animation: purifHalo 2.6s ease-out forwards;
+                    mix-blend-mode: screen;
+                    pointer-events: none;
+                }
+                @keyframes purifHalo {
+                    0% { transform: translate(-50%,-50%) scale(0.3); opacity: 0; }
+                    20% { transform: translate(-50%,-50%) scale(1.0); opacity: 1; }
+                    70% { transform: translate(-50%,-50%) scale(1.2); opacity: 0.9; }
+                    100% { transform: translate(-50%,-50%) scale(1.6); opacity: 0; }
+                }
+                .purificacao-particula {
+                    position: absolute;
+                    width: 6px; height: 6px;
+                    border-radius: 50%;
+                    background: radial-gradient(circle, #fff5dc 0%, #e8b923 50%, rgba(232,185,35,0) 100%);
+                    box-shadow: 0 0 8px 2px rgba(232,185,35,0.8);
+                    pointer-events: none;
+                    animation: purifPart 2.2s ease-out forwards;
+                    opacity: 0;
+                }
+                @keyframes purifPart {
+                    0% { opacity: 0; transform: translate(0,0) scale(0.4); }
+                    15% { opacity: 1; transform: translate(0,-10px) scale(1); }
+                    100% { opacity: 0; transform: translate(var(--dx,0), var(--dy,-180px)) scale(0.6); }
+                }
+                img.purificacao-flash {
+                    animation: purifFlash 2.4s ease-out forwards;
+                }
+                @keyframes purifFlash {
+                    0% { filter: brightness(1); }
+                    20% { filter: brightness(2.2) drop-shadow(0 0 20px rgba(255,245,220,1)); }
+                    60% { filter: brightness(1.8) drop-shadow(0 0 15px rgba(255,245,220,0.8)); }
+                    85% { filter: brightness(1.2); opacity: 1; }
+                    100% { filter: brightness(0.6); opacity: 0; }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+    }
+
+    // =============================================================
+    // Versão curta (skipBravelyAnimations ligado)
+    // =============================================================
+    function purificacaoCurta() {
+        return new Promise((resolve) => {
+            const board = document.getElementById('board');
+            if (!board) { resolve(); return; }
+
+            const overlay = document.createElement('div');
+            overlay.className = 'purificacao-overlay active';
+            overlay.id = 'purificacaoOverlay';
+            overlay.innerHTML = `<div class="purificacao-darken"></div>`;
+            board.appendChild(overlay);
+
+            if (typeof playSfx === 'function') {
+                try { playSfx('purificacao'); } catch (e) {}
+            }
+
+            setTimeout(() => {
+                if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+                resolve();
+            }, 800);
+        });
+    }
+
+    // =============================================================
+    // Versão completa (feixe, halo, partículas, flash)
+    // =============================================================
+    function purificacaoCompleta(bossType, tileX, tileY, isFinalBoss) {
+        return new Promise((resolve) => {
+            const board = document.getElementById('board');
+            if (!board) { resolve(); return; }
+
+            const duration = isFinalBoss ? 3200 : 2600;
+
+            // Som
+            if (typeof playSfx === 'function') {
+                try { playSfx('purificacao'); } catch (e) {}
+            }
+
+            // Overlay
+            const overlay = document.createElement('div');
+            overlay.className = 'purificacao-overlay active';
+            overlay.id = 'purificacaoOverlay';
+            board.appendChild(overlay);
+
+            // Darken
+            const darken = document.createElement('div');
+            darken.className = 'purificacao-darken';
+            overlay.appendChild(darken);
+
+            // Posição (do tile do boss)
+            const s = (typeof getStep === 'function') ? getStep() : 59;
+            const bossCenterX = tileX * s + s / 2 + 8;
+            const feixeWidth = s * 2;
+
+            // Feixe vertical
+            const feixe = document.createElement('div');
+            feixe.className = 'purificacao-feixe';
+            feixe.style.left = bossCenterX + 'px';
+            feixe.style.width = feixeWidth + 'px';
+            feixe.style.height = '100%';
+            overlay.appendChild(feixe);
+
+            // Halo
+            const halo = document.createElement('div');
+            halo.className = 'purificacao-halo';
+            halo.style.left = bossCenterX + 'px';
+            halo.style.top = (tileY * s + s / 2 + 8) + 'px';
+            halo.style.animationDuration = duration + 'ms';
+            overlay.appendChild(halo);
+
+            // Partículas
+            const particleCount = isFinalBoss ? 26 : 18;
+            for (let i = 0; i < particleCount; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'purificacao-particula';
+                const offsetX = (Math.random() - 0.5) * s * 1.8;
+                const offsetY = (Math.random() - 0.5) * s * 1.8;
+                const driftX = (Math.random() - 0.5) * 60;
+                const driftY = -150 - Math.random() * 150;
+                particle.style.left = (bossCenterX + offsetX) + 'px';
+                particle.style.top = (tileY * s + s / 2 + 8 + offsetY) + 'px';
+                particle.style.setProperty('--dx', driftX + 'px');
+                particle.style.setProperty('--dy', driftY + 'px');
+                particle.style.animationDelay = (Math.random() * 0.5) + 's';
+                particle.style.animationDuration = (1.8 + Math.random() * 0.6) + 's';
+                overlay.appendChild(particle);
+            }
+
+            // Flash no sprite do boss
+            const bossImg = document.getElementById('imgBoss');
+            if (bossImg) bossImg.classList.add('purificacao-flash');
+
+            setTimeout(() => {
+                if (bossImg) bossImg.classList.remove('purificacao-flash');
+                if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+                resolve();
+            }, duration);
+        });
+    }
+
+    // =============================================================
+    // SUBSTITUI TODA A CADEIA POR UMA FUNÇÃO ÚNICA
+    // -------------------------------------------------------------
+    // Isso garante que nenhum wrapper antigo (V16.x/V17.x) interfira.
+    // =============================================================
+    window.showPurificacao = async function(bossType, tileX, tileY, isFinalBoss) {
+        // Guard: fora do modo história
+        if (!window._storyMode) return;
+
+        // Guard: já tem uma animação rodando? Evita duplicata
+        if (document.getElementById('purificacaoOverlay')) {
+            return;
+        }
+
+        // Toggle: pular animações
+        if (typeof STORY_SETTINGS !== 'undefined' && STORY_SETTINGS.skipBravelyAnimations) {
+            return purificacaoCurta();
+        }
+
+        return purificacaoCompleta(bossType, tileX, tileY, isFinalBoss);
+    };
+
+    // =============================================================
+    // Debug — mostra estado da purificação
+    // =============================================================
+    window._debugPurificacaoV1067 = function() {
+        console.log('═══ [V10.67] Purificação ═══');
+        console.log('Função atual:', window.showPurificacao.toString().substring(0, 80), '...');
+        console.log('skipBravelyAnimations:', STORY_SETTINGS?.skipBravelyAnimations);
+        console.log('Overlay ativo agora?', !!document.getElementById('purificacaoOverlay'));
+        console.log('typeof enfileirarCinema:', typeof window.enfileirarCinema);
+        console.log('typeof enfileirarCinema (bare):', typeof enfileirarCinema);
+        console.log('══════════════════════════════');
+    };
+
+    // Teste manual — só funciona se estiver no modo história
+    window._testPurificacao = async function() {
+        if (!window._storyMode) {
+            console.warn('[V10.67] Só funciona no Modo História.');
+            return;
+        }
+        console.log('[V10.67] Testando purificação manual...');
+        const bx = boss?.x ?? 4;
+        const by = boss?.y ?? 0;
+        await window.showPurificacao(boss?.type || 'BOITATA', bx, by, false);
+        console.log('[V10.67] Purificação de teste concluída.');
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V10.67] Purificação REESCRITA');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Cadeia de wrappers removida (era a causa do bug)');
+    console.log('• Sem dependência de enfileirarCinema');
+    console.log('• Respeita STORY_SETTINGS.skipBravelyAnimations');
+    console.log('• CSS de fallback se o index não carregar');
+        console.log('');
+    console.log('💡 Debug:');
+    console.log('   window._debugPurificacaoV1067()');
+    console.log('   window._testPurificacao()      ← força uma purificação');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — V10.68 (Preview v4: formAtk + bonusElemento)
+// -----------------------------------------------------------------
+// Complementa V10.66. Não substitui — só adiciona os bônus que
+// faltavam no cálculo do preview:
+//
+//   • bonus.formAtk    (nível 6) → soma quando forma válida
+//   • bonus.bonusElemento (nível 11 reroll) → soma quando tile inicial
+//     bate o elemento do herói
+//
+// Mantém V10.66 intocado (a barra storyPreviewBarV3 continua lá,
+// apenas com o cálculo corrigido).
+// =================================================================
+
+(function previewV4_FixFormAtkV1068() {
+    if (window._previewV4FixV1068) return;
+    window._previewV4FixV1068 = true;
+
+    // =============================================================
+    // Substitui apenas a função de estimativa (o resto do V10.66
+    // continua funcionando — CSS, render, hooks)
+    // =============================================================
+    function estimarPreviewV4() {
+        if (window._pvpMode || window._coopMode) return null;
+        if (typeof path === 'undefined' || !path || path.length === 0) return null;
+        if (typeof players === 'undefined' || !Array.isArray(players)) return null;
+
+        const active = players[currentPlayerIdx];
+        if (!active || active.dead) return null;
+
+        const info = (typeof CLASS_DB !== 'undefined' && CLASS_DB[active.class])
+            ? CLASS_DB[active.class] : { atk: 2, min: 0 };
+        const heroData = (typeof STORY_HERO_CLASSES !== 'undefined' && STORY_HERO_CLASSES[active.class])
+            ? STORY_HERO_CLASSES[active.class] : { role: 'Guerreiro', paKey: 'base_coluna' };
+        const isBaseHero = !heroData.paKey || heroData.paKey.startsWith('base_');
+
+        const usedPath = [...path];
+        const threshold = parseInt(document.getElementById('bravely_tiles')?.value) || 9;
+        const isBravely = usedPath.length >= threshold;
+        const shape = (typeof detectShape === 'function') ? detectShape(usedPath) : null;
+
+        // Bônus de nível (todos de uma vez)
+        let levelAtk = 0;
+        let levelFormAtk = 0;
+        let levelElemBonus = 0;
+        if (typeof getHeroBonusFromLevel === 'function') {
+            const b = getHeroBonusFromLevel(active.class) || {};
+            levelAtk = b.atk || 0;
+            levelFormAtk = b.formAtk || 0;
+            levelElemBonus = b.bonusElemento || 0;
+        }
+
+        // Bônus de arma (elemento apenas — atk já está em bonusAtk)
+        let weaponElem = 0;
+        if (!isBaseHero && typeof getHeroEquipment === 'function' && typeof getWeaponById === 'function') {
+            const eq = getHeroEquipment(active.class);
+            if (eq?.arma && usedPath.length > 0) {
+                const w = getWeaponById(eq.arma);
+                if (w) {
+                    const tileEl = grid[usedPath[0]];
+                    if (w.elemento === 'ANY') {
+                        if (tileEl === active.element) weaponElem = w.elementoBonus || 0;
+                    } else if (tileEl === w.elemento) {
+                        weaponElem = w.elementoBonus || 0;
+                    }
+                }
+            }
+        }
+
+        const tileBonus = (usedPath.length > 0 && grid[usedPath[0]] === active.element) ? 1 : 0;
+
+        let shapeAtk = 0, heal = 0, recarrega = false;
+        if (shape === 'LINHA') { shapeAtk = 2; heal = 1; }
+        else if (shape === 'L') { heal = 2; }
+        else if (shape === 'ZIGZAG') { shapeAtk = 3; }
+        else if (shape === 'QUADRADO') { recarrega = true; }
+
+        // ⭐ formAtk: só quando forma válida (V36.0 aplica via bonusAtk)
+        const formAtkBonus = shape ? levelFormAtk : 0;
+
+        // ⭐ bonusElemento: só quando tile inicial bate elemento do herói
+        // (V36.0 aplica via bonusAtk)
+        const elemAtkBonus = tileBonus > 0 ? levelElemBonus : 0;
+
+        const titleAtk = active.titleBonus?.ATK || 0;
+
+        const totalAtk = info.atk + (active.bonusAtk || 0) + levelAtk
+                       + tileBonus + shapeAtk + formAtkBonus + elemAtkBonus
+                       + titleAtk + weaponElem;
+
+        let dano = 0, nota = '', mata = false;
+
+        if (heroData.role === 'Guerreiro') {
+            const golpes = contarGolpesGuerreiroLocal(active, usedPath);
+            const totalBruto = totalAtk * golpes;
+            const bHp = (typeof boss !== 'undefined' && boss) ? boss.hp : Infinity;
+            mata = golpes > 0 && totalBruto >= bHp;
+
+            if (golpes === 0) {
+                dano = 0;
+                nota = 'não alcança o boss';
+            } else {
+                dano = mata ? bHp : totalBruto;
+                if (golpes === 1) {
+                    nota = mata ? 'mata' : '1 golpe';
+                } else {
+                    nota = `${golpes}×${totalAtk}`;
+                    if (mata) nota += ' · mata';
+                }
+            }
+        } else {
+            if (usedPath.length >= (info.min || 0)) {
+                const extra = usedPath.length - (info.min || 0);
+                let extraDmg;
+                if (isBaseHero) {
+                    if (active.class === 'Sume') extraDmg = extra;
+                    else if (active.class === 'Caipora') extraDmg = Math.floor(extra / 2);
+                    else extraDmg = extra;
+                } else {
+                    extraDmg = extra;
+                }
+                dano = totalAtk + extraDmg;
+            } else {
+                const falta = (info.min || 0) - usedPath.length;
+                nota = `precisa +${falta} tile${falta > 1 ? 's' : ''}`;
+            }
+        }
+
+        return {
+            tiles: usedPath.length, threshold, shape, isBravely,
+            totalAtk, dano, nota, heal, recarrega, role: heroData.role, mata,
+        };
+    }
+
+    function contarGolpesGuerreiroLocal(active, usedPath) {
+        if (typeof boss === 'undefined' || !boss || boss.dead) return 0;
+        if (!active) return 0;
+        const bAdj = (px, py) =>
+            Math.abs(px - boss.x) + Math.abs(py - boss.y) <= 1;
+        let golpes = 0;
+        if (bAdj(active.x, active.y)) golpes++;
+        let px = active.x, py = active.y;
+        for (const idx of usedPath) {
+            px = idx % 8;
+            py = Math.floor(idx / 8);
+            if (typeof isOccupied === 'function' && isOccupied(px, py, active.id)) break;
+            if (bAdj(px, py)) golpes++;
+        }
+        return golpes;
+    }
+
+    // =============================================================
+    // Exporta a estimativa nova para o V10.66 usar
+    // =============================================================
+    window._estimarPreviewV1066 = estimarPreviewV4;
+
+    // =============================================================
+    // Re-renderiza a barra com a função nova
+    // =============================================================
+    function renderComFix() {
+        const boardArea = document.querySelector('.board-area');
+        if (!boardArea) return;
+
+        let bar = document.getElementById('storyPreviewBarV3');
+        if (!bar) return; // V10.66 ainda não montou
+
+        if (window._pvpMode || window._coopMode) {
+            bar.style.display = 'none';
+            return;
+        }
+
+        let data;
+        try { data = estimarPreviewV4(); } catch (e) {
+            bar.style.display = 'none';
+            return;
+        }
+        if (!data) { bar.style.display = 'none'; return; }
+
+        bar.style.display = 'flex';
+
+        const chips = [];
+        chips.push(`<span class="preview-chip tiles">🎯 ${data.tiles} tile${data.tiles > 1 ? 's' : ''}</span>`);
+        if (data.shape) {
+            chips.push(`<span class="preview-chip shape">🟩 ${data.shape}</span>`);
+        }
+        if (data.isBravely) {
+            chips.push(`<span class="preview-chip pa">⚡ PA ${data.tiles}/${data.threshold}</span>`);
+        } else if (data.tiles >= Math.max(4, data.threshold - 3)) {
+            chips.push(`<span class="preview-chip dim">⚡ ${data.tiles}/${data.threshold}</span>`);
+        }
+        if (data.dano > 0) {
+            chips.push(`<span class="preview-chip dano">⚔️ ~${data.dano} dano</span>`);
+        }
+        if (data.nota) {
+            const cls = data.mata ? 'kill' : 'dim';
+            chips.push(`<span class="preview-chip ${cls}">${data.nota}</span>`);
+        }
+        if (data.heal > 0)  chips.push(`<span class="preview-chip heal">💚 +${data.heal} HP</span>`);
+        if (data.recarrega) chips.push(`<span class="preview-chip recarrega">♻️ Recarrega</span>`);
+        chips.push(`<span class="preview-chip help" title="ATK base ${data.totalAtk} · estimativa">?</span>`);
+
+        bar.innerHTML = chips.join('');
+    }
+
+    // Roda a cada 400ms, junto com o V10.66 (sobrescreve a cada ciclo)
+    setInterval(() => { try { renderComFix(); } catch (e) {} }, 400);
+
+    // Diagnóstico
+    window._debugPreviewV4 = function() {
+        const active = players?.[currentPlayerIdx];
+        const bonus = (typeof getHeroBonusFromLevel === 'function' && active)
+            ? getHeroBonusFromLevel(active.class) : null;
+        console.log('═══ [V10.68] Preview v4 ═══');
+        console.log('Herói:', active?.class, '| Level:', (typeof getHeroLevel === 'function') ? getHeroLevel(active?.class) : '?');
+        console.log('Bônus de nível:', bonus);
+        console.log('Estimativa:', estimarPreviewV4());
+        console.log('══════════════════════════');
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V10.68] Preview v4 — formAtk + bonusElemento');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Soma bonus.formAtk (nível 6) quando forma válida');
+    console.log('• Soma bonus.bonusElemento (nível 11 reroll) quando');
+    console.log('  tile inicial bate elemento do herói');
+    console.log('• V10.66 continua ativo (barra storyPreviewBarV3)');
+    console.log('');
+    console.log('💡 Debug: window._debugPreviewV4()');
+    console.log('═══════════════════════════════════════════════════');
+})();
