@@ -46108,3 +46108,647 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
     console.log('• Battle modal usa o mesmo conteúdo da OCA');
     console.log('═══════════════════════════════════════════════════');
 })();
+
+// =================================================================
+// historia.js — BLOCO V10.80 (Fix: armas evento + coração vazio + essências)
+// -----------------------------------------------------------------
+// Corrige:
+//   BUG 1: Armas do evento não aparecem no inventário (ID raw)
+//   BUG 2: Coração do Vazio craftável na Tesouraria
+//   NOVO:  Pesadelo dropa Coração do Vazio (mesma chance dos raros)
+//   NOVO:  Essências escalam por dificuldade (1x / 1.5x / 2x)
+// =================================================================
+
+(function fixEventoItensV1080() {
+    if (window._fixEventoItensV1080) return;
+    window._fixEventoItensV1080 = true;
+
+    // =============================================================
+    // 0. CORAÇÃO DO VAZIO EM STORY_MATERIALS (para display de drop)
+    // =============================================================
+    if (typeof STORY_MATERIALS !== 'undefined' && !STORY_MATERIALS['coracao_vazio']) {
+        STORY_MATERIALS['coracao_vazio'] = {
+            id: 'coracao_vazio',
+            name: 'Coração do Vazio',
+            emoji: '🖤'
+        };
+    }
+
+    // =============================================================
+    // 1. getWeaponById inclui EVENTO_ARMAS (BUG 1)
+    // -------------------------------------------------------------
+    // O V39.1 sobrescreveu e só olhava STORY_WEAPONS.
+    // Armas do evento ficavam "invisíveis" no inventário.
+    // =============================================================
+    if (typeof window.getBaseId !== 'function') {
+        window.getBaseId = function(id) {
+            if (!id) return null;
+            return String(id).split('#')[0];
+        };
+    }
+
+    window.getWeaponById = function(uid) {
+        if (!uid) return null;
+        const baseId = window.getBaseId(uid);
+
+        // Armas normais (Ato 1-13)
+        if (typeof STORY_WEAPONS !== 'undefined' && STORY_WEAPONS[baseId]) {
+            return { ...STORY_WEAPONS[baseId], uid: uid, baseId: baseId, id: uid };
+        }
+        // ⭐ Armas do EVENTO (21 armas)
+        if (typeof EVENTO_ARMAS !== 'undefined' && EVENTO_ARMAS[baseId]) {
+            return { ...EVENTO_ARMAS[baseId], uid: uid, baseId: baseId, id: uid };
+        }
+        return null;
+    };
+
+    // Ícone das armas do evento (usa EVENTO_SPRITES)
+    window.getWeaponIcon = function(uid, size) {
+        const baseId = window.getBaseId(uid);
+
+        // 1. Sprite específico do evento
+        if (typeof EVENTO_SPRITES !== 'undefined' && EVENTO_SPRITES[baseId]) {
+            const url = EVENTO_SPRITES[baseId];
+            if (url && url.trim() !== '') {
+                const cls = size === 'large' ? 'weapon-icon weapon-icon-large'
+                          : size === 'small' ? 'weapon-icon weapon-icon-small'
+                          : 'weapon-icon';
+                return `<img src="${url}" class="${cls}" alt="${baseId}">`;
+            }
+        }
+
+        // 2. Arma normal
+        if (typeof STORY_WEAPONS !== 'undefined' && STORY_WEAPONS[baseId]) {
+            const w = STORY_WEAPONS[baseId];
+            const emoji = w.emoji || '⚔️';
+            const fs = size === 'large' ? '2em' : size === 'small' ? '0.85em' : '1em';
+            return `<span style="font-size:${fs};">${emoji}</span>`;
+        }
+
+        // 3. Fallback
+        return '⚔️';
+    };
+
+    // =============================================================
+    // 2. isAmuletAvailable bloqueia coracao_vazio (BUG 2)
+    // =============================================================
+    const _origIsAmuletAvail = window.isAmuletAvailable;
+    if (typeof _origIsAmuletAvail === 'function') {
+        window.isAmuletAvailable = function(amuletId) {
+            const baseId = window.getBaseId(amuletId);
+            // Coração do Vazio é EXCLUSIVO da Loja das Sombras
+            if (baseId === 'coracao_vazio') return false;
+            return _origIsAmuletAvail.apply(this, arguments);
+        };
+    }
+
+    // =============================================================
+    // 3. MIGRAÇÃO: converte itens sem UID (V12.9 cria IDs raw)
+    // -------------------------------------------------------------
+    // Idempotente. Pode rodar várias vezes.
+    // =============================================================
+    window._migrarItensSemUID = function() {
+        if (typeof STORY_PROGRESS === 'undefined') return false;
+        let mudou = false;
+        const getBase = window.getBaseId;
+
+        function migrarArray(arr) {
+            if (!Array.isArray(arr)) return arr;
+
+            // Bases que JÁ têm UID (para detectar duplicatas)
+            const basesComUID = new Set();
+            arr.forEach(id => {
+                if (typeof id === 'string' && id.includes('#')) {
+                    basesComUID.add(getBase(id));
+                }
+            });
+
+            const resultado = [];
+            arr.forEach(id => {
+                if (typeof id !== 'string') return;
+
+                if (id.includes('#')) {
+                    resultado.push(id); // Já tem UID
+                } else {
+                    const base = getBase(id);
+                    if (basesComUID.has(base)) {
+                        // Raw duplicado (já existe versão com UID) → descarta
+                        mudou = true;
+                    } else {
+                        // Migra para UID
+                        resultado.push(`${base}#${Date.now()}${Math.floor(Math.random()*1000000)}`);
+                        mudou = true;
+                    }
+                }
+            });
+            return resultado;
+        }
+
+        STORY_PROGRESS.craftedWeapons = migrarArray(STORY_PROGRESS.craftedWeapons);
+        STORY_PROGRESS.craftedAmulets = migrarArray(STORY_PROGRESS.craftedAmulets);
+
+        // Atualiza referências em heroEquipment (raw → UID)
+        if (STORY_PROGRESS.heroEquipment) {
+            const weaponMap = new Map();
+            const amuletMap = new Map();
+            (STORY_PROGRESS.craftedWeapons || []).forEach(uid => {
+                const base = getBase(uid);
+                if (!weaponMap.has(base)) weaponMap.set(base, uid);
+            });
+            (STORY_PROGRESS.craftedAmulets || []).forEach(uid => {
+                const base = getBase(uid);
+                if (!amuletMap.has(base)) amuletMap.set(base, uid);
+            });
+
+            for (const hc in STORY_PROGRESS.heroEquipment) {
+                const eq = STORY_PROGRESS.heroEquipment[hc];
+                if (!eq) continue;
+
+                if (eq.arma && !eq.arma.includes('#')) {
+                    const base = getBase(eq.arma);
+                    if (weaponMap.has(base)) {
+                        eq.arma = weaponMap.get(base);
+                    } else {
+                        eq.arma = null;
+                    }
+                    mudou = true;
+                }
+                if (eq.amuleto && !eq.amuleto.includes('#')) {
+                    const base = getBase(eq.amuleto);
+                    if (amuletMap.has(base)) {
+                        eq.amuleto = amuletMap.get(base);
+                    } else {
+                        eq.amuleto = null;
+                    }
+                    mudou = true;
+                }
+            }
+        }
+
+        // ⭐ SYNC: eventoArmas → craftedWeapons (com UID)
+        // O _aplicarDrops (V9.5-P2B) empurra pra eventoArmas, não craftedWeapons.
+        // Aqui garante que o item aparece no inventário.
+        if (Array.isArray(STORY_PROGRESS.eventoArmas) && Array.isArray(STORY_PROGRESS.craftedWeapons)) {
+            const basesWeapons = new Set(STORY_PROGRESS.craftedWeapons.map(getBase));
+            STORY_PROGRESS.eventoArmas.forEach(baseId => {
+                if (baseId && !basesWeapons.has(baseId)) {
+                    STORY_PROGRESS.craftedWeapons.push(
+                        `${baseId}#${Date.now()}${Math.floor(Math.random()*1000000)}`
+                    );
+                    mudou = true;
+                }
+            });
+        }
+
+        if (mudou && typeof saveStoryProgress === 'function') saveStoryProgress();
+        return mudou;
+    };
+
+    // =============================================================
+    // 4. Hook comprarEventoItem (loja usa UID)
+    // =============================================================
+    const _origComprar = window.comprarEventoItem;
+    if (typeof _origComprar === 'function' && !_origComprar._v1080) {
+        window.comprarEventoItem = function(itemId, preco, tipo) {
+            const r = _origComprar.apply(this, arguments);
+            window._migrarItensSemUID();
+            return r;
+        };
+        window.comprarEventoItem._v1080 = true;
+    }
+
+    // =============================================================
+    // 5. Hook eventoFinalizarPartida
+    // -------------------------------------------------------------
+    // • Roda ANTES do original (é o ÚLTIMO wrapper instalado)
+    // • Roll Coração Vazio se Pesadelo venceu
+    // • Após original: escala essências + migra itens
+    // =============================================================
+    const _origFinalizar = window.eventoFinalizarPartida;
+    if (typeof _origFinalizar === 'function' && !_origFinalizar._v1080) {
+        const _innerFinalizar = _origFinalizar;
+
+        window.eventoFinalizarPartida = async function(vitoria, saindo) {
+            // Reset
+            window._pvCoracaoDropado = false;
+
+            // Captura ANTES (para calcular delta de essência)
+            const essenciaAntes = (STORY_PROGRESS?.inventory?.['essencia_sombria'] || 0);
+
+            // ⭐ ROLL CORAÇÃO DO VAZIO (só Pesadelo, só vitória no boss final)
+            if (vitoria && !saindo
+                && window._eventoBatalha?.isPesadelo
+                && window._eventoBatalha?.faseId === 'boss') {
+
+                const diffId = STORY_PROGRESS.eventoDificuldade || 'normal';
+                const diff = (typeof EVENTO_DIFICULDADES !== 'undefined')
+                    ? EVENTO_DIFICULDADES[diffId] : null;
+                // dropItem: 5% / 10% / 20% (mesma chance dos fragmentos raros)
+                const chance = diff?.dropItem ?? 0.05;
+
+                if (Math.random() < chance) {
+                    if (!Array.isArray(STORY_PROGRESS.craftedAmulets)) {
+                        STORY_PROGRESS.craftedAmulets = [];
+                    }
+
+                    const jaTem = STORY_PROGRESS.craftedAmulets.some(id =>
+                        window.getBaseId(id) === 'coracao_vazio'
+                    );
+
+                    if (!jaTem) {
+                        STORY_PROGRESS.craftedAmulets.push(
+                            `coracao_vazio#${Date.now()}${Math.floor(Math.random()*1000000)}`
+                        );
+                        STORY_PROGRESS.itemDurability = STORY_PROGRESS.itemDurability || {};
+                        STORY_PROGRESS.itemDurability['coracao_vazio'] = 100;
+                        window._pvCoracaoDropado = true;
+
+                        if (typeof showToast === 'function') {
+                            showToast('🖤', 'Coração do Vazio dropado!', '🖤');
+                        }
+                        console.log('[V10.80] Coração Vazio dropado do Pesadelo!');
+                    } else {
+                        console.log('[V10.80] Coração Vazio já possuído. Drop ignorado.');
+                    }
+                }
+            }
+
+            // Chama o original (drops + finalização + tela)
+            const result = await _innerFinalizar.apply(this, arguments);
+
+            // ⭐ ESCALAR ESSÊNCIAS POR DIFICULDADE
+            // O V10.42 já dropa; aqui a gente escala o delta
+            if (vitoria && !saindo) {
+                const essenciaDepois = (STORY_PROGRESS?.inventory?.['essencia_sombria'] || 0);
+                const deltaOriginal = essenciaDepois - essenciaAntes;
+
+                if (deltaOriginal > 0) {
+                    const diffId = STORY_PROGRESS.eventoDificuldade || 'normal';
+                    const multiplicador = {
+                        normal:   1.0,
+                        dificil:  1.5,
+                        pesadelo: 2.0
+                    }[diffId] ?? 1.0;
+
+                    if (multiplicador !== 1.0) {
+                        const deltaAjustado = Math.floor(deltaOriginal * multiplicador);
+                        STORY_PROGRESS.inventory['essencia_sombria'] = essenciaAntes + deltaAjustado;
+                        if (typeof saveStoryProgress === 'function') saveStoryProgress();
+                        console.log(`[V10.80] Essência escalada: ${deltaOriginal} → ${deltaAjustado} (${diffId})`);
+                    }
+                }
+            }
+
+            // ⭐ Migra itens após tudo (drops usam ID raw)
+            window._migrarItensSemUID();
+
+            return result;
+        };
+        window.eventoFinalizarPartida._v1080 = true;
+    }
+
+    // =============================================================
+    // 6. Hook _mostrarTelaFinalEvento (Coração no display)
+    // =============================================================
+    const _installMostrarHook = () => {
+        if (typeof window._mostrarTelaFinalEvento !== 'function') return false;
+        if (window._mostrarTelaFinalEvento._v1080) return true;
+
+        const _origMostrar = window._mostrarTelaFinalEvento;
+
+        window._mostrarTelaFinalEvento = function(vitoria, drops, dropsResult) {
+            const _origVictory = window.showStoryVictoryScreen;
+            let restored = false;
+            const restore = () => {
+                if (!restored) {
+                    window.showStoryVictoryScreen = _origVictory;
+                    restored = true;
+                }
+            };
+
+            // Só intercepta se coração foi dropado
+            if (vitoria && window._pvCoracaoDropado && typeof _origVictory === 'function') {
+                window.showStoryVictoryScreen = function(phase, dropsFormatados, rewards, meta) {
+                    if (Array.isArray(dropsFormatados)) {
+                        dropsFormatados.push({ id: 'coracao_vazio', qty: 1 });
+                    }
+                    restore();
+                    return _origVictory.call(this, phase, dropsFormatados, rewards, meta);
+                };
+            }
+
+            try {
+                return _origMostrar.apply(this, arguments);
+            } finally {
+                restore();
+            }
+        };
+        window._mostrarTelaFinalEvento._v1080 = true;
+        console.log('[V10.80] Hook _mostrarTelaFinalEvento instalado.');
+        return true;
+    };
+    if (!_installMostrarHook()) {
+        const t = setInterval(() => { if (_installMostrarHook()) clearInterval(t); }, 200);
+    }
+
+    // =============================================================
+    // 7. Hooks de entrada (migração on-demand)
+    // =============================================================
+    const _origRenderTes = window.renderTesourariaScreen;
+    if (typeof _origRenderTes === 'function' && !_origRenderTes._v1080) {
+        window.renderTesourariaScreen = function() {
+            window._migrarItensSemUID();
+            return _origRenderTes.apply(this, arguments);
+        };
+        window.renderTesourariaScreen._v1080 = true;
+    }
+
+    const _origOpenEquip = window.openEquipScreen;
+    if (typeof _origOpenEquip === 'function' && !_origOpenEquip._v1080) {
+        window.openEquipScreen = function(heroClass) {
+            window._migrarItensSemUID();
+            const r = _origOpenEquip.apply(this, arguments);
+            // Migra de novo (V12.9 pode ter empurrado raw durante a renderização)
+            window._migrarItensSemUID();
+            return r;
+        };
+        window.openEquipScreen._v1080 = true;
+    }
+
+    // =============================================================
+    // 8. Migração inicial ao carregar (saves antigos)
+    // =============================================================
+    setTimeout(() => {
+        if (window._migrarItensSemUID()) {
+            console.log('[V10.80] Migração inicial concluída (saves antigos).');
+        }
+    }, 800);
+    setTimeout(() => {
+        window._migrarItensSemUID();
+    }, 2500);
+
+    // =============================================================
+    // 9. Debug
+    // =============================================================
+    window._debugEventoItens = function() {
+        console.log('═══ [V10.80] Evento Itens ═══');
+        console.log('craftedWeapons:', STORY_PROGRESS?.craftedWeapons);
+        console.log('craftedAmulets:', STORY_PROGRESS?.craftedAmulets);
+        console.log('eventoArmas:', STORY_PROGRESS?.eventoArmas);
+        console.log('essencia_sombria:', STORY_PROGRESS?.inventory?.['essencia_sombria']);
+        console.log('coracao_vazio disponível?', window.isAmuletAvailable('coracao_vazio'));
+        console.log('getWeaponById("arma_teju_tacape") →', window.getWeaponById('arma_teju_tacape'));
+        console.log('getWeaponById("arma_teju_tacape#123") →', window.getWeaponById('arma_teju_tacape#123'));
+        console.log('══════════════════════════════');
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V10.80] Fix: Itens do Evento');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('🐛 BUG 1 — Armas do evento no inventário:');
+    console.log('   • getWeaponById agora busca em EVENTO_ARMAS');
+    console.log('   • Migração sincroniza eventoArmas → craftedWeapons com UID');
+    console.log('   • Ícone das armas do evento usa EVENTO_SPRITES');
+    console.log('');
+    console.log('🐛 BUG 2 — Coração do Vazio na Tesouraria:');
+    console.log('   • isAmuletAvailable("coracao_vazio") agora retorna FALSE');
+    console.log('');
+    console.log('🎁 NOVO — Coração do Vazio como drop do Pesadelo:');
+    console.log('   • Chance: 5% (normal) / 10% (difícil) / 20% (pesadelo)');
+    console.log('   • Aparece na tela de vitória como drop');
+    console.log('');
+    console.log('💎 NOVO — Essências escalam por dificuldade:');
+    console.log('   • Normal: ×1.0  |  Difícil: ×1.5  |  Pesadelo: ×2.0');
+    console.log('');
+    console.log('💡 Debug: window._debugEventoItens()');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — BLOCO V10.81 (Fix sprites das armas)
+// -----------------------------------------------------------------
+// O V10.80 sobrescreveu getWeaponIcon e perdeu STORY_WEAPON_SPRITES
+// (armas normais viravam emoji). Este patch restaura a prioridade:
+//
+//   1. STORY_WEAPON_SPRITES (armas normais, Ato 1-13)
+//   2. EVENTO_SPRITES (armas do evento, 21 armas)
+//   3. Emoji do item (fallback)
+// =================================================================
+
+(function fixWeaponSpritesV1081() {
+    if (window._fixWeaponSpritesV1081) return;
+    window._fixWeaponSpritesV1081 = true;
+
+    // =============================================================
+    // getWeaponIcon — agora com 3 camadas de prioridade
+    // =============================================================
+    window.getWeaponIcon = function(uid, size) {
+        const baseId = (typeof window.getBaseId === 'function')
+            ? window.getBaseId(uid)
+            : (uid ? String(uid).split('#')[0] : null);
+
+        if (!baseId) return '⚔️';
+
+        const cls = size === 'large' ? 'weapon-icon weapon-icon-large'
+                  : size === 'small' ? 'weapon-icon weapon-icon-small'
+                  : 'weapon-icon';
+
+        // ────────────────────────────────────────────────────────
+        // 1. ARMA NORMAL → STORY_WEAPON_SPRITES
+        // ────────────────────────────────────────────────────────
+        if (typeof STORY_WEAPON_SPRITES !== 'undefined' && STORY_WEAPON_SPRITES[baseId]) {
+            const url = STORY_WEAPON_SPRITES[baseId];
+            if (url && String(url).trim() !== '') {
+                const emoji = STORY_WEAPONS?.[baseId]?.emoji || '⚔️';
+                return `<img src="${url}" class="${cls}" alt="${baseId}" onerror="this.outerHTML='${emoji}'">`;
+            }
+        }
+
+        // ────────────────────────────────────────────────────────
+        // 2. ARMA DO EVENTO → EVENTO_SPRITES
+        // ────────────────────────────────────────────────────────
+        if (typeof EVENTO_SPRITES !== 'undefined' && EVENTO_SPRITES[baseId]) {
+            const url = EVENTO_SPRITES[baseId];
+            if (url && String(url).trim() !== '') {
+                const emoji = EVENTO_ARMAS?.[baseId]?.emoji
+                           || (EVENTO_ARMAS?.[baseId]?.tipo === 'flecha' ? '🏹'
+                             : EVENTO_ARMAS?.[baseId]?.tipo === 'cajado' ? '🪄'
+                             : '⚔️');
+                return `<img src="${url}" class="${cls}" alt="${baseId}" onerror="this.outerHTML='${emoji}'">`;
+            }
+        }
+
+        // ────────────────────────────────────────────────────────
+        // 3. FALLBACK → emoji
+        // ────────────────────────────────────────────────────────
+        const w = (typeof STORY_WEAPONS !== 'undefined') ? STORY_WEAPONS[baseId] : null;
+        const evt = (typeof EVENTO_ARMAS !== 'undefined') ? EVENTO_ARMAS[baseId] : null;
+
+        let emoji = '⚔️';
+        if (w?.emoji) emoji = w.emoji;
+        else if (evt?.emoji) emoji = evt.emoji;
+        else if (evt?.tipo === 'flecha') emoji = '🏹';
+        else if (evt?.tipo === 'cajado') emoji = '🪄';
+        else if (evt?.tipo === 'tacape') emoji = '🪓';
+
+        const fs = size === 'large' ? '2em' : size === 'small' ? '0.85em' : '1em';
+        return `<span style="font-size:${fs}; display:inline-block; line-height:1;">${emoji}</span>`;
+    };
+
+    // =============================================================
+    // getAmuletIcon — mesma coisa para amuletos (por garantia)
+    // -------------------------------------------------------------
+    // O V10.80 não tocou nisso, mas o V40.1 também não garante.
+    // Aqui deixamos explícito.
+    // =============================================================
+    window.getAmuletIcon = function(uid, size) {
+        const baseId = (typeof window.getBaseId === 'function')
+            ? window.getBaseId(uid)
+            : (uid ? String(uid).split('#')[0] : null);
+
+        if (!baseId) return '🧿';
+
+        const cls = size === 'large' ? 'weapon-icon weapon-icon-large'
+                  : size === 'small' ? 'weapon-icon weapon-icon-small'
+                  : 'weapon-icon';
+
+        // 1. Sprite da tabela antiga
+        if (typeof STORY_AMULET_SPRITES !== 'undefined' && STORY_AMULET_SPRITES[baseId]) {
+            const url = STORY_AMULET_SPRITES[baseId];
+            if (url && String(url).trim() !== '') {
+                const emoji = STORY_AMULETS?.[baseId]?.emoji || '🧿';
+                return `<img src="${url}" class="${cls}" alt="${baseId}" onerror="this.outerHTML='${emoji}'">`;
+            }
+        }
+
+        // 2. Fallback emoji
+        const a = (typeof STORY_AMULETS !== 'undefined') ? STORY_AMULETS[baseId] : null;
+        const emoji = a?.emoji || '🧿';
+        const fs = size === 'large' ? '2em' : size === 'small' ? '0.85em' : '1em';
+        return `<span style="font-size:${fs}; display:inline-block; line-height:1;">${emoji}</span>`;
+    };
+
+    // =============================================================
+    // Diagnóstico
+    // =============================================================
+    window._debugSprites = function() {
+        console.log('═══ [V10.81] Sprites ═══');
+        console.log('STORY_WEAPON_SPRITES:', Object.keys(STORY_WEAPON_SPRITES || {}).length);
+        console.log('EVENTO_SPRITES (armas):',
+            Object.keys(EVENTO_SPRITES || {}).filter(k => k.startsWith('arma_')).length);
+        console.log('');
+        console.log('Teste arma normal:');
+        console.log('  tacape_1 →', window.getWeaponIcon('tacape_1', 'normal').substring(0, 60));
+        console.log('Teste arma evento:');
+        console.log('  arma_teju_tacape →', window.getWeaponIcon('arma_teju_tacape', 'normal').substring(0, 60));
+        console.log('Teste com UID:');
+        console.log('  arma_teju_tacape#123 →', window.getWeaponIcon('arma_teju_tacape#123', 'normal').substring(0, 60));
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V10.81] Sprites das armas restaurados');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('Prioridade:');
+    console.log('  1. STORY_WEAPON_SPRITES (armas normais)');
+    console.log('  2. EVENTO_SPRITES (armas do evento)');
+    console.log('  3. Emoji (último recurso)');
+    console.log('');
+    console.log('💡 Debug: window._debugSprites()');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — BLOCO V10.82 (Fix: revive de arma desmanchada)
+// -----------------------------------------------------------------
+// O V10.80 sincronizava eventoArmas → craftedWeapons em CADA chamada
+// de _migrarItensSemUID (que roda 2x no load + em cada render).
+// Se o jogador desmanchasse uma arma já recuperada, ela voltava.
+//
+// Solução: cada base ID só é recuperada UMA VEZ por save. Depois
+// disso, desmanchar é definitivo.
+// =================================================================
+
+(function fixReviveArmaDesmanchadaV1082() {
+    if (window._fixReviveArmaDesmanchadaV1082) return;
+    window._fixReviveArmaDesmanchadaV1082 = true;
+
+    // Garante o array de controle no save
+    if (typeof STORY_PROGRESS !== 'undefined' && !Array.isArray(STORY_PROGRESS._v1080_armasRecuperadas)) {
+        STORY_PROGRESS._v1080_armasRecuperadas = [];
+    }
+
+    // Sobrescreve o _migrarItensSemUID com a lógica "recupera uma vez só"
+    const _origMigrar = window._migrarItensSemUID;
+    if (typeof _origMigrar === 'function' && !_origMigrar._v1082) {
+        window._migrarItensSemUID = function() {
+            if (typeof STORY_PROGRESS === 'undefined') return false;
+            if (!Array.isArray(STORY_PROGRESS._v1080_armasRecuperadas)) {
+                STORY_PROGRESS._v1080_armasRecuperadas = [];
+            }
+
+            let mudou = false;
+            const getBase = window.getBaseId || (id => id ? String(id).split('#')[0] : null);
+
+            // ---- 1. Migra raw → UID (delega ao original, que já faz certo) ----
+            const mudouOriginal = _origMigrar.apply(this, arguments);
+            if (mudouOriginal) mudou = true;
+
+            // ---- 2. Sync eventoArmas → craftedWeapons (uma vez por base) ----
+            if (Array.isArray(STORY_PROGRESS.eventoArmas) &&
+                Array.isArray(STORY_PROGRESS.craftedWeapons)) {
+
+                const basesWeapons = new Set(STORY_PROGRESS.craftedWeapons.map(getBase));
+
+                STORY_PROGRESS.eventoArmas.forEach(baseId => {
+                    if (!baseId) return;
+
+                    // ⭐ Se já foi recuperada antes, pula (mesmo que o jogador
+                    // tenha desmanchado depois). Desmanchar é definitivo.
+                    if (STORY_PROGRESS._v1080_armasRecuperadas.includes(baseId)) {
+                        return;
+                    }
+
+                    // Se o item não está no inventário → adiciona
+                    if (!basesWeapons.has(baseId)) {
+                        const novoUID = `${baseId}#${Date.now()}${Math.floor(Math.random()*1000000)}`;
+                        STORY_PROGRESS.craftedWeapons.push(novoUID);
+                        basesWeapons.add(baseId);
+                        mudou = true;
+                        console.log(`[V10.82] Arma recuperada uma vez: ${baseId}`);
+                    }
+
+                    // Marca como recuperada (mesmo que já estivesse lá)
+                    STORY_PROGRESS._v1080_armasRecuperadas.push(baseId);
+                    mudou = true;
+                });
+            }
+
+            if (mudou && typeof saveStoryProgress === 'function') {
+                saveStoryProgress();
+            }
+            return mudou;
+        };
+        window._migrarItensSemUID._v1082 = true;
+        console.log('[V10.82] Sync eventoArmas limitado a uma recuperação por base.');
+    }
+
+    // Diagnóstico
+    window._debugRecuperadas = function() {
+        console.log('═══ [V10.82] Recuperadas ═══');
+        console.log('_v1080_armasRecuperadas:', STORY_PROGRESS._v1080_armasRecuperadas);
+        console.log('eventoArmas:', STORY_PROGRESS.eventoArmas);
+        console.log('craftedWeapons:', STORY_PROGRESS.craftedWeapons);
+        console.log('══════════════════════════════');
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V10.82] Fix: arma desmanchada não volta mais');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Cada base ID é recuperada UMA VEZ por save');
+    console.log('• Desmanchar depois da recuperação é definitivo');
+    console.log('• Save antigo (sem a flag) roda o sync normalmente na 1ª vez');
+    console.log('');
+    console.log('💡 Debug: window._debugRecuperadas()');
+    console.log('═══════════════════════════════════════════════════');
+})();
