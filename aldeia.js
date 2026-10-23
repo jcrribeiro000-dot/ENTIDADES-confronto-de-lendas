@@ -1586,3 +1586,787 @@
     aplicarPosicoes();
     
 })();
+
+// =================================================================
+// 🚶 heroAldeiaWalker v6 — Visual novo, sem piscar, sem vazar
+// -----------------------------------------------------------------
+// Foco: .aldeia-visual-wrap + .aldeia-icone[data-id]
+// Walker mora em #storyScreen (não em body) → morre junto com a tela.
+// Observer só CRIA — nunca remove. Sem polling.
+// =================================================================
+(function heroAldeiaWalkerV6() {
+    if (window._heroAldeiaWalkerV6) return;
+    window._heroAldeiaWalkerV6 = true;
+
+    const SPRITE_SIZE = 52;
+    const WALK_MS = 1200;
+    let heroElem = null;
+    let animando = false;
+    let _obsDebounce = null;
+
+    // ---------------- CSS ----------------
+    if (!document.getElementById('heroAldeiaWalkerCSS6')) {
+        const style = document.createElement('style');
+        style.id = 'heroAldeiaWalkerCSS6';
+        style.textContent = `
+            .hero-walker-wrap {
+                position: fixed;
+                width: ${SPRITE_SIZE}px; height: ${SPRITE_SIZE}px;
+                pointer-events: none;
+                z-index: 99999;
+                opacity: 0;
+                transition:
+                    left ${WALK_MS}ms cubic-bezier(.25,.8,.3,1),
+                    top ${WALK_MS}ms cubic-bezier(.25,.8,.3,1),
+                    opacity 0.3s ease;
+                filter: drop-shadow(0 6px 10px rgba(0,0,0,0.9))
+                        drop-shadow(0 0 10px rgba(232,185,35,0.6));
+            }
+            .hero-walker-wrap.visible { opacity: 1; }
+            .hero-walker-wrap.walking {
+                filter: drop-shadow(0 6px 12px rgba(0,0,0,0.9))
+                        drop-shadow(0 0 16px rgba(232,185,35,0.9));
+            }
+            .hero-walker-img {
+                width: 100%; height: 100%;
+                object-fit: contain;
+                transform-origin: center bottom;
+            }
+            .hero-walker-wrap.walking .hero-walker-img {
+                animation: heroWalkerBob 0.3s ease-in-out infinite;
+            }
+            @keyframes heroWalkerBob {
+                0%,100% { transform: translateY(0); }
+                50%     { transform: translateY(-5px); }
+            }
+            .hero-walker-wrap.facing-left .hero-walker-img {
+                transform: scaleX(-1);
+            }
+            .hero-walker-wrap.facing-left.walking .hero-walker-img {
+                animation: heroWalkerBobLeft 0.3s ease-in-out infinite;
+            }
+            @keyframes heroWalkerBobLeft {
+                0%,100% { transform: scaleX(-1) translateY(0); }
+                50%     { transform: scaleX(-1) translateY(-5px); }
+            }
+            .hero-walker-badge {
+                position: absolute; bottom: -14px; left: 50%;
+                transform: translateX(-50%);
+                font-family: 'Cinzel', serif; font-size: 0.6rem;
+                color: #e8b923; background: rgba(10,6,2,0.85);
+                border: 1px solid rgba(201,162,39,0.5);
+                border-radius: 8px; padding: 1px 6px;
+                white-space: nowrap;
+                text-shadow: 0 1px 2px #000;
+                pointer-events: none;
+            }
+            .aldeia-icone.hero-target-pulse {
+                animation: heroTargetPulse 0.9s ease-out;
+            }
+            @keyframes heroTargetPulse {
+                0%,100% { filter: drop-shadow(0 0 0 rgba(232,185,35,0)); }
+                50%     { filter: drop-shadow(0 0 28px rgba(232,185,35,0.95)); }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // ---------------- acesso seguro às globais ----------------
+    function getSP() { try { if (typeof STORY_PROGRESS !== 'undefined') return STORY_PROGRESS; } catch(e){} return window.STORY_PROGRESS || null; }
+    function getHC() { try { if (typeof STORY_HERO_CLASSES !== 'undefined') return STORY_HERO_CLASSES; } catch(e){} return window.STORY_HERO_CLASSES || null; }
+    function getSS() { try { if (typeof SPRITES_STORY !== 'undefined') return SPRITES_STORY; } catch(e){} return window.SPRITES_STORY || null; }
+    function getES() { try { if (typeof EMOJI_STORY !== 'undefined') return EMOJI_STORY; } catch(e){} return window.EMOJI_STORY || null; }
+
+    // ---------------- 100% visual ----------------
+    function getAldeiaWrap() {
+        return document.querySelector('.aldeia-visual-wrap');
+    }
+    function getIcone(key) {
+        return document.querySelector(`.aldeia-icone[data-id="${key}"]`);
+    }
+    function getAnchorIcone(el) {
+        if (!el) return null;
+        return el.querySelector('.aldeia-icone-icon') || el;
+    }
+
+    // ---------------- helpers de herói ----------------
+    function getSelectedHeroClass() {
+        const sel = getSP()?.selectedHeroes;
+        return (Array.isArray(sel) && sel[0]) ? sel[0] : null;
+    }
+    function getHeroSprite(cls) {
+        if (!cls) return null;
+        const hc = getHC(), ss = getSS();
+        const key = hc?.[cls]?.spriteKey;
+        if (key && ss?.[key]) {
+            const url = ss[key];
+            if (url && String(url).trim() !== '') return url;
+        }
+        try { if (typeof SPRITES !== 'undefined' && SPRITES[cls]) return SPRITES[cls]; } catch(e){}
+        return null;
+    }
+    function getHeroEmoji(cls) {
+        const key = getHC()?.[cls]?.spriteKey;
+        return (key && getES()?.[key]) ? getES()[key] : '🧙';
+    }
+    function getHeroDisplayName(cls) {
+        return getHC()?.[cls]?.displayName || cls || 'Herói';
+    }
+
+    // ---------------- executar ação (fallback) ----------------
+    function executarAcaoDireta(key) {
+        const fns = {
+            atos: ['renderAtosScreen'],
+            oca: ['renderOcaScreenFiltered', 'renderOcaScreen'],
+            loja: ['renderLojaScreenCompleta', 'renderLojaScreen'],
+            ritual: ['renderRitualScreen'],
+            bestiario: ['renderBestiaryScreen'],
+            tesouraria: ['renderTesourariaScreen'],
+            evento: ['renderEventoSemanalScreen'],
+            coop: ['coopAbrirPainel'],
+            pvp: ['pvpAbrirPainel']
+        }[key] || [];
+        for (const n of fns) if (typeof window[n] === 'function') { try { window[n](); return true; } catch(e){} }
+        if (typeof window.enterAldeiaLocation === 'function') {
+            try { window.enterAldeiaLocation(key); return true; } catch(e){}
+        }
+        return false;
+    }
+
+    // ---------------- posicionar ----------------
+    function posicionarHeroNaAldeia() {
+        // Early return: já existe e está visível + não animando
+        const existente = document.getElementById('aldeiaHeroWalker');
+        if (existente && existente.classList.contains('visible') && !existente.classList.contains('walking')) {
+            return;
+        }
+
+        // Se já existe (mesmo invisível), remove
+        if (existente) existente.remove();
+        heroElem = null;
+
+        if (animando) return;
+        if (!getAldeiaWrap()) return;
+
+        const heroClass = getSelectedHeroClass();
+        if (!heroClass) { console.log('[v6] sem herói selecionado'); return; }
+
+        const ocaIcon = getIcone('oca');
+        if (!ocaIcon) { console.warn('[v6] ícone OCA não encontrado'); return; }
+
+        const anchor = getAnchorIcone(ocaIcon);
+        const sprite = getHeroSprite(heroClass);
+        const emoji  = getHeroEmoji(heroClass);
+        const name   = getHeroDisplayName(heroClass);
+
+        const wrap = document.createElement('div');
+        wrap.id = 'aldeiaHeroWalker';
+        wrap.className = 'hero-walker-wrap';
+        wrap.setAttribute('data-hero', heroClass);
+
+        if (sprite) {
+            const img = document.createElement('img');
+            img.className = 'hero-walker-img';
+            img.src = sprite;
+            img.alt = name;
+            img.onerror = function () {
+                this.outerHTML = `<div class="hero-walker-img" style="display:flex;align-items:center;justify-content:center;font-size:2.4rem;">${emoji}</div>`;
+            };
+            wrap.appendChild(img);
+        } else {
+            const img = document.createElement('div');
+            img.className = 'hero-walker-img';
+            img.textContent = emoji;
+            img.style.cssText = 'display:flex;align-items:center;justify-content:center;font-size:2.4rem;';
+            wrap.appendChild(img);
+        }
+
+        const badge = document.createElement('div');
+        badge.className = 'hero-walker-badge';
+        badge.textContent = name;
+        wrap.appendChild(badge);
+
+        const baseRect = anchor.getBoundingClientRect();
+        const isMobile = window.innerWidth < 700;
+        let x, y;
+        if (isMobile) {
+            x = baseRect.left + baseRect.width / 2 - SPRITE_SIZE / 2;
+            y = baseRect.top - SPRITE_SIZE - 6;
+        } else {
+            x = baseRect.right + 8;
+            y = baseRect.top + baseRect.height / 2 - SPRITE_SIZE / 2;
+        }
+        x = Math.max(4, Math.min(window.innerWidth  - SPRITE_SIZE - 4, x));
+        y = Math.max(4, Math.min(window.innerHeight - SPRITE_SIZE - 4, y));
+
+        wrap.style.left = x + 'px';
+        wrap.style.top  = y + 'px';
+
+        // ⭐ MORADOR: #storyScreen (morre com a tela)
+        const screen = document.getElementById('storyScreen');
+        (screen || document.body).appendChild(wrap);
+        heroElem = wrap;
+
+        requestAnimationFrame(() => {
+            if (heroElem) heroElem.classList.add('visible');
+        });
+
+        console.log(`[v6] ${name} posicionado em (${x|0}, ${y|0})`);
+    }
+
+    // ---------------- caminhada ----------------
+    async function animarCaminhada(target) {
+        return new Promise(resolve => {
+            if (!heroElem || !target) { resolve(); return; }
+            const tgt = target.getBoundingClientRect();
+            const targetCenter = tgt.left + tgt.width / 2;
+            const currentX = parseFloat(heroElem.style.left) || 0;
+            const goRight = targetCenter > currentX;
+            heroElem.classList.toggle('facing-left', !goRight);
+
+            const dx = goRight ? tgt.right + 8 : tgt.left - SPRITE_SIZE - 8;
+            const dy = tgt.top + tgt.height / 2 - SPRITE_SIZE / 2;
+
+            target.classList.add('hero-target-pulse');
+            heroElem.classList.add('walking');
+            heroElem.style.left = dx + 'px';
+            heroElem.style.top  = dy + 'px';
+
+            setTimeout(() => {
+                if (heroElem) heroElem.classList.remove('walking');
+                target.classList.remove('hero-target-pulse');
+                resolve();
+            }, WALK_MS + 50);
+        });
+    }
+
+    // ---------------- click handler ----------------
+    function onClick(ev) {
+        if (animando) {
+            if (ev.target.closest('.aldeia-icone')) {
+                ev.preventDefault();
+                ev.stopImmediatePropagation();
+            }
+            return;
+        }
+
+        const icone = ev.target.closest('.aldeia-icone');
+        if (!icone) return;
+        if (icone.classList.contains('locked')) return;
+        if (!getAldeiaWrap()) return;
+
+        const key = icone.getAttribute('data-id');
+        if (!key) return;
+
+        const origOnClick = icone.onclick;
+
+        ev.preventDefault();
+        ev.stopImmediatePropagation();
+
+        const acionarAcao = () => {
+            if (typeof origOnClick === 'function') {
+                try { origOnClick.call(icone); return; } catch (e) { console.warn('[v6] onclick erro:', e); }
+            }
+            executarAcaoDireta(key);
+        };
+
+        // OCA → entra direto (sem caminhada)
+        if (key === 'oca' || !heroElem) {
+            acionarAcao();
+            return;
+        }
+
+        // Caminha → ação
+        animando = true;
+        (async () => {
+            try {
+                await animarCaminhada(icone);
+                await new Promise(r => setTimeout(r, 150));
+                if (heroElem) { heroElem.remove(); heroElem = null; }
+                acionarAcao();
+            } catch (e) {
+                console.warn('[v6] erro:', e);
+                acionarAcao();
+            } finally {
+                setTimeout(() => { animando = false; }, 150);
+            }
+        })();
+    }
+
+    window.addEventListener('click', onClick, true);
+
+    // ---------------- observer (só CRIA) ----------------
+    function instalarObserver() {
+        const screen = document.getElementById('storyScreen');
+        if (!screen) { setTimeout(instalarObserver, 300); return; }
+        const obs = new MutationObserver(() => {
+            clearTimeout(_obsDebounce);
+            _obsDebounce = setTimeout(() => {
+                // ⭐ Só cria se: tem aldeia + não tem walker + não está animando
+                if (getAldeiaWrap()
+                    && !document.getElementById('aldeiaHeroWalker')
+                    && !animando) {
+                    posicionarHeroNaAldeia();
+                }
+            }, 350);
+        });
+        obs.observe(screen, { childList: true, subtree: true });
+        console.log('[v6] MutationObserver instalado.');
+    }
+    instalarObserver();
+
+    // Tentativas iniciais
+    setTimeout(posicionarHeroNaAldeia, 400);
+    setTimeout(posicionarHeroNaAldeia, 1200);
+
+    // Resize
+    let rt = null;
+    window.addEventListener('resize', () => {
+        clearTimeout(rt);
+        rt = setTimeout(() => {
+            // Reposicionar se já existe
+            const el = document.getElementById('aldeiaHeroWalker');
+            if (el && !el.classList.contains('walking') && getAldeiaWrap()) {
+                el.remove();
+                heroElem = null;
+                posicionarHeroNaAldeia();
+            }
+        }, 250);
+    });
+    window.addEventListener('orientationchange', () => {
+        setTimeout(() => {
+            const el = document.getElementById('aldeiaHeroWalker');
+            if (el && !el.classList.contains('walking') && getAldeiaWrap()) {
+                el.remove();
+                heroElem = null;
+                posicionarHeroNaAldeia();
+            }
+        }, 350);
+    });
+
+    // ---------------- debug ----------------
+    window._forceWalker = function() {
+        console.log('[v6] forçando...');
+        const el = document.getElementById('aldeiaHeroWalker');
+        if (el) el.remove();
+        heroElem = null;
+        posicionarHeroNaAldeia();
+        setTimeout(() => {
+            const el2 = document.getElementById('aldeiaHeroWalker');
+            console.log('[v6] DIAGNÓSTICO:', {
+                aldeiaWrap: !!getAldeiaWrap(),
+                ocaIcon: !!getIcone('oca'),
+                heroClass: getSelectedHeroClass(),
+                walkerNoDOM: !!el2,
+                walkerVisivel: el2?.classList.contains('visible'),
+                walkerAnimando: el2?.classList.contains('walking'),
+                pos: el2 ? { x: el2.getBoundingClientRect().x | 0, y: el2.getBoundingClientRect().y | 0 } : null
+            });
+        }, 200);
+    };
+
+    window._debugHeroWalker = function() {
+        const el = document.getElementById('aldeiaHeroWalker');
+        console.log('═══ [v6] ═══');
+        console.log('Aldeia visual-wrap?', !!getAldeiaWrap());
+        console.log('Ícone OCA?         ', !!getIcone('oca'));
+        console.log('Herói selecionado? ', getSelectedHeroClass());
+        console.log('Walker no DOM?     ', !!el);
+        console.log('Walker visível?    ', el?.classList.contains('visible'));
+        console.log('Walker animando?   ', el?.classList.contains('walking'));
+        console.log('Animando (flag)?   ', animando);
+        console.log('Papai do walker?   ', el?.parentElement?.id || el?.parentElement?.className);
+        console.log('═══════════════════');
+    };
+
+    console.log('✅ [v6] Walker instalado. Foco no layout visual.');
+    console.log('   💡 Debug: window._forceWalker() / window._debugHeroWalker()');
+})();
+// =================================================================
+// FIM — heroAldeiaWalker v6
+// =================================================================
+// =================================================================
+// 🚶 heroAldeiaWalker v6.1 — Visual novo, à prova de polling antigo
+// -----------------------------------------------------------------
+// Foco: .aldeia-visual-wrap + .aldeia-icone[data-id]
+// Walker mora em #storyScreen → morre junto com a tela.
+// Guard observer recria imediatamente se for removido por algo
+// externo (proteção contra v3/v4/v5 antigos ainda ativos).
+// =================================================================
+(function heroAldeiaWalkerV61() {
+    if (window._heroAldeiaWalkerV61) return;
+    window._heroAldeiaWalkerV61 = true;
+
+    const SPRITE_SIZE = 52;
+    const WALK_MS = 1200;
+    let heroElem = null;
+    let animando = false;
+    let _obsDebounce = null;
+    let _removidosExternos = 0;
+
+    // ---------------- CSS ----------------
+    if (!document.getElementById('heroAldeiaWalkerCSS61')) {
+        const style = document.createElement('style');
+        style.id = 'heroAldeiaWalkerCSS61';
+        style.textContent = `
+            .hero-walker-wrap {
+                position: fixed;
+                width: ${SPRITE_SIZE}px; height: ${SPRITE_SIZE}px;
+                pointer-events: none; z-index: 99999;
+                opacity: 0;
+                transition:
+                    left ${WALK_MS}ms cubic-bezier(.25,.8,.3,1),
+                    top ${WALK_MS}ms cubic-bezier(.25,.8,.3,1),
+                    opacity 0.3s ease;
+                filter: drop-shadow(0 6px 10px rgba(0,0,0,0.9))
+                        drop-shadow(0 0 10px rgba(232,185,35,0.6));
+            }
+            .hero-walker-wrap.visible { opacity: 1; }
+            .hero-walker-wrap.walking {
+                filter: drop-shadow(0 6px 12px rgba(0,0,0,0.9))
+                        drop-shadow(0 0 16px rgba(232,185,35,0.9));
+            }
+            .hero-walker-img {
+                width: 100%; height: 100%;
+                object-fit: contain;
+                transform-origin: center bottom;
+            }
+            .hero-walker-wrap.walking .hero-walker-img {
+                animation: heroWalkerBob 0.3s ease-in-out infinite;
+            }
+            @keyframes heroWalkerBob {
+                0%,100% { transform: translateY(0); }
+                50%     { transform: translateY(-5px); }
+            }
+            .hero-walker-wrap.facing-left .hero-walker-img { transform: scaleX(-1); }
+            .hero-walker-wrap.facing-left.walking .hero-walker-img {
+                animation: heroWalkerBobLeft 0.3s ease-in-out infinite;
+            }
+            @keyframes heroWalkerBobLeft {
+                0%,100% { transform: scaleX(-1) translateY(0); }
+                50%     { transform: scaleX(-1) translateY(-5px); }
+            }
+            .hero-walker-badge {
+                position: absolute; bottom: -14px; left: 50%;
+                transform: translateX(-50%);
+                font-family: 'Cinzel', serif; font-size: 0.6rem;
+                color: #e8b923; background: rgba(10,6,2,0.85);
+                border: 1px solid rgba(201,162,39,0.5);
+                border-radius: 8px; padding: 1px 6px;
+                white-space: nowrap;
+                text-shadow: 0 1px 2px #000;
+                pointer-events: none;
+            }
+            .aldeia-icone.hero-target-pulse {
+                animation: heroTargetPulse 0.9s ease-out;
+            }
+            @keyframes heroTargetPulse {
+                0%,100% { filter: drop-shadow(0 0 0 rgba(232,185,35,0)); }
+                50%     { filter: drop-shadow(0 0 28px rgba(232,185,35,0.95)); }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // ---------------- acesso seguro às globais ----------------
+    function getSP() { try { if (typeof STORY_PROGRESS !== 'undefined') return STORY_PROGRESS; } catch(e){} return window.STORY_PROGRESS || null; }
+    function getHC() { try { if (typeof STORY_HERO_CLASSES !== 'undefined') return STORY_HERO_CLASSES; } catch(e){} return window.STORY_HERO_CLASSES || null; }
+    function getSS() { try { if (typeof SPRITES_STORY !== 'undefined') return SPRITES_STORY; } catch(e){} return window.SPRITES_STORY || null; }
+    function getES() { try { if (typeof EMOJI_STORY !== 'undefined') return EMOJI_STORY; } catch(e){} return window.EMOJI_STORY || null; }
+
+    // ---------------- visual ----------------
+    function getAldeiaWrap() { return document.querySelector('.aldeia-visual-wrap'); }
+    function getIcone(key) { return document.querySelector(`.aldeia-icone[data-id="${key}"]`); }
+    function getAnchorIcone(el) { return el ? (el.querySelector('.aldeia-icone-icon') || el) : null; }
+
+    // ---------------- herói ----------------
+    function getSelectedHeroClass() {
+        const sel = getSP()?.selectedHeroes;
+        return (Array.isArray(sel) && sel[0]) ? sel[0] : null;
+    }
+    function getHeroSprite(cls) {
+        if (!cls) return null;
+        const hc = getHC(), ss = getSS();
+        const key = hc?.[cls]?.spriteKey;
+        if (key && ss?.[key]) {
+            const url = ss[key];
+            if (url && String(url).trim() !== '') return url;
+        }
+        try { if (typeof SPRITES !== 'undefined' && SPRITES[cls]) return SPRITES[cls]; } catch(e){}
+        return null;
+    }
+    function getHeroEmoji(cls) {
+        const key = getHC()?.[cls]?.spriteKey;
+        return (key && getES()?.[key]) ? getES()[key] : '🧙';
+    }
+    function getHeroDisplayName(cls) {
+        return getHC()?.[cls]?.displayName || cls || 'Herói';
+    }
+
+    // ---------------- ação ----------------
+    function executarAcaoDireta(key) {
+        const fns = {
+            atos: ['renderAtosScreen'],
+            oca: ['renderOcaScreenFiltered', 'renderOcaScreen'],
+            loja: ['renderLojaScreenCompleta', 'renderLojaScreen'],
+            ritual: ['renderRitualScreen'],
+            bestiario: ['renderBestiaryScreen'],
+            tesouraria: ['renderTesourariaScreen'],
+            evento: ['renderEventoSemanalScreen'],
+            coop: ['coopAbrirPainel'],
+            pvp: ['pvpAbrirPainel']
+        }[key] || [];
+        for (const n of fns) if (typeof window[n] === 'function') { try { window[n](); return true; } catch(e){} }
+        if (typeof window.enterAldeiaLocation === 'function') {
+            try { window.enterAldeiaLocation(key); return true; } catch(e){}
+        }
+        return false;
+    }
+
+    // ---------------- posicionar ----------------
+    function posicionarHeroNaAldeia() {
+        // Se já existe conectado e visível → não recria
+        const existente = document.getElementById('aldeiaHeroWalker');
+        if (existente && existente.isConnected && existente.classList.contains('visible') && !existente.classList.contains('walking')) {
+            return;
+        }
+        if (existente) existente.remove();
+        heroElem = null;
+
+        if (animando) return;
+        if (!getAldeiaWrap()) return;
+
+        const heroClass = getSelectedHeroClass();
+        if (!heroClass) return;
+
+        const ocaIcon = getIcone('oca');
+        if (!ocaIcon) return;
+
+        const anchor = getAnchorIcone(ocaIcon);
+        const sprite = getHeroSprite(heroClass);
+        const emoji  = getHeroEmoji(heroClass);
+        const name   = getHeroDisplayName(heroClass);
+
+        const wrap = document.createElement('div');
+        wrap.id = 'aldeiaHeroWalker';
+        wrap.className = 'hero-walker-wrap';
+        wrap.setAttribute('data-hero', heroClass);
+
+        if (sprite) {
+            const img = document.createElement('img');
+            img.className = 'hero-walker-img';
+            img.src = sprite;
+            img.alt = name;
+            img.onerror = function () {
+                this.outerHTML = `<div class="hero-walker-img" style="display:flex;align-items:center;justify-content:center;font-size:2.4rem;">${emoji}</div>`;
+            };
+            wrap.appendChild(img);
+        } else {
+            const img = document.createElement('div');
+            img.className = 'hero-walker-img';
+            img.textContent = emoji;
+            img.style.cssText = 'display:flex;align-items:center;justify-content:center;font-size:2.4rem;';
+            wrap.appendChild(img);
+        }
+
+        const badge = document.createElement('div');
+        badge.className = 'hero-walker-badge';
+        badge.textContent = name;
+        wrap.appendChild(badge);
+
+        const baseRect = anchor.getBoundingClientRect();
+        const isMobile = window.innerWidth < 700;
+        let x, y;
+        if (isMobile) {
+            x = baseRect.left + baseRect.width / 2 - SPRITE_SIZE / 2;
+            y = baseRect.top - SPRITE_SIZE - 6;
+        } else {
+            x = baseRect.right + 8;
+            y = baseRect.top + baseRect.height / 2 - SPRITE_SIZE / 2;
+        }
+        x = Math.max(4, Math.min(window.innerWidth  - SPRITE_SIZE - 4, x));
+        y = Math.max(4, Math.min(window.innerHeight - SPRITE_SIZE - 4, y));
+
+        wrap.style.left = x + 'px';
+        wrap.style.top  = y + 'px';
+
+        const screen = document.getElementById('storyScreen');
+        (screen || document.body).appendChild(wrap);
+        heroElem = wrap;
+
+        requestAnimationFrame(() => {
+            if (heroElem) heroElem.classList.add('visible');
+        });
+    }
+
+    // ---------------- caminhada ----------------
+    async function animarCaminhada(target) {
+        return new Promise(resolve => {
+            if (!heroElem || !target) { resolve(); return; }
+            const tgt = target.getBoundingClientRect();
+            const targetCenter = tgt.left + tgt.width / 2;
+            const currentX = parseFloat(heroElem.style.left) || 0;
+            const goRight = targetCenter > currentX;
+            heroElem.classList.toggle('facing-left', !goRight);
+
+            const dx = goRight ? tgt.right + 8 : tgt.left - SPRITE_SIZE - 8;
+            const dy = tgt.top + tgt.height / 2 - SPRITE_SIZE / 2;
+
+            target.classList.add('hero-target-pulse');
+            heroElem.classList.add('walking');
+            heroElem.style.left = dx + 'px';
+            heroElem.style.top  = dy + 'px';
+
+            setTimeout(() => {
+                if (heroElem) heroElem.classList.remove('walking');
+                target.classList.remove('hero-target-pulse');
+                resolve();
+            }, WALK_MS + 50);
+        });
+    }
+
+    // ---------------- click ----------------
+    function onClick(ev) {
+        if (animando) {
+            if (ev.target.closest('.aldeia-icone')) {
+                ev.preventDefault();
+                ev.stopImmediatePropagation();
+            }
+            return;
+        }
+
+        const icone = ev.target.closest('.aldeia-icone');
+        if (!icone) return;
+        if (icone.classList.contains('locked')) return;
+        if (!getAldeiaWrap()) return;
+
+        const key = icone.getAttribute('data-id');
+        if (!key) return;
+
+        const origOnClick = icone.onclick;
+        ev.preventDefault();
+        ev.stopImmediatePropagation();
+
+        const acionarAcao = () => {
+            if (typeof origOnClick === 'function') {
+                try { origOnClick.call(icone); return; } catch (e) { console.warn('[v6.1] onclick erro:', e); }
+            }
+            executarAcaoDireta(key);
+        };
+
+        if (key === 'oca' || !heroElem) { acionarAcao(); return; }
+
+        animando = true;
+        (async () => {
+            try {
+                await animarCaminhada(icone);
+                await new Promise(r => setTimeout(r, 150));
+                if (heroElem) { heroElem.remove(); heroElem = null; }
+                acionarAcao();
+            } catch (e) { console.warn('[v6.1] erro:', e); acionarAcao(); }
+            finally { setTimeout(() => { animando = false; }, 150); }
+        })();
+    }
+
+    window.addEventListener('click', onClick, true);
+
+    // ---------------- Observer principal (cria com debounce) ----------------
+    function instalarObserverPrincipal() {
+        const screen = document.getElementById('storyScreen');
+        if (!screen) { setTimeout(instalarObserverPrincipal, 300); return; }
+        const obs = new MutationObserver(() => {
+            clearTimeout(_obsDebounce);
+            _obsDebounce = setTimeout(() => {
+                if (getAldeiaWrap()
+                    && !document.getElementById('aldeiaHeroWalker')
+                    && !animando) {
+                    posicionarHeroNaAldeia();
+                }
+            }, 350);
+        });
+        obs.observe(screen, { childList: true, subtree: true });
+    }
+    instalarObserverPrincipal();
+
+    // ---------------- Guard observer (recupera IMEDIATAMENTE se removido) ----------------
+    function instalarGuardObserver() {
+        const screen = document.getElementById('storyScreen');
+        if (!screen) { setTimeout(instalarGuardObserver, 300); return; }
+        const guard = new MutationObserver(() => {
+            if (animando) return;
+            if (!getAldeiaWrap()) return;
+            if (document.getElementById('aldeiaHeroWalker')) return;
+            if (!heroElem) return;
+            // Walker foi removido por algo externo → recria AGORA
+            _removidosExternos++;
+            if (_removidosExternos === 5 || _removidosExternos === 20) {
+                console.warn(`[v6.1] Walker removido ${_removidosExternos}× por patch externo. Você ainda tem v3/v4/v5 rodando? Delete-os!`);
+            }
+            heroElem = null;
+            posicionarHeroNaAldeia();
+        });
+        guard.observe(screen, { childList: true });  // só filhos diretos
+    }
+    instalarGuardObserver();
+
+    // Tentativas iniciais
+    setTimeout(posicionarHeroNaAldeia, 400);
+    setTimeout(posicionarHeroNaAldeia, 1200);
+
+    // Resize
+    let rt = null;
+    window.addEventListener('resize', () => {
+        clearTimeout(rt);
+        rt = setTimeout(() => {
+            const el = document.getElementById('aldeiaHeroWalker');
+            if (el && !el.classList.contains('walking') && getAldeiaWrap()) {
+                el.remove();
+                heroElem = null;
+                posicionarHeroNaAldeia();
+            }
+        }, 250);
+    });
+
+    // ---------------- Debug ----------------
+    window._forceWalker = function() {
+        console.log('[v6.1] forçando...');
+        _removidosExternos = 0;
+        const el = document.getElementById('aldeiaHeroWalker');
+        if (el) el.remove();
+        heroElem = null;
+        posicionarHeroNaAldeia();
+        setTimeout(() => {
+            const el2 = document.getElementById('aldeiaHeroWalker');
+            console.log('[v6.1] DIAGNÓSTICO:', {
+                aldeiaWrap: !!getAldeiaWrap(),
+                ocaIcon: !!getIcone('oca'),
+                heroClass: getSelectedHeroClass(),
+                walkerNoDOM: !!el2,
+                walkerVisivel: el2?.classList.contains('visible'),
+                walkerAnimando: el2?.classList.contains('walking'),
+                removidosExternos: _removidosExternos,
+                pos: el2 ? { x: el2.getBoundingClientRect().x | 0, y: el2.getBoundingClientRect().y | 0 } : null
+            });
+        }, 200);
+    };
+
+    window._debugHeroWalker = function() {
+        const el = document.getElementById('aldeiaHeroWalker');
+        console.log('═══ [v6.1] ═══');
+        console.log('Aldeia wrap?      ', !!getAldeiaWrap());
+        console.log('Ícone OCA?        ', !!getIcone('oca'));
+        console.log('Herói:            ', getSelectedHeroClass());
+        console.log('Walker no DOM?    ', !!el);
+        console.log('Walker visível?   ', el?.classList.contains('visible'));
+        console.log('Walker animando?  ', el?.classList.contains('walking'));
+        console.log('Animando (flag)?  ', animando);
+        console.log('Removidos externos:', _removidosExternos);
+        console.log('Papai do walker?  ', el?.parentElement?.id);
+        console.log('═══════════════════');
+    };
+
+    console.log('✅ [v6.1] Walker instalado. Foco no visual novo + guard observer.');
+})();
+// =================================================================
+// FIM — heroAldeiaWalker v6.1
+// =================================================================
