@@ -3312,3 +3312,86 @@
     console.log('• Debug: window._debugV50()');
     console.log('═══════════════════════════════════════════════════');
 })();
+// =================================================================
+// 🎯 V56 — Fix mínimo: loadStoryProgressByName preenche saveName
+// -----------------------------------------------------------------
+// Bug de 1 linha: loadStoryProgressByName usava `STORY_PROGRESS.saveName
+// || saveName` mas NÃO garantia que STORY_PROGRESS.saveName ficasse
+// preenchido. renderAldeiaScreen então mostrava o modal indevidamente.
+//
+// Fix: apenas preenche STORY_PROGRESS.saveName após o load.
+// Não interfere em render, modal, showScreen, observers, nada.
+// =================================================================
+(function fixSaveNameV56() {
+    if (window._fixSaveNameV56) return;
+    window._fixSaveNameV56 = true;
+
+    // ── Fix 1: loadStoryProgressByName sempre preenche saveName ──
+    const _origLoad = window.loadStoryProgressByName;
+    if (typeof _origLoad === 'function' && !_origLoad._v56) {
+        window.loadStoryProgressByName = function(name) {
+            const r = _origLoad.apply(this, arguments);
+            if (r && typeof STORY_PROGRESS !== 'undefined' && STORY_PROGRESS) {
+                if (!STORY_PROGRESS.saveName) {
+                    STORY_PROGRESS.saveName = name;
+                    try { if (typeof saveStoryProgress === 'function') saveStoryProgress(); } catch(e) {}
+                }
+            }
+            return r;
+        };
+        window.loadStoryProgressByName._v56 = true;
+        console.log('[V56] loadStoryProgressByName: saveName garantido.');
+    }
+
+    // ── Fix 2: após criar/confirmar save, força Aldeia ──
+    const _origConfirm = window.confirmStorySaveName;
+    if (typeof _origConfirm === 'function' && !_origConfirm._v56) {
+        window.confirmStorySaveName = function() {
+            const r = _origConfirm.apply(this, arguments);
+            setTimeout(() => {
+                if (typeof STORY_CURRENT_SAVE_NAME === 'undefined' || !STORY_CURRENT_SAVE_NAME) return;
+
+                // Sincroniza
+                if (typeof STORY_PROGRESS !== 'undefined' && STORY_PROGRESS && !STORY_PROGRESS.saveName) {
+                    STORY_PROGRESS.saveName = STORY_CURRENT_SAVE_NAME;
+                }
+
+                // Limpa flag de "usuário quer menu"
+                try { sessionStorage.removeItem('_v47_userQuerMenu'); } catch(e) {}
+
+                // Esconde título/intro + remove modal + força Aldeia
+                ['titleScreen','introScreen'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.style.setProperty('display', 'none', 'important');
+                });
+                const modal = document.getElementById('storySaveNameModal');
+                if (modal) modal.remove();
+                const story = document.getElementById('storyScreen');
+                if (story) {
+                    story.style.setProperty('display', 'flex', 'important');
+                    story.classList.add('active');
+                }
+                if (typeof renderAldeiaScreen === 'function') renderAldeiaScreen();
+                console.log('[V56] ✅ Aldeia forçada após criar save.');
+            }, 100);
+            return r;
+        };
+        window.confirmStorySaveName._v56 = true;
+        console.log('[V56] confirmStorySaveName: força Aldeia.');
+    }
+
+    // ── Debug ──
+    window._debugV56 = function() {
+        console.log('═══ [V56] ═══');
+        try { console.log('STORY_CURRENT_SAVE_NAME:', STORY_CURRENT_SAVE_NAME); } catch(e) {}
+        try { console.log('STORY_PROGRESS.saveName:', STORY_PROGRESS?.saveName); } catch(e) {}
+        console.log('Modal aberto?', !!document.getElementById('storySaveNameModal'));
+        const title = document.getElementById('titleScreen');
+        const story = document.getElementById('storyScreen');
+        console.log('Title display:', title ? getComputedStyle(title).display : '?');
+        console.log('Story display:', story ? getComputedStyle(story).display : '?');
+        console.log('═══════════════');
+    };
+
+    console.log('✅ [V56] Fix mínimo do saveName ativado.');
+})();

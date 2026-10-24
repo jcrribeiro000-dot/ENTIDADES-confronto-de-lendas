@@ -16827,7 +16827,7 @@ console.log('💡 Zeradas:', STORY_PROGRESS.clearedDifficulties || []);
             spriteKey: 'heroi_Curupira',
             className: 'Curupira',
             role: 'Arqueiro',
-            hp: 11, atk: 3, range: 3,
+            hp: 11, atk: 4, range: 3,
             element: 'TERRA',
             paKey: 'curupira_chuva_flechas',
             starsNeeded: 0,
@@ -16851,7 +16851,7 @@ console.log('💡 Zeradas:', STORY_PROGRESS.clearedDifficulties || []);
             spriteKey: 'heroi_AnhangaMirim',
             className: 'Anhanga-Mirim',
             role: 'Mago',
-            hp: 12, atk: 3, range: 4,
+            hp: 12, atk: 4, range: 4,
             element: 'AR',
             paKey: 'anhanga_mirim_raio',
             starsNeeded: 0,
@@ -16915,7 +16915,7 @@ console.log('💡 Zeradas:', STORY_PROGRESS.clearedDifficulties || []);
             spriteKey: 'heroi_Tupinamba',
             className: 'Tupinambá',
             role: 'Guerreiro',
-            hp: 20, atk: 3, range: 0,
+            hp: 20, atk: 4, range: 0,
             element: 'TERRA',
             paKey: 'tupinamba_avalanche',
             starsNeeded: 220,
@@ -16965,7 +16965,7 @@ console.log('💡 Zeradas:', STORY_PROGRESS.clearedDifficulties || []);
             spriteKey: 'heroi_Negrinho',
             className: 'Negrinho do Pastoreio',
             role: 'Mago',
-            hp: 10, atk: 2, range: 4,
+            hp: 10, atk: 3, range: 4,
             element: 'AGUA',
             paKey: 'negrinho_cruz_cura',
             starsNeeded: 240,
@@ -18205,401 +18205,6 @@ console.log('💡 Zeradas:', STORY_PROGRESS.clearedDifficulties || []);
     console.log('═══════════════════════════════════════════════════');
 })();
 // =================================================================
-// historia.js — BLOCO 13 (V9.5) — Fix Curupira PA (fluxo correto)
-// -----------------------------------------------------------------
-// Cole NO FINAL de historia.js, depois do Bloco 12.
-//
-// PROBLEMA:
-//   O triggerBravelyChain era chamado DENTRO do executeAction.
-//   Quando o Curupira ativava o PA, o fluxo já estava no meio da
-//   execução — não dava pra "pausar" e esperar o jogador escolher
-//   os tiles. Resultado: a barra aparecia mas não tinha como
-//   confirmar (o executeAction já tinha terminado).
-//
-// SOLUÇÃO:
-//   Interceptar o executeAction ANTES do triggerBravelyChain.
-//   Se for Curupira com Bravely:
-//     1. Pausa o fluxo
-//     2. Mostra modo de seleção
-//     3. Espera o jogador confirmar (Promise)
-//     4. Aí sim executa o PA (flechas + dano)
-//     5. Publica o estado
-// =================================================================
-
-(function fixCurupiraPAV95() {
-    if (window._curupiraFixV95) return;
-    window._curupiraFixV95 = true;
-
-    // ==============================================================
-    // 1. Promise de seleção (resolve quando o jogador confirmar)
-    // ==============================================================
-    let _curupiraResolve = null;
-    let _curupiraReject = null;
-
-    // ==============================================================
-    // 2. Abre o modo de seleção e retorna Promise
-    // ==============================================================
-    function abrirSelecaoCurupira() {
-        return new Promise((resolve, reject) => {
-            _curupiraResolve = resolve;
-            _curupiraReject = reject;
-
-            // Tiles AR no tabuleiro
-            const arTiles = [];
-            grid.forEach((el, idx) => {
-                if (el === 'AR') arTiles.push({ x: idx % 8, y: Math.floor(idx / 8), idx });
-            });
-
-            if (arTiles.length === 0) {
-                showToast('🏹', 'Nenhum tile AR no tabuleiro!', '🏹');
-                _curupiraResolve = null;
-                _curupiraReject = null;
-                resolve({ cancelado: true });
-                return;
-            }
-
-            // Se ≤10, auto-seleciona (resolve na hora)
-            if (arTiles.length <= 10) {
-                addLog(`🏹 Curupira: ${arTiles.length} tiles AR selecionados automaticamente!`);
-                _curupiraResolve = null;
-                _curupiraReject = null;
-                resolve({ tiles: arTiles, auto: true });
-                return;
-            }
-
-            // Se >10, modo manual
-            window._curupiraSelecting = true;
-            window._curupiraSelectedTiles = [];
-
-            // Destaca tiles AR
-            arTiles.forEach(t => {
-                const el = document.querySelectorAll('#grid .tile')[t.idx];
-                if (el) el.classList.add('curupira-eligible');
-            });
-
-            // Barra de seleção
-            let bar = document.getElementById('curupiraBar');
-            if (bar) bar.remove();
-            bar = document.createElement('div');
-            bar.id = 'curupiraBar';
-            bar.className = 'curupira-bar';
-            bar.innerHTML = `
-                <span class="curupira-bar-icon">🏹</span>
-                <span class="curupira-bar-text">
-                    CHUVA DE FLECHAS: selecione até 10 tiles AR
-                    <b id="curupiraCount">0/10</b>
-                </span>
-                <button class="curupira-bar-btn confirm" id="curupiraConfirmBtn" disabled>CONFIRMAR</button>
-                <button class="curupira-bar-btn cancel" id="curupiraCancelBtn">CANCELAR</button>
-            `;
-            const main = document.querySelector('.game-main');
-            if (main) main.parentNode.insertBefore(bar, main);
-
-            // Handlers dos botões
-            document.getElementById('curupiraConfirmBtn').onclick = () => {
-                if (window._curupiraSelectedTiles.length === 0) {
-                    showToast('🏹', 'Selecione pelo menos 1 tile!', '🏹');
-                    return;
-                }
-                finalizarSelecaoCurupira(false);
-            };
-
-            document.getElementById('curupiraCancelBtn').onclick = () => {
-                finalizarSelecaoCurupira(true);
-            };
-
-            addLog(`🏹 Curupira: clique em até 10 tiles AR (0/10 selecionados)`);
-        });
-    }
-
-    // ==============================================================
-    // 3. Finaliza a seleção (confirmar ou cancelar)
-    // ==============================================================
-    function finalizarSelecaoCurupira(cancelado) {
-        // Limpa UI
-        document.querySelectorAll('.curupira-eligible, .curupira-selected')
-            .forEach(el => el.classList.remove('curupira-eligible', 'curupira-selected'));
-        const bar = document.getElementById('curupiraBar');
-        if (bar) bar.remove();
-
-        window._curupiraSelecting = false;
-
-        const selected = window._curupiraSelectedTiles.slice();
-        window._curupiraSelectedTiles = [];
-
-        if (cancelado) {
-            addLog(`🏹 Curupira: seleção cancelada. PA não foi ativado.`);
-            if (_curupiraResolve) {
-                const r = _curupiraResolve;
-                _curupiraResolve = null;
-                _curupiraReject = null;
-                r({ cancelado: true });
-            }
-            return;
-        }
-
-        addLog(`🏹 Curupira: ${selected.length} tiles confirmados. CHUVA DE FLECHAS!`);
-        if (_curupiraResolve) {
-            const r = _curupiraResolve;
-            _curupiraResolve = null;
-            _curupiraReject = null;
-            r({ tiles: selected, auto: false });
-        }
-    }
-
-    // ==============================================================
-    // 4. Handler de clique nos tiles (chamado pelo handleSelect)
-    // ==============================================================
-    function curupiraHandleTileClick(idx) {
-        if (!window._curupiraSelecting) return false;
-
-        const el = document.querySelectorAll('#grid .tile')[idx];
-        if (!el || !el.classList.contains('curupira-eligible')) return false;
-
-        const pos = window._curupiraSelectedTiles.findIndex(t => t.idx === idx);
-        if (pos >= 0) {
-            window._curupiraSelectedTiles.splice(pos, 1);
-            el.classList.remove('curupira-selected');
-        } else {
-            if (window._curupiraSelectedTiles.length >= 10) {
-                showToast('🏹', 'Máximo de 10 tiles!', '🏹');
-                return true;
-            }
-            window._curupiraSelectedTiles.push({ x: idx % 8, y: Math.floor(idx / 8), idx });
-            el.classList.add('curupira-selected');
-        }
-
-        // Atualiza contador
-        const count = document.getElementById('curupiraCount');
-        if (count) {
-            count.textContent = `${window._curupiraSelectedTiles.length}/10`;
-        }
-
-        // Habilita botão CONFIRMAR se tiver pelo menos 1
-        const confirmBtn = document.getElementById('curupiraConfirmBtn');
-        if (confirmBtn) {
-            confirmBtn.disabled = window._curupiraSelectedTiles.length === 0;
-        }
-
-        return true;
-    }
-
-    // ==============================================================
-    // 5. Executa o PA do Curupira (flechas + dano)
-    // ==============================================================
-    async function executarPAcurupira(tiles, totalAtk) {
-        // Converte pra TERRA
-        tiles.forEach(t => {
-            grid[t.idx] = 'TERRA';
-            const el = document.querySelectorAll('#grid .tile')[t.idx];
-            if (el) el.className = `tile bg-TERRA`;
-        });
-
-        // Flechas caindo (visual)
-        tiles.forEach((t, i) => {
-            setTimeout(() => {
-                if (typeof spawnFxAt === 'function') {
-                    spawnFxAt('impact', 'fx-impact', t.x, t.y, { duration: 500, scale: 0.7 });
-                }
-            }, i * 60);
-        });
-
-        await sleep(700);
-
-        // Dano no boss
-        const bossIdx = boss.y * 8 + boss.x;
-        if (tiles.some(t => t.idx === bossIdx)) {
-            const dmg = Math.floor(totalAtk * 2);
-            if (typeof applyDmg === 'function') applyDmg(boss, dmg);
-            addLog(`🏹 Curupira: CHUVA DE FLECHAS! Dano crítico ×2 (${dmg})`);
-        } else {
-            addLog(`🏹 Curupira: ${tiles.length} tiles AR → TERRA (boss fora da área)`);
-        }
-    }
-
-    // ==============================================================
-    // 6. INTERCEPTAR O executeAction (a correção real)
-    // ==============================================================
-    const _origExecuteAction = window.executeAction;
-    if (typeof _origExecuteAction === 'function') {
-        window.executeAction = async function() {
-            // Só no modo história
-            if (!window._storyMode) {
-                return _origExecuteAction.apply(this, arguments);
-            }
-
-            // Precisa ter caminho válido
-            if (!path || path.length === 0) {
-                return _origExecuteAction.apply(this, arguments);
-            }
-
-            const active = players[currentPlayerIdx];
-            if (!active) return _origExecuteAction.apply(this, arguments);
-
-            const heroData = STORY_HERO_CLASSES[active.class];
-            if (!heroData) return _origExecuteAction.apply(this, arguments);
-
-            // Só o Curupira tem fluxo especial
-            if (heroData.paKey !== 'curupira_chuva_flechas') {
-                return _origExecuteAction.apply(this, arguments);
-            }
-
-            // Precisa ser Bravely (9+ tiles)
-            const threshold = parseInt(document.getElementById('bravely_tiles')?.value) || 9;
-            if (path.length < threshold) {
-                return _origExecuteAction.apply(this, arguments);
-            }
-
-            // ---- FLUXO ESPECIAL DO CURUPIRA ----
-            console.log('[Curupira] Bravely detectado! Abrindo seleção...');
-            isExecutingAction = true;
-
-            try {
-                // 1. Calcula o ATK total (mesma lógica do executeAction)
-                const info = CLASS_DB[active.class] || { atk: 2, min: 0 };
-                const titleAtkBonus = active.titleBonus?.ATK || 0;
-                const tileBonus = (path.length > 0 && grid[path[0]] === active.element) ? 1 : 0;
-
-                let levelBonus = { atk: 0 };
-                if (typeof getHeroBonusFromLevel === 'function') {
-                    levelBonus = getHeroBonusFromLevel(active.class) || levelBonus;
-                }
-
-                let weaponElementBonus = 0;
-                if (typeof getHeroEquipment === 'function' && typeof getWeaponById === 'function') {
-                    const eq = getHeroEquipment(active.class);
-                    if (eq && eq.arma && path.length > 0) {
-                        const w = getWeaponById(eq.arma);
-                        if (w) {
-                            const tileEl = grid[path[0]];
-                            if (w.elemento === 'ANY') {
-                                if (tileEl === active.element) weaponElementBonus = w.elementoBonus || 0;
-                            } else if (tileEl === w.elemento) {
-                                weaponElementBonus = w.elementoBonus || 0;
-                            }
-                        }
-                    }
-                }
-
-                const totalAtk = info.atk
-                    + (active.bonusAtk || 0)
-                    + (levelBonus.atk || 0)
-                    + tileBonus
-                    + titleAtkBonus
-                    + weaponElementBonus;
-
-                // 2. Executa o movimento normal (SEM ataque, SEM PA)
-                // O Curupira anda até o fim do caminho e coleta amuletos
-                for (const idx of path) {
-                    active.x = idx % 8;
-                    active.y = Math.floor(idx / 8);
-                    if (typeof checkAmulet === 'function') checkAmulet(active, active.x, active.y);
-                    if (typeof updateVisuals === 'function') updateVisuals();
-                    if (typeof updateHeroCard === 'function') updateHeroCard();
-                    if (typeof isOccupied === 'function' && isOccupied(active.x, active.y, active.id)) break;
-                    await sleep(80);
-                }
-
-                // 3. Limpa tiles usados
-                const usedPath = [...path];
-                usedPath.forEach(idx => {
-                    const gridEl = document.getElementById('grid');
-                    if (gridEl.childNodes[idx] && typeof createTile === 'function') {
-                        gridEl.replaceChild(createTile(idx), gridEl.childNodes[idx]);
-                    }
-                });
-
-                // 4. Mostra overlay do PA
-                if (typeof showPoderAncestralEffect === 'function') {
-                    showPoderAncestralEffect();
-                }
-                if (typeof playSfx === 'function') {
-                    try { playSfx('skill1'); } catch(e) {}
-                }
-                await sleep(400);
-
-                // 5. Abre seleção e ESPERA o jogador
-                const resultado = await abrirSelecaoCurupira();
-
-                // 6. Se cancelou, reembolsa o turno? Não — o PA foi "gasto"
-                //    Mas o jogador não faz nada. Considera turno passado.
-                if (resultado.cancelado) {
-                    addLog(`🏹 Curupira: PA cancelado. Turno passado.`);
-                } else {
-                    // 7. Executa o PA
-                    await executarPAcurupira(resultado.tiles, totalAtk);
-                }
-
-                // 8. Limpa path e publica estado
-                path = [];
-                if (typeof renderPath === 'function') renderPath();
-                RANKING.turns++;
-
-                // Atualiza RANKING.bravely (mas o PA do Curupira é diferente)
-                if (typeof updateTitleStats === 'function') updateTitleStats('bravely_chain');
-
-                // Publica
-                if (typeof manageTurns === 'function') {
-                    manageTurns();
-                }
-
-            } catch (e) {
-                console.error('[Curupira] Erro no fluxo do PA:', e);
-            } finally {
-                isExecutingAction = false;
-            }
-        };
-    }
-
-    // ==============================================================
-    // 7. Hook no handleSelect (pra capturar cliques nos tiles)
-    // ==============================================================
-    // Precisa vir ANTES dos outros hooks (curupiraSelecting tem prioridade)
-    const _origHandleSelect = window.handleSelect;
-    if (typeof _origHandleSelect === 'function') {
-        window.handleSelect = function(idx) {
-            // Prioridade 1: seleção do Curupira
-            if (window._curupiraSelecting) {
-                if (curupiraHandleTileClick(idx)) return;
-            }
-            return _origHandleSelect.apply(this, arguments);
-        };
-    }
-
-    // ==============================================================
-    // 8. Remove o hook antigo do triggerBravelyChain
-    //    (que estava no Bloco 12 e não funcionava)
-    // ==============================================================
-    // O triggerBravelyChain antigo interceptava e chamava
-    // curupiraStartSelection() — mas o executeAction original
-    // continuava rodando e "passava" por cima. Agora, com o hook
-    // no executeAction, o triggerBravelyChain NUNCA é chamado
-    // para o Curupira (o fluxo é desviado antes).
-    // Não precisa remover o hook antigo — ele nunca vai disparar
-    // porque o Curupira nunca chega no triggerBravelyChain.
-
-    // ==============================================================
-    // 9. Expõe funções de debug
-    // ==============================================================
-    window.curupiraConfirmSelection = function() {
-        if (window._curupiraSelecting) finalizarSelecaoCurupira(false);
-    };
-    window.curupiraCancelSelection = function() {
-        if (window._curupiraSelecting) finalizarSelecaoCurupira(true);
-    };
-
-    console.log('');
-    console.log('═══════════════════════════════════════════════════');
-    console.log('✅ [V9.5] Fix Curupira PA instalado');
-    console.log('═══════════════════════════════════════════════════');
-    console.log('• Fluxo: 9+ tiles → executar → overlay → seleção → confirma → PA');
-    console.log('• Se ≤10 tiles AR: auto-seleciona (sem barra)');
-    console.log('• Se >10 tiles AR: barra com contador + CONFIRMAR/CANCELAR');
-    console.log('• Movimento + ataque base + PA são feitos ANTES da seleção');
-    console.log('• Depois de confirmar: flechas caem + dano é aplicado');
-    console.log('═══════════════════════════════════════════════════');
-})();
-// =================================================================
 // historia.js — BLOCO 14 (V9.5 — ATO DE EVENTO SEMANAL — PARTE 1/2)
 // -----------------------------------------------------------------
 // Cole NO FINAL do historia.js, depois do Bloco 13.
@@ -19017,7 +18622,7 @@ console.log('💡 Zeradas:', STORY_PROGRESS.clearedDifficulties || []);
             spriteKey: 'heroi_Ruda',
             className: 'Rudá',
             role: 'Mago',
-            hp: 10, atk: 4, range: 3,
+            hp: 14, atk: 5, range: 3,
             element: 'AR',
             paKey: 'ruda_flecha_amor',
             starsNeeded: 0,
@@ -44805,233 +44410,6 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
     console.log('═══════════════════════════════════════════════════');
 })();
 // =================================================================
-// historia.js — V10.71 (Curupira: PA rework + passiva adjacente)
-// -----------------------------------------------------------------
-// Mudanças:
-//   1. PA: seleção manual de até 10 tiles AR/AGUA/TERRA (não FOGO)
-//      em qualquer lugar do board → viram TERRA
-//   2. Passiva: 150% de dano em inimigos adjacentes
-//   3. Rarity: 4⭐ (já era) + passive registrada
-// =================================================================
-
-(function fixCurupiraV1071() {
-    if (window._fixCurupiraV1071) return;
-    window._fixCurupiraV1071 = true;
-
-    // =============================================================
-    // 1. Passiva na tabela
-    // =============================================================
-    const _reg = () => {
-        if (typeof STORY_HERO_CLASSES === 'undefined') return false;
-        const c = STORY_HERO_CLASSES['Curupira'];
-        if (!c) return false;
-        c.rarity = 4;
-        c.passive = 'curupira_adjacente';
-        return true;
-    };
-    _reg();
-    setTimeout(_reg, 500);
-    setTimeout(_reg, 1500);
-
-    // =============================================================
-    // 2. PA — execute vira no-op (V10.71 wrapper cuida)
-    // =============================================================
-    const _subPA = () => {
-        if (typeof STORY_HERO_PA === 'undefined') return false;
-        STORY_HERO_PA['curupira_chuva_flechas'] = {
-            desc: 'Escolha até 10 tiles AR/AGUA/TERRA → viram TERRA. Boss neles toma dano PA.',
-            execute: async () => { /* V10.71 wrapper cuida */ }
-        };
-        return true;
-    };
-    _subPA();
-    setTimeout(_subPA, 800);
-    setTimeout(_subPA, 2000);
-
-    // =============================================================
-    // 3. Selection UI (promise-based)
-    // =============================================================
-    let _curupiraResolve = null;
-    window._curupiraSelecting = false;
-
-    function abrirSelecaoCurupira() {
-        return new Promise((resolve) => {
-            _curupiraResolve = resolve;
-
-            const elegiveis = [];
-            for (let i = 0; i < 64; i++) {
-                if (['AR', 'AGUA', 'TERRA'].includes(grid[i])) {
-                    elegiveis.push({ x: i % 8, y: Math.floor(i / 8), idx: i });
-                }
-            }
-
-            if (elegiveis.length === 0) {
-                if (typeof showToast === 'function')
-                    showToast('🏹', 'Nenhum tile AR/AGUA/TERRA no board!', '🏹');
-                _curupiraResolve = null;
-                resolve({ cancelado: true });
-                return;
-            }
-
-            window._curupiraSelecting = true;
-            window._curupiraSelectedTiles = [];
-
-            elegiveis.forEach(t => {
-                const el = document.querySelectorAll('#grid .tile')[t.idx];
-                if (el) el.classList.add('curupira-eligible');
-            });
-
-            let bar = document.getElementById('curupiraBar');
-            if (bar) bar.remove();
-            bar = document.createElement('div');
-            bar.id = 'curupiraBar';
-            bar.className = 'curupira-bar';
-            bar.innerHTML = `
-                <span class="curupira-bar-icon">🏹</span>
-                <span class="curupira-bar-text">CHUVA DE FLECHAS: até 10 tiles AR/AGUA/TERRA
-                    <b id="curupiraCount">0/10</b>
-                </span>
-                <button class="curupira-bar-btn confirm" id="curupiraConfirmBtn" disabled>CONFIRMAR</button>
-                <button class="curupira-bar-btn cancel" id="curupiraCancelBtn">CANCELAR</button>
-            `;
-            const main = document.querySelector('.game-main');
-            if (main) main.parentNode.insertBefore(bar, main);
-
-            document.getElementById('curupiraConfirmBtn').onclick = () => finalizarCurupira(false);
-            document.getElementById('curupiraCancelBtn').onclick = () => finalizarCurupira(true);
-
-            if (typeof addLog === 'function') addLog('🏹 Curupira: escolha até 10 tiles AR/AGUA/TERRA');
-        });
-    }
-
-    function finalizarCurupira(cancelado) {
-        document.querySelectorAll('.curupira-eligible, .curupira-selected')
-            .forEach(el => el.classList.remove('curupira-eligible', 'curupira-selected'));
-        const bar = document.getElementById('curupiraBar');
-        if (bar) bar.remove();
-
-        window._curupiraSelecting = false;
-        const selected = window._curupiraSelectedTiles.slice();
-        window._curupiraSelectedTiles = [];
-
-        if (_curupiraResolve) {
-            const r = _curupiraResolve;
-            _curupiraResolve = null;
-            if (cancelado) r({ cancelado: true });
-            else r({ cancelado: false, tiles: selected });
-        }
-    }
-
-    // =============================================================
-    // 4. Hook handleSelect
-    // =============================================================
-    const _hs = window.handleSelect;
-    if (typeof _hs === 'function' && !_hs._v1071) {
-        const _innerHs = _hs;
-        window.handleSelect = function(idx) {
-            if (!window._curupiraSelecting) return _innerHs.apply(this, arguments);
-
-            const el = document.querySelectorAll('#grid .tile')[idx];
-            if (!el || !el.classList.contains('curupira-eligible')) {
-                return _innerHs.apply(this, arguments);
-            }
-
-            const pos = window._curupiraSelectedTiles.findIndex(t => t.idx === idx);
-            if (pos >= 0) {
-                window._curupiraSelectedTiles.splice(pos, 1);
-                el.classList.remove('curupira-selected');
-            } else {
-                if (window._curupiraSelectedTiles.length >= 10) {
-                    if (typeof showToast === 'function')
-                        showToast('🏹', 'Máximo de 10 tiles!', '🏹');
-                    return;
-                }
-                window._curupiraSelectedTiles.push({
-                    x: idx % 8, y: Math.floor(idx / 8), idx
-                });
-                el.classList.add('curupira-selected');
-            }
-
-            const count = document.getElementById('curupiraCount');
-            if (count) count.textContent = `${window._curupiraSelectedTiles.length}/10`;
-            const confirmBtn = document.getElementById('curupiraConfirmBtn');
-            if (confirmBtn) confirmBtn.disabled = window._curupiraSelectedTiles.length === 0;
-        };
-        window.handleSelect._v1071 = true;
-    }
-
-    // =============================================================
-    // 5. Wrapper triggerBravelyChain (skip V23.2, roda tudo custom)
-    // =============================================================
-    const _brav = window.triggerBravelyChain;
-    if (typeof _brav === 'function' && !_brav._v1071) {
-        const _innerBrav = _brav;
-        window.triggerBravelyChain = async function(active, target, totalAtk) {
-            if (window._pvpMode || window._coopMode) return _innerBrav.apply(this, arguments);
-
-            const heroData = STORY_HERO_CLASSES[active?.class];
-            if (!heroData || heroData.paKey !== 'curupira_chuva_flechas') {
-                return _innerBrav.apply(this, arguments);
-            }
-
-            if (typeof showPoderAncestralEffect === 'function') {
-                try { showPoderAncestralEffect(); } catch(e) {}
-            }
-            await sleep(300);
-            try { playSfx('skill1'); } catch(e) {}
-
-            const chosen = await abrirSelecaoCurupira();
-            if (chosen.cancelado) {
-                if (typeof addLog === 'function') addLog('🏹 Curupira: PA cancelado.');
-                return;
-            }
-
-            const selected = chosen.tiles;
-
-            selected.forEach(t => {
-                grid[t.idx] = 'TERRA';
-                const el = document.querySelectorAll('#grid .tile')[t.idx];
-                if (el) el.className = 'tile bg-TERRA';
-            });
-
-            selected.forEach((t, i) => {
-                setTimeout(() => {
-                    if (typeof spawnFxAt === 'function') {
-                        spawnFxAt('impact', 'fx-impact', t.x, t.y, { duration: 500, scale: 0.7 });
-                    }
-                }, i * 60);
-            });
-
-            await sleep(600);
-
-            if (target && !target.dead) {
-                const bossIdx = target.y * 8 + target.x;
-                if (selected.some(t => t.idx === bossIdx)) {
-                    const dmg = Math.floor(totalAtk * 2);
-                    if (typeof applyDmg === 'function') applyDmg(target, dmg);
-                    if (typeof addLog === 'function')
-                        addLog(`🏹 Curupira: dano crítico ×2! (${dmg})`);
-                }
-            }
-
-            if (typeof addLog === 'function')
-                addLog(`🏹 Curupira: ${selected.length} tiles → TERRA.`);
-            if (typeof updateVisuals === 'function') updateVisuals();
-            if (typeof updateTitleStats === 'function') updateTitleStats('bravely_chain');
-        };
-        window.triggerBravelyChain._v1071 = true;
-    }
-
-    window._debugCurupira = function() {
-        console.log('═══ [V10.71] Curupira ═══');
-        console.log('passive:', STORY_HERO_CLASSES?.['Curupira']?.passive);
-        console.log('execute é no-op?', STORY_HERO_PA?.['curupira_chuva_flechas']?.execute?.toString().includes('V10.71'));
-        console.log('selecting agora?', window._curupiraSelecting);
-    };
-
-    console.log('✅ [V10.71] Curupira: seleção manual AR/AGUA/TERRA + passiva 150% adjacente.');
-})();
-// =================================================================
 // historia.js — V10.72 (Sistema de passivas + Mãe-do-Ouro + Matinta)
 // =================================================================
 
@@ -47144,5 +46522,1763 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
     console.log('• Espera DOM estabilizar (3 ciclos × 200ms)');
     console.log('• Scroll preciso + re-verifica em 3s');
     console.log('• Debug: window._debugV501()');
+    console.log('═══════════════════════════════════════════════════');
+})();
+
+// =================================================================
+// historia.js — V62 — Curupira: seleção manual (patch único)
+// -----------------------------------------------------------------
+// Cole NO FINAL do historia.js (depois do V50.1).
+//
+// O que faz:
+//   • execute() substituído (10 tiles manuais, corrompidos purificam)
+//   • triggerBravelyChain substituído (bypass V23.2 pro Curupira)
+//   • Limpa path + bloqueia cliques ANTES do GIF (mata o bug do
+//     "caminho aleatório" do original)
+//   • Overlay verde sobre "Jogar Turno" (só sobreposição, sem
+//     bloquear/desbloquear a função)
+//   • Sem botão de cancelar (clique no tile de novo desmarca)
+// =================================================================
+(function curupiraV62() {
+    if (window._curupiraV62) return;
+    window._curupiraV62 = true;
+
+    const PA_KEY = 'curupira_chuva_flechas';
+    const _sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    const _corrompido = (idx) =>
+        Array.isArray(window._corruptedTiles) && window._corruptedTiles.includes(idx);
+
+    // ═══════════════════════════════════════════════════════════
+    // ESTADO
+    // ═══════════════════════════════════════════════════════════
+    const st = {
+        ativo: false,
+        tiles: [],
+        overlay: null,
+        overlayTimer: null,
+        resolve: null,
+        captureHandler: null,
+        preCapture: null,
+    };
+    window._curupiraV62State = st;
+
+    // ═══════════════════════════════════════════════════════════
+    // LOCALIZAR BOTÃO "JOGAR TURNO"
+    // ═══════════════════════════════════════════════════════════
+    function _findPlayBtn() {
+        const ids = ['btnPlay','btnJogarTurno','btnExecutar','btnTurno','btnConfirmTurno','btnConfirmarAcao','btnJogar','btnExecute','btnAction'];
+        for (const id of ids) {
+            const el = document.getElementById(id);
+            if (el && el.tagName === 'BUTTON') return el;
+        }
+        const all = document.querySelectorAll('button');
+        for (const b of all) {
+            const oc = b.getAttribute('onclick') || '';
+            if (oc.includes('executeAction') && !oc.includes('activateSkill')) return b;
+        }
+        for (const b of all) {
+            const txt = (b.textContent || '').trim().toUpperCase();
+            if ((txt.includes('JOGAR TURNO') || txt === 'EXECUTAR' || txt.includes('EXECUTAR AÇÃO'))
+                && !b.id.startsWith('curupiraV62')) return b;
+        }
+        return null;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // OVERLAY SOBRE O BOTÃO
+    // ═══════════════════════════════════════════════════════════
+    function _atualizarContador() {
+        const el = document.getElementById('curupiraV62Confirm');
+        if (!el) return;
+        const n = st.tiles.length;
+        const corr = st.tiles.filter(t => _corrompido(t.idx)).length;
+        el.textContent = corr > 0
+            ? `✓ CONFIRMAR (${n}/10) · ${corr}🖤`
+            : `✓ CONFIRMAR (${n}/10)`;
+    }
+
+    function _posicionarOverlay() {
+        if (!st.overlay) return;
+        const btn = _findPlayBtn();
+        if (!btn) return;
+        const r = btn.getBoundingClientRect();
+        if (r.width < 5 || r.height < 5) return;
+        st.overlay.style.left = (r.left - 2) + 'px';
+        st.overlay.style.top = (r.top - 2) + 'px';
+        st.overlay.style.width = (r.width + 4) + 'px';
+        st.overlay.style.height = (r.height + 4) + 'px';
+    }
+
+    function _criarOverlay() {
+        if (st.overlay) return;
+        const ov = document.createElement('button');
+        ov.id = 'curupiraV62Overlay';
+        ov.type = 'button';
+        ov.style.cssText = `
+            position: fixed;
+            z-index: 2147483647;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 12px;
+            box-sizing: border-box;
+            cursor: pointer;
+            background: linear-gradient(180deg, rgba(107,163,92,.4), transparent 45%),
+                        linear-gradient(135deg, #4a7040, #2a4520);
+            color: #e0f0d0;
+            border: 2px solid #6ba35c;
+            border-radius: 6px;
+            font-family: 'Cinzel', serif;
+            font-weight: 700;
+            font-size: 0.9rem;
+            letter-spacing: 1px;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.9);
+            box-shadow: 0 0 20px rgba(107,163,92,.7), 0 4px 15px rgba(0,0,0,.5);
+            animation: curupiraV62Pulse 1s ease-in-out infinite alternate;
+            user-select: none;
+            -webkit-user-select: none;
+        `;
+        ov.innerHTML = `<span id="curupiraV62Confirm">✓ CONFIRMAR (0/10)</span>`;
+        ov.onclick = (ev) => {
+            ev.stopPropagation();
+            ev.preventDefault();
+            ev.stopImmediatePropagation();
+            _confirmar();
+        };
+        document.body.appendChild(ov);
+        st.overlay = ov;
+        _posicionarOverlay();
+        st.overlayTimer = setInterval(_posicionarOverlay, 150);
+        window.addEventListener('resize', _posicionarOverlay);
+        window.addEventListener('scroll', _posicionarOverlay, true);
+    }
+
+    function _removerOverlay() {
+        if (st.overlayTimer) { clearInterval(st.overlayTimer); st.overlayTimer = null; }
+        window.removeEventListener('resize', _posicionarOverlay);
+        window.removeEventListener('scroll', _posicionarOverlay, true);
+        if (st.overlay) { try { st.overlay.remove(); } catch(e) {} st.overlay = null; }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // TOGGLE DE TILE
+    // ═══════════════════════════════════════════════════════════
+    function _toggle(el, idx) {
+        if (!st.ativo) return;
+        const corr = _corrompido(idx);
+        if (!corr && grid[idx] === 'FOGO') {
+            if (typeof showToast === 'function') showToast('🏹', 'Não pode escolher FOGO comum!', '🏹');
+            return;
+        }
+        const pos = st.tiles.findIndex(t => t.idx === idx);
+        if (pos >= 0) {
+            st.tiles.splice(pos, 1);
+            el.classList.remove('curupiraV62-selected');
+        } else {
+            if (st.tiles.length >= 10) {
+                if (typeof showToast === 'function') showToast('🏹', 'Máximo de 10 tiles!', '🏹');
+                return;
+            }
+            st.tiles.push({ idx, x: idx % 8, y: Math.floor(idx / 8) });
+            el.classList.add('curupiraV62-selected');
+        }
+        _atualizarContador();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // FECHAR SELEÇÃO
+    // ═══════════════════════════════════════════════════════════
+    function _fechar() {
+        st.ativo = false;
+        if (st.captureHandler) {
+            window.removeEventListener('click', st.captureHandler, true);
+            st.captureHandler = null;
+        }
+        if (st.preCapture) {
+            window.removeEventListener('click', st.preCapture, true);
+            st.preCapture = null;
+        }
+        document.querySelectorAll('.curupiraV62-eligible, .curupiraV62-selected')
+            .forEach(el => el.classList.remove('curupiraV62-eligible', 'curupiraV62-selected'));
+        _removerOverlay();
+        const resolve = st.resolve;
+        st.resolve = null;
+        const tiles = st.tiles.slice();
+        st.tiles = [];
+        if (resolve) resolve({ tiles });
+    }
+
+    function _confirmar() {
+        if (!st.ativo) return;
+        if (st.tiles.length === 0) {
+            if (typeof showToast === 'function') showToast('🏹', 'Escolha ao menos 1 tile!', '🏹');
+            return;
+        }
+        _fechar();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // ABRIR SELEÇÃO
+    // ═══════════════════════════════════════════════════════════
+    function _abrirSelecao() {
+        return new Promise((resolve) => {
+            st.ativo = true;
+            st.tiles = [];
+            st.resolve = resolve;
+
+            const elegiveis = [];
+            for (let i = 0; i < 64; i++) {
+                if (_corrompido(i) || grid[i] !== 'FOGO') elegiveis.push(i);
+            }
+
+            if (elegiveis.length === 0) {
+                st.ativo = false;
+                st.resolve = null;
+                if (typeof showToast === 'function') showToast('🏹', 'Nenhum tile elegível!', '🏹');
+                resolve({ tiles: [] });
+                return;
+            }
+
+            const allTiles = document.querySelectorAll('#grid .tile');
+            elegiveis.forEach(i => {
+                if (allTiles[i]) allTiles[i].classList.add('curupiraV62-eligible');
+            });
+
+            _criarOverlay();
+
+            // Capture handler da seleção
+            st.captureHandler = (ev) => {
+                if (!st.ativo) return;
+                if (ev.target.closest('#curupiraV62Overlay')) return;
+                const tile = ev.target.closest('#grid .tile');
+                if (tile) {
+                    ev.stopPropagation();
+                    ev.preventDefault();
+                    ev.stopImmediatePropagation();
+                    const tiles = Array.from(document.querySelectorAll('#grid .tile'));
+                    const idx = tiles.indexOf(tile);
+                    if (idx !== -1) _toggle(tile, idx);
+                } else {
+                    ev.stopPropagation();
+                    ev.preventDefault();
+                    ev.stopImmediatePropagation();
+                }
+            };
+            window.addEventListener('click', st.captureHandler, true);
+
+            // Remove pre-capture (a seleção agora tem o seu próprio)
+            if (st.preCapture) {
+                window.removeEventListener('click', st.preCapture, true);
+                st.preCapture = null;
+            }
+
+            if (typeof addLog === 'function') {
+                const corr = elegiveis.filter(_corrompido).length;
+                const extra = corr > 0 ? ` (${corr} corrompido${corr > 1 ? 's' : ''} purificável${corr > 1 ? 'eis' : ''})` : '';
+                addLog(`🏹 Curupira: escolha até 10 tiles${extra}.`);
+            }
+        });
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // EXECUTE NOVO
+    // ═══════════════════════════════════════════════════════════
+    async function _executeNovo(active, target, totalAtk) {
+        try { if (typeof playSfx === 'function') playSfx('skill1'); } catch(e) {}
+
+        const resultado = await _abrirSelecao();
+        const selecionados = resultado.tiles;
+
+        if (selecionados.length === 0) {
+            if (typeof addLog === 'function') addLog('🏹 Curupira: nenhum tile escolhido.');
+            return;
+        }
+
+        const bossIdx = (target && typeof target.x === 'number') ? (target.y * 8 + target.x) : -1;
+        let danoTotal = 0;
+        let purificados = 0;
+
+        for (let i = 0; i < selecionados.length; i++) {
+            const t = selecionados[i];
+            const eraTerra = (grid[t.idx] === 'TERRA');
+            const corr = _corrompido(t.idx);
+
+            if (corr) {
+                window._corruptedTiles = (window._corruptedTiles || []).filter(x => x !== t.idx);
+                purificados++;
+                const board = document.getElementById('board');
+                const s = (typeof getStep === 'function') ? getStep() : 59;
+                if (board) {
+                    const smoke = document.createElement('div');
+                    smoke.className = 'corruption-smoke-fx';
+                    smoke.style.left = (t.x * s + 8) + 'px';
+                    smoke.style.top = (t.y * s + 8) + 'px';
+                    smoke.style.width = s + 'px';
+                    smoke.style.height = s + 'px';
+                    board.appendChild(smoke);
+                    setTimeout(() => smoke.remove(), 1500);
+                }
+            }
+
+            grid[t.idx] = 'TERRA';
+            const el = document.querySelectorAll('#grid .tile')[t.idx];
+            if (el) el.className = 'tile bg-TERRA';
+
+            if (typeof spawnFxAt === 'function') {
+                spawnFxAt('impact', 'fx-impact', t.x, t.y, { duration: 500, scale: 0.8, delay: i * 40 });
+            }
+
+            if (target && !target.dead && t.idx === bossIdx) {
+                const dmg = eraTerra ? Math.floor(totalAtk * 2) : totalAtk;
+                danoTotal += dmg;
+                await _sleep(200);
+                if (typeof applyDmg === 'function') applyDmg(target, dmg);
+                if (typeof addLog === 'function') {
+                    addLog(eraTerra
+                        ? `🏹 Curupira: DANO ×2 (${dmg})! Boss já estava em TERRA.`
+                        : `🏹 Curupira: dano ${dmg} no boss.`);
+                }
+            }
+            await _sleep(80);
+        }
+
+        await _sleep(400);
+
+        if (purificados > 0) {
+            if (typeof addLog === 'function') addLog(`✨ Curupira purificou ${purificados} tile(s)!`);
+            try { if (typeof playSfx === 'function') playSfx('purificacao'); } catch(e) {}
+        }
+
+        if (typeof addLog === 'function') {
+            addLog(`🏹 Curupira: ${selecionados.length} tiles → TERRA.${danoTotal > 0 ? ` Dano: ${danoTotal}.` : ''}`);
+        }
+        if (typeof updateVisuals === 'function') updateVisuals();
+        if (typeof updateTitleStats === 'function') updateTitleStats('bravely_chain');
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // INSTALAR EXECUTE
+    // ═══════════════════════════════════════════════════════════
+    function _instalarExecute() {
+        if (typeof STORY_HERO_PA === 'undefined') return;
+        if (!STORY_HERO_PA[PA_KEY]) STORY_HERO_PA[PA_KEY] = {};
+        if (STORY_HERO_PA[PA_KEY].execute === _executeNovo) return;
+        STORY_HERO_PA[PA_KEY].execute = _executeNovo;
+        STORY_HERO_PA[PA_KEY].desc = 'Escolha até 10 tiles (≠ FOGO comum). Corrompidos são purificados. Dano ×2 se boss em tile que já era TERRA.';
+    }
+    _instalarExecute();
+    setTimeout(_instalarExecute, 500);
+    setTimeout(_instalarExecute, 1500);
+    setTimeout(_instalarExecute, 3000);
+
+    // ═══════════════════════════════════════════════════════════
+    // INSTALAR triggerBravelyChain
+    // -------------------------------------------------------------
+    // Para o Curupira: bypass TOTAL do V23.2 (sem dano duplicado,
+    // sem conversão AR). Para os outros heróis: delega.
+    //
+    // Limpa path + bloqueia cliques ANTES do GIF (mata o bug do
+    // "caminho aleatório" do original).
+    // ═══════════════════════════════════════════════════════════
+    function _instalarBravely() {
+        const cur = window.triggerBravelyChain;
+        if (typeof cur !== 'function') return;
+        if (cur._v62Curupira) return;
+
+        const wrapped = async function(active, target, totalAtk) {
+            const heroData = (typeof STORY_HERO_CLASSES !== 'undefined' && active)
+                ? STORY_HERO_CLASSES[active.class] : null;
+
+            if (!heroData || heroData.paKey !== PA_KEY) {
+                return cur.apply(this, arguments);
+            }
+
+            // ─── Curupira: fluxo próprio ───
+
+            // ⭐ Limpa path IMEDIATAMENTE (evita que cliques durante o
+            //    GIF adicionem tiles ao "caminho aleatório")
+            try {
+                if (typeof path !== 'undefined' && Array.isArray(path)) {
+                    path.length = 0;
+                    if (typeof renderPath === 'function') renderPath();
+                }
+            } catch(e) {}
+
+            // ⭐ Pre-capture: bloqueia cliques em tiles ANTES do GIF
+            //    (a seleção real substitui por outro capture)
+            if (st.preCapture) window.removeEventListener('click', st.preCapture, true);
+            st.preCapture = (ev) => {
+                const tile = ev.target.closest('#grid .tile');
+                if (tile) {
+                    ev.stopPropagation();
+                    ev.preventDefault();
+                    ev.stopImmediatePropagation();
+                }
+            };
+            window.addEventListener('click', st.preCapture, true);
+
+            try {
+                // GIF "PODER ANCESTRAL"
+                if (typeof showPoderAncestralEffect === 'function') {
+                    try { showPoderAncestralEffect(); } catch(e) {}
+                }
+                await _sleep(300);
+
+                // Chama execute (que troca o preCapture pelo capture da seleção)
+                const paFn = STORY_HERO_PA[PA_KEY];
+                if (paFn && typeof paFn.execute === 'function') {
+                    await paFn.execute(active, target, totalAtk);
+                }
+            } finally {
+                // Limpeza de segurança
+                if (st.preCapture) {
+                    window.removeEventListener('click', st.preCapture, true);
+                    st.preCapture = null;
+                }
+            }
+        };
+        wrapped._v62Curupira = true;
+        window.triggerBravelyChain = wrapped;
+    }
+    _instalarBravely();
+    setTimeout(_instalarBravely, 500);
+    setTimeout(_instalarBravely, 1500);
+    setTimeout(_instalarBravely, 3000);
+
+    // ═══════════════════════════════════════════════════════════
+    // DESCRIÇÃO NO PAINEL "?"
+    // ═══════════════════════════════════════════════════════════
+    function _atualizarDescricao() {
+        if (typeof STORY_HERO_DETAILS === 'undefined') return;
+        STORY_HERO_DETAILS['Curupira'] = {
+            paName: 'Chuva de Flechas',
+            paDesc: 'Curupira escolhe até 10 tiles no tabuleiro. Cada um se transforma em TERRA, e flechas caem sobre eles. Tiles corrompidos podem ser escolhidos — e são purificados. Se o boss estiver em um dos tiles escolhidos, toma dano PA — dobrado se o tile já era TERRA antes.',
+            paExtra: 'Até 10 tiles (≠ FOGO comum, corrompidos OK). Convertem pra TERRA. Corrompidos são purificados. Dano ×2 se boss em tile que já era TERRA.',
+            tactical: 'Alcance: 3 (ataca à distância).',
+            notes: 'PA purifica corrupção dos tiles escolhidos.'
+        };
+    }
+    _atualizarDescricao();
+    setTimeout(_atualizarDescricao, 800);
+    setTimeout(_atualizarDescricao, 2000);
+    setTimeout(_atualizarDescricao, 4000);
+
+    // ═══════════════════════════════════════════════════════════
+    // CSS
+    // ═══════════════════════════════════════════════════════════
+    if (!document.getElementById('curupiraV62CSS')) {
+        const s = document.createElement('style');
+        s.id = 'curupiraV62CSS';
+        s.textContent = `
+            @keyframes curupiraV62Pulse {
+                from { box-shadow: 0 0 15px rgba(107,163,92,.6), 0 4px 15px rgba(0,0,0,.5); }
+                to   { box-shadow: 0 0 35px rgba(107,163,92,1), 0 4px 15px rgba(0,0,0,.5); }
+            }
+            #curupiraV62Overlay:hover { filter: brightness(1.1); }
+
+            .curupiraV62-eligible {
+                box-shadow: inset 0 0 0 2px rgba(74,140,181,.9) !important;
+                cursor: pointer !important;
+                animation: curupiraV62EligPulse 1s ease-in-out infinite alternate !important;
+            }
+            @keyframes curupiraV62EligPulse {
+                from { box-shadow: inset 0 0 0 2px rgba(74,140,181,.5); }
+                to   { box-shadow: inset 0 0 0 3px rgba(74,140,181,1), 0 0 12px rgba(74,140,181,.6); }
+            }
+            .curupiraV62-selected {
+                box-shadow: inset 0 0 0 3px #e8b923, 0 0 20px rgba(232,185,35,.9) !important;
+                transform: scale(1.05);
+                z-index: 5;
+            }
+            .tile.tile-corrupted.curupiraV62-eligible {
+                cursor: pointer !important;
+            }
+            .tile.tile-corrupted.curupiraV62-selected {
+                background: linear-gradient(135deg, rgba(142,68,173,.4), rgba(39,174,96,.4)) !important;
+                box-shadow: inset 0 0 0 3px #e8b923, 0 0 22px rgba(232,185,35,.9), 0 0 32px rgba(142,68,173,.7) !important;
+            }
+            .tile.tile-corrupted.curupiraV62-selected .corruption-fx { display: none !important; }
+        `;
+        document.head.appendChild(s);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // DEBUG
+    // ═══════════════════════════════════════════════════════════
+    window._debugCurupiraV62 = function() {
+        console.log('═══ [V62] Curupira ═══');
+        console.log('ativo:', st.ativo);
+        console.log('tiles:', st.tiles.length, st.tiles);
+        console.log('overlay:', !!document.getElementById('curupiraV62Overlay'));
+        console.log('preCapture:', !!st.preCapture);
+        console.log('captureHandler:', !!st.captureHandler);
+        console.log('execute override?', STORY_HERO_PA?.[PA_KEY]?.execute === _executeNovo);
+        console.log('bravely override?', window.triggerBravelyChain?._v62Curupira === true);
+        console.log('corrupted:', window._corruptedTiles);
+        console.log('════════════════════════');
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V62] Curupira — seleção manual sobre o original');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• execute() substituído');
+    console.log('• triggerBravelyChain bypassa V23.2 pro Curupira');
+    console.log('• path limpo ANTES do GIF (mata bug do caminho)');
+    console.log('• Cliques em tiles bloqueados durante execução');
+    console.log('• Overlay verde sobre "Jogar Turno"');
+    console.log('• SEM botão de cancelar (clique de novo desmarca)');
+    console.log('');
+    console.log('💡 Debug: window._debugCurupiraV62()');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — V63 — Curupira: auto-diagnóstico + reinstalação forçada
+// -----------------------------------------------------------------
+// Faz 3 coisas:
+//   1. Substitui execute() e triggerBravelyChain do Curupira
+//   2. REINSTALA a cada 100ms se algo sobrescrever
+//   3. LOGA tudo no console: quando carrega, quando chama, quando abre
+//
+// Cole NO FINAL do historia.js.
+// =================================================================
+(function curupiraV63() {
+    if (window._curupiraV63) return;
+    window._curupiraV63 = true;
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V63] Curupira — carregando...');
+    console.log('═══════════════════════════════════════════════════');
+
+    const PA_KEY = 'curupira_chuva_flechas';
+    const _sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    const _corrompido = (idx) =>
+        Array.isArray(window._corruptedTiles) && window._corruptedTiles.includes(idx);
+
+    const st = {
+        ativo: false,
+        tiles: [],
+        overlay: null,
+        overlayTimer: null,
+        resolve: null,
+        captureHandler: null,
+        preCapture: null,
+    };
+
+    // ─────────────────────────────────────────────────────────────
+    // LOCALIZAR BOTÃO
+    // ─────────────────────────────────────────────────────────────
+    function _findPlayBtn() {
+        const ids = ['btnPlay','btnJogarTurno','btnExecutar','btnTurno','btnConfirmTurno','btnConfirmarAcao','btnJogar','btnExecute','btnAction'];
+        for (const id of ids) {
+            const el = document.getElementById(id);
+            if (el && el.tagName === 'BUTTON') return el;
+        }
+        const all = document.querySelectorAll('button');
+        for (const b of all) {
+            const oc = b.getAttribute('onclick') || '';
+            if (oc.includes('executeAction') && !oc.includes('activateSkill')) return b;
+        }
+        for (const b of all) {
+            const txt = (b.textContent || '').trim().toUpperCase();
+            if ((txt.includes('JOGAR TURNO') || txt === 'EXECUTAR' || txt.includes('EXECUTAR AÇÃO'))
+                && !b.id.startsWith('curupiraV63')) return b;
+        }
+        return null;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // OVERLAY
+    // ─────────────────────────────────────────────────────────────
+    function _atualizarContador() {
+        const el = document.getElementById('curupiraV63Confirm');
+        if (!el) return;
+        const n = st.tiles.length;
+        const corr = st.tiles.filter(t => _corrompido(t.idx)).length;
+        el.textContent = corr > 0
+            ? `✓ CONFIRMAR (${n}/10) · ${corr}🖤`
+            : `✓ CONFIRMAR (${n}/10)`;
+    }
+
+    function _posicionarOverlay() {
+        if (!st.overlay) return;
+        const btn = _findPlayBtn();
+        if (!btn) return;
+        const r = btn.getBoundingClientRect();
+        if (r.width < 5 || r.height < 5) return;
+        st.overlay.style.left = (r.left - 2) + 'px';
+        st.overlay.style.top = (r.top - 2) + 'px';
+        st.overlay.style.width = (r.width + 4) + 'px';
+        st.overlay.style.height = (r.height + 4) + 'px';
+    }
+
+    function _criarOverlay() {
+        if (st.overlay) return;
+        const ov = document.createElement('button');
+        ov.id = 'curupiraV63Overlay';
+        ov.type = 'button';
+        ov.style.cssText = `
+            position: fixed; z-index: 2147483647;
+            display: flex; align-items: center; justify-content: center;
+            padding: 0 12px; box-sizing: border-box; cursor: pointer;
+            background: linear-gradient(180deg, rgba(107,163,92,.4), transparent 45%),
+                        linear-gradient(135deg, #4a7040, #2a4520);
+            color: #e0f0d0; border: 2px solid #6ba35c; border-radius: 6px;
+            font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.9rem;
+            letter-spacing: 1px; text-shadow: 0 1px 2px rgba(0,0,0,0.9);
+            box-shadow: 0 0 20px rgba(107,163,92,.7), 0 4px 15px rgba(0,0,0,.5);
+            animation: curupiraV63Pulse 1s ease-in-out infinite alternate;
+            user-select: none;
+        `;
+        ov.innerHTML = `<span id="curupiraV63Confirm">✓ CONFIRMAR (0/10)</span>`;
+        ov.onclick = (ev) => {
+            ev.stopPropagation();
+            ev.preventDefault();
+            ev.stopImmediatePropagation();
+            _confirmar();
+        };
+        document.body.appendChild(ov);
+        st.overlay = ov;
+        _posicionarOverlay();
+        st.overlayTimer = setInterval(_posicionarOverlay, 150);
+        window.addEventListener('resize', _posicionarOverlay);
+        window.addEventListener('scroll', _posicionarOverlay, true);
+        console.log('[V63] Overlay criado');
+    }
+
+    function _removerOverlay() {
+        if (st.overlayTimer) { clearInterval(st.overlayTimer); st.overlayTimer = null; }
+        window.removeEventListener('resize', _posicionarOverlay);
+        window.removeEventListener('scroll', _posicionarOverlay, true);
+        if (st.overlay) { try { st.overlay.remove(); } catch(e) {} st.overlay = null; }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // TOGGLE / CONFIRMAR
+    // ─────────────────────────────────────────────────────────────
+    function _toggle(el, idx) {
+        if (!st.ativo) return;
+        const corr = _corrompido(idx);
+        if (!corr && grid[idx] === 'FOGO') {
+            if (typeof showToast === 'function') showToast('🏹', 'Não pode escolher FOGO comum!', '🏹');
+            return;
+        }
+        const pos = st.tiles.findIndex(t => t.idx === idx);
+        if (pos >= 0) {
+            st.tiles.splice(pos, 1);
+            el.classList.remove('curupiraV63-selected');
+        } else {
+            if (st.tiles.length >= 10) {
+                if (typeof showToast === 'function') showToast('🏹', 'Máximo de 10!', '🏹');
+                return;
+            }
+            st.tiles.push({ idx, x: idx % 8, y: Math.floor(idx / 8) });
+            el.classList.add('curupiraV63-selected');
+        }
+        _atualizarContador();
+    }
+
+    function _fechar() {
+        st.ativo = false;
+        if (st.captureHandler) {
+            window.removeEventListener('click', st.captureHandler, true);
+            st.captureHandler = null;
+        }
+        if (st.preCapture) {
+            window.removeEventListener('click', st.preCapture, true);
+            st.preCapture = null;
+        }
+        document.querySelectorAll('.curupiraV63-eligible, .curupiraV63-selected')
+            .forEach(el => el.classList.remove('curupiraV63-eligible', 'curupiraV63-selected'));
+        _removerOverlay();
+        const resolve = st.resolve;
+        st.resolve = null;
+        const tiles = st.tiles.slice();
+        st.tiles = [];
+        if (resolve) resolve({ tiles });
+    }
+
+    function _confirmar() {
+        if (!st.ativo) return;
+        if (st.tiles.length === 0) {
+            if (typeof showToast === 'function') showToast('🏹', 'Escolha ao menos 1 tile!', '🏹');
+            return;
+        }
+        console.log('[V63] Confirmando PA com', st.tiles.length, 'tiles');
+        _fechar();
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // ABRIR SELEÇÃO
+    // ─────────────────────────────────────────────────────────────
+    function _abrirSelecao() {
+        return new Promise((resolve) => {
+            st.ativo = true;
+            st.tiles = [];
+            st.resolve = resolve;
+
+            const elegiveis = [];
+            for (let i = 0; i < 64; i++) {
+                if (_corrompido(i) || grid[i] !== 'FOGO') elegiveis.push(i);
+            }
+            console.log('[V63] Seleção aberta. Elegíveis:', elegiveis.length,
+                '| Corrompidos:', elegiveis.filter(_corrompido).length);
+
+            if (elegiveis.length === 0) {
+                st.ativo = false;
+                st.resolve = null;
+                if (typeof showToast === 'function') showToast('🏹', 'Nenhum tile elegível!', '🏹');
+                resolve({ tiles: [] });
+                return;
+            }
+
+            const allTiles = document.querySelectorAll('#grid .tile');
+            elegiveis.forEach(i => {
+                if (allTiles[i]) allTiles[i].classList.add('curupiraV63-eligible');
+            });
+
+            _criarOverlay();
+
+            st.captureHandler = (ev) => {
+                if (!st.ativo) return;
+                if (ev.target.closest('#curupiraV63Overlay')) return;
+                const tile = ev.target.closest('#grid .tile');
+                if (tile) {
+                    ev.stopPropagation();
+                    ev.preventDefault();
+                    ev.stopImmediatePropagation();
+                    const tiles = Array.from(document.querySelectorAll('#grid .tile'));
+                    const idx = tiles.indexOf(tile);
+                    if (idx !== -1) _toggle(tile, idx);
+                } else {
+                    ev.stopPropagation();
+                    ev.preventDefault();
+                    ev.stopImmediatePropagation();
+                }
+            };
+            window.addEventListener('click', st.captureHandler, true);
+
+            if (st.preCapture) {
+                window.removeEventListener('click', st.preCapture, true);
+                st.preCapture = null;
+            }
+
+            if (typeof addLog === 'function') {
+                const corr = elegiveis.filter(_corrompido).length;
+                const extra = corr > 0 ? ` (${corr} corrompido${corr > 1 ? 's' : ''})` : '';
+                addLog(`🏹 Curupira: escolha até 10 tiles${extra}.`);
+            }
+        });
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // EXECUTE
+    // ─────────────────────────────────────────────────────────────
+    async function _executeNovo(active, target, totalAtk) {
+        console.log('[V63] execute CHAMADO. class=', active?.class, 'totalAtk=', totalAtk);
+        try { if (typeof playSfx === 'function') playSfx('skill1'); } catch(e) {}
+
+        const resultado = await _abrirSelecao();
+        const selecionados = resultado.tiles;
+        console.log('[V63] execute: selecionados =', selecionados.length);
+
+        if (selecionados.length === 0) {
+            if (typeof addLog === 'function') addLog('🏹 Curupira: nenhum tile escolhido.');
+            return;
+        }
+
+        const bossIdx = (target && typeof target.x === 'number') ? (target.y * 8 + target.x) : -1;
+        let danoTotal = 0;
+        let purificados = 0;
+
+        for (let i = 0; i < selecionados.length; i++) {
+            const t = selecionados[i];
+            const eraTerra = (grid[t.idx] === 'TERRA');
+            const corr = _corrompido(t.idx);
+
+            if (corr) {
+                window._corruptedTiles = (window._corruptedTiles || []).filter(x => x !== t.idx);
+                purificados++;
+                const board = document.getElementById('board');
+                const s = (typeof getStep === 'function') ? getStep() : 59;
+                if (board) {
+                    const smoke = document.createElement('div');
+                    smoke.className = 'corruption-smoke-fx';
+                    smoke.style.left = (t.x * s + 8) + 'px';
+                    smoke.style.top = (t.y * s + 8) + 'px';
+                    smoke.style.width = s + 'px';
+                    smoke.style.height = s + 'px';
+                    board.appendChild(smoke);
+                    setTimeout(() => smoke.remove(), 1500);
+                }
+            }
+
+            grid[t.idx] = 'TERRA';
+            const el = document.querySelectorAll('#grid .tile')[t.idx];
+            if (el) el.className = 'tile bg-TERRA';
+
+            if (typeof spawnFxAt === 'function') {
+                spawnFxAt('impact', 'fx-impact', t.x, t.y, { duration: 500, scale: 0.8, delay: i * 40 });
+            }
+
+            if (target && !target.dead && t.idx === bossIdx) {
+                const dmg = eraTerra ? Math.floor(totalAtk * 2) : totalAtk;
+                danoTotal += dmg;
+                await _sleep(200);
+                if (typeof applyDmg === 'function') applyDmg(target, dmg);
+                if (typeof addLog === 'function') {
+                    addLog(eraTerra
+                        ? `🏹 Curupira: DANO ×2 (${dmg})! Boss já estava em TERRA.`
+                        : `🏹 Curupira: dano ${dmg} no boss.`);
+                }
+            }
+            await _sleep(80);
+        }
+
+        await _sleep(400);
+
+        if (purificados > 0) {
+            if (typeof addLog === 'function') addLog(`✨ Curupira purificou ${purificados} tile(s)!`);
+            try { if (typeof playSfx === 'function') playSfx('purificacao'); } catch(e) {}
+        }
+
+        if (typeof addLog === 'function') {
+            addLog(`🏹 Curupira: ${selecionados.length} tiles → TERRA.${danoTotal > 0 ? ` Dano: ${danoTotal}.` : ''}`);
+        }
+        if (typeof updateVisuals === 'function') updateVisuals();
+        if (typeof updateTitleStats === 'function') updateTitleStats('bravely_chain');
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // WRAPPER triggerBravelyChain
+    // ─────────────────────────────────────────────────────────────
+    function _criarWrapperBravely(inner) {
+        const wrapped = async function(active, target, totalAtk) {
+            const heroData = (typeof STORY_HERO_CLASSES !== 'undefined' && active)
+                ? STORY_HERO_CLASSES[active.class] : null;
+
+            console.log('[V63] triggerBravelyChain CHAMADO. class=', active?.class,
+                'paKey=', heroData?.paKey);
+
+            if (!heroData || heroData.paKey !== PA_KEY) {
+                return inner.apply(this, arguments);
+            }
+
+            // ⭐ Curupira: fluxo próprio
+            try {
+                if (typeof path !== 'undefined' && Array.isArray(path)) {
+                    path.length = 0;
+                    if (typeof renderPath === 'function') renderPath();
+                }
+            } catch(e) {}
+
+            if (st.preCapture) window.removeEventListener('click', st.preCapture, true);
+            st.preCapture = (ev) => {
+                const tile = ev.target.closest('#grid .tile');
+                if (tile) {
+                    ev.stopPropagation();
+                    ev.preventDefault();
+                    ev.stopImmediatePropagation();
+                }
+            };
+            window.addEventListener('click', st.preCapture, true);
+
+            try {
+                if (typeof showPoderAncestralEffect === 'function') {
+                    try { showPoderAncestralEffect(); } catch(e) {}
+                }
+                await _sleep(300);
+
+                const paFn = STORY_HERO_PA[PA_KEY];
+                if (paFn && typeof paFn.execute === 'function') {
+                    await paFn.execute(active, target, totalAtk);
+                }
+            } finally {
+                if (st.preCapture) {
+                    window.removeEventListener('click', st.preCapture, true);
+                    st.preCapture = null;
+                }
+            }
+        };
+        wrapped._v63Curupira = true;
+        return wrapped;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // REINSTALAÇÃO FORÇADA A CADA 100ms
+    // ─────────────────────────────────────────────────────────────
+    let _contadorExec = 0;
+    let _contadorBrav = 0;
+
+    function _ensureExecute() {
+        if (typeof STORY_HERO_PA === 'undefined') return;
+        if (!STORY_HERO_PA[PA_KEY]) STORY_HERO_PA[PA_KEY] = {};
+        if (STORY_HERO_PA[PA_KEY].execute === _executeNovo) return;
+        STORY_HERO_PA[PA_KEY].execute = _executeNovo;
+        STORY_HERO_PA[PA_KEY].desc = 'Escolha até 10 tiles (≠ FOGO comum). Corrompidos são purificados. Dano ×2 se boss em tile que já era TERRA.';
+        _contadorExec++;
+        console.log(`[V63] execute REINSTALADO (${_contadorExec}ª vez)`);
+    }
+
+    function _ensureBravely() {
+        const cur = window.triggerBravelyChain;
+        if (typeof cur !== 'function') return;
+        if (cur._v63Curupira === true) return;
+        window.triggerBravelyChain = _criarWrapperBravely(cur);
+        _contadorBrav++;
+        console.log(`[V63] triggerBravelyChain REINSTALADO (${_contadorBrav}ª vez)`);
+    }
+
+    setInterval(() => {
+        _ensureExecute();
+        _ensureBravely();
+    }, 100);
+
+    // Instala imediatamente
+    _ensureExecute();
+    _ensureBravely();
+
+    // ─────────────────────────────────────────────────────────────
+    // DESCRIÇÃO NO "?"
+    // ─────────────────────────────────────────────────────────────
+    function _atualizarDescricao() {
+        if (typeof STORY_HERO_DETAILS === 'undefined') return;
+        STORY_HERO_DETAILS['Curupira'] = {
+            paName: 'Chuva de Flechas',
+            paDesc: 'Curupira escolhe até 10 tiles no tabuleiro. Cada um vira TERRA, e flechas caem sobre eles. Corrompidos são purificados. Se o boss estiver em um tile escolhido, toma dano PA — ×2 se já era TERRA antes.',
+            paExtra: 'Até 10 tiles (≠ FOGO comum, corrompidos OK). Convertem pra TERRA. Corrompidos são purificados. Dano ×2 se boss em tile que já era TERRA.',
+            tactical: 'Alcance: 3 (ataca à distância).',
+            notes: 'PA purifica corrupção.'
+        };
+    }
+    _atualizarDescricao();
+    setTimeout(_atualizarDescricao, 500);
+    setTimeout(_atualizarDescricao, 2000);
+
+    // ─────────────────────────────────────────────────────────────
+    // CSS
+    // ─────────────────────────────────────────────────────────────
+    if (!document.getElementById('curupiraV63CSS')) {
+        const s = document.createElement('style');
+        s.id = 'curupiraV63CSS';
+        s.textContent = `
+            @keyframes curupiraV63Pulse {
+                from { box-shadow: 0 0 15px rgba(107,163,92,.6), 0 4px 15px rgba(0,0,0,.5); }
+                to   { box-shadow: 0 0 35px rgba(107,163,92,1), 0 4px 15px rgba(0,0,0,.5); }
+            }
+            #curupiraV63Overlay:hover { filter: brightness(1.1); }
+            .curupiraV63-eligible {
+                box-shadow: inset 0 0 0 2px rgba(74,140,181,.9) !important;
+                cursor: pointer !important;
+                animation: curupiraV63EligPulse 1s ease-in-out infinite alternate !important;
+            }
+            @keyframes curupiraV63EligPulse {
+                from { box-shadow: inset 0 0 0 2px rgba(74,140,181,.5); }
+                to   { box-shadow: inset 0 0 0 3px rgba(74,140,181,1), 0 0 12px rgba(74,140,181,.6); }
+            }
+            .curupiraV63-selected {
+                box-shadow: inset 0 0 0 3px #e8b923, 0 0 20px rgba(232,185,35,.9) !important;
+                transform: scale(1.05);
+                z-index: 5;
+            }
+            .tile.tile-corrupted.curupiraV63-eligible { cursor: pointer !important; }
+            .tile.tile-corrupted.curupiraV63-selected {
+                background: linear-gradient(135deg, rgba(142,68,173,.4), rgba(39,174,96,.4)) !important;
+                box-shadow: inset 0 0 0 3px #e8b923, 0 0 22px rgba(232,185,35,.9), 0 0 32px rgba(142,68,173,.7) !important;
+            }
+            .tile.tile-corrupted.curupiraV63-selected .corruption-fx { display: none !important; }
+        `;
+        document.head.appendChild(s);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // DIAGNÓSTICO
+    // ─────────────────────────────────────────────────────────────
+    window._diagCurupira = function() {
+        console.group('═══ DIAGNÓSTICO CURUPIRA ═══');
+        console.log('V63 carregado?', window._curupiraV63 === true);
+        console.log('');
+        console.log('STORY_HERO_PA existe?', typeof STORY_HERO_PA !== 'undefined');
+        console.log('  tem curupira_chuva_flechas?', STORY_HERO_PA?.[PA_KEY] !== undefined);
+        console.log('  execute é meu?', STORY_HERO_PA?.[PA_KEY]?.execute === _executeNovo);
+        console.log('  execute (início):', STORY_HERO_PA?.[PA_KEY]?.execute?.toString().slice(0, 100));
+        console.log('');
+        console.log('triggerBravelyChain tem _v63Curupira?',
+            window.triggerBravelyChain?._v63Curupira === true);
+        console.log('triggerBravelyChain (início):',
+            window.triggerBravelyChain?.toString().slice(0, 100));
+        console.log('');
+        console.log('Reinstalações:');
+        console.log('  execute:', _contadorExec);
+        console.log('  bravely:', _contadorBrav);
+        console.log('');
+        console.log('Estado da seleção:');
+        console.log('  ativo:', st.ativo);
+        console.log('  tiles:', st.tiles.length);
+        console.log('  overlay:', !!document.getElementById('curupiraV63Overlay'));
+        console.log('');
+        console.log('Botão "Jogar Turno":', _findPlayBtn()?.textContent?.trim().substring(0, 30) || 'NÃO ENCONTRADO');
+        console.log('Corrompidos:', window._corruptedTiles);
+        console.groupEnd();
+    };
+
+    console.log('');
+    console.log('✅ [V63] Instalado.');
+    console.log('   Reinstala execute/bravely a cada 100ms.');
+    console.log('   Se outro patch sobrescrever, verá:');
+    console.log('   "[V63] execute REINSTALADO (Nª vez)"');
+    console.log('');
+    console.log('💡 Diagnóstico: window._diagCurupira()');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — V65 — Curupira: PA overlay não sobrepõe telas críticas
+// -----------------------------------------------------------------
+// Reduz z-index do overlay PA de 2147483647 → 99997
+// E esconde quando qualquer overlay crítico está visível.
+//
+// Cole NO FINAL do historia.js.
+// =================================================================
+(function curupiraV65() {
+    if (window._curupiraV65) return;
+    window._curupiraV65 = true;
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V65] Curupira — overlay PA controlado');
+    console.log('═══════════════════════════════════════════════════');
+
+    const Z_INDEX_PA = 99997;
+
+    const IDS_PRIORITARIOS = [
+        'storyPurificationOverlay',   // mensagem de purificação (99999)
+        'storySaciDialogOverlay',     // diálogo de boss (99998)
+        'storySaciFinalOverlay',      // diálogo final
+        'storyVictoryOverlay',        // vitória/derrota (10002)
+        'stat11RollOverlay',          // roll de stat (25000)
+        'matInfoModal',               // modal de material (30000)
+        'battleHeroModal',            // modal de herói em batalha (21000)
+        'equipScreenOverlay',         // tela de equipamentos (20000)
+        'heroDetailsOverlay',         // detalhes do herói (10050)
+        'gameOverlay',                // game over do evento
+    ];
+
+    const SELECTORS_PRIORITARIOS = [
+        '.story-purification-overlay',
+        '.story-saci-dialog-overlay',
+        '.story-result-overlay',
+        '.battle-hero-modal-overlay',
+        '.equip-screen-overlay',
+        '.hero-details-overlay',
+        '.stat11-roll-overlay',
+        '.mat-info-overlay',
+    ];
+
+    function _estaVisivel(el) {
+        if (!el) return false;
+        const cs = getComputedStyle(el);
+        if (cs.display === 'none') return false;
+        if (cs.visibility === 'hidden') return false;
+        if (parseFloat(cs.opacity) < 0.1) return false;
+        const r = el.getBoundingClientRect();
+        if (r.width < 5 || r.height < 5) return false;
+        return true;
+    }
+
+    function _temOverlayCritico() {
+        for (const id of IDS_PRIORITARIOS) {
+            if (id === 'curupiraV63Overlay') continue;
+            if (_estaVisivel(document.getElementById(id))) return id;
+        }
+        for (const sel of SELECTORS_PRIORITARIOS) {
+            const el = document.querySelector(sel);
+            if (_estaVisivel(el)) return sel;
+        }
+        return null;
+    }
+
+    let _lastHiddenState = null;
+
+    function _atualizarOverlayPA() {
+        const overlay = document.getElementById('curupiraV63Overlay');
+        if (!overlay) return;
+
+        // Ajusta z-index só uma vez
+        if (overlay.style.zIndex !== String(Z_INDEX_PA)) {
+            overlay.style.zIndex = String(Z_INDEX_PA);
+        }
+
+        const critico = _temOverlayCritico();
+
+        if (critico) {
+            if (overlay.style.display !== 'none') {
+                overlay.style.display = 'none';
+                if (_lastHiddenState !== critico) {
+                    console.log(`[V65] PA overlay escondido (${critico} visível)`);
+                    _lastHiddenState = critico;
+                }
+            }
+        } else {
+            if (overlay.style.display === 'none') {
+                overlay.style.display = 'flex';
+                if (_lastHiddenState !== null) {
+                    console.log('[V65] PA overlay restaurado');
+                    _lastHiddenState = null;
+                }
+            }
+        }
+    }
+
+    setInterval(_atualizarOverlayPA, 120);
+
+    window._debugOverlayPA = function() {
+        const overlay = document.getElementById('curupiraV63Overlay');
+        console.log('═══ [V65] Overlay PA ═══');
+        console.log('Existe?', !!overlay);
+        if (overlay) {
+            console.log('  z-index:', overlay.style.zIndex);
+            console.log('  display:', overlay.style.display);
+        }
+        console.log('Overlay crítico ativo?', _temOverlayCritico() || 'nenhum');
+        console.log('═══════════════════════');
+    };
+
+    console.log('• z-index do PA:', Z_INDEX_PA);
+    console.log('• Esconde quando: purificação / diálogo / vitória /');
+    console.log('  stat roll / equip / hero details / game over estiverem visíveis');
+    console.log('• Debug: window._debugOverlayPA()');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — V68 — Curupira: PA sempre abre, purificação clicável
+// -----------------------------------------------------------------
+// Substitui triggerBravelyChain do V63 (marca _v63Curupira = true
+// para o V63 não reinstalar).
+//
+// • PA SEMPRE abre (sem guard de prioridade no trigger)
+// • captureHandler NÃO bloqueia cliques quando prioridade visível
+// • Overlay escondido quando prioridade visível (z-index 500)
+// • PA continua aberto esperando confirmação depois que a
+//   purificação fechar
+//
+// Cole NO FINAL do historia.js (depois do V63).
+// =================================================================
+(function curupiraV68() {
+    if (window._curupiraV68) return;
+    window._curupiraV68 = true;
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V68] Curupira — PA sempre abre, purificação clicável');
+    console.log('═══════════════════════════════════════════════════');
+
+    const PA_KEY = 'curupira_chuva_flechas';
+    const _sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    const _corrompido = (idx) =>
+        Array.isArray(window._corruptedTiles) && window._corruptedTiles.includes(idx);
+
+    // ─────────────────────────────────────────────────────────────
+    // PRIORIDADE: overlays que NÃO devem ser bloqueados
+    // ─────────────────────────────────────────────────────────────
+    function _temPrioridadeVisivel() {
+        const ids = [
+            'storyPurificationOverlay',
+            'storySaciDialogOverlay',
+            'storySaciFinalOverlay',
+            'storyVictoryOverlay',
+            'stat11RollOverlay',
+            'matInfoModal',
+            'battleHeroModal',
+            'equipScreenOverlay',
+            'heroDetailsOverlay',
+            'gameOverlay',
+        ];
+        for (const id of ids) {
+            const el = document.getElementById(id);
+            if (!el) continue;
+            const cs = getComputedStyle(el);
+            if (cs.display === 'none') continue;
+            if (cs.visibility === 'hidden') continue;
+            if (parseFloat(cs.opacity) < 0.1) continue;
+            const r = el.getBoundingClientRect();
+            if (r.width < 5 || r.height < 5) continue;
+            return id;
+        }
+        return null;
+    }
+
+    const st = {
+        ativo: false,
+        tiles: [],
+        overlay: null,
+        overlayTimer: null,
+        resolve: null,
+        captureHandler: null,
+        preCapture: null,
+    };
+
+    // ─────────────────────────────────────────────────────────────
+    // LOCALIZAR BOTÃO
+    // ─────────────────────────────────────────────────────────────
+    function _findPlayBtn() {
+        const ids = ['btnPlay','btnJogarTurno','btnExecutar','btnTurno','btnConfirmTurno','btnConfirmarAcao','btnJogar','btnExecute','btnAction'];
+        for (const id of ids) {
+            const el = document.getElementById(id);
+            if (el && el.tagName === 'BUTTON') return el;
+        }
+        const all = document.querySelectorAll('button');
+        for (const b of all) {
+            const oc = b.getAttribute('onclick') || '';
+            if (oc.includes('executeAction') && !oc.includes('activateSkill')) return b;
+        }
+        for (const b of all) {
+            const txt = (b.textContent || '').trim().toUpperCase();
+            if ((txt.includes('JOGAR TURNO') || txt === 'EXECUTAR' || txt.includes('EXECUTAR AÇÃO'))
+                && !b.id.startsWith('curupiraV68')) return b;
+        }
+        return null;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // OVERLAY
+    // ─────────────────────────────────────────────────────────────
+    function _atualizarContador() {
+        const el = document.getElementById('curupiraV68Confirm');
+        if (!el) return;
+        const n = st.tiles.length;
+        const corr = st.tiles.filter(t => _corrompido(t.idx)).length;
+        el.textContent = corr > 0
+            ? `✓ CONFIRMAR (${n}/10) · ${corr}🖤`
+            : `✓ CONFIRMAR (${n}/10)`;
+    }
+
+    function _posicionarOverlay() {
+        if (!st.overlay) return;
+        // Esconde quando prioridade visível
+        if (_temPrioridadeVisivel()) {
+            st.overlay.style.visibility = 'hidden';
+            st.overlay.style.pointerEvents = 'none';
+            return;
+        }
+        st.overlay.style.visibility = 'visible';
+        st.overlay.style.pointerEvents = 'auto';
+        const btn = _findPlayBtn();
+        if (!btn) return;
+        const r = btn.getBoundingClientRect();
+        if (r.width < 5 || r.height < 5) return;
+        st.overlay.style.left = (r.left - 2) + 'px';
+        st.overlay.style.top = (r.top - 2) + 'px';
+        st.overlay.style.width = (r.width + 4) + 'px';
+        st.overlay.style.height = (r.height + 4) + 'px';
+    }
+
+    function _criarOverlay() {
+        if (st.overlay) return;
+        const ov = document.createElement('button');
+        ov.id = 'curupiraV68Overlay';
+        ov.type = 'button';
+        ov.style.cssText = `
+            position: fixed; z-index: 500;
+            display: flex; align-items: center; justify-content: center;
+            padding: 0 12px; box-sizing: border-box; cursor: pointer;
+            background: linear-gradient(180deg, rgba(107,163,92,.4), transparent 45%),
+                        linear-gradient(135deg, #4a7040, #2a4520);
+            color: #e0f0d0; border: 2px solid #6ba35c; border-radius: 6px;
+            font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.9rem;
+            letter-spacing: 1px; text-shadow: 0 1px 2px rgba(0,0,0,0.9);
+            box-shadow: 0 0 20px rgba(107,163,92,.7), 0 4px 15px rgba(0,0,0,.5);
+            animation: curupiraV68Pulse 1s ease-in-out infinite alternate;
+            user-select: none;
+        `;
+        ov.innerHTML = `<span id="curupiraV68Confirm">✓ CONFIRMAR (0/10)</span>`;
+        ov.onclick = (ev) => {
+            ev.stopPropagation();
+            ev.preventDefault();
+            ev.stopImmediatePropagation();
+            _confirmar();
+        };
+        document.body.appendChild(ov);
+        st.overlay = ov;
+        _posicionarOverlay();
+        st.overlayTimer = setInterval(_posicionarOverlay, 150);
+        window.addEventListener('resize', _posicionarOverlay);
+        window.addEventListener('scroll', _posicionarOverlay, true);
+    }
+
+    function _removerOverlay() {
+        if (st.overlayTimer) { clearInterval(st.overlayTimer); st.overlayTimer = null; }
+        window.removeEventListener('resize', _posicionarOverlay);
+        window.removeEventListener('scroll', _posicionarOverlay, true);
+        if (st.overlay) { try { st.overlay.remove(); } catch(e) {} st.overlay = null; }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // TOGGLE / CONFIRMAR
+    // ─────────────────────────────────────────────────────────────
+    function _toggle(el, idx) {
+        if (!st.ativo) return;
+        const corr = _corrompido(idx);
+        if (!corr && grid[idx] === 'FOGO') {
+            if (typeof showToast === 'function') showToast('🏹', 'Não pode escolher FOGO comum!', '🏹');
+            return;
+        }
+        const pos = st.tiles.findIndex(t => t.idx === idx);
+        if (pos >= 0) {
+            st.tiles.splice(pos, 1);
+            el.classList.remove('curupiraV68-selected');
+        } else {
+            if (st.tiles.length >= 10) {
+                if (typeof showToast === 'function') showToast('🏹', 'Máximo de 10!', '🏹');
+                return;
+            }
+            st.tiles.push({ idx, x: idx % 8, y: Math.floor(idx / 8) });
+            el.classList.add('curupiraV68-selected');
+        }
+        _atualizarContador();
+    }
+
+    function _fechar() {
+        st.ativo = false;
+        if (st.captureHandler) {
+            window.removeEventListener('click', st.captureHandler, true);
+            st.captureHandler = null;
+        }
+        if (st.preCapture) {
+            window.removeEventListener('click', st.preCapture, true);
+            st.preCapture = null;
+        }
+        document.querySelectorAll('.curupiraV68-eligible, .curupiraV68-selected')
+            .forEach(el => el.classList.remove('curupiraV68-eligible', 'curupiraV68-selected'));
+        _removerOverlay();
+        const resolve = st.resolve;
+        st.resolve = null;
+        const tiles = st.tiles.slice();
+        st.tiles = [];
+        if (resolve) resolve({ tiles });
+    }
+
+    function _confirmar() {
+        if (!st.ativo) return;
+        if (st.tiles.length === 0) {
+            if (typeof showToast === 'function') showToast('🏹', 'Escolha ao menos 1 tile!', '🏹');
+            return;
+        }
+        _fechar();
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // ABRIR SELEÇÃO (sem guard de prioridade)
+    // ─────────────────────────────────────────────────────────────
+    function _abrirSelecao() {
+        return new Promise((resolve) => {
+            st.ativo = true;
+            st.tiles = [];
+            st.resolve = resolve;
+
+            const elegiveis = [];
+            for (let i = 0; i < 64; i++) {
+                if (_corrompido(i) || grid[i] !== 'FOGO') elegiveis.push(i);
+            }
+            if (elegiveis.length === 0) {
+                st.ativo = false;
+                st.resolve = null;
+                if (typeof showToast === 'function') showToast('🏹', 'Nenhum tile elegível!', '🏹');
+                resolve({ tiles: [] });
+                return;
+            }
+
+            const allTiles = document.querySelectorAll('#grid .tile');
+            elegiveis.forEach(i => {
+                if (allTiles[i]) allTiles[i].classList.add('curupiraV68-eligible');
+            });
+
+            _criarOverlay();
+
+            // ⭐ captureHandler RESPEITA prioridade (deixa passar, NÃO cancela PA)
+            st.captureHandler = (ev) => {
+                if (!st.ativo) return;
+
+                // Se prioridade visível → deixa o clique passar
+                if (_temPrioridadeVisivel()) {
+                    return;
+                }
+
+                if (ev.target.closest('#curupiraV68Overlay')) return;
+
+                const tile = ev.target.closest('#grid .tile');
+                if (tile) {
+                    ev.stopPropagation();
+                    ev.preventDefault();
+                    ev.stopImmediatePropagation();
+                    const tiles = Array.from(document.querySelectorAll('#grid .tile'));
+                    const idx = tiles.indexOf(tile);
+                    if (idx !== -1) _toggle(tile, idx);
+                } else {
+                    ev.stopPropagation();
+                    ev.preventDefault();
+                    ev.stopImmediatePropagation();
+                }
+            };
+            window.addEventListener('click', st.captureHandler, true);
+
+            if (st.preCapture) {
+                window.removeEventListener('click', st.preCapture, true);
+                st.preCapture = null;
+            }
+
+            if (typeof addLog === 'function') {
+                const corr = elegiveis.filter(_corrompido).length;
+                const extra = corr > 0 ? ` (${corr} corrompido${corr > 1 ? 's' : ''})` : '';
+                addLog(`🏹 Curupira: escolha até 10 tiles${extra}.`);
+            }
+        });
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // FLUXO
+    // ─────────────────────────────────────────────────────────────
+    async function _fluxoCurupira(active, target, totalAtk) {
+        try { if (typeof playSfx === 'function') playSfx('skill1'); } catch(e) {}
+
+        const resultado = await _abrirSelecao();
+        const selecionados = resultado.tiles;
+        if (selecionados.length === 0) {
+            if (typeof addLog === 'function') addLog('🏹 Curupira: nenhum tile escolhido.');
+            return;
+        }
+
+        const bossIdx = (target && typeof target.x === 'number') ? (target.y * 8 + target.x) : -1;
+        let danoTotal = 0;
+        let purificados = 0;
+
+        for (let i = 0; i < selecionados.length; i++) {
+            const t = selecionados[i];
+            const eraTerra = (grid[t.idx] === 'TERRA');
+            const corr = _corrompido(t.idx);
+
+            if (corr) {
+                window._corruptedTiles = (window._corruptedTiles || []).filter(x => x !== t.idx);
+                purificados++;
+                const board = document.getElementById('board');
+                const s = (typeof getStep === 'function') ? getStep() : 59;
+                if (board) {
+                    const smoke = document.createElement('div');
+                    smoke.className = 'corruption-smoke-fx';
+                    smoke.style.left = (t.x * s + 8) + 'px';
+                    smoke.style.top = (t.y * s + 8) + 'px';
+                    smoke.style.width = s + 'px';
+                    smoke.style.height = s + 'px';
+                    board.appendChild(smoke);
+                    setTimeout(() => smoke.remove(), 1500);
+                }
+            }
+
+            grid[t.idx] = 'TERRA';
+            const el = document.querySelectorAll('#grid .tile')[t.idx];
+            if (el) el.className = 'tile bg-TERRA';
+
+            if (typeof spawnFxAt === 'function') {
+                spawnFxAt('impact', 'fx-impact', t.x, t.y, { duration: 500, scale: 0.8, delay: i * 40 });
+            }
+
+            if (target && !target.dead && t.idx === bossIdx) {
+                const dmg = eraTerra ? Math.floor(totalAtk * 2) : totalAtk;
+                danoTotal += dmg;
+                await _sleep(200);
+                if (typeof applyDmg === 'function') applyDmg(target, dmg);
+                if (typeof addLog === 'function') {
+                    addLog(eraTerra
+                        ? `🏹 Curupira: DANO ×2 (${dmg})! Boss já estava em TERRA.`
+                        : `🏹 Curupira: dano ${dmg} no boss.`);
+                }
+            }
+            await _sleep(80);
+        }
+
+        await _sleep(400);
+
+        if (purificados > 0) {
+            if (typeof addLog === 'function') addLog(`✨ Curupira purificou ${purificados} tile(s)!`);
+            try { if (typeof playSfx === 'function') playSfx('purificacao'); } catch(e) {}
+        }
+        if (typeof addLog === 'function') {
+            addLog(`🏹 Curupira: ${selecionados.length} tiles → TERRA.${danoTotal > 0 ? ` Dano: ${danoTotal}.` : ''}`);
+        }
+        if (typeof updateVisuals === 'function') updateVisuals();
+        if (typeof updateTitleStats === 'function') updateTitleStats('bravely_chain');
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // WRAPPER (PA SEMPRE abre, sem guard de prioridade)
+    // ─────────────────────────────────────────────────────────────
+    function _ensureBravely() {
+        const cur = window.triggerBravelyChain;
+        if (typeof cur !== 'function') return;
+        if (cur._v68Curupira === true) return;
+
+        const wrapped = async function(active, target, totalAtk) {
+            const heroData = (typeof STORY_HERO_CLASSES !== 'undefined' && active)
+                ? STORY_HERO_CLASSES[active.class] : null;
+            if (!heroData || heroData.paKey !== PA_KEY) {
+                return cur.apply(this, arguments);
+            }
+
+            try {
+                if (typeof path !== 'undefined' && Array.isArray(path)) {
+                    path.length = 0;
+                    if (typeof renderPath === 'function') renderPath();
+                }
+            } catch(e) {}
+
+            if (st.preCapture) window.removeEventListener('click', st.preCapture, true);
+            st.preCapture = (ev) => {
+                // Não bloqueia se prioridade visível
+                if (_temPrioridadeVisivel()) return;
+                const tile = ev.target.closest('#grid .tile');
+                if (tile) {
+                    ev.stopPropagation();
+                    ev.preventDefault();
+                    ev.stopImmediatePropagation();
+                }
+            };
+            window.addEventListener('click', st.preCapture, true);
+
+            try {
+                if (typeof showPoderAncestralEffect === 'function') {
+                    try { showPoderAncestralEffect(); } catch(e) {}
+                }
+                await _sleep(300);
+                await _fluxoCurupira(active, target, totalAtk);
+            } finally {
+                if (st.preCapture) {
+                    window.removeEventListener('click', st.preCapture, true);
+                    st.preCapture = null;
+                }
+            }
+        };
+        // ⭐ Marcadores: impede V63/V67 de reinstalar
+        wrapped._v63Curupira = true;
+        wrapped._v67Curupira = true;
+        wrapped._v68Curupira = true;
+        window.triggerBravelyChain = wrapped;
+    }
+
+    _ensureBravely();
+    setInterval(_ensureBravely, 100);
+
+    // ─────────────────────────────────────────────────────────────
+    // CSS
+    // ─────────────────────────────────────────────────────────────
+    if (!document.getElementById('curupiraV68CSS')) {
+        const s = document.createElement('style');
+        s.id = 'curupiraV68CSS';
+        s.textContent = `
+            @keyframes curupiraV68Pulse {
+                from { box-shadow: 0 0 15px rgba(107,163,92,.6), 0 4px 15px rgba(0,0,0,.5); }
+                to   { box-shadow: 0 0 35px rgba(107,163,92,1), 0 4px 15px rgba(0,0,0,.5); }
+            }
+            #curupiraV68Overlay:hover { filter: brightness(1.1); }
+            .curupiraV68-eligible {
+                box-shadow: inset 0 0 0 2px rgba(74,140,181,.9) !important;
+                cursor: pointer !important;
+                animation: curupiraV68EligPulse 1s ease-in-out infinite alternate !important;
+            }
+            @keyframes curupiraV68EligPulse {
+                from { box-shadow: inset 0 0 0 2px rgba(74,140,181,.5); }
+                to   { box-shadow: inset 0 0 0 3px rgba(74,140,181,1), 0 0 12px rgba(74,140,181,.6); }
+            }
+            .curupiraV68-selected {
+                box-shadow: inset 0 0 0 3px #e8b923, 0 0 20px rgba(232,185,35,.9) !important;
+                transform: scale(1.05);
+                z-index: 5;
+            }
+            .tile.tile-corrupted.curupiraV68-eligible { cursor: pointer !important; }
+            .tile.tile-corrupted.curupiraV68-selected {
+                background: linear-gradient(135deg, rgba(142,68,173,.4), rgba(39,174,96,.4)) !important;
+                box-shadow: inset 0 0 0 3px #e8b923, 0 0 22px rgba(232,185,35,.9), 0 0 32px rgba(142,68,173,.7) !important;
+            }
+            .tile.tile-corrupted.curupiraV68-selected .corruption-fx { display: none !important; }
+        `;
+        document.head.appendChild(s);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // DEBUG
+    // ─────────────────────────────────────────────────────────────
+    window._debugCurupiraV68 = function() {
+        console.log('═══ [V68] Curupira ═══');
+        console.log('Prioridade visível?', _temPrioridadeVisivel() || 'nenhuma');
+        console.log('PA ativo?', st.ativo);
+        console.log('Tiles:', st.tiles.length);
+        console.log('Overlay existe?', !!document.getElementById('curupiraV68Overlay'));
+        console.log('Overlay visível?', st.overlay?.style.visibility);
+        console.log('triggerBravelyChain._v68Curupira:', window.triggerBravelyChain?._v68Curupira);
+        console.log('═══════════════════════');
+    };
+
+    console.log('• PA SEMPRE abre (não cancela)');
+    console.log('• captureHandler respeita prioridade (deixa cliques passar)');
+    console.log('• Overlay escondido quando prioridade visível (z-index 500)');
+    console.log('• Debug: window._debugCurupiraV68()');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — V69 — Correções de passivas
+// -----------------------------------------------------------------
+// 1. Curupira: re-declarar passive (UI volta a mostrar)
+// 2. Kanarott: rarity 2 (sem passiva)
+// 3. Anhanga-Mirim: Sombra Regenerativa (+1 HP por turno)
+// 4. Rudá: fix do timing (+1 HP em AR agora funciona)
+//
+// Cole NO FINAL do historia.js.
+// =================================================================
+(function passivasV69() {
+    if (window._passivasV69) return;
+    window._passivasV69 = true;
+
+    // ─────────────────────────────────────────────────────────────
+    // 1. Curupira: passive re-declarada (UI)
+    // ─────────────────────────────────────────────────────────────
+    const _regCurupira = () => {
+        if (typeof STORY_HERO_CLASSES === 'undefined') return;
+        const c = STORY_HERO_CLASSES['Curupira'];
+        if (!c) return;
+        c.rarity = 4;
+        c.passive = 'curupira_adjacente';
+    };
+    _regCurupira();
+    setTimeout(_regCurupira, 500);
+    setTimeout(_regCurupira, 1500);
+
+    // ─────────────────────────────────────────────────────────────
+    // 2. Kanarott: rarity 2 (sem passiva)
+    // ─────────────────────────────────────────────────────────────
+    const _regKanarott = () => {
+        if (typeof STORY_HERO_CLASSES === 'undefined') return;
+        const k = STORY_HERO_CLASSES['Kanarott'];
+        if (!k) return;
+        k.rarity = 2;
+        delete k.passive;
+    };
+    _regKanarott();
+    setTimeout(_regKanarott, 500);
+    setTimeout(_regKanarott, 1500);
+
+    // ─────────────────────────────────────────────────────────────
+    // 3. Anhanga-Mirim: 5⭐ + passive regen
+    // ─────────────────────────────────────────────────────────────
+    const _regAnhanga = () => {
+        if (typeof STORY_HERO_CLASSES === 'undefined') return;
+        const a = STORY_HERO_CLASSES['Anhanga-Mirim'];
+        if (!a) return;
+        a.rarity = 5;
+        a.passive = 'anhanga_mirim_regen';
+    };
+    _regAnhanga();
+    setTimeout(_regAnhanga, 500);
+    setTimeout(_regAnhanga, 1500);
+
+    // ─────────────────────────────────────────────────────────────
+    // 4. PASSIVE_DISPLAY
+    // ─────────────────────────────────────────────────────────────
+    const _regDisplay = () => {
+        if (typeof window.PASSIVE_DISPLAY === 'undefined') window.PASSIVE_DISPLAY = {};
+        window.PASSIVE_DISPLAY['anhanga_mirim_regen'] = {
+            name: 'Sombra Regenerativa',
+            desc: 'Recupera 1 HP no fim de cada turno.'
+        };
+        window.PASSIVE_DISPLAY['curupira_adjacente'] = window.PASSIVE_DISPLAY['curupira_adjacente'] || {
+            name: 'Instinto Selvagem',
+            desc: '150% de dano em inimigos adjacentes.'
+        };
+    };
+    _regDisplay();
+    setTimeout(_regDisplay, 500);
+    setTimeout(_regDisplay, 1500);
+
+    // ─────────────────────────────────────────────────────────────
+    // 5. executeAction hook: regen por turno (Anhanga + Rudá)
+    // ─────────────────────────────────────────────────────────────
+    function _installExecHook() {
+        const cur = window.executeAction;
+        if (typeof cur !== 'function') return;
+        if (cur._v69Passivas) return;
+
+        const inner = cur;
+        window.executeAction = async function() {
+            // ⭐ Snapshot do herói ANTES (fix timing Rudá)
+            const heroAgora = (typeof players !== 'undefined'
+                                && Array.isArray(players)
+                                && currentPlayerIdx >= 0)
+                ? players[currentPlayerIdx] : null;
+
+            const result = await inner.apply(this, arguments);
+
+            // Fora do modo história / evento: não aplica
+            if (!window._storyMode && !window._eventoAtivo) return result;
+            if (window._pvpMode || window._coopMode) return result;
+            if (!heroAgora || heroAgora.dead) return result;
+
+            // ⭐ Anhanga-Mirim: +1 HP por turno
+            if (heroAgora.class === 'Anhanga-Mirim' && heroAgora.hp < heroAgora.maxHp) {
+                heroAgora.hp = Math.min(heroAgora.maxHp, heroAgora.hp + 1);
+                if (typeof showHealEffect === 'function') {
+                    showHealEffect(heroAgora.x, heroAgora.y, 1);
+                }
+                if (typeof updateHeroCard === 'function') updateHeroCard();
+                if (typeof addLog === 'function') {
+                    addLog(`🌑 Anhanga-Mirim: +1 HP (Sombra Regenerativa).`);
+                }
+            }
+
+            // ⭐ Rudá: +1 HP em tile AR
+            if (heroAgora.class === 'Rudá') {
+                const idx = heroAgora.y * 8 + heroAgora.x;
+                if (grid[idx] === 'AR' && heroAgora.hp < heroAgora.maxHp) {
+                    heroAgora.hp = Math.min(heroAgora.maxHp, heroAgora.hp + 1);
+                    if (typeof showHealEffect === 'function') {
+                        showHealEffect(heroAgora.x, heroAgora.y, 1);
+                    }
+                    if (typeof updateHeroCard === 'function') updateHeroCard();
+                    if (typeof addLog === 'function') {
+                        addLog(`💚 Rudá: +1 HP (Toque do Amor).`);
+                    }
+                }
+            }
+
+            return result;
+        };
+        window.executeAction._v69Passivas = true;
+    }
+
+    _installExecHook();
+    setInterval(_installExecHook, 500);
+
+    // ─────────────────────────────────────────────────────────────
+    // Debug
+    // ─────────────────────────────────────────────────────────────
+    window._debugPassivasV69 = function() {
+        console.group('=== PASSIVAS V69 ===');
+        ['Curupira', 'Kanarott', 'Anhanga-Mirim', 'Rudá'].forEach(h => {
+            const d = STORY_HERO_CLASSES?.[h];
+            const meta = d?.passive ? window.PASSIVE_DISPLAY?.[d.passive] : null;
+            console.log(`${h}: rarity=${d?.rarity}, passive=${d?.passive || 'nenhuma'}`,
+                meta ? `→ "${meta.name}"` : '');
+        });
+        console.log('executeAction._v69Passivas:', window.executeAction?._v69Passivas);
+        console.groupEnd();
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V69] Passivas corrigidas');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Curupira: passive re-declarada (UI volta a mostrar)');
+    console.log('• Kanarott: rarity 2 (sem passiva)');
+    console.log('• Anhanga-Mirim: Sombra Regenerativa (+1 HP/turno)');
+    console.log('• Rudá: fix do timing (+1 HP em AR agora funciona)');
+    console.log('');
+    console.log('💡 Debug: window._debugPassivasV69()');
     console.log('═══════════════════════════════════════════════════');
 })();
