@@ -48282,3 +48282,351 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
     console.log('💡 Debug: window._debugPassivasV69()');
     console.log('═══════════════════════════════════════════════════');
 })();
+// =================================================================
+// historia.js — V70 — Semente do Vento (consumível do evento)
+// -----------------------------------------------------------------
+// • Item da Loja das Sombras (50 essências)
+// • Máximo 1 no inventário
+// • Botão no canto sup-esq do Solo Sagrado (não bloqueia o resto)
+// • Ao usar: reroll ponderado do tabuleiro (preserva corrompidos)
+// • Não em PvP/Coop
+//
+// Cole NO FINAL do historia.js.
+// =================================================================
+(function sementeVentoV70() {
+    if (window._sementeVentoV70) return;
+    window._sementeVentoV70 = true;
+
+    // ═══════════════════════════════════════════════════════════
+    // SPRITES (cole os links aqui depois — deixe vazio pra emoji)
+    // ═══════════════════════════════════════════════════════════
+    const SPRITE_SEMENTE = 'https://i.imgur.com/iGSbGX6.png'; // ← colar link do PNG do item aqui
+    const SPRITE_BOTAO   = 'https://i.imgur.com/l3S6ixw.png'; // ← colar link do ícone do botão (24x24)
+    const EMOJI_SEMENTE = '🌪️';
+
+    const _sementeIconHTML = () => SPRITE_SEMENTE
+        ? `<img src="${SPRITE_SEMENTE}" style="width:100%;height:100%;object-fit:contain;" alt="Semente">`
+        : `<span style="font-size:3rem;line-height:1;">${EMOJI_SEMENTE}</span>`;
+
+    const _sementeBotaoHTML = () => SPRITE_BOTAO
+        ? `<img src="${SPRITE_BOTAO}" style="width:100%;height:100%;object-fit:contain;pointer-events:none;" alt="Semente">`
+        : `<span style="pointer-events:none;">${EMOJI_SEMENTE}</span>`;
+
+    // ═══════════════════════════════════════════════════════════
+    // 1. REGISTRAR O ITEM (pra Tesouraria/Loja não quebrar)
+    // ═══════════════════════════════════════════════════════════
+    if (typeof STORY_MATERIALS !== 'undefined') {
+        STORY_MATERIALS['semente_vento'] = {
+            id: 'semente_vento',
+            name: 'Semente do Vento',
+            emoji: EMOJI_SEMENTE,
+        };
+    }
+    if (typeof STORY_MATERIAL_SPRITES !== 'undefined' && !('semente_vento' in STORY_MATERIAL_SPRITES)) {
+        STORY_MATERIAL_SPRITES['semente_vento'] = ''; // ← trocar por SPRITE_SEMENTE depois
+    }
+    if (typeof STORY_MATERIAL_PRICES !== 'undefined') {
+        STORY_MATERIAL_PRICES['semente_vento'] = 0; // não vendável
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 2. HOOK EM comprarEventoItem (bloqueio de duplicata)
+    // ═══════════════════════════════════════════════════════════
+    const _origComprar = window.comprarEventoItem;
+    if (typeof _origComprar === 'function' && !_origComprar._v70Semente) {
+        window.comprarEventoItem = function(itemId, preco, tipo) {
+            if (itemId === 'semente_vento') {
+                if ((STORY_PROGRESS.inventory['semente_vento'] || 0) >= 1) {
+                    if (typeof showToast === 'function') showToast('❌', 'Você já possui uma Semente do Vento.', '❌');
+                    return;
+                }
+                const result = _origComprar.apply(this, arguments);
+                if (typeof renderEventoShopScreen === 'function') renderEventoShopScreen();
+                return result;
+            }
+            return _origComprar.apply(this, arguments);
+        };
+        window.comprarEventoItem._v70Semente = true;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 3. INJETAR CARD NA LOJA DO EVENTO
+    // ═══════════════════════════════════════════════════════════
+    function _injetarCardLoja() {
+        const grid = document.querySelector('.evento-shop-grid');
+        if (!grid) return;
+        if (grid.querySelector('[data-item="semente_vento"]')) return;
+
+        const tem = (STORY_PROGRESS.inventory['semente_vento'] || 0) >= 1;
+        const essencias = STORY_PROGRESS.inventory['essencia_sombria'] || 0;
+        const podeComprar = !tem && essencias >= 50;
+
+        const card = document.createElement('div');
+        card.setAttribute('data-item', 'semente_vento');
+        card.className = `evento-shop-card ${podeComprar || tem ? '' : 'disabled'}`;
+        card.innerHTML = `
+            <div class="evento-shop-emoji">${_sementeIconHTML()}</div>
+            <div class="evento-shop-name">Semente do Vento</div>
+            <div class="evento-shop-stats">🌀 Reroll</div>
+            <div class="evento-shop-desc">Rerolla o tabuleiro (preserva corrompidos). Máximo 1 por vez.</div>
+            ${tem ? `<div class="evento-shop-durability">✅ Você já possui</div>` : ''}
+            <div class="evento-shop-price">🌑 50</div>
+            <button class="evento-shop-btn" ${podeComprar ? '' : 'disabled'}
+                onclick="comprarEventoItem('semente_vento', 50, 'material')">
+                ${tem ? 'JÁ POSSUI' : podeComprar ? 'COMPRAR' : 'FALTA ESSÊNCIA'}
+            </button>
+        `;
+        grid.appendChild(card);
+    }
+
+    const _origShop = window.renderEventoShopScreen;
+    if (typeof _origShop === 'function') {
+        window.renderEventoShopScreen = function() {
+            const r = _origShop.apply(this, arguments);
+            setTimeout(_injetarCardLoja, 50);
+            setTimeout(_injetarCardLoja, 300);
+            return r;
+        };
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 4. BOTÃO NA BATALHA
+    // ═══════════════════════════════════════════════════════════
+    let _sementeBtn = null;
+    let _sementeTimer = null;
+
+    function _getSkillBtn() {
+        return document.getElementById('btnSkill');
+    }
+
+    function _temPAativo() {
+        return !!document.getElementById('curupiraV68Overlay');
+    }
+
+    function _atualizarBotaoSemente() {
+        // Só solo/evento (nunca PvP/Coop)
+        if (!window._storyMode && !window._eventoAtivo) { _removerBotao(); return; }
+        if (window._pvpMode || window._coopMode) { _removerBotao(); return; }
+
+        // Só se tiver o item
+        const tem = (STORY_PROGRESS.inventory['semente_vento'] || 0) >= 1;
+        if (!tem) { _removerBotao(); return; }
+
+        // Se PA do Curupira estiver selecionando, esconde
+        if (_temPAativo()) {
+            if (_sementeBtn) _sementeBtn.style.display = 'none';
+            return;
+        }
+
+        const skillBtn = _getSkillBtn();
+        if (!skillBtn) { _removerBotao(); return; }
+
+        // Skill button visível?
+        const cs = getComputedStyle(skillBtn);
+        if (cs.display === 'none' || cs.visibility === 'hidden') {
+            if (_sementeBtn) _sementeBtn.style.display = 'none';
+            return;
+        }
+
+        if (!_sementeBtn) _criarBotao();
+
+        // Posiciona no canto superior esquerdo do Solo Sagrado
+        const rect = skillBtn.getBoundingClientRect();
+        if (rect.width < 5 || rect.height < 5) {
+            _sementeBtn.style.display = 'none';
+            return;
+        }
+        _sementeBtn.style.display = 'flex';
+        _sementeBtn.style.left = (rect.left + 3) + 'px';
+        _sementeBtn.style.top = (rect.top + 3) + 'px';
+    }
+
+    function _criarBotao() {
+        if (_sementeBtn) return;
+        const btn = document.createElement('button');
+        btn.id = 'sementeVentoBtn';
+        btn.type = 'button';
+        btn.title = 'Semente do Vento — rerollar tabuleiro (não afeta corrompidos)';
+        btn.style.cssText = `
+            position: fixed;
+            z-index: 400;
+            width: 24px;
+            height: 24px;
+            padding: 0;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle, #8a6a2e, #4a3418);
+            border: 1.5px solid #e8b923;
+            border-radius: 50%;
+            color: #fff5dc;
+            font-size: 14px;
+            line-height: 1;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.6), 0 0 10px rgba(232,185,35,0.5);
+            transition: transform 0.15s;
+            user-select: none;
+            -webkit-user-select: none;
+            box-sizing: border-box;
+            overflow: hidden;
+        `;
+        btn.innerHTML = _sementeBotaoHTML();
+        btn.onclick = (ev) => {
+            ev.stopPropagation();
+            ev.preventDefault();
+            ev.stopImmediatePropagation();
+            _usarSemente();
+        };
+        btn.onmouseenter = () => { btn.style.transform = 'scale(1.15)'; };
+        btn.onmouseleave = () => { btn.style.transform = 'scale(1)'; };
+        document.body.appendChild(btn);
+        _sementeBtn = btn;
+        _sementeTimer = setInterval(_atualizarBotaoSemente, 300);
+    }
+
+    function _removerBotao() {
+        if (_sementeTimer) { clearInterval(_sementeTimer); _sementeTimer = null; }
+        if (_sementeBtn) { try { _sementeBtn.remove(); } catch(e) {} _sementeBtn = null; }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 5. USO DA SEMENTE
+    // ═══════════════════════════════════════════════════════════
+    function _usarSemente() {
+        if ((STORY_PROGRESS.inventory['semente_vento'] || 0) < 1) {
+            if (typeof showToast === 'function') showToast('❌', 'Você não tem Semente do Vento.', '❌');
+            return;
+        }
+        if (!confirm('🌪️ Usar Semente do Vento?\n\nO tabuleiro inteiro será rerollado.\nTiles corrompidos são preservados.\n\nContinuar?')) return;
+
+        STORY_PROGRESS.inventory['semente_vento'] -= 1;
+        if (STORY_PROGRESS.inventory['semente_vento'] <= 0) {
+            delete STORY_PROGRESS.inventory['semente_vento'];
+        }
+        if (typeof saveStoryProgress === 'function') saveStoryProgress();
+
+        _removerBotao();
+        _executarReroll();
+
+        try { if (typeof playSfx === 'function') playSfx('purificacao'); } catch(e) {}
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 6. REROLL PONDERADO (preserva corrompidos)
+    // ═══════════════════════════════════════════════════════════
+    function _executarReroll() {
+        const corrompidos = new Set(Array.isArray(window._corruptedTiles) ? window._corruptedTiles : []);
+        const elegiveis = [];
+        for (let i = 0; i < 64; i++) if (!corrompidos.has(i)) elegiveis.push(i);
+
+        const N = elegiveis.length;
+        if (N === 0) {
+            if (typeof showToast === 'function') showToast('⚠️', 'Todos os tiles estão corrompidos!', '⚠️');
+            return;
+        }
+
+        const elementos = ['FOGO', 'AGUA', 'TERRA', 'AR'];
+        const pool = [];
+
+        // Mínimo garantido (anti-monotonia + anti-combo-quebrado)
+        if (N >= 8) {
+            elementos.forEach(el => { pool.push(el); pool.push(el); }); // 8 fixos
+            for (let i = 8; i < N; i++) pool.push(elementos[Math.floor(Math.random() * 4)]);
+        } else if (N >= 4) {
+            elementos.forEach(el => pool.push(el)); // 4 fixos
+            for (let i = 4; i < N; i++) pool.push(elementos[Math.floor(Math.random() * 4)]);
+        } else {
+            for (let i = 0; i < N; i++) pool.push(elementos[Math.floor(Math.random() * 4)]);
+        }
+
+        // Fisher-Yates
+        for (let i = pool.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [pool[i], pool[j]] = [pool[j], pool[i]];
+        }
+
+        // Aplica cascata
+        elegiveis.forEach((idx, i) => {
+            const novoEl = pool[i];
+            const x = idx % 8, y = Math.floor(idx / 8);
+            setTimeout(() => {
+                if (typeof spawnTileFlip === 'function') spawnTileFlip(x, y);
+                grid[idx] = novoEl;
+                const el = document.querySelectorAll('#grid .tile')[idx];
+                if (el) el.className = `tile bg-${novoEl}`;
+            }, i * 30);
+        });
+
+        if (typeof addLog === 'function') {
+            addLog(`🌪️ Semente do Vento: tabuleiro rerollado (${N} tiles, ${corrompidos.size} corrompidos preservados).`);
+        }
+
+        const duracao = elegiveis.length * 30;
+        setTimeout(() => {
+            if (typeof showToast === 'function') showToast('🌪️', 'Tabuleiro rerollado!', '🌪️');
+            if (typeof updateVisuals === 'function') updateVisuals();
+        }, duracao + 200);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 7. LOOPS DE ATUALIZAÇÃO
+    // ═══════════════════════════════════════════════════════════
+    setTimeout(_atualizarBotaoSemente, 500);
+    setTimeout(_atualizarBotaoSemente, 1500);
+    setTimeout(_atualizarBotaoSemente, 3000);
+    setInterval(_atualizarBotaoSemente, 500);
+
+    // Reposiciona em resize/scroll
+    window.addEventListener('resize', _atualizarBotaoSemente);
+    window.addEventListener('scroll', _atualizarBotaoSemente, true);
+
+    // ═══════════════════════════════════════════════════════════
+    // 8. DEBUG
+    // ═══════════════════════════════════════════════════════════
+    window._debugSementeVento = function() {
+        console.group('=== SEMENTE DO VENTO ===');
+        console.log('No inventário:', STORY_PROGRESS.inventory['semente_vento'] || 0);
+        console.log('Botão existe no DOM?', !!document.getElementById('sementeVentoBtn'));
+        console.log('Botão visível?', _sementeBtn?.style.display || '(não existe)');
+        console.log('PA do Curupira ativo?', _temPAativo());
+        console.log('Corrompidos:', (window._corruptedTiles || []).length);
+        const skill = _getSkillBtn();
+        if (skill) {
+            const r = skill.getBoundingClientRect();
+            console.log('Solo Sagrado rect:', { left: r.left, top: r.top, w: r.width, h: r.height });
+        }
+        console.groupEnd();
+    };
+
+    window._forcarSemente = function() {
+        STORY_PROGRESS.inventory['semente_vento'] = 1;
+        if (typeof saveStoryProgress === 'function') saveStoryProgress();
+        _atualizarBotaoSemente();
+        console.log('✅ Semente forçada no inventário');
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V70] Semente do Vento');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Item na Loja das Sombras: 50 🌑');
+    console.log('• Máximo 1 por vez');
+    console.log('• Botão no canto sup-esq do Solo Sagrado');
+    console.log('• Reroll ponderado (≥2 de cada elemento se ≥8 tiles)');
+    console.log('• Corrompidos preservados');
+    console.log('• Esconde durante seleção do PA do Curupira');
+    console.log('');
+    console.log('💡 Debug: window._debugSementeVento()');
+    console.log('💡 Forçar item: window._forcarSemente()');
+    console.log('');
+    console.log('📸 SPRITES PRA COLAR DEPOIS:');
+    console.log('   1. Card da Loja:');
+    console.log('      STORY_MATERIAL_SPRITES["semente_vento"] = "URL"');
+    console.log('   2. Ícone do botão na batalha:');
+    console.log('      Edite o topo do V70: const SPRITE_BOTAO = "URL"');
+    console.log('      (botão tem 24×24px — use PNG transparente)');
+    console.log('   3. Card do item na Loja (grande):');
+    console.log('      Edite o topo do V70: const SPRITE_SEMENTE = "URL"');
+    console.log('═══════════════════════════════════════════════════');
+})();
