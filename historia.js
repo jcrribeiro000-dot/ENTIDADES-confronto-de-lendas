@@ -48368,7 +48368,7 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
             <div class="evento-shop-emoji">${_sementeIconHTML()}</div>
             <div class="evento-shop-name">Semente do Vento</div>
             <div class="evento-shop-stats">🌀 Reroll</div>
-            <div class="evento-shop-desc">Rerolla o tabuleiro (preserva corrompidos). Máximo 1 por vez.</div>
+            <div class="evento-shop-desc">Reorganiza o tabuleiro (preserva corrompidos). Máximo 1 por vez.</div>
             ${tem ? `<div class="evento-shop-durability">✅ Você já possui</div>` : ''}
             <div class="evento-shop-price">🌑 50</div>
             <button class="evento-shop-btn" ${podeComprar ? '' : 'disabled'}
@@ -48446,7 +48446,7 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
         const btn = document.createElement('button');
         btn.id = 'sementeVentoBtn';
         btn.type = 'button';
-        btn.title = 'Semente do Vento — rerollar tabuleiro (não afeta corrompidos)';
+        btn.title = 'Semente do Vento — reorganizar o tabuleiro (não afeta corrompidos)';
         btn.style.cssText = `
             position: fixed;
             z-index: 400;
@@ -48498,7 +48498,7 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
             if (typeof showToast === 'function') showToast('❌', 'Você não tem Semente do Vento.', '❌');
             return;
         }
-        if (!confirm('🌪️ Usar Semente do Vento?\n\nO tabuleiro inteiro será rerollado.\nTiles corrompidos são preservados.\n\nContinuar?')) return;
+        if (!confirm('🌪️ Usar Semente do Vento?\n\nO tabuleiro inteiro será reorganizado.\nTiles corrompidos são preservados.\n\nContinuar?')) return;
 
         STORY_PROGRESS.inventory['semente_vento'] -= 1;
         if (STORY_PROGRESS.inventory['semente_vento'] <= 0) {
@@ -48559,12 +48559,12 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
         });
 
         if (typeof addLog === 'function') {
-            addLog(`🌪️ Semente do Vento: tabuleiro rerollado (${N} tiles, ${corrompidos.size} corrompidos preservados).`);
+            addLog(`🌪️ Semente do Vento: tabuleiro reorganizado (${N} tiles, ${corrompidos.size} corrompidos preservados).`);
         }
 
         const duracao = elegiveis.length * 30;
         setTimeout(() => {
-            if (typeof showToast === 'function') showToast('🌪️', 'Tabuleiro rerollado!', '🌪️');
+            if (typeof showToast === 'function') showToast('🌪️', 'Tabuleiro reorganizado!', '🌪️');
             if (typeof updateVisuals === 'function') updateVisuals();
         }, duracao + 200);
     }
