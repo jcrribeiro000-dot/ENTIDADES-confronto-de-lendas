@@ -46752,3 +46752,397 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
     console.log('💡 Debug: window._debugRecuperadas()');
     console.log('═══════════════════════════════════════════════════');
 })();
+// =================================================================
+// historia.js — V50 — Fix UX: Ritual + Barra de Preview
+// -----------------------------------------------------------------
+// 1. Ritual: ao subir nível, mantém scroll no herói ascendido
+//    + destaca o card com um flash dourado por 2s
+// 2. Preview Bar: reserva espaço fixo, não empurra mais o tabuleiro
+//    (a barra aparece no espaço reservado, sem mover nada)
+//
+// Cole NO FINAL do historia.js.
+// =================================================================
+(function fixUXRitualPreviewV50() {
+    if (window._fixUXRitualPreviewV50) return;
+    window._fixUXRitualPreviewV50 = true;
+
+    // =============================================================
+    // CSS
+    // =============================================================
+    if (!document.getElementById('fixUXV50CSS')) {
+        const style = document.createElement('style');
+        style.id = 'fixUXV50CSS';
+        style.textContent = `
+            /* ─── Ritual: destaque do card ascendido ─── */
+            .ritual-card-highlight {
+                animation: ritualCardFlashV50 2s ease-out;
+            }
+            @keyframes ritualCardFlashV50 {
+                0% {
+                    box-shadow: 0 0 0 rgba(232, 185, 35, 0);
+                    transform: scale(1);
+                }
+                20% {
+                    box-shadow:
+                        0 0 30px rgba(232, 185, 35, 0.9),
+                        inset 0 0 20px rgba(232, 185, 35, 0.3);
+                    transform: scale(1.02);
+                }
+                100% {
+                    box-shadow: 0 0 0 rgba(232, 185, 35, 0);
+                    transform: scale(1);
+                }
+            }
+
+            /* ─── Preview Bar: reserva espaço, não empurra nada ───
+             * display: flex !important sobrescreve display:none inline
+             * opacity: 0 por padrão (vazia), 1 quando tem conteúdo
+             * min-height garante o espaço reservado sempre
+             */
+            #storyPreviewBarV3 {
+                display: flex !important;
+                min-height: 36px !important;
+                opacity: 0;
+                transition: opacity 0.15s;
+                pointer-events: none;
+            }
+            #storyPreviewBarV3.preview-active {
+                opacity: 1;
+                pointer-events: auto;
+            }
+            /* Versões antigas: continua escondido */
+            #storyPreviewBar,
+            #storyPreviewBarV2 {
+                display: none !important;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // =============================================================
+    // RITUAL: fixar scroll no herói ascendido
+    // =============================================================
+    let _ultimoAscendHero = null;
+    let _ascendScrollTimer = null;
+
+    function fixarScrollNoHeroi(heroClass, tentativa) {
+        tentativa = tentativa || 0;
+        if (tentativa > 25) {
+            console.log('[V50] Desistiu de fixar scroll (25 tentativas).');
+            return;
+        }
+
+        const heroData = window.STORY_HERO_CLASSES?.[heroClass];
+        if (!heroData) return;
+        const nome = heroData.displayName;
+
+        const cards = document.querySelectorAll('.ritual-card');
+        for (const card of cards) {
+            const nameEl = card.querySelector('.ritual-card-name');
+            if (nameEl && nameEl.textContent.trim() === nome) {
+                try {
+                    card.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                } catch (e) {
+                    card.scrollIntoView(false);
+                }
+                card.classList.add('ritual-card-highlight');
+                setTimeout(() => card.classList.remove('ritual-card-highlight'), 2200);
+                console.log(`[V50] Scroll fixado em ${nome}`);
+                return;
+            }
+        }
+        // Ainda não achou — tenta de novo (render pode estar em andamento)
+        _ascendScrollTimer = setTimeout(
+            () => fixarScrollNoHeroi(heroClass, tentativa + 1),
+            200
+        );
+    }
+
+    const _origAscend = window.handleRitualAscend;
+    if (typeof _origAscend === 'function' && !_origAscend._v50) {
+        window.handleRitualAscend = function (heroClass) {
+            _ultimoAscendHero = heroClass;
+            if (_ascendScrollTimer) {
+                clearTimeout(_ascendScrollTimer);
+                _ascendScrollTimer = null;
+            }
+            const r = _origAscend.apply(this, arguments);
+            setTimeout(() => {
+                if (_ultimoAscendHero === heroClass) fixarScrollNoHeroi(heroClass);
+            }, 1200);
+            return r;
+        };
+        window.handleRitualAscend._v50 = true;
+        console.log('[V50] handleRitualAscend: scroll fixado.');
+    }
+
+    const _origReroll = window.rerollStat11;
+    if (typeof _origReroll === 'function' && !_origReroll._v50) {
+        window.rerollStat11 = function (heroClass) {
+            _ultimoAscendHero = heroClass;
+            if (_ascendScrollTimer) {
+                clearTimeout(_ascendScrollTimer);
+                _ascendScrollTimer = null;
+            }
+            const r = _origReroll.apply(this, arguments);
+            setTimeout(() => {
+                if (_ultimoAscendHero === heroClass) fixarScrollNoHeroi(heroClass);
+            }, 1200);
+            return r;
+        };
+        window.rerollStat11._v50 = true;
+    }
+
+    // =============================================================
+    // PREVIEW BAR: observa conteúdo e toggla .preview-active
+    // =============================================================
+    function instalarObserverPreview() {
+        const boardArea = document.querySelector('.board-area');
+        if (!boardArea) {
+            setTimeout(instalarObserverPreview, 500);
+            return;
+        }
+
+        const obs = new MutationObserver(() => {
+            const bar = document.getElementById('storyPreviewBarV3');
+            if (!bar) return;
+            // Tem conteúdo real?
+            const hasContent =
+                bar.children.length > 0 ||
+                bar.textContent.trim() !== '';
+            bar.classList.toggle('preview-active', hasContent);
+        });
+
+        obs.observe(boardArea, { childList: true, subtree: true, characterData: true });
+        console.log('[V50] Observer do preview bar instalado.');
+    }
+    instalarObserverPreview();
+
+    // =============================================================
+    // Debug
+    // =============================================================
+    window._debugV50UX = function () {
+        console.log('═══ [V50] UX ═══');
+        console.log('Último herói ascendido:', _ultimoAscendHero);
+        console.log('Timer ativo?', !!_ascendScrollTimer);
+        const bar = document.getElementById('storyPreviewBarV3');
+        console.log('Preview bar existe?', !!bar);
+        if (bar) {
+            console.log('Barra tem classe preview-active?', bar.classList.contains('preview-active'));
+            console.log('Barra display:', getComputedStyle(bar).display);
+            console.log('Barra opacity:', getComputedStyle(bar).opacity);
+            console.log('Barra min-height:', getComputedStyle(bar).minHeight);
+            console.log('Barra filhos:', bar.children.length);
+        }
+        console.log('═══════════════');
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V50] Fix UX instalado');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Ritual: scroll fixa no herói que subiu de nível');
+    console.log('• Preview Bar: reserva espaço, não move o tabuleiro');
+    console.log('• Debug: window._debugV50UX()');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — V50.1 — Fix definitivo do scroll no Ritual
+// -----------------------------------------------------------------
+// O V50 disparava o scroll 1.2s após o CLIQUE, mas o overlay da
+// animação do roll só fecha quando o usuário clica em "CONTINUAR".
+// Solução: esperar o overlay fechar via MutationObserver, depois
+// aguardar o DOM estabilizar (render do V36.2 leva ~700ms) e por
+// fim fazer o scroll no card certo.
+//
+// Cole NO FINAL do historia.js (depois do V50).
+// =================================================================
+(function fixScrollRitualV50_1() {
+    if (window._fixScrollRitualV50_1) return;
+    window._fixScrollRitualV50_1 = true;
+
+    let _heroAlvoAscensao = null;
+    let _observerOverlay = null;
+
+    // -------------------------------------------------------------
+    // Scroll preciso no card do herói (com fallback manual)
+    // -------------------------------------------------------------
+    function scrollPrecisoNoCard(heroClass) {
+        const heroData = window.STORY_HERO_CLASSES?.[heroClass];
+        if (!heroData) return false;
+        const nome = heroData.displayName;
+
+        const screen = document.getElementById('storyScreen');
+        if (!screen) return false;
+
+        const cards = document.querySelectorAll('.ritual-card');
+        for (const card of cards) {
+            const nameEl = card.querySelector('.ritual-card-name');
+            if (!nameEl) continue;
+            if (nameEl.textContent.trim() !== nome) continue;
+
+            // 1. scrollIntoView como base
+            try {
+                card.scrollIntoView({ block: 'center', behavior: 'auto' });
+            } catch (e) {}
+
+            // 2. Ajuste fino manual (garante centralização)
+            try {
+                const cardRect = card.getBoundingClientRect();
+                const screenRect = screen.getBoundingClientRect();
+                const offsetIdeal = screenRect.top + (screenRect.height / 2) - (cardRect.height / 2);
+                const delta = cardRect.top - offsetIdeal;
+                if (Math.abs(delta) > 20) {
+                    screen.scrollTop += delta;
+                }
+            } catch (e) {}
+
+            // 3. Destaque visual
+            card.classList.add('ritual-card-highlight');
+            setTimeout(() => card.classList.remove('ritual-card-highlight'), 2500);
+
+            console.log(`[V50.1] Scroll fixado em ${nome}`);
+            return true;
+        }
+        return false;
+    }
+
+    // -------------------------------------------------------------
+    // Aguarda o DOM do Ritual estabilizar antes de fazer o scroll
+    // -------------------------------------------------------------
+    function aguardarRitualEstabilizar() {
+        let tentativas = 0;
+        let ultimoCardCount = -1;
+        let estabilizadoHa = 0;
+        let scrollFeito = false;
+
+        const tentar = () => {
+            tentativas++;
+            if (!_heroAlvoAscensao) return;
+
+            const cards = document.querySelectorAll('.ritual-card');
+            const count = cards.length;
+
+            if (count === ultimoCardCount) {
+                estabilizadoHa++;
+            } else {
+                ultimoCardCount = count;
+                estabilizadoHa = 0;
+            }
+
+            // Faz scroll quando o DOM estabilizou por 3 ciclos (600ms)
+            if (estabilizadoHa >= 3 && !scrollFeito) {
+                scrollFeito = scrollPrecisoNoCard(_heroAlvoAscensao);
+            }
+
+            if (!scrollFeito && tentativas < 80) {
+                setTimeout(tentar, 200);
+                return;
+            }
+
+            // Re-verificação: se o DOM re-renderizar de novo (algum patch
+            // tardio) e o card sair da tela, re-fixa.
+            if (scrollFeito) {
+                setTimeout(() => {
+                    if (!_heroAlvoAscensao) return;
+                    const screen = document.getElementById('storyScreen');
+                    const heroData = window.STORY_HERO_CLASSES?.[_heroAlvoAscensao];
+                    if (!screen || !heroData) return;
+
+                    const cards = document.querySelectorAll('.ritual-card');
+                    for (const card of cards) {
+                        const nameEl = card.querySelector('.ritual-card-name');
+                        if (!nameEl || nameEl.textContent.trim() !== heroData.displayName) continue;
+
+                        const rect = card.getBoundingClientRect();
+                        const sRect = screen.getBoundingClientRect();
+                        if (rect.top < sRect.top + 50 || rect.bottom > sRect.bottom - 50) {
+                            console.log('[V50.1] Card saiu da tela após render tardio — re-fixando');
+                            scrollPrecisoNoCard(_heroAlvoAscensao);
+                        }
+                        break;
+                    }
+                }, 3000);
+            }
+        };
+
+        setTimeout(tentar, 250);
+    }
+
+    // -------------------------------------------------------------
+    // Observer que espera o overlay do roll FECHAR
+    // -------------------------------------------------------------
+    function monitorarOverlay() {
+        if (_observerOverlay) _observerOverlay.disconnect();
+
+        _observerOverlay = new MutationObserver((mutations) => {
+            for (const m of mutations) {
+                for (const node of m.removedNodes) {
+                    if (node.id === 'stat11RollOverlay') {
+                        console.log('[V50.1] Overlay de roll fechou — aguardando render estabilizar');
+                        // Espera V36.2 re-renderizar (100ms) + pós-processamentos (600ms)
+                        setTimeout(aguardarRitualEstabilizar, 800);
+                        return;
+                    }
+                }
+            }
+        });
+
+        _observerOverlay.observe(document.body, { childList: true });
+    }
+
+    // -------------------------------------------------------------
+    // Substitui handleRitualAscend
+    // -------------------------------------------------------------
+    const _origAscend = window.handleRitualAscend;
+    if (typeof _origAscend === 'function' && !_origAscend._v50_1) {
+        window.handleRitualAscend = function (heroClass) {
+            _heroAlvoAscensao = heroClass;
+            monitorarOverlay();
+            return _origAscend.apply(this, arguments);
+        };
+        window.handleRitualAscend._v50_1 = true;
+        console.log('[V50.1] handleRitualAscend: scroll aguarda overlay fechar.');
+    }
+
+    // -------------------------------------------------------------
+    // Substitui rerollStat11
+    // -------------------------------------------------------------
+    const _origReroll = window.rerollStat11;
+    if (typeof _origReroll === 'function' && !_origReroll._v50_1) {
+        window.rerollStat11 = function (heroClass) {
+            _heroAlvoAscensao = heroClass;
+            monitorarOverlay();
+            return _origReroll.apply(this, arguments);
+        };
+        window.rerollStat11._v50_1 = true;
+    }
+
+    // -------------------------------------------------------------
+    // Debug
+    // -------------------------------------------------------------
+    window._debugV501 = function () {
+        console.log('═══ [V50.1] ═══');
+        console.log('Herói alvo:', _heroAlvoAscensao);
+        console.log('Observer ativo?', !!_observerOverlay);
+        console.log('Overlay de roll aberto agora?', !!document.getElementById('stat11RollOverlay'));
+        console.log('Cards do Ritual no DOM:', document.querySelectorAll('.ritual-card').length);
+        const screen = document.getElementById('storyScreen');
+        if (screen) {
+            console.log('storyScreen scrollTop:', screen.scrollTop);
+            console.log('storyScreen scrollHeight:', screen.scrollHeight);
+            console.log('storyScreen clientHeight:', screen.clientHeight);
+        }
+        console.log('═══════════════');
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V50.1] Scroll do Ritual — fix definitivo');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Aguarda overlay do roll fechar (MutationObserver)');
+    console.log('• Espera DOM estabilizar (3 ciclos × 200ms)');
+    console.log('• Scroll preciso + re-verifica em 3s');
+    console.log('• Debug: window._debugV501()');
+    console.log('═══════════════════════════════════════════════════');
+})();
