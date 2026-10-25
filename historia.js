@@ -53163,3 +53163,808 @@ if (heroAgora.class === 'Anhanga-Mirim' && heroAgora.hp < heroAgora.maxHp) {
     console.log('💡 Debug: window._debugToggleV81()');
     console.log('═══════════════════════════════════════════════════');
 })();
+// =================================================================
+// historia.js — V82 — Sistema de Liderança
+// -----------------------------------------------------------------
+// • 26 líderes com habilidades únicas (uma por herói)
+// • Líder escolhido na OCA (card em destaque com bust)
+// • Buff passivo global (funciona mesmo fora do time)
+// • NÃO afeta PvP/Coop
+//
+// Cole NO FINAL do historia.js (último bloco).
+// =================================================================
+(function liderancaV82() {
+    if (window._liderancaV82) return;
+    window._liderancaV82 = true;
+
+    // ═══════════════════════════════════════════════════════════
+    // 1. TABELA DE LÍDERES (26)
+    // ═══════════════════════════════════════════════════════════
+    const LEADER_ABILITIES = {
+        // ---- BASE ----
+        'Tupa':                 { nome: 'Bênção do Trovão',       desc: '+1 HP máximo a todos',                icon: '⚡' },
+        'Sume':                 { nome: 'Ensinamento Ancestral',  desc: '+8% XP em todas as batalhas',         icon: '📚' },
+        'Caipora':              { nome: 'Olhar da Caçadora',      desc: '+1 ATK em qualquer forma válida',     icon: '🏹' },
+
+        // ---- GUERREIROS ----
+        'Kanarott':             { nome: 'Muralha de Pedra',       desc: '+2 HP a todos',                       icon: '🛡️' },
+        'Teperesik':            { nome: 'Fortaleza Viva',         desc: '+2 HP a todos',                       icon: '🏔️' },
+        'Eru':                  { nome: 'Chama de Guerra',        desc: '+1 ATK a todos',                      icon: '🔥' },
+        'Kianumanka-Manã':      { nome: 'Chama Ancestral',        desc: '+2 dano quando herói em FOGO',        icon: '☄️' },
+        'Caboclo d\'Água':      { nome: 'Maré Guerreira',         desc: 'PA +2 dano',                          icon: '🌊' },
+        'Tupinambá':            { nome: 'Resistência Tribal',     desc: '-1 dano recebido em TERRA',           icon: '🛡️' },
+        'Mbaraká':              { nome: 'Voo do Vento',           desc: '+1 dano quando herói em AR',          icon: '🌪️' },
+
+        // ---- MAGOS ----
+        'Anduré':               { nome: 'Águas Puras',            desc: 'Cura +1 quando alvo em AGUA',         icon: '💧' },
+        'Mãe da Mata':          { nome: 'Bênção da Mata',         desc: 'Cura +1 global',                      icon: '🌳' },
+        'Pajé Anhanguera':      { nome: 'Fogo dos Magos',         desc: '+2 ATK a todos os magos',             icon: '🔮' },
+        'Mãe-do-Ouro':          { nome: 'Fortuna',                desc: '+10% ouro em todas as batalhas',      icon: '💰' },
+        'Pajé-Açu':             { nome: 'Sabedoria Ancestral',    desc: '+10% XP em todas as batalhas',        icon: '📖' },
+        'Anhanga-Mirim':        { nome: 'Poder Abissal',          desc: '+2 HP e +1 ATK a todos',              icon: '🌑' },
+        'Negrinho do Pastoreio':{ nome: 'Cruz Curativa',          desc: 'Todo PA cura +1 HP extra',            icon: '💚' },
+        'Rudá':                 { nome: 'Amor Divino',            desc: 'Toda cura +3',                        icon: '💖' },
+
+        // ---- ARQUEIROS ----
+        'Juruá':                { nome: 'Rajada',                 desc: 'ZIGZAG +1 dano',                      icon: '🌪️' },
+        'Araci':                { nome: 'Linha do Vento',         desc: 'LINHA +1 dano',                       icon: '💨' },
+        'Bicho Folharal':       { nome: 'Instinto',               desc: 'L: +1 HP e +1 ATK',                   icon: '🌿' },
+        'Tapyra-Yawara':        { nome: 'Caçada',                 desc: '+5% ouro e +1 dano em animais',       icon: '🏹' },
+        'Curupira':             { nome: 'Guia da Mata',           desc: 'PA ativa com 8 tiles',                icon: '👣' },
+        'Matinta Pereira':      { nome: 'Aura de Medo',           desc: '+2 ATK a todos os arqueiros',         icon: '🦉' },
+        'Naiá':                 { nome: 'Sacrifício',             desc: '+1 HP/turno quando herói em AGUA',    icon: '💧' },
+        'Kuatí':                { nome: 'Brincalhão',             desc: '+5% ouro e +5% XP',                   icon: '🎭' },
+    };
+
+    // ═══════════════════════════════════════════════════════════
+    // 2. ESTADO
+    // ═══════════════════════════════════════════════════════════
+    if (typeof STORY_PROGRESS.leader === 'undefined') {
+        STORY_PROGRESS.leader = null;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 3. HELPERS
+    // ═══════════════════════════════════════════════════════════
+    function getLeader() { return STORY_PROGRESS.leader; }
+    function isLeader(c) { return STORY_PROGRESS.leader === c; }
+    function getLeaderAbility() { return LEADER_ABILITIES[getLeader()] || null; }
+
+    function getLeaderHpBonus() {
+        const l = getLeader();
+        if (l === 'Tupa') return 1;
+        if (l === 'Kanarott' || l === 'Teperesik') return 2;
+        if (l === 'Anhanga-Mirim') return 2;
+        return 0;
+    }
+
+    function getLeaderAtkBonus(active, shape) {
+        const l = getLeader();
+        if (!l || !active) return 0;
+        let b = 0;
+        if (l === 'Eru') b += 1;
+        if (l === 'Anhanga-Mirim') b += 1;
+        if (l === 'Pajé Anhanguera' && active.role === 'Mago') b += 2;
+        if (l === 'Matinta Pereira' && active.role === 'Arqueiro') b += 2;
+        if (l === 'Caipora' && shape) b += 1;
+        if (l === 'Juruá' && shape === 'ZIGZAG') b += 1;
+        if (l === 'Araci' && shape === 'LINHA') b += 1;
+        if (l === 'Bicho Folharal' && shape === 'L') b += 1;
+        if (l === 'Kianumanka-Manã') {
+            const tile = grid[active.y * 8 + active.x];
+            if (tile === 'FOGO') b += 2;
+        }
+        if (l === 'Mbaraká') {
+            const tile = grid[active.y * 8 + active.x];
+            if (tile === 'AR') b += 1;
+        }
+        return b;
+    }
+
+    function getLeaderHealBonus(target) {
+        const l = getLeader();
+        if (!l) return 0;
+        let b = 0;
+        if (l === 'Mãe da Mata') b += 1;
+        if (l === 'Rudá') b += 3;
+        if (l === 'Anduré' && target) {
+            const tile = grid[target.y * 8 + target.x];
+            if (tile === 'AGUA') b += 1;
+        }
+        return b;
+    }
+
+    function getLeaderXpMult() {
+        const l = getLeader();
+        if (l === 'Sume') return 1.08;
+        if (l === 'Pajé-Açu') return 1.10;
+        if (l === 'Kuatí') return 1.05;
+        return 1;
+    }
+
+    function getLeaderOuroMult() {
+        const l = getLeader();
+        if (l === 'Mãe-do-Ouro') return 1.10;
+        if (l === 'Kuatí') return 1.05;
+        if (l === 'Tapyra-Yawara' || l === "Tapyra'yawara") return 1.05;
+        return 1;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 4. HOOKS
+    // ═══════════════════════════════════════════════════════════
+
+    // ---- HP máx ----
+    const _origInit = window.initStoryBattle;
+    if (typeof _origInit === 'function' && !_origInit._v82) {
+        window.initStoryBattle = async function() {
+            const r = await _origInit.apply(this, arguments);
+            const hpBonus = getLeaderHpBonus();
+            if (hpBonus > 0 && Array.isArray(players)) {
+                players.forEach(p => {
+                    if (p) { p.maxHp += hpBonus; p.hp = p.maxHp; }
+                });
+                if (typeof updateHeroCard === 'function') updateHeroCard();
+                if (typeof addLog === 'function') addLog(`👑 Líder: +${hpBonus} HP máximo a todos`);
+            }
+            return r;
+        };
+        window.initStoryBattle._v82 = true;
+    }
+
+    // ---- ATK (executeAction) ----
+    const _origExec = window.executeAction;
+    if (typeof _origExec === 'function' && !_origExec._v82) {
+        window.executeAction = async function() {
+            const active = (typeof players !== 'undefined' && Array.isArray(players))
+                ? players[currentPlayerIdx] : null;
+            if (!active) return _origExec.apply(this, arguments);
+
+            const shape = (typeof detectShape === 'function' && Array.isArray(path) && path.length > 0)
+                ? detectShape([...path]) : null;
+
+            const atkBonus = getLeaderAtkBonus(active, shape);
+
+            let origBravelyTiles = null;
+            if (isLeader('Curupira')) {
+                const input = document.getElementById('bravely_tiles');
+                if (input) {
+                    origBravelyTiles = input.value;
+                    input.value = Math.max(3, (parseInt(origBravelyTiles) || 9) - 1);
+                }
+            }
+
+            const origBonusAtk = active.bonusAtk || 0;
+            if (atkBonus > 0) active.bonusAtk = origBonusAtk + atkBonus;
+
+            try {
+                return await _origExec.apply(this, arguments);
+            } finally {
+                active.bonusAtk = origBonusAtk;
+                if (origBravelyTiles !== null) {
+                    const input = document.getElementById('bravely_tiles');
+                    if (input) input.value = origBravelyTiles;
+                }
+            }
+        };
+        window.executeAction._v82 = true;
+    }
+
+    // ---- Redução + dano condicional (applyDmg) ----
+    const _origDmg = window.applyDmg;
+    if (typeof _origDmg === 'function' && !_origDmg._v82) {
+        window.applyDmg = function(target, amount) {
+            if (!window._storyMode && !window._eventoAtivo) return _origDmg.apply(this, arguments);
+            if (window._pvpMode || window._coopMode) return _origDmg.apply(this, arguments);
+
+            // Redução (Tupinambá)
+            if (target && players?.includes(target) && !target.dead && isLeader('Tupinambá')) {
+                const tile = grid[target.y * 8 + target.x];
+                if (tile === 'TERRA') amount = Math.max(1, amount - 1);
+            }
+
+            // Dano em animais (Tapyra)
+            if (target === boss && !target.dead && isLeader('Tapyra-Yawara')) {
+                const enemyId = Array.isArray(window.storyEnemiesRemaining) ? storyEnemiesRemaining[0] : null;
+                const enemy = enemyId && typeof STORY_ENEMIES !== 'undefined' ? STORY_ENEMIES[enemyId] : null;
+                if (enemy && !enemy.isBoss && !enemy.isMiniBoss) amount += 1;
+            }
+
+            return _origDmg.call(this, target, amount);
+        };
+        window.applyDmg._v82 = true;
+    }
+
+    // ---- Cura (showHealEffect) ----
+    const _origHeal = window.showHealEffect;
+    if (typeof _origHeal === 'function' && !_origHeal._v82) {
+        window.showHealEffect = function(x, y, qty) {
+            if (!window._storyMode && !window._eventoAtivo) return _origHeal.apply(this, arguments);
+            if (window._pvpMode || window._coopMode) return _origHeal.apply(this, arguments);
+
+            const p = (typeof players !== 'undefined' && Array.isArray(players))
+                ? players.find(pl => !pl.dead && pl.x === x && pl.y === y) : null;
+
+            if (p) {
+                const bonus = getLeaderHealBonus(p);
+                if (bonus > 0) {
+                    const hpAntes = p.hp;
+                    p.hp = Math.min(p.maxHp, p.hp + bonus);
+                    const curadoExtra = p.hp - hpAntes;
+                    if (curadoExtra > 0) {
+                        if (typeof updateHeroCard === 'function') updateHeroCard();
+                        return _origHeal.call(this, x, y, qty + curadoExtra);
+                    }
+                }
+            }
+            return _origHeal.apply(this, arguments);
+        };
+        window.showHealEffect._v82 = true;
+    }
+
+    // ---- XP/Ouro na vitória ----
+    const _origVictory = window.handleStoryPhaseVictory;
+    if (typeof _origVictory === 'function' && !_origVictory._v82) {
+        window.handleStoryPhaseVictory = function(phase, drops, finalScore, rankSnapshot) {
+            const xpMult = getLeaderXpMult();
+            const ouroMult = getLeaderOuroMult();
+            if ((xpMult > 1 || ouroMult > 1) && phase && phase.reward) {
+                const modified = Object.assign({}, phase, {
+                    reward: Object.assign({}, phase.reward, {
+                        xp: Math.floor((phase.reward.xp || 0) * xpMult),
+                        gold: Math.floor((phase.reward.gold || 0) * ouroMult),
+                    }),
+                });
+                return _origVictory.call(this, modified, drops, finalScore, rankSnapshot);
+            }
+            return _origVictory.apply(this, arguments);
+        };
+        window.handleStoryPhaseVictory._v82 = true;
+    }
+
+    // ---- Naiá: +1 HP/turno em AGUA ----
+    let _ultimoHealTurnoNai = -1;
+    const _origSwitch = window.switchConfig;
+    if (typeof _origSwitch === 'function' && !_origSwitch._v82) {
+        window.switchConfig = function(idx) {
+            const r = _origSwitch.apply(this, arguments);
+            if (!window._storyMode && !window._eventoAtivo) return r;
+            if (window._pvpMode || window._coopMode) return r;
+            if (!isLeader('Naiá')) return r;
+
+            const p = players?.[idx];
+            if (p && !p.dead) {
+                const turno = (typeof RANKING !== 'undefined') ? RANKING.turns : 0;
+                if (_ultimoHealTurnoNai !== turno) {
+                    const tile = grid[p.y * 8 + p.x];
+                    if (tile === 'AGUA' && p.hp < p.maxHp) {
+                        _ultimoHealTurnoNai = turno;
+                        p.hp = Math.min(p.maxHp, p.hp + 1);
+                        if (typeof showHealEffect === 'function') showHealEffect(p.x, p.y, 1);
+                        if (typeof updateHeroCard === 'function') updateHeroCard();
+                    }
+                }
+            }
+            return r;
+        };
+        window.switchConfig._v82 = true;
+    }
+
+    // ---- Caboclo: PA +2 dano ----
+    const _origBrav = window.triggerBravelyChain;
+    if (typeof _origBrav === 'function' && !_origBrav._v82) {
+        window.triggerBravelyChain = async function(active, target, totalAtk) {
+            if (isLeader('Caboclo d\'Água') && !window._pvpMode && !window._coopMode) {
+                totalAtk = (totalAtk || 0) + 2;
+            }
+            return _origBrav.apply(this, arguments);
+        };
+        window.triggerBravelyChain._v82 = true;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 5. UI — Card do Líder na OCA
+    // ═══════════════════════════════════════════════════════════
+    function renderLeaderCard() {
+        const title = document.querySelector('.story-title');
+        if (!title || !title.textContent.includes('OCA')) return;
+
+        // Remove antigo
+        const old = document.getElementById('ocaLeaderSection');
+        if (old) old.remove();
+
+        const grid = document.querySelector('.story-heroes-grid');
+        if (!grid) return;
+
+        const leader = getLeader();
+        const ability = leader ? LEADER_ABILITIES[leader] : null;
+        const spriteURL = (leader && typeof SPRITES !== 'undefined' && SPRITES[leader]) || '';
+
+        const section = document.createElement('div');
+        section.id = 'ocaLeaderSection';
+        section.className = 'oca-leader-section';
+
+        if (!leader) {
+            section.innerHTML = `
+                <div class="oca-leader-empty">
+                    <div class="oca-leader-empty-icon">👑</div>
+                    <div class="oca-leader-empty-text">Nenhum líder escolhido</div>
+                    <button class="oca-leader-btn" data-acao="escolher-lider">ESCOLHER LÍDER</button>
+                </div>
+            `;
+        } else {
+            const heroData = STORY_HERO_CLASSES[leader];
+            section.innerHTML = `
+                <div class="oca-leader-bust" style="background-image: url('${spriteURL}')"></div>
+                <div class="oca-leader-info">
+                    <div class="oca-leader-label">👑 LÍDER DO GRUPO</div>
+                    <div class="oca-leader-name">${heroData?.displayName || leader}</div>
+                    <div class="oca-leader-ability">${ability?.icon || '⭐'} <b>${ability?.nome || ''}</b> — ${ability?.desc || ''}</div>
+                </div>
+                <button class="oca-leader-btn" data-acao="escolher-lider">TROCAR LÍDER</button>
+            `;
+        }
+
+        grid.parentNode.insertBefore(section, grid);
+    }
+
+    // ---- Modal de escolha ----
+    function abrirModalEscolherLider() {
+        const old = document.getElementById('escolherLiderOverlay');
+        if (old) old.remove();
+
+        const unlockedList = STORY_PROGRESS.unlockedHeroesStory || ['Tupa','Sume','Caipora'];
+        const allHeroes = Object.values(STORY_HERO_CLASSES);
+        const unlocked = allHeroes.filter(h =>
+            (h.starsNeeded === 0 || unlockedList.includes(h.className)) &&
+            LEADER_ABILITIES[h.className]
+        );
+
+        const ov = document.createElement('div');
+        ov.id = 'escolherLiderOverlay';
+        ov.className = 'escolher-lider-overlay';
+        ov.onclick = (e) => { if (e.target === ov) ov.remove(); };
+
+        const currentLeader = getLeader();
+
+        const cardsHTML = unlocked.map(h => {
+            const ability = LEADER_ABILITIES[h.className];
+            const isCurrent = h.className === currentLeader;
+            const spriteURL = (typeof SPRITES !== 'undefined' && SPRITES[h.className]) || '';
+            return `
+                <div class="escolher-lider-card ${isCurrent ? 'current' : ''}" data-lider="${h.className}">
+                    <img src="${spriteURL}" class="escolher-lider-sprite" onerror="this.style.display='none'">
+                    <div class="escolher-lider-name">${h.displayName}</div>
+                    <div class="escolher-lider-role">${h.role}</div>
+                    <div class="escolher-lider-ability">${ability.icon} ${ability.nome}</div>
+                    <div class="escolher-lider-desc">${ability.desc}</div>
+                </div>
+            `;
+        }).join('');
+
+        ov.innerHTML = `
+            <div class="escolher-lider-panel">
+                <div class="escolher-lider-header">
+                    <div class="escolher-lider-title">👑 ESCOLHER LÍDER</div>
+                    <button class="escolher-lider-close" data-acao="fechar-escolher-lider">✕</button>
+                </div>
+                <div class="escolher-lider-hint">O líder gera um bônus passivo para todo o grupo. Não afeta PvP/Coop.</div>
+                <div class="escolher-lider-grid">${cardsHTML}</div>
+            </div>
+        `;
+        document.body.appendChild(ov);
+    }
+
+    // Delegação de eventos
+    document.addEventListener('click', (ev) => {
+        const acaoBtn = ev.target.closest('[data-acao]');
+        if (acaoBtn) {
+            const acao = acaoBtn.getAttribute('data-acao');
+            if (acao === 'escolher-lider') {
+                ev.preventDefault(); ev.stopPropagation();
+                abrirModalEscolherLider();
+                return;
+            }
+            if (acao === 'fechar-escolher-lider') {
+                ev.preventDefault(); ev.stopPropagation();
+                document.getElementById('escolherLiderOverlay')?.remove();
+                return;
+            }
+        }
+        const card = ev.target.closest('[data-lider]');
+        if (card) {
+            ev.preventDefault(); ev.stopPropagation();
+            const heroClass = card.getAttribute('data-lider');
+            STORY_PROGRESS.leader = heroClass;
+            if (typeof saveStoryProgress === 'function') saveStoryProgress();
+            document.getElementById('escolherLiderOverlay')?.remove();
+            const heroData = STORY_HERO_CLASSES[heroClass];
+            if (typeof showToast === 'function') {
+                showToast('👑', `${heroData?.displayName || heroClass} é o novo líder!`, '👑');
+            }
+            renderLeaderCard();
+        }
+    }, true);
+
+    // Hook no render da OCA
+    const _origOca = window.renderOcaScreenFiltered;
+    if (typeof _origOca === 'function' && !_origOca._v82) {
+        window.renderOcaScreenFiltered = function() {
+            const r = _origOca.apply(this, arguments);
+            setTimeout(renderLeaderCard, 150);
+            setTimeout(renderLeaderCard, 500);
+            return r;
+        };
+        window.renderOcaScreenFiltered._v82 = true;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 6. CSS
+    // ═══════════════════════════════════════════════════════════
+    if (!document.getElementById('v82CSS')) {
+        const s = document.createElement('style');
+        s.id = 'v82CSS';
+        s.textContent = `
+            .oca-leader-section {
+                display: flex; align-items: center; gap: 16px;
+                padding: 16px 20px; margin-bottom: 20px;
+                background: radial-gradient(ellipse at top left, rgba(232,185,35,.15), transparent 60%),
+                            linear-gradient(135deg, #3d2d18, #2a1f10);
+                border: 3px solid #e8b923; border-radius: 10px;
+                box-shadow: 0 0 25px rgba(232,185,35,.35), inset 0 0 20px rgba(232,185,35,.08);
+                position: relative; overflow: hidden;
+            }
+            .oca-leader-section::before {
+                content: '👑'; position: absolute; top: -20px; right: -10px;
+                font-size: 5rem; opacity: 0.08; pointer-events: none;
+            }
+            .oca-leader-bust {
+                width: 110px; height: 130px;
+                background-size: 230% auto;
+                background-position: center 8%;
+                background-repeat: no-repeat;
+                background-color: rgba(10,6,2,.6);
+                border-radius: 8px;
+                border: 3px solid #e8b923;
+                box-shadow: 0 0 20px rgba(232,185,35,.6);
+                flex-shrink: 0;
+            }
+            .oca-leader-info { flex: 1; min-width: 0; }
+            .oca-leader-label {
+                font-family: 'Cinzel', serif; color: #e8b923;
+                font-size: .75rem; letter-spacing: 3px; margin-bottom: 4px;
+                text-shadow: 0 0 8px rgba(232,185,35,.6);
+            }
+            .oca-leader-name {
+                font-family: 'Cinzel Decorative', serif; color: #f0e2c0;
+                font-size: 1.4rem; font-weight: 700; letter-spacing: 1px;
+                margin-bottom: 6px; line-height: 1.1;
+            }
+            .oca-leader-ability {
+                font-family: 'EB Garamond', serif; color: #d9c89a;
+                font-size: .95rem; line-height: 1.3;
+            }
+            .oca-leader-ability b {
+                color: #e8b923; font-family: 'Cinzel', serif;
+                font-size: .85rem; letter-spacing: 1px;
+            }
+            .oca-leader-btn {
+                padding: 10px 18px;
+                background: linear-gradient(180deg, rgba(232,185,35,.25), transparent 45%),
+                            linear-gradient(135deg, #8a6a2e, #4a3418);
+                color: #fff5dc; border: 2px solid #e8b923; border-radius: 6px;
+                cursor: pointer; font-family: 'Cinzel', serif; font-weight: 700;
+                font-size: .8rem; letter-spacing: 1.5px; transition: all .2s;
+                flex-shrink: 0; white-space: nowrap;
+            }
+            .oca-leader-btn:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 6px 20px rgba(0,0,0,.6), 0 0 25px rgba(232,185,35,.5);
+            }
+            .oca-leader-empty {
+                display: flex; align-items: center; gap: 16px;
+                width: 100%; justify-content: center; padding: 10px;
+            }
+            .oca-leader-empty-icon { font-size: 2.5rem; opacity: .6; }
+            .oca-leader-empty-text {
+                font-family: 'EB Garamond', serif; color: #b8a577;
+                font-size: 1rem; font-style: italic;
+            }
+
+            .escolher-lider-overlay {
+                position: fixed; inset: 0; background: rgba(10,6,2,.94);
+                z-index: 21000; display: flex; align-items: flex-start; justify-content: center;
+                padding: 20px; overflow-y: auto;
+            }
+            .escolher-lider-panel {
+                background: linear-gradient(180deg, #2a1f10, #1a1208);
+                border: 3px solid #e8b923; border-radius: 10px;
+                max-width: 900px; width: 100%; padding: 20px; margin: auto;
+                box-shadow: 0 20px 60px rgba(0,0,0,.9), 0 0 40px rgba(232,185,35,.3);
+            }
+            .escolher-lider-header {
+                display: flex; justify-content: space-between; align-items: center;
+                border-bottom: 2px solid rgba(232,185,35,.3);
+                padding-bottom: 12px; margin-bottom: 12px;
+            }
+            .escolher-lider-title {
+                font-family: 'Cinzel Decorative', serif; color: #e8b923;
+                font-size: 1.3rem; letter-spacing: 3px;
+                text-shadow: 0 0 15px rgba(232,185,35,.5);
+            }
+            .escolher-lider-close {
+                background: #6a2020; color: #f5c8c8;
+                border: 1px solid #a83232; border-radius: 50%;
+                width: 30px; height: 30px; cursor: pointer; font-weight: 700;
+            }
+            .escolher-lider-hint {
+                font-family: 'EB Garamond', serif; color: #8a7a52;
+                font-size: .9rem; font-style: italic; text-align: center;
+                margin-bottom: 16px; padding: 8px;
+                background: rgba(10,6,2,.4); border-radius: 4px;
+            }
+            .escolher-lider-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+                gap: 12px;
+            }
+            .escolher-lider-card {
+                background: linear-gradient(180deg, rgba(201,162,39,.05), transparent 40%), rgba(10,6,2,.7);
+                border: 2px solid rgba(201,162,39,.25); border-radius: 6px;
+                padding: 12px; text-align: center; cursor: pointer;
+                transition: all .2s; position: relative;
+            }
+            .escolher-lider-card:hover {
+                border-color: #c9a227; transform: translateY(-3px);
+                box-shadow: 0 6px 15px rgba(0,0,0,.5), 0 0 15px rgba(232,185,35,.3);
+            }
+            .escolher-lider-card.current {
+                border-color: #e8b923;
+                background: linear-gradient(180deg, rgba(232,185,35,.15), transparent 50%), rgba(10,6,2,.8);
+                box-shadow: 0 0 20px rgba(232,185,35,.5);
+            }
+            .escolher-lider-card.current::before {
+                content: '👑'; position: absolute; top: 6px; right: 8px; font-size: 1rem;
+            }
+            .escolher-lider-sprite { width: 56px; height: 56px; object-fit: contain; margin-bottom: 6px; }
+            .escolher-lider-name {
+                font-family: 'Cinzel', serif; color: #f0e2c0;
+                font-size: .9rem; font-weight: 700; margin-bottom: 2px;
+            }
+            .escolher-lider-role {
+                font-family: 'EB Garamond', serif; color: #8a7a52;
+                font-size: .75rem; font-style: italic; margin-bottom: 6px;
+            }
+            .escolher-lider-ability {
+                font-family: 'Cinzel', serif; color: #e8b923;
+                font-size: .8rem; font-weight: 700; margin-bottom: 4px;
+            }
+            .escolher-lider-desc {
+                font-family: 'EB Garamond', serif; color: #b8a577;
+                font-size: .75rem; line-height: 1.3;
+            }
+
+            @media (max-width: 600px) {
+                .oca-leader-section { flex-direction: column; text-align: center; }
+                .oca-leader-bust { width: 90px; height: 110px; }
+                .oca-leader-name { font-size: 1.15rem; }
+                .escolher-lider-grid { grid-template-columns: repeat(2, 1fr); }
+            }
+        `;
+        document.head.appendChild(s);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 7. DEBUG
+    // ═══════════════════════════════════════════════════════════
+    window._debugLiderV82 = function() {
+        console.group('=== LIDERANÇA V82 ===');
+        console.log('Líder:', getLeader());
+        console.log('Habilidade:', getLeaderAbility());
+        console.log('HP bonus:', getLeaderHpBonus());
+        console.log('XP mult:', getLeaderXpMult());
+        console.log('Ouro mult:', getLeaderOuroMult());
+        console.groupEnd();
+    };
+
+    window._setLider = function(heroClass) {
+        if (!STORY_HERO_CLASSES[heroClass]) { console.warn('Herói inválido'); return; }
+        STORY_PROGRESS.leader = heroClass;
+        if (typeof saveStoryProgress === 'function') saveStoryProgress();
+        if (typeof renderOcaScreenFiltered === 'function') renderOcaScreenFiltered();
+        console.log('Líder definido:', heroClass);
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V82] Sistema de Liderança');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• 26 líderes com habilidades únicas');
+    console.log('• Bust do herói em destaque na OCA');
+    console.log('• Buff passivo global (funciona mesmo fora do time)');
+    console.log('• NÃO afeta PvP/Coop');
+    console.log('');
+    console.log('💡 Debug: window._debugLiderV82()');
+    console.log('💡 Teste: window._setLider("Mãe da Mata")');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — V82.1 — Bônus de líder visíveis nos cards
+// -----------------------------------------------------------------
+// • HP/ATK dos cards já mostram o bônus do líder (verde com brilho
+//   dourado para distinguir do bônus comum)
+// • Bônus UNIVERSAIS e POR CLASSE aparecem no card:
+//     - Tupã, Kanarott, Teperesik, Anhanga-Mirim → HP
+//     - Eru, Anhanga-Mirim → ATK
+//     - Pajé Anhanguera → ATK só nos Magos
+//     - Matinta Pereira → ATK só nos Arqueiros
+// • Bônus VARIÁVEIS (dano por forma, tile, PA, cura, redução,
+//   XP, ouro) NÃO aparecem no card — ficam só no preview da batalha
+//
+// Cole NO FINAL do historia.js (depois do V82).
+// =================================================================
+(function leaderCardBonusV82_1() {
+    if (window._leaderCardBonusV82_1) return;
+    window._leaderCardBonusV82_1 = true;
+
+    // ═══════════════════════════════════════════════════════════
+    // BÔNUS DO LÍDER VISÍVEL NO CARD (só HP e ATK)
+    // ═══════════════════════════════════════════════════════════
+    function getLeaderCardBonus(heroClass) {
+        const leader = STORY_PROGRESS.leader;
+        if (!leader) return { hp: 0, atk: 0 };
+        const heroData = STORY_HERO_CLASSES[heroClass];
+        if (!heroData) return { hp: 0, atk: 0 };
+
+        let hp = 0, atk = 0;
+
+        // HP universal
+        if (leader === 'Tupa') hp = 1;
+        if (leader === 'Kanarott' || leader === 'Teperesik') hp = 2;
+        if (leader === 'Anhanga-Mirim') hp = 2;
+
+        // ATK universal
+        if (leader === 'Eru') atk = 1;
+        if (leader === 'Anhanga-Mirim') atk += 1;
+
+        // ATK por classe (sempre ativo para a classe)
+        if (leader === 'Pajé Anhanguera' && heroData.role === 'Mago') atk = 2;
+        if (leader === 'Matinta Pereira' && heroData.role === 'Arqueiro') atk = 2;
+
+        return { hp, atk };
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // ATUALIZA TODOS OS CARDS
+    // ═══════════════════════════════════════════════════════════
+    function updateAllCardStats() {
+        document.querySelectorAll('.story-hero-card').forEach(card => {
+            if (card.classList.contains('locked')) return;
+            const onclickAttr = card.getAttribute('onclick') || '';
+            const match = onclickAttr.match(/toggleHeroSelection\('((?:\\'|[^'])*)'\)/);
+            if (!match) return;
+            const heroClass = match[1].replace(/\\'/g, "'");
+            const heroData = STORY_HERO_CLASSES[heroClass];
+            if (!heroData) return;
+
+            const baseHp = heroData.hp;
+            const baseAtk = heroData.atk;
+            let bonusHp = 0, bonusAtk = 0;
+
+            // Nível + stat 11
+            if (typeof getHeroBonusFromLevel === 'function') {
+                const lb = getHeroBonusFromLevel(heroClass) || {};
+                bonusHp += lb.hp || 0;
+                bonusAtk += lb.atk || 0;
+            }
+
+            // Equipamento
+            if (typeof getHeroEquipment === 'function') {
+                const eq = getHeroEquipment(heroClass);
+                if (eq?.arma && typeof getWeaponById === 'function') {
+                    const w = getWeaponById(eq.arma);
+                    if (w) bonusAtk += w.atkBonus || 0;
+                }
+                if (eq?.amuleto && typeof getAmuletById === 'function') {
+                    const a = getAmuletById(eq.amuleto);
+                    if (a?.efeito) {
+                        bonusHp += a.efeito.hpBonus || 0;
+                        bonusAtk += a.efeito.atkBonus || 0;
+                    }
+                }
+            }
+
+            // ⭐ Bônus do líder
+            const leaderBonus = getLeaderCardBonus(heroClass);
+            bonusHp += leaderBonus.hp;
+            bonusAtk += leaderBonus.atk;
+
+            const formatar = (base, bonus, isLeader) => {
+                if (bonus === 0) return `${base}`;
+                const cor = bonus > 0 ? '#8ac070' : '#d05050';
+                const sinal = bonus > 0 ? '+' : '';
+                const shadow = isLeader
+                    ? '; text-shadow: 0 0 6px rgba(232,185,35,.7), 0 0 10px rgba(232,185,35,.35);'
+                    : '; text-shadow: 0 0 4px rgba(0,0,0,.8);';
+                return `${base} <span style="color:${cor}; font-weight:900${shadow}">${sinal}${bonus}</span>`;
+            };
+
+            const infoDiv = card.querySelector('.story-hero-level');
+            if (infoDiv) {
+                infoDiv.innerHTML = `${heroData.role} · HP ${formatar(baseHp, bonusHp, leaderBonus.hp > 0)} · ATK ${formatar(baseAtk, bonusAtk, leaderBonus.atk > 0)}`;
+            }
+        });
+    }
+
+    window._updateAllCardStatsV821 = updateAllCardStats;
+    window._getLeaderCardBonusV821 = getLeaderCardBonus;
+
+    // ═══════════════════════════════════════════════════════════
+    // HOOK no render da OCA (roda após V10.31)
+    // ═══════════════════════════════════════════════════════════
+    const _origOca = window.renderOcaScreenFiltered;
+    if (typeof _origOca === 'function' && !_origOca._v82_1) {
+        window.renderOcaScreenFiltered = function() {
+            const r = _origOca.apply(this, arguments);
+            setTimeout(updateAllCardStats, 400);
+            setTimeout(updateAllCardStats, 800);
+            return r;
+        };
+        window.renderOcaScreenFiltered._v82_1 = true;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // Detecta mudança de líder
+    // ═══════════════════════════════════════════════════════════
+    let _lastLeader = STORY_PROGRESS.leader;
+
+    // Capture listener (V82 usa stopPropagation, não stopImmediatePropagation,
+    // então nosso listener ainda roda; o setTimeout garante que roda depois
+    // do V82 ter atualizado STORY_PROGRESS.leader)
+    document.addEventListener('click', (ev) => {
+        if (!ev.target.closest('[data-lider]')) return;
+        setTimeout(() => {
+            if (STORY_PROGRESS.leader !== _lastLeader) {
+                _lastLeader = STORY_PROGRESS.leader;
+                updateAllCardStats();
+            }
+        }, 200);
+    }, true);
+
+    // Safety net (mudança via console, _setLider, etc.)
+    setInterval(() => {
+        if (STORY_PROGRESS.leader !== _lastLeader) {
+            _lastLeader = STORY_PROGRESS.leader;
+            const ss = document.getElementById('storyScreen');
+            if (ss && ss.classList.contains('active') && ss.innerHTML.includes('OCA')) {
+                updateAllCardStats();
+            }
+        }
+    }, 1000);
+
+    // ═══════════════════════════════════════════════════════════
+    // DEBUG
+    // ═══════════════════════════════════════════════════════════
+    window._debugLeaderCardBonus = function() {
+        console.group('=== V82.1 — Bônus de Líder nos Cards ===');
+        console.log('Líder atual:', STORY_PROGRESS.leader || '(nenhum)');
+        const exemplos = ['Tupa', 'Eru', 'Pajé Anhanguera', 'Matinta Pereira', 'Mãe da Mata', 'Curupira'];
+        exemplos.forEach(h => {
+            const heroData = STORY_HERO_CLASSES[h];
+            const b = getLeaderCardBonus(h);
+            console.log(`${h} (${heroData?.role || '?'}) → HP +${b.hp}, ATK +${b.atk}`);
+        });
+        console.groupEnd();
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V82.1] Bônus de líder visíveis nos cards');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• HP/ATK dos cards refletem o buff do líder');
+    console.log('• Bônus do líder tem brilho dourado (distinto dos outros)');
+    console.log('• Bônus variáveis (forma, tile, cura, XP, ouro) → só no preview');
+    console.log('');
+    console.log('💡 Debug: window._debugLeaderCardBonus()');
+    console.log('═══════════════════════════════════════════════════');
+})();

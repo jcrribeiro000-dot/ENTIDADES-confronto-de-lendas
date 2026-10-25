@@ -15,23 +15,23 @@
 // 🦸 A_SPRITES — Base (entidades.js)
 // ================================================================
 const A_SPRITES = {
-    Tupa:    'https://i.imgur.com/L5V84tS.gif',   // ✓
+    Tupa:    'https://i.imgur.com/R2WKPky.gif',   // ✓
     Sume:    'https://i.imgur.com/qoKCarB.gif',   // ✓
-    Caipora: 'https://i.imgur.com/eBfmPl5.gif',   // ✓
+    Caipora: 'https://i.imgur.com/3bayQJu.gif',   // ✓
 
     BOITATA:     'https://i.imgur.com/4PEG3BL.gif',   // ✓
     MAPINGUARI:  'https://i.imgur.com/TWRsZmS.gif',   // ✓
-    SACI:        'https://i.imgur.com/zpVmIss.gif',   // ✓
+    SACI:        'https://i.imgur.com/NTcI6G2.gif',   // ✓
     IARA:        'https://i.imgur.com/NxMl4Cj.gif',   // ✓
     MULA:        'https://i.imgur.com/SpEsN9P.gif',   // ✓
     CORPOSECO:   'https://i.imgur.com/5Tkoqxg.gif',   // ✓
-    LOBISOMEM:   'https://i.imgur.com/9DJBxmg.gif',   // ✓
-    CUCA:        'https://i.imgur.com/v6SowAl.gif',   // ✓
+    LOBISOMEM:   'https://i.imgur.com/EL12OX1.gif',   // ✓
+    CUCA:        'https://i.imgur.com/ubm1PCp.gif',   // ✓
     BOTO:        'https://i.imgur.com/InSAq1W.gif',   // ✓
     BOI:         'https://i.imgur.com/tP2hyxJ.gif',   // ✓
     JACI:        'https://i.imgur.com/vnRilxj.gif',   // ✓
-    GUARACI:     'https://i.imgur.com/ThXOwpQ.gif',   // ✓
-    ANHANGA:     'https://i.imgur.com/BfWrmfP.gif',   // ✓
+    GUARACI:     'https://i.imgur.com/ViX8EKj.gif',   // ✓
+    ANHANGA:     'https://i.imgur.com/q43m2km.gif',   // ✓
 
     // ---- FX de combate ----
     SwordFX:       'https://i.imgur.com/pHVNBWZ.png',  // ✓
