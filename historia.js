@@ -40918,7 +40918,7 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
             background: linear-gradient(180deg, rgba(40,15,50,0.95), rgba(20,5,20,0.95));
             border: 2px solid #8e44ad; border-radius: 8px; padding: 15px 30px;
             text-align: center; z-index: 1000; box-shadow: 0 10px 30px rgba(0,0,0,0.8);
-            pointer-events: none; animation: fadeInOut 4s ease forwards;
+            pointer-events: none; animation: fadeInOut 2s ease forwards;
         `;
         document.body.appendChild(warning);
         
@@ -48628,5 +48628,1575 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
     console.log('      (botão tem 24×24px — use PNG transparente)');
     console.log('   3. Card do item na Loja (grande):');
     console.log('      Edite o topo do V70: const SPRITE_SEMENTE = "URL"');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — V71 — Dano Elemental (cumulativo)
+// -----------------------------------------------------------------
+// Ciclo: FOGO > TERRA > AR > AGUA > FOGO
+//
+// Bônus aplicados (cumulativos):
+//   +1 arma do meu elemento
+//   -1 arma que é forte contra mim
+//   +1 inimigo fraco contra mim (eu > ele)
+//   -1 inimigo forte contra mim (ele > eu)
+//   -1 tile que é forte contra mim
+//   (+1 tile do meu elemento já existe no V8.1)
+//
+// Mínimo 1 dano. Toggle: window._toggleDanoElemental()
+// Só solo/história/evento (não PvP/Coop).
+//
+// Cole NO FINAL do historia.js.
+// =================================================================
+(function danoElementalV71() {
+    if (window._danoElementalV71) return;
+    window._danoElementalV71 = true;
+
+    // ═══════════════════════════════════════════════════════════
+    // CICLO
+    // ═══════════════════════════════════════════════════════════
+    const CICLO = {
+        FOGO:  { forte: 'TERRA', fraco: 'AGUA' },
+        TERRA: { forte: 'AR',    fraco: 'FOGO' },
+        AR:    { forte: 'AGUA',  fraco: 'TERRA' },
+        AGUA:  { forte: 'FOGO',  fraco: 'AR' },
+    };
+
+    // Narrativa temática (mostrada no tooltip)
+    const TEMATICO = {
+        'FOGO>TERRA':  'Fogo queima a terra',
+        'TERRA>AR':    'Montanha bloqueia o vento',
+        'AR>AGUA':     'Vento seca a água',
+        'AGUA>FOGO':   'Rio apaga o fogo',
+    };
+
+    window._elementalBonusEnabled = true;
+
+    // ═══════════════════════════════════════════════════════════
+    // CÁLCULO
+    // ═══════════════════════════════════════════════════════════
+    function _calcBonus(heroi, arma, tile, alvo) {
+        const b = { arma: 0, tile: 0, inimigo: 0, total: 0 };
+        if (!CICLO[heroi]) return b;
+
+        // Arma
+        if (arma === heroi)                          b.arma = +1;
+        else if (arma && CICLO[arma]?.forte === heroi) b.arma = -1;
+
+        // Tile (o +1 do tile=meu elemento já existe no V8.1)
+        if (tile && CICLO[tile]?.forte === heroi) b.tile = -1;
+
+        // Inimigo
+        if (alvo && CICLO[heroi]?.forte === alvo)      b.inimigo = +1;
+        else if (alvo && CICLO[alvo]?.forte === heroi) b.inimigo = -1;
+
+        b.total = b.arma + b.tile + b.inimigo;
+        return b;
+    }
+
+    function _getContexto() {
+        if (typeof players === 'undefined' || !Array.isArray(players)) return null;
+        const active = players[currentPlayerIdx];
+        if (!active || !active.element) return null;
+
+        const heroi = active.element;
+
+        // Tile
+        let tile = null;
+        if (typeof path !== 'undefined' && Array.isArray(path) && path.length > 0) {
+            tile = grid[path[0]];
+        } else if (typeof active.x === 'number') {
+            tile = grid[active.y * 8 + active.x];
+        }
+
+        // Arma
+        let arma = null;
+        if (typeof getHeroEquipment === 'function' && typeof getWeaponById === 'function') {
+            const eq = getHeroEquipment(active.class);
+            if (eq?.arma) {
+                const w = getWeaponById(eq.arma);
+                arma = w?.elemento || null;
+            }
+        }
+
+        // Alvo (boss)
+        let alvo = null;
+        if (typeof boss !== 'undefined' && boss && !boss.dead) {
+            alvo = boss.elemento || boss.element || null;
+            if (!alvo && typeof STORY_ENEMIES !== 'undefined') {
+                const enemyId = Array.isArray(storyEnemiesRemaining) && storyEnemiesRemaining[0];
+                if (enemyId) {
+                    const e = STORY_ENEMIES[enemyId];
+                    alvo = e?.elemento || e?.element || null;
+                }
+            }
+        }
+
+        return { active, heroi, arma, tile, alvo };
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // APLICAÇÃO (hook em applyDmg, só quando boss recebe dano)
+    // ═══════════════════════════════════════════════════════════
+    const _applyDmgOrig = window.applyDmg;
+    if (typeof _applyDmgOrig === 'function' && !_applyDmgOrig._v71Elem) {
+        window.applyDmg = function(target, amount) {
+            if (!window._elementalBonusEnabled) return _applyDmgOrig.apply(this, arguments);
+            if (!window._storyMode && !window._eventoAtivo) return _applyDmgOrig.apply(this, arguments);
+            if (window._pvpMode || window._coopMode) return _applyDmgOrig.apply(this, arguments);
+
+            // Só boss recebendo dano
+            if (typeof boss !== 'undefined' && target === boss && !target.dead) {
+                const ctx = _getContexto();
+                if (ctx) {
+                    const b = _calcBonus(ctx.heroi, ctx.arma, ctx.tile, ctx.alvo);
+                    if (b.total !== 0) {
+                        const novoAmount = Math.max(1, amount + b.total);
+                        if (typeof addLog === 'function') {
+                            const partes = [];
+                            if (b.arma)    partes.push(`arma${b.arma > 0 ? '+' : ''}${b.arma}`);
+                            if (b.tile)    partes.push(`tile${b.tile > 0 ? '+' : ''}${b.tile}`);
+                            if (b.inimigo) partes.push(`fraqueza${b.inimigo > 0 ? '+' : ''}${b.inimigo}`);
+                            addLog(`⚗️ Elemental: ${amount} ${b.total > 0 ? '+' : ''}${b.total} = ${novoAmount} (${partes.join(', ')})`);
+                        }
+                        console.log(`[V71] Dano elemental: ${amount} → ${novoAmount}`, b);
+                        return _applyDmgOrig.call(this, target, novoAmount);
+                    }
+                }
+            }
+            return _applyDmgOrig.apply(this, arguments);
+        };
+        window.applyDmg._v71Elem = true;
+        console.log('[V71] Hook em applyDmg instalado.');
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // PREVIEW BAR — ajusta o dano mostrado
+    // ═══════════════════════════════════════════════════════════
+    setInterval(() => {
+        if (!window._elementalBonusEnabled) return;
+        if (!window._storyMode && !window._eventoAtivo) return;
+        if (window._pvpMode || window._coopMode) return;
+
+        const bar = document.getElementById('storyPreviewBarV3');
+        if (!bar) return;
+        const chipDano = bar.querySelector('.preview-chip.dano');
+        if (!chipDano) return;
+
+        const ctx = _getContexto();
+        if (!ctx) return;
+        const b = _calcBonus(ctx.heroi, ctx.arma, ctx.tile, ctx.alvo);
+
+        // Remove chip antigo
+        const antigo = bar.querySelector('.preview-chip.elemental');
+        if (antigo) antigo.remove();
+
+        if (b.total === 0) return;
+
+        // Ajusta dano mostrado
+        const match = chipDano.textContent.match(/~?(\d+)/);
+        if (match) {
+            const danoBase = parseInt(match[1]);
+            const danoTotal = Math.max(1, danoBase + b.total);
+            chipDano.textContent = `⚔️ ~${danoTotal} dano`;
+        }
+
+        // Chip informativo
+        const info = document.createElement('span');
+        info.className = 'preview-chip elemental';
+        info.textContent = `${b.total > 0 ? '+' : ''}${b.total} elem`;
+        info.style.color = b.total > 0 ? '#8ac070' : '#d05050';
+        info.style.borderColor = b.total > 0 ? '#6ba35c' : '#a83232';
+        info.title = `Arma ${b.arma > 0 ? '+' : ''}${b.arma} · Tile ${b.tile > 0 ? '+' : ''}${b.tile} · Fraqueza ${b.inimigo > 0 ? '+' : ''}${b.inimigo}`;
+        chipDano.after(info);
+    }, 410);
+
+    // ═══════════════════════════════════════════════════════════
+    // DEBUG / TOGGLE
+    // ═══════════════════════════════════════════════════════════
+    window._debugDanoElemental = function() {
+        console.group('=== DANO ELEMENTAL ===');
+        console.log('Habilitado:', window._elementalBonusEnabled);
+        console.log('Ciclo:', CICLO);
+        console.log('Narrativa:', TEMATICO);
+        const ctx = _getContexto();
+        if (ctx) {
+            console.log('Herói:', ctx.active.class, '→', ctx.heroi);
+            console.log('Arma:', ctx.arma);
+            console.log('Tile:', ctx.tile);
+            console.log('Alvo:', ctx.alvo);
+            const b = _calcBonus(ctx.heroi, ctx.arma, ctx.tile, ctx.alvo);
+            console.log('Bônus:', b);
+        } else {
+            console.log('(sem contexto — herói não encontrado)');
+        }
+        console.groupEnd();
+    };
+
+    window._toggleDanoElemental = function() {
+        window._elementalBonusEnabled = !window._elementalBonusEnabled;
+        console.log('Dano elemental:', window._elementalBonusEnabled ? 'ON' : 'OFF');
+        if (typeof showToast === 'function') {
+            showToast(
+                window._elementalBonusEnabled ? '⚗️' : '🚫',
+                'Dano elemental ' + (window._elementalBonusEnabled ? 'ativado' : 'desativado'),
+                window._elementalBonusEnabled ? '⚗️' : '🚫'
+            );
+        }
+    };
+
+    // ═══════════════════════════════════════════════════════════
+    // CSS
+    // ═══════════════════════════════════════════════════════════
+    if (!document.getElementById('v71ElemCSS')) {
+        const s = document.createElement('style');
+        s.id = 'v71ElemCSS';
+        s.textContent = `
+            .story-preview-bar-v3 .preview-chip.elemental {
+                font-weight: 700;
+                padding: 3px 8px;
+                border-radius: 12px;
+                background: rgba(10, 6, 2, 0.5);
+                border: 1px solid currentColor;
+                font-size: 0.72rem;
+                letter-spacing: 1px;
+            }
+        `;
+        document.head.appendChild(s);
+    }
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V71] Dano Elemental');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('Ciclo: FOGO > TERRA > AR > AGUA > FOGO');
+    console.log('');
+    console.log('  +1  arma do meu elemento');
+    console.log('  -1  arma que é forte contra mim');
+    console.log('  +1  inimigo fraco contra mim');
+    console.log('  -1  inimigo forte contra mim');
+    console.log('  -1  tile que é forte contra mim');
+    console.log('  (+1 tile do meu elemento já existe no V8.1)');
+    console.log('');
+    console.log('Mínimo 1 dano. Não aplica em PvP/Coop.');
+    console.log('');
+    console.log('💡 Debug:  window._debugDanoElemental()');
+    console.log('💡 Toggle: window._toggleDanoElemental()');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — V71.1 — Fix visual do chip elemental (sem piscar)
+// -----------------------------------------------------------------
+// Substitui o setInterval do V71 por um que SÓ ATUALIZA o chip
+// existente (nunca remove/recria) → sem reflow, sem subir/descer.
+//
+// Cole NO FINAL do historia.js (depois do V71).
+// =================================================================
+(function fixChipElementalV71_1() {
+    if (window._fixChipElementalV71_1) return;
+    window._fixChipElementalV71_1 = true;
+
+    // Espera o V71 carregar
+    setTimeout(() => {
+        if (typeof window._calcBonus !== 'function' && !window._danoElementalV71) {
+            console.warn('[V71.1] V71 não encontrado. Cole o V71 primeiro.');
+            return;
+        }
+
+        // ─────────────────────────────────────────────────────
+        // Cria o chip UMA VEZ (se não existe)
+        // ─────────────────────────────────────────────────────
+        function _garantirChip() {
+            const bar = document.getElementById('storyPreviewBarV3');
+            if (!bar) return null;
+            const chipDano = bar.querySelector('.preview-chip.dano');
+            if (!chipDano) return null;
+
+            let chip = bar.querySelector('.preview-chip.elemental');
+            if (!chip) {
+                chip = document.createElement('span');
+                chip.className = 'preview-chip elemental';
+                chip.style.cssText = `
+                    display: none;
+                    font-weight: 700;
+                    padding: 3px 8px;
+                    border-radius: 12px;
+                    background: rgba(10, 6, 2, 0.5);
+                    border: 1px solid currentColor;
+                    font-size: 0.72rem;
+                    letter-spacing: 1px;
+                `;
+                chipDano.after(chip);
+            }
+            return chip;
+        }
+
+        // ─────────────────────────────────────────────────────
+        // Atualiza o chip (só texto, sem remove/recreate)
+        // ─────────────────────────────────────────────────────
+        let _ultimoTotal = null;
+        let _ultimoDano = null;
+
+        function _atualizarChip() {
+            if (!window._elementalBonusEnabled) {
+                const chip = document.querySelector('.preview-chip.elemental');
+                if (chip) chip.style.display = 'none';
+                return;
+            }
+            if (!window._storyMode && !window._eventoAtivo) return;
+            if (window._pvpMode || window._coopMode) return;
+
+            const bar = document.getElementById('storyPreviewBarV3');
+            if (!bar) return;
+            const chipDano = bar.querySelector('.preview-chip.dano');
+            if (!chipDano) return;
+
+            const ctx = (typeof window._getContextoV71 === 'function')
+                ? window._getContextoV71()
+                : null;
+            if (!ctx) {
+                const chip = bar.querySelector('.preview-chip.elemental');
+                if (chip) chip.style.display = 'none';
+                return;
+            }
+
+            const b = window._calcBonusV71(ctx.heroi, ctx.arma, ctx.tile, ctx.alvo);
+            const chip = _garantirChip();
+            if (!chip) return;
+
+            // Se total = 0, esconde (sem remover do DOM)
+            if (b.total === 0) {
+                if (chip.style.display !== 'none') chip.style.display = 'none';
+                return;
+            }
+
+            // Evita reflow se nada mudou
+            if (_ultimoTotal === b.total && _ultimoDano === chipDano.textContent) return;
+            _ultimoTotal = b.total;
+            _ultimoDano = chipDano.textContent;
+
+            // Atualiza o dano (sem recriar elemento)
+            const match = chipDano.textContent.match(/~?(\d+)/);
+            if (match) {
+                // Precisamos saber o dano base original.
+                // Vamos ler direto do DOM apenas o número e re-calcular.
+                // O V71 já colocou o dano ajustado no chip — mas se o
+                // V71 rodou 1ª vez, pode ter sobrescrito o valor base.
+                // Solução: sempre mostrar o valor atual + delta caso o
+                // valor base seja diferente do atual.
+                // Como V71 roda a cada 410ms e já ajusta, aqui só
+                // atualizamos o chip informativo.
+            }
+
+            chip.textContent = `${b.total > 0 ? '+' : ''}${b.total} elem`;
+            chip.style.color = b.total > 0 ? '#8ac070' : '#d05050';
+            chip.style.borderColor = b.total > 0 ? '#6ba35c' : '#a83232';
+            chip.style.display = '';
+            chip.title = `Arma ${b.arma > 0 ? '+' : ''}${b.arma} · Tile ${b.tile > 0 ? '+' : ''}${b.tile} · Fraqueza ${b.inimigo > 0 ? '+' : ''}${b.inimigo}`;
+        }
+
+        // ─────────────────────────────────────────────────────
+        // Expor calc/getContexto do V71 (senão V71.1 não acessa)
+        // ─────────────────────────────────────────────────────
+        // O V71 os tem em escopo fechado. Vou reinstalar essa
+        // parte do cálculo no V71.1 mesmo, pra garantir.
+        const CICLO = {
+            FOGO:  { forte: 'TERRA', fraco: 'AGUA' },
+            TERRA: { forte: 'AR',    fraco: 'FOGO' },
+            AR:    { forte: 'AGUA',  fraco: 'TERRA' },
+            AGUA:  { forte: 'FOGO',  fraco: 'AR' },
+        };
+
+        window._calcBonusV71 = function(heroi, arma, tile, alvo) {
+            const b = { arma: 0, tile: 0, inimigo: 0, total: 0 };
+            if (!CICLO[heroi]) return b;
+            if (arma === heroi)                           b.arma = +1;
+            else if (arma && CICLO[arma]?.forte === heroi) b.arma = -1;
+            if (tile && CICLO[tile]?.forte === heroi)     b.tile = -1;
+            if (alvo && CICLO[heroi]?.forte === alvo)     b.inimigo = +1;
+            else if (alvo && CICLO[alvo]?.forte === heroi) b.inimigo = -1;
+            b.total = b.arma + b.tile + b.inimigo;
+            return b;
+        };
+
+        window._getContextoV71 = function() {
+            if (typeof players === 'undefined' || !Array.isArray(players)) return null;
+            const active = players[currentPlayerIdx];
+            if (!active || !active.element) return null;
+            const heroi = active.element;
+            let tile = null;
+            if (typeof path !== 'undefined' && Array.isArray(path) && path.length > 0) {
+                tile = grid[path[0]];
+            } else if (typeof active.x === 'number') {
+                tile = grid[active.y * 8 + active.x];
+            }
+            let arma = null;
+            if (typeof getHeroEquipment === 'function' && typeof getWeaponById === 'function') {
+                const eq = getHeroEquipment(active.class);
+                if (eq?.arma) {
+                    const w = getWeaponById(eq.arma);
+                    arma = w?.elemento || null;
+                }
+            }
+            let alvo = null;
+            if (typeof boss !== 'undefined' && boss && !boss.dead) {
+                alvo = boss.elemento || boss.element || null;
+                if (!alvo && typeof STORY_ENEMIES !== 'undefined') {
+                    const enemyId = Array.isArray(storyEnemiesRemaining) && storyEnemiesRemaining[0];
+                    if (enemyId) {
+                        const e = STORY_ENEMIES[enemyId];
+                        alvo = e?.elemento || e?.element || null;
+                    }
+                }
+            }
+            return { active, heroi, arma, tile, alvo };
+        };
+
+        // ─────────────────────────────────────────────────────
+        // Loop de atualização (só o chip, sem reflow)
+        // ─────────────────────────────────────────────────────
+        setInterval(_atualizarChip, 250);
+
+        console.log('✅ [V71.1] Chip elemental sem flicker instalado.');
+    }, 500);
+
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V71.1] Fix visual do chip elemental');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Chip nunca é removido (só escondido com display:none)');
+    console.log('• Sem reflow → botão não sobe/desce');
+    console.log('• Debug: window._debugChipElemental()');
+    console.log('═══════════════════════════════════════════════════');
+
+    // Debug extra
+    setTimeout(() => {
+        window._debugChipElemental = function() {
+            const chip = document.querySelector('.preview-chip.elemental');
+            const ctx = window._getContextoV71?.();
+            console.group('=== CHIP ELEMENTAL ===');
+            console.log('Chip existe?', !!chip);
+            if (chip) {
+                console.log('  display:', chip.style.display || '(padrão)');
+                console.log('  texto:', chip.textContent);
+            }
+            console.log('Contexto:', ctx);
+            if (ctx) {
+                const b = window._calcBonusV71(ctx.heroi, ctx.arma, ctx.tile, ctx.alvo);
+                console.log('Bônus:', b);
+            }
+            console.groupEnd();
+        };
+    }, 1000);
+})();
+// =================================================================
+// historia.js — V71.2 — Chip elemental estável (sem flicker)
+// -----------------------------------------------------------------
+// Problema: V71 original remove/recreate o chip a cada 410ms.
+// Solução: CSS esconde chips do V71/V71.1 (que têm .elemental),
+// e o V71.2 cria o seu com classe .v712-own (que ninguém toca).
+//
+// Cole NO FINAL do historia.js (depois do V71.1).
+// =================================================================
+(function fixChipV712() {
+    if (window._fixChipV712) return;
+    window._fixChipV712 = true;
+
+    // ─────────────────────────────────────────────────────────
+    // CSS: esconde chips do V71/V71.1, estiliza o do V71.2
+    // ─────────────────────────────────────────────────────────
+    if (!document.getElementById('v712ChipCSS')) {
+        const s = document.createElement('style');
+        s.id = 'v712ChipCSS';
+        s.textContent = `
+            /* Esconde os chips que o V71 original remove/recria */
+            .story-preview-bar-v3 .preview-chip.elemental {
+                display: none !important;
+            }
+            /* Chip do V71.2 (nunca é removido) */
+            .story-preview-bar-v3 .preview-chip.v712-own {
+                display: inline-block !important;
+                font-family: 'Cinzel', serif;
+                font-weight: 700;
+                padding: 3px 8px;
+                border-radius: 12px;
+                background: rgba(10, 6, 2, 0.5);
+                border: 1px solid currentColor;
+                font-size: 0.72rem;
+                letter-spacing: 1px;
+                line-height: 1.3;
+            }
+        `;
+        document.head.appendChild(s);
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // Ciclo + cálculo (réplica do V71)
+    // ─────────────────────────────────────────────────────────
+    const CICLO = {
+        FOGO:  { forte: 'TERRA', fraco: 'AGUA' },
+        TERRA: { forte: 'AR',    fraco: 'FOGO' },
+        AR:    { forte: 'AGUA',  fraco: 'TERRA' },
+        AGUA:  { forte: 'FOGO',  fraco: 'AR' },
+    };
+
+    function _calcBonus(heroi, arma, tile, alvo) {
+        const b = { arma: 0, tile: 0, inimigo: 0, total: 0 };
+        if (!CICLO[heroi]) return b;
+        if (arma === heroi)                            b.arma = +1;
+        else if (arma && CICLO[arma]?.forte === heroi) b.arma = -1;
+        if (tile && CICLO[tile]?.forte === heroi)      b.tile = -1;
+        if (alvo && CICLO[heroi]?.forte === alvo)      b.inimigo = +1;
+        else if (alvo && CICLO[alvo]?.forte === heroi) b.inimigo = -1;
+        b.total = b.arma + b.tile + b.inimigo;
+        return b;
+    }
+
+    function _getContexto() {
+        if (typeof players === 'undefined' || !Array.isArray(players)) return null;
+        const active = players[currentPlayerIdx];
+        if (!active || !active.element) return null;
+        const heroi = active.element;
+
+        let tile = null;
+        if (typeof path !== 'undefined' && Array.isArray(path) && path.length > 0) {
+            tile = grid[path[0]];
+        } else if (typeof active.x === 'number') {
+            tile = grid[active.y * 8 + active.x];
+        }
+
+        let arma = null;
+        if (typeof getHeroEquipment === 'function' && typeof getWeaponById === 'function') {
+            const eq = getHeroEquipment(active.class);
+            if (eq?.arma) {
+                const w = getWeaponById(eq.arma);
+                arma = w?.elemento || null;
+            }
+        }
+
+        let alvo = null;
+        if (typeof boss !== 'undefined' && boss && !boss.dead) {
+            alvo = boss.elemento || boss.element || null;
+            if (!alvo && typeof STORY_ENEMIES !== 'undefined') {
+                const enemyId = Array.isArray(storyEnemiesRemaining) && storyEnemiesRemaining[0];
+                if (enemyId) {
+                    const e = STORY_ENEMIES[enemyId];
+                    alvo = e?.elemento || e?.element || null;
+                }
+            }
+        }
+
+        return { active, heroi, arma, tile, alvo };
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // Chip (NUNCA removido, só escondido)
+    // ─────────────────────────────────────────────────────────
+    let _chip = null;
+
+    function _atualizar() {
+        // Guards
+        if (!window._elementalBonusEnabled
+            || (!window._storyMode && !window._eventoAtivo)
+            || window._pvpMode || window._coopMode) {
+            if (_chip) _chip.style.display = 'none';
+            return;
+        }
+
+        const bar = document.getElementById('storyPreviewBarV3');
+        if (!bar) { _chip = null; return; }
+        const chipDano = bar.querySelector('.preview-chip.dano');
+        if (!chipDano) { _chip = null; return; }
+
+        // Se o chip saiu do DOM (V8.1 re-renderizou o bar), recria
+        if (_chip && !bar.contains(_chip)) _chip = null;
+
+        if (!_chip) {
+            _chip = document.createElement('span');
+            _chip.className = 'preview-chip v712-own';
+            _chip.style.display = 'none';
+            chipDano.after(_chip);
+        }
+
+        const ctx = _getContexto();
+        if (!ctx) { _chip.style.display = 'none'; return; }
+
+        const b = _calcBonus(ctx.heroi, ctx.arma, ctx.tile, ctx.alvo);
+        if (b.total === 0) {
+            if (_chip.style.display !== 'none') _chip.style.display = 'none';
+            return;
+        }
+
+        _chip.textContent = `${b.total > 0 ? '+' : ''}${b.total} elem`;
+        _chip.style.color = b.total > 0 ? '#8ac070' : '#d05050';
+        _chip.style.borderColor = b.total > 0 ? '#6ba35c' : '#a83232';
+        _chip.style.display = 'inline-block';
+        _chip.title = `Arma ${b.arma > 0 ? '+' : ''}${b.arma} · Tile ${b.tile > 0 ? '+' : ''}${b.tile} · Fraqueza ${b.inimigo > 0 ? '+' : ''}${b.inimigo}`;
+    }
+
+    // Loop principal (200ms — mais rápido que V71, o chip fica sempre fresco)
+    setInterval(_atualizar, 200);
+
+    // MutationObserver: recria chip imediatamente se removido
+    setTimeout(() => {
+        const bar = document.getElementById('storyPreviewBarV3');
+        if (!bar) return;
+        const observer = new MutationObserver(() => {
+            if (_chip && !bar.contains(_chip)) _chip = null;
+            _atualizar();
+        });
+        observer.observe(bar, { childList: true });
+    }, 500);
+
+    // ─────────────────────────────────────────────────────────
+    // Debug
+    // ─────────────────────────────────────────────────────────
+    window._debugChipV712 = function() {
+        console.group('=== CHIP V71.2 ===');
+        console.log('Chip no DOM?', !!_chip && !!document.body.contains(_chip));
+        if (_chip) {
+            console.log('  display:', _chip.style.display);
+            console.log('  texto:', _chip.textContent);
+            console.log('  cor:', _chip.style.color);
+        }
+        const ctx = _getContexto();
+        if (ctx) {
+            const b = _calcBonus(ctx.heroi, ctx.arma, ctx.tile, ctx.alvo);
+            console.log('Bônus calculado:', b);
+        } else {
+            console.log('(sem contexto)');
+        }
+        // Quantos chips elementais existem no DOM?
+        const todos = document.querySelectorAll('.preview-chip.elemental, .preview-chip.v712-own');
+        console.log('Total de chips elementais no DOM:', todos.length);
+        todos.forEach((c, i) => {
+            console.log(`  [${i}]`, c.className, '→ display:', getComputedStyle(c).display);
+        });
+        console.groupEnd();
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V71.2] Chip elemental estável');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• CSS esconde chips do V71/V71.1 (.elemental)');
+    console.log('• V71.2 cria próprio chip (.v712-own) — nunca removido');
+    console.log('• MutationObserver recria se o V8.1 re-renderizar');
+    console.log('• Sem piscar (só atualiza conteúdo, sem reflow)');
+    console.log('');
+    console.log('💡 Debug: window._debugChipV712()');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — V72 — Elemento por Ato
+// -----------------------------------------------------------------
+// Cada ato tem um elemento temático. Todos os inimigos do ato
+// herdam esse elemento. O V71 (dano elemental) usa isso pra
+// calcular bônus/penalidade.
+//
+// • Seta STORY_ENEMIES[enemyId].elemento (não toca em .element)
+// • Propaga pro boss em initStoryBattle e advanceStoryEnemy
+// • Ato 13 = null (Anhangá, sem bônus elemental)
+// • Só solo/história (PvP/Coop não passam por initStoryBattle)
+//
+// Cole NO FINAL do historia.js (depois do V71.2).
+// =================================================================
+(function elementoPorAtoV72() {
+    if (window._elementoPorAtoV72) return;
+    window._elementoPorAtoV72 = true;
+
+    // ═══════════════════════════════════════════════════════════
+    // MAPA ATO → ELEMENTO
+    // ═══════════════════════════════════════════════════════════
+    const ATO_ELEMENTO = {
+        1:  'AR',    // Saci (redemoinho)
+        2:  'TERRA', // Mapinguari (mata fechada)
+        3:  'AGUA',  // Iara (rio)
+        4:  'FOGO',  // Boitatá (fogo)
+        5:  'FOGO',  // Mula (fogo da maldição)
+        6:  'TERRA', // Corpo Seco (sertão)
+        7:  'AR',    // Lobisomem (lua)
+        8:  'AGUA',  // Cuca (poções)
+        9:  'AGUA',  // Boto (rio)
+        10: 'TERRA', // Boi (pasto)
+        11: 'AR',    // Jaci (lua)
+        12: 'FOGO',  // Guaraci (sol)
+        13: null,    // Anhangá (variável — sem bônus)
+    };
+
+    // ═══════════════════════════════════════════════════════════
+    // 1. APLICAR NOS INIMIGOS
+    // ═══════════════════════════════════════════════════════════
+    let _aplicados = 0;
+    if (typeof STORY_CHAPTERS !== 'undefined' && typeof STORY_ENEMIES !== 'undefined') {
+        Object.keys(STORY_CHAPTERS).forEach(cidStr => {
+            const cid = parseInt(cidStr);
+            const elem = ATO_ELEMENTO[cid];
+            if (elem === undefined) return;
+
+            const chapter = STORY_CHAPTERS[cid];
+            chapter.phases.forEach(phase => {
+                if (!Array.isArray(phase.enemies)) return;
+                phase.enemies.forEach(enemyId => {
+                    const enemy = STORY_ENEMIES[enemyId];
+                    if (!enemy) return;
+
+                    // ⚠️ Só seta se ainda não foi setado por este patch
+                    if (enemy._v72Elem === true) return;
+
+                    // ⚠️ Não sobrescreve `element` (inglês) — só `elemento`
+                    enemy.elemento = elem;
+                    enemy._v72Elem = true;
+                    _aplicados++;
+                });
+            });
+        });
+        console.log(`[V72] Elemento por ato: ${_aplicados} inimigos mapeados`);
+    } else {
+        console.warn('[V72] STORY_CHAPTERS ou STORY_ENEMIES indisponíveis');
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 2. PROPAGAR PRO BOSS EM RUNTIME
+    // ═══════════════════════════════════════════════════════════
+    function _aplicarNoBoss() {
+        if (typeof boss === 'undefined' || !boss) return;
+        const enemyId = (typeof storyEnemiesRemaining !== 'undefined'
+                         && Array.isArray(storyEnemiesRemaining)
+                         && storyEnemiesRemaining.length > 0)
+            ? storyEnemiesRemaining[0]
+            : null;
+        if (!enemyId) return;
+
+        const enemy = (typeof STORY_ENEMIES !== 'undefined') ? STORY_ENEMIES[enemyId] : null;
+        if (!enemy) return;
+
+        // Só seta se mudou (evita writes redundantes)
+        if (boss.elemento !== enemy.elemento) {
+            boss.elemento = enemy.elemento;
+            console.log(`[V72] boss.elemento = ${enemy.elemento || 'null'} (${enemyId})`);
+        }
+    }
+
+    // initStoryBattle
+    const _origInit = window.initStoryBattle;
+    if (typeof _origInit === 'function' && !_origInit._v72Elem) {
+        window.initStoryBattle = async function() {
+            const r = await _origInit.apply(this, arguments);
+            _aplicarNoBoss();
+            return r;
+        };
+        window.initStoryBattle._v72Elem = true;
+    } else {
+        // Se não existia, instala um observer de segurança
+        setTimeout(() => {
+            if (typeof window.initStoryBattle === 'function' && !window.initStoryBattle._v72Elem) {
+                const _i = window.initStoryBattle;
+                window.initStoryBattle = async function() {
+                    const r = await _i.apply(this, arguments);
+                    _aplicarNoBoss();
+                    return r;
+                };
+                window.initStoryBattle._v72Elem = true;
+            }
+        }, 500);
+    }
+
+    // advanceStoryEnemy
+    const _origAdv = window.advanceStoryEnemy;
+    if (typeof _origAdv === 'function' && !_origAdv._v72Elem) {
+        window.advanceStoryEnemy = async function() {
+            const r = await _origAdv.apply(this, arguments);
+            _aplicarNoBoss();
+            return r;
+        };
+        window.advanceStoryEnemy._v72Elem = true;
+    }
+
+    // Safety net: se o boss mudou mas o elemento ficou null, aplica
+    setInterval(() => {
+        if (!window._storyMode && !window._eventoAtivo) return;
+        if (typeof boss === 'undefined' || !boss) return;
+        if (!Array.isArray(storyEnemiesRemaining) || storyEnemiesRemaining.length === 0) return;
+        const enemyId = storyEnemiesRemaining[0];
+        const enemy = STORY_ENEMIES[enemyId];
+        if (enemy && boss.elemento !== enemy.elemento) {
+            boss.elemento = enemy.elemento;
+        }
+    }, 1500);
+
+    // ═══════════════════════════════════════════════════════════
+    // 3. DEBUG
+    // ═══════════════════════════════════════════════════════════
+    window._debugElementoPorAto = function() {
+        console.group('=== ELEMENTO POR ATO (V72) ===');
+        console.log('Ato → Elemento:', ATO_ELEMENTO);
+        console.log('');
+        Object.keys(STORY_CHAPTERS).forEach(cidStr => {
+            const cid = parseInt(cidStr);
+            const ch = STORY_CHAPTERS[cidStr];
+            const inimigos = new Set();
+            ch.phases.forEach(p => p.enemies.forEach(e => inimigos.add(e)));
+            console.log(`Ato ${cid} (${ch.name}):`);
+            inimigos.forEach(id => {
+                const e = STORY_ENEMIES[id];
+                console.log(`  ${id} → ${e?.elemento === null ? 'null (variável)' : e?.elemento || '(não setado)'}`);
+            });
+        });
+        console.log('');
+        console.log('Boss atual:', boss ? {
+            type: boss.type,
+            elemento: boss.elemento,
+            enemyId: storyEnemiesRemaining?.[0],
+        } : '(sem boss)');
+        console.groupEnd();
+    };
+
+    // ═══════════════════════════════════════════════════════════
+    // LOG
+    // ═══════════════════════════════════════════════════════════
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V72] Elemento por Ato');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('Ato 1 AR · Ato 2 TERRA · Ato 3 AGUA · Ato 4 FOGO');
+    console.log('Ato 5 FOGO · Ato 6 TERRA · Ato 7 AR · Ato 8 AGUA');
+    console.log('Ato 9 AGUA · Ato 10 TERRA · Ato 11 AR · Ato 12 FOGO');
+    console.log('Ato 13 null (variável — sem bônus elemental)');
+    console.log('');
+    console.log('• Não sobrescreve boss.element (só boss.elemento)');
+    console.log('• Só solo/história');
+    console.log('• Safety net de 1.5s corrige se algum wrapper antigo');
+    console.log('  limpar boss.elemento');
+    console.log('');
+    console.log('💡 Debug: window._debugElementoPorAto()');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — V73 — Flecha do arqueiro (animação caprichada)
+// -----------------------------------------------------------------
+// Substitui window.spawnArrowProjectile. Não depende do entidades.js.
+//
+// O que a animação faz:
+//   1. Flecha SVG vetorial (ponta, haste, penas) — não usa sprite
+//   2. Voo em arco parabólico (não linha reta) — satisfatório
+//   3. Rotação da flecha acompanhando o arco
+//   4. Trail de energia elemental (cor do elemento do herói)
+//   5. Explosão de impacto: flash + anel + 12 partículas radiais
+//   6. Shake leve no tabuleiro (classe CSS, não style inline)
+//   7. ~450ms total (300 voo + 150 impacto) — não arrasta
+//
+// Fallback:
+//   • Sem _storyMode/_eventoAtivo → delega pro original
+//   • PvP/Coop → delega (sincronização própria)
+//   • Sem board ou sem active/target → delega
+//
+// Cole NO FINAL do historia.js.
+// =================================================================
+(function flechaArqueiroV73() {
+    if (window._flechaArqueiroV73) return;
+    window._flechaArqueiroV73 = true;
+
+    const _orig = window.spawnArrowProjectile;
+
+    // ═══════════════════════════════════════════════════════════
+    // PALETA POR ELEMENTO
+    // ═══════════════════════════════════════════════════════════
+    const CORES = {
+        FOGO:  { principal: '#e74c3c', brilho: '#ffb088', secundaria: '#a83232' },
+        AGUA:  { principal: '#3498db', brilho: '#a8d8f0', secundaria: '#1e5a80' },
+        TERRA: { principal: '#27ae60', brilho: '#8ad8a0', secundaria: '#155a30' },
+        AR:    { principal: '#f1c40f', brilho: '#fff0a0', secundaria: '#a08000' },
+    };
+
+    // ═══════════════════════════════════════════════════════════
+    // SVG DA FLECHA
+    // ═══════════════════════════════════════════════════════════
+    function _svgFlecha(cor) {
+        return `<svg viewBox="0 0 48 14" xmlns="http://www.w3.org/2000/svg"
+                    style="width:100%;height:100%;display:block;
+                           filter:drop-shadow(0 0 4px ${cor.brilho})
+                                  drop-shadow(0 0 8px ${cor.principal}80);">
+            <!-- haste (madeira escura) -->
+            <rect x="10" y="6.2" width="30" height="1.6" fill="${cor.secundaria}" rx="0.8"/>
+            <!-- haste interna (brilho) -->
+            <rect x="10" y="6.6" width="30" height="0.8" fill="${cor.principal}" opacity="0.7"/>
+            <!-- ponta (brilho) -->
+            <polygon points="48,7 38,2.5 38,11.5" fill="${cor.brilho}"/>
+            <polygon points="44,7 40,5 40,9" fill="${cor.principal}"/>
+            <!-- penas -->
+            <polygon points="10,7 2,2 5,7 2,12" fill="${cor.principal}" opacity="0.95"/>
+            <polygon points="12,7 7,4 9,7 7,10" fill="${cor.brilho}" opacity="0.85"/>
+            <!-- brilho central (energia) -->
+            <circle cx="24" cy="7" r="1.8" fill="${cor.brilho}"/>
+            <circle cx="24" cy="7" r="3" fill="${cor.principal}" opacity="0.35"/>
+        </svg>`;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // CRIAÇÃO DE ELEMENTOS
+    // ═══════════════════════════════════════════════════════════
+    function _criarFlecha(cor, angulo, step) {
+        const w = Math.max(28, Math.min(48, step * 0.7));
+        const h = w * 0.29;
+        const el = document.createElement('div');
+        el.style.cssText = `
+            position: absolute;
+            width: ${w}px;
+            height: ${h}px;
+            pointer-events: none;
+            z-index: 70;
+            transform-origin: center center;
+            transform: rotate(${angulo}deg);
+            will-change: left, top, transform;
+        `;
+        el.innerHTML = _svgFlecha(cor);
+        return el;
+    }
+
+    function _criarParticulaTrail(board, cx, cy, cor) {
+        const size = 4 + Math.random() * 4;
+        const p = document.createElement('div');
+        p.style.cssText = `
+            position: absolute;
+            left: ${cx}px;
+            top: ${cy}px;
+            width: ${size}px;
+            height: ${size}px;
+            margin-left: -${size/2}px;
+            margin-top: -${size/2}px;
+            background: radial-gradient(circle, #ffffff, ${cor.brilho} 40%, ${cor.principal} 70%, transparent 100%);
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 68;
+            box-shadow: 0 0 6px ${cor.principal};
+            opacity: 0.9;
+            transition: transform 0.4s ease-out, opacity 0.4s ease-out;
+        `;
+        board.appendChild(p);
+        requestAnimationFrame(() => {
+            p.style.transform = `translate(${(Math.random()-0.5)*14}px, ${(Math.random()-0.5)*14}px) scale(0.2)`;
+            p.style.opacity = '0';
+        });
+        setTimeout(() => { if (p.parentNode) p.remove(); }, 450);
+    }
+
+    function _explosaoImpacto(board, cx, cy, cor) {
+        // Flash central
+        const flash = document.createElement('div');
+        flash.style.cssText = `
+            position: absolute;
+            left: ${cx}px; top: ${cy}px;
+            width: 14px; height: 14px;
+            margin-left: -7px; margin-top: -7px;
+            background: radial-gradient(circle, #ffffff 0%, ${cor.brilho} 30%, ${cor.principal} 65%, transparent 100%);
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 76;
+            animation: flechaV73Flash 0.5s ease-out forwards;
+        `;
+        board.appendChild(flash);
+        setTimeout(() => { if (flash.parentNode) flash.remove(); }, 520);
+
+        // Anel expandindo
+        const ring = document.createElement('div');
+        ring.style.cssText = `
+            position: absolute;
+            left: ${cx}px; top: ${cy}px;
+            width: 8px; height: 8px;
+            margin-left: -4px; margin-top: -4px;
+            border: 2.5px solid ${cor.brilho};
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 75;
+            box-shadow: 0 0 18px ${cor.principal}, inset 0 0 8px ${cor.principal};
+            animation: flechaV73Ring 0.6s cubic-bezier(0.25,0.8,0.3,1) forwards;
+        `;
+        board.appendChild(ring);
+        setTimeout(() => { if (ring.parentNode) ring.remove(); }, 620);
+
+        // 12 partículas radiais
+        const N = 12;
+        for (let i = 0; i < N; i++) {
+            const angle = (i / N) * Math.PI * 2 + (Math.random() - 0.5) * 0.35;
+            const dist = 30 + Math.random() * 25;
+            const size = 3 + Math.random() * 4;
+            const dx = Math.cos(angle) * dist;
+            const dy = Math.sin(angle) * dist;
+            const p = document.createElement('div');
+            p.style.cssText = `
+                position: absolute;
+                left: ${cx}px; top: ${cy}px;
+                width: ${size}px; height: ${size}px;
+                margin-left: -${size/2}px; margin-top: -${size/2}px;
+                background: radial-gradient(circle, #ffffff 0%, ${cor.brilho} 40%, ${cor.principal} 80%, transparent 100%);
+                border-radius: 50%;
+                pointer-events: none;
+                z-index: 75;
+                box-shadow: 0 0 8px ${cor.principal};
+                transition: transform 0.55s cubic-bezier(0.25,0.8,0.3,1), opacity 0.55s ease-out;
+            `;
+            board.appendChild(p);
+            requestAnimationFrame(() => {
+                p.style.transform = `translate(${dx}px, ${dy}px) scale(0.15)`;
+                p.style.opacity = '0';
+            });
+            setTimeout(() => { if (p.parentNode) p.remove(); }, 650);
+        }
+    }
+
+    function _getElemento(active) {
+        if (active?.element) return active.element;
+        const heroClass = active?.class;
+        if (!heroClass) return 'FOGO';
+        if (typeof STORY_HERO_CLASSES !== 'undefined' && STORY_HERO_CLASSES[heroClass]?.element) {
+            return STORY_HERO_CLASSES[heroClass].element;
+        }
+        if (typeof getHeroStoryElement === 'function') {
+            try { return getHeroStoryElement(heroClass); } catch(e) {}
+        }
+        if (typeof getSaveElement === 'function') {
+            try { return getSaveElement(); } catch(e) {}
+        }
+        return 'FOGO';
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // FUNÇÃO PRINCIPAL
+    // ═══════════════════════════════════════════════════════════
+    window.spawnArrowProjectile = async function(active, target) {
+        // Fora do história/evento → original
+        if (!window._storyMode && !window._eventoAtivo) {
+            if (typeof _orig === 'function') return _orig.apply(this, arguments);
+            return Promise.resolve();
+        }
+        // PvP/Coop → original (sincronização própria)
+        if (window._pvpMode || window._coopMode) {
+            if (typeof _orig === 'function') return _orig.apply(this, arguments);
+            return Promise.resolve();
+        }
+        // Sem dados → original
+        if (!active || !target ||
+            typeof active.x !== 'number' || typeof target.x !== 'number') {
+            if (typeof _orig === 'function') return _orig.apply(this, arguments);
+            return Promise.resolve();
+        }
+
+        const board = document.getElementById('board');
+        if (!board) {
+            if (typeof _orig === 'function') return _orig.apply(this, arguments);
+            return Promise.resolve();
+        }
+
+        // ─── Elemento + cor ───
+        const elem = _getElemento(active);
+        const cor = CORES[elem] || CORES.FOGO;
+
+        // ─── Posições (px dentro do board) ───
+        const step = (typeof getStep === 'function') ? getStep() : 59;
+        const pad = 8;
+        const startX = active.x * step + pad + step / 2;
+        const startY = active.y * step + pad + step / 2;
+        const endX = target.x * step + pad + step / 2;
+        const endY = target.y * step + pad + step / 2;
+
+        // ─── Arco (ponto de controle da Bézier) ───
+        const dx = endX - startX;
+        const dy = endY - startY;
+        const dist = Math.max(1, Math.sqrt(dx*dx + dy*dy));
+        const perpX = -dy / dist;
+        const perpY = dx / dist;
+        const arco = Math.min(50, Math.max(20, dist * 0.35)); // arco perceptível
+        const midX = (startX + endX) / 2 + perpX * arco;
+        const midY = (startY + endY) / 2 + perpY * arco;
+
+        // ─── Ângulo inicial ───
+        const angInicial = Math.atan2(midY - startY, midX - startX) * (180 / Math.PI);
+
+        // ─── Cria flecha ───
+        const flecha = _criarFlecha(cor, angInicial, step);
+        flecha.style.left = startX + 'px';
+        flecha.style.top = startY + 'px';
+        flecha.style.marginLeft = `-${parseFloat(flecha.style.width || 40) / 2}px`;
+        flecha.style.marginTop = `-${parseFloat(flecha.style.height || 12) / 2}px`;
+        board.appendChild(flecha);
+
+        // ─── Animação via rAF (bezier quadrática) ───
+        const duracao = 300;
+        const startTime = performance.now();
+        let ultimoTrail = -999;
+
+        await new Promise((resolve) => {
+            const animar = (now) => {
+                const elapsed = now - startTime;
+                const t = Math.min(1, elapsed / duracao);
+                const it = 1 - t;
+
+                // Bézier: P(t) = (1-t)²·P0 + 2(1-t)t·P1 + t²·P2
+                const px = it*it*startX + 2*it*t*midX + t*t*endX;
+                const py = it*it*startY + 2*it*t*midY + t*t*endY;
+
+                // Tangente (derivada) → ângulo
+                const tx = 2*it*(midX - startX) + 2*t*(endX - midX);
+                const ty = 2*it*(midY - startY) + 2*t*(endY - midY);
+                const ang = Math.atan2(ty, tx) * (180 / Math.PI);
+
+                flecha.style.left = px + 'px';
+                flecha.style.top = py + 'px';
+                flecha.style.transform = `rotate(${ang}deg)`;
+
+                // Trail (a cada ~28ms)
+                if (elapsed - ultimoTrail > 28) {
+                    ultimoTrail = elapsed;
+                    _criarParticulaTrail(board, px, py, cor);
+                }
+
+                if (t < 1) {
+                    requestAnimationFrame(animar);
+                } else {
+                    if (flecha.parentNode) flecha.remove();
+                    _explosaoImpacto(board, endX, endY, cor);
+                    // Shake leve via classe CSS (não inline)
+                    board.classList.add('flechaV73-shake');
+                    setTimeout(() => board.classList.remove('flechaV73-shake'), 300);
+                    // Espera impacto terminar
+                    setTimeout(resolve, 150);
+                }
+            };
+            requestAnimationFrame(animar);
+        });
+    };
+
+    // ═══════════════════════════════════════════════════════════
+    // CSS (keyframes da explosão + shake)
+    // ═══════════════════════════════════════════════════════════
+    if (!document.getElementById('flechaV73CSS')) {
+        const s = document.createElement('style');
+        s.id = 'flechaV73CSS';
+        s.textContent = `
+            @keyframes flechaV73Flash {
+                0%   { transform: scale(0.2); opacity: 0; }
+                30%  { transform: scale(1.4); opacity: 1; }
+                60%  { transform: scale(1.1); opacity: 0.9; }
+                100% { transform: scale(1.8); opacity: 0; }
+            }
+            @keyframes flechaV73Ring {
+                0%   { transform: scale(0.3); opacity: 0; }
+                20%  { transform: scale(1);   opacity: 1; }
+                100% { transform: scale(6);   opacity: 0; }
+            }
+            @keyframes flechaV73ShakeKf {
+                0%, 100% { transform: translateX(0); }
+                20%      { transform: translateX(-2px); }
+                40%      { transform: translateX(2px); }
+                60%      { transform: translateX(-1.5px); }
+                80%      { transform: translateX(1.5px); }
+            }
+            #board.flechaV73-shake {
+                animation: flechaV73ShakeKf 0.25s ease-in-out;
+            }
+        `;
+        document.head.appendChild(s);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // DEBUG
+    // ═══════════════════════════════════════════════════════════
+    window._debugFlechaV73 = function() {
+        console.group('=== FLECHA V73 ===');
+        console.log('Instalada?', window.spawnArrowProjectile?._v73 === true || 'verificando...');
+        console.log('Original do entidades.js existia?', typeof _orig === 'function');
+        console.log('Modo história:', window._storyMode);
+        console.log('Modo evento:', window._eventoAtivo);
+        console.log('PvP:', window._pvpMode, '| Coop:', window._coopMode);
+        console.groupEnd();
+    };
+    window.spawnArrowProjectile._v73 = true;
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V73] Flecha do arqueiro (animação completa)');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Flecha SVG vetorial com brilho elemental');
+    console.log('• Voo em arco parabólico (bezier quadrática)');
+    console.log('• Rotação acompanhando a tangente do arco');
+    console.log('• Trail de partículas durante o voo');
+    console.log('• Impacto: flash + anel expandindo + 12 partículas radiais');
+    console.log('• Shake leve no tabuleiro');
+    console.log('• ~450ms total (300 voo + 150 impacto)');
+    console.log('');
+    console.log('Cores:');
+    console.log('  FOGO  vermelho/laranja');
+    console.log('  AGUA  azul');
+    console.log('  TERRA verde');
+    console.log('  AR    amarelo');
+    console.log('');
+    console.log('💡 Debug: window._debugFlechaV73()');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — V74 — Reduzir tempo do aviso "BOSS ESTÁ ENFURECIDO"
+// -----------------------------------------------------------------
+// O aviso do V10.53 dura 4s. Este patch reduz pra 1.8s (padrão).
+// Ajuste DURACAO_MS abaixo pra mudar.
+//
+// Cole NO FINAL do historia.js.
+// =================================================================
+(function fixTempoWarningV74() {
+    if (window._fixTempoWarningV74) return;
+    window._fixTempoWarningV74 = true;
+
+    // ═══════════════════════════════════════════════════════════
+    // ⭐ AJUSTE AQUI (em milissegundos)
+    // ═══════════════════════════════════════════════════════════
+    const DURACAO_MS = 1800;
+    // Sugestões:
+    //   1200 → rápido
+    //   1500 → ágil
+    //   1800 → padrão (recomendado)
+    //   2500 → mais calmo
+
+    // ═══════════════════════════════════════════════════════════
+    // Override da animação (CSS !important + keyframe novo)
+    // ═══════════════════════════════════════════════════════════
+    if (!document.getElementById('v74WarningCSS')) {
+        const s = document.createElement('style');
+        s.id = 'v74WarningCSS';
+        s.textContent = `
+            #corruptionWarning {
+                animation: fadeInOutV74 ${DURACAO_MS}ms ease forwards !important;
+            }
+            @keyframes fadeInOutV74 {
+                0%   { opacity: 0; transform: translate(-50%, -30%) scale(0.9); }
+                10%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+                85%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+                100% { opacity: 0; transform: translate(-50%, -70%) scale(0.9); }
+            }
+        `;
+        document.head.appendChild(s);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // MutationObserver: remove antecipadamente
+    // ═══════════════════════════════════════════════════════════
+    const obs = new MutationObserver((mutations) => {
+        for (const m of mutations) {
+            for (const node of m.addedNodes) {
+                if (node.id === 'corruptionWarning') {
+                    setTimeout(() => {
+                        if (node.parentNode) node.remove();
+                    }, DURACAO_MS);
+                }
+            }
+        }
+    });
+    obs.observe(document.body, { childList: true });
+
+    // ═══════════════════════════════════════════════════════════
+    // Debug
+    // ═══════════════════════════════════════════════════════════
+    window._debugWarningV74 = function() {
+        console.log('═══ [V74] Warning enfurecido ═══');
+        console.log('Duração configurada:', DURACAO_MS, 'ms');
+        console.log('Warning no DOM agora?', !!document.getElementById('corruptionWarning'));
+        console.log('CSS ativo?', !!document.getElementById('v74WarningCSS'));
+    };
+
+    // Teste manual (só funciona no modo história)
+    window._testWarningV74 = function() {
+        if (!window._storyMode && !window._eventoAtivo) {
+            console.warn('[V74] Teste só funciona no modo história/evento');
+            return;
+        }
+        const w = document.createElement('div');
+        w.id = 'corruptionWarning';
+        w.innerHTML = `
+            <div style="font-family:'Cinzel Decorative', serif; color:#c39bd3; font-size:1.5rem; text-shadow: 0 0 15px #8e44ad;">O BOSS ESTÁ ENFURECIDO!</div>
+            <div style="font-family:'EB Garamond', serif; color:#d9c89a; font-size:1rem; font-style:italic; margin-top:5px;">O tabuleiro foi corrompido. Use o Solo Sagrado (✨) nos tiles negros para limpá-los.</div>
+        `;
+        w.style.cssText = `
+            position: absolute; top: 20%; left: 50%; transform: translate(-50%, -50%);
+            background: linear-gradient(180deg, rgba(40,15,50,0.95), rgba(20,5,20,0.95));
+            border: 2px solid #8e44ad; border-radius: 8px; padding: 15px 30px;
+            text-align: center; z-index: 1000; box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            pointer-events: none;
+        `;
+        document.body.appendChild(w);
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V74] Aviso "BOSS ESTÁ ENFURECIDO" reduzido');
+    console.log('═══════════════════════════════════════════════════');
+    console.log(`• Duração: 4000ms → ${DURACAO_MS}ms`);
+    console.log('• Pra mudar: edite DURACAO_MS no topo do V74');
+    console.log('');
+    console.log('💡 Debug: window._debugWarningV74()');
+    console.log('💡 Teste: window._testWarningV74()');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — V75 — FX leve nos PAs (tile único, mobile-friendly)
+// -----------------------------------------------------------------
+// Bug: triggerElementalFX faz coluna/linha INTEIRA. Chamado uma vez
+// por tile afetado → 240 elementos no Anhanga-Mirim (cruz 15 tiles).
+//
+// Fix: substitui triggerBravelyChain para heróis novos (exceto
+// Curupira) por versão com 1 pulso leve por tile (spawnElementPulse).
+// Redução: 240 → 15 elementos. ~16× mais leve.
+//
+// Aplica em: Kanarott, Teperesik, Eru, Anduré, Mãe da Mata,
+//            Pajé Anhanguera, Juruá, Araci, Bicho Folharal,
+//            Tapyra, Anhanga-Mirim, Matinta, Naiá, Kuatí,
+//            Caboclo, Tupinambá, Mbaraká, Mãe-do-Ouro,
+//            Pajé-Açu, Negrinho, Rudá
+//
+// NÃO afeta: Tupã, Sumé, Caipora (base), Curupira (V68 próprio)
+//
+// Cole NO FINAL do historia.js.
+// =================================================================
+(function fxLevePAV75() {
+    if (window._fxLevePAV75) return;
+    window._fxLevePAV75 = true;
+
+    const _sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+    // ═══════════════════════════════════════════════════════════
+    // CÁLCULO DE TILES (mesma lógica do V9.0-B1)
+    // ═══════════════════════════════════════════════════════════
+    function getPATiles(active, paKey, targetSnapshot) {
+        const tiles = [];
+        const cx = active.x, cy = active.y;
+        const hasTarget = targetSnapshot
+            && typeof targetSnapshot.x === 'number'
+            && typeof targetSnapshot.y === 'number';
+
+        if (paKey === 'kanarott_cruz_empurra') {
+            for (let i = -2; i <= 2; i++) {
+                const ny = cy + i;
+                if (ny >= 0 && ny < 8) tiles.push(ny * 8 + cx);
+            }
+            for (let i = -2; i <= 2; i++) {
+                if (i === 0) continue;
+                const nx = cx + i;
+                if (nx >= 0 && nx < 8) tiles.push(cy * 8 + nx);
+            }
+        }
+        else if (paKey === 'teperesik_area2x2') {
+            for (let dx = -1; dx <= 1; dx++)
+                for (let dy = -1; dy <= 1; dy++) {
+                    if (dx === 0 && dy === 0) continue;
+                    const nx = cx + dx, ny = cy + dy;
+                    if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) tiles.push(ny * 8 + nx);
+                }
+        }
+        else if (paKey === 'eru_linha_horizontal' || paKey === 'araci_linha_horizontal' || paKey === 'pajeacu_linha') {
+            for (let x = 0; x < 8; x++) tiles.push(cy * 8 + x);
+        }
+        else if (paKey === 'andure_area2x2_cura') {
+            for (let dx = -1; dx <= 1; dx++)
+                for (let dy = -1; dy <= 1; dy++) {
+                    const nx = cx + dx, ny = cy + dy;
+                    if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) tiles.push(ny * 8 + nx);
+                }
+        }
+        else if (paKey === 'maedamata_area3x3_cura') {
+            for (let dx = -2; dx <= 2; dx++)
+                for (let dy = -2; dy <= 2; dy++) {
+                    const nx = cx + dx, ny = cy + dy;
+                    if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) tiles.push(ny * 8 + nx);
+                }
+        }
+        else if (paKey === 'paje_coluna_fogo') {
+            for (let y = 0; y < 8; y++) tiles.push(y * 8 + cx);
+        }
+        else if (paKey === 'jurua_area_alvo_3x3') {
+            if (hasTarget) {
+                for (let dx = -1; dx <= 1; dx++)
+                    for (let dy = -1; dy <= 1; dy++) {
+                        const nx = targetSnapshot.x + dx, ny = targetSnapshot.y + dy;
+                        if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) tiles.push(ny * 8 + nx);
+                    }
+            }
+        }
+        else if (paKey === 'bicho_cruz_completa' || paKey === 'anhanga_mirim_raio') {
+            if (hasTarget) {
+                for (let x = 0; x < 8; x++) tiles.push(targetSnapshot.y * 8 + x);
+                for (let y = 0; y < 8; y++) {
+                    if (y !== targetSnapshot.y) tiles.push(y * 8 + targetSnapshot.x);
+                }
+            }
+        }
+        else if (paKey === 'tapyra_coluna_alvo') {
+            if (hasTarget) for (let y = 0; y < 8; y++) tiles.push(y * 8 + targetSnapshot.x);
+        }
+        else if (paKey === 'matinta_rajada') {
+            for (let x = 0; x < 8; x++) tiles.push(cy * 8 + x);
+        }
+        else if (paKey === 'maedouro_caminho') {
+            if (hasTarget) {
+                const stepX = Math.sign(targetSnapshot.x - cx);
+                for (let x = cx; x !== targetSnapshot.x + stepX; x += (stepX || 1)) {
+                    const nx = Math.max(0, Math.min(7, x));
+                    if (!tiles.includes(cy * 8 + nx)) tiles.push(cy * 8 + nx);
+                    if (stepX === 0) break;
+                }
+                const stepY = Math.sign(targetSnapshot.y - cy);
+                for (let y = cy; y !== targetSnapshot.y + stepY; y += (stepY || 1)) {
+                    const ny = Math.max(0, Math.min(7, y));
+                    if (!tiles.includes(ny * 8 + targetSnapshot.x)) tiles.push(ny * 8 + targetSnapshot.x);
+                    if (stepY === 0) break;
+                }
+                if (!tiles.includes(targetSnapshot.y * 8 + targetSnapshot.x)) {
+                    tiles.push(targetSnapshot.y * 8 + targetSnapshot.x);
+                }
+            }
+        }
+
+        return tiles;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // FX LEVE — 1 pulso por tile (sem linha/coluna inteira)
+    // ═══════════════════════════════════════════════════════════
+    function _fxLeveTile(x, y, element, delay) {
+        setTimeout(() => {
+            if (typeof spawnElementPulse === 'function') {
+                spawnElementPulse(x, y, element);
+            } else if (typeof spawnFxAt === 'function') {
+                spawnFxAt('element_pulse', 'fx-element-pulse', x, y, { duration: 500, scale: 0.8 });
+            }
+        }, delay);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // WRAPPER triggerBravelyChain
+    // ═══════════════════════════════════════════════════════════
+    const _orig = window.triggerBravelyChain;
+    if (typeof _orig !== 'function') {
+        console.warn('[V75] triggerBravelyChain não encontrado. Abortando.');
+        return;
+    }
+    if (_orig._v75) return;
+
+    const wrapped = async function(active, target, totalAtk) {
+        // ─── Guardas ───
+        if (!window._storyMode && !window._eventoAtivo) {
+            return _orig.apply(this, arguments);
+        }
+        if (window._pvpMode || window._coopMode) {
+            return _orig.apply(this, arguments);
+        }
+
+        const heroData = (typeof STORY_HERO_CLASSES !== 'undefined' && active)
+            ? STORY_HERO_CLASSES[active.class] : null;
+        if (!heroData || !heroData.paKey || heroData.paKey.startsWith('base_')) {
+            return _orig.apply(this, arguments);
+        }
+
+        // Curupira tem fluxo próprio (V68) — delega
+        if (heroData.paKey === 'curupira_chuva_flechas') {
+            return _orig.apply(this, arguments);
+        }
+
+        // ─── Heróis novos: fluxo com FX leve ───
+        const paKey = heroData.paKey;
+        const element = active.element || 'FOGO';
+
+        const targetSnapshot = target
+            ? { x: target.x, y: target.y, dead: target.dead, id: target.id }
+            : null;
+
+        // 1. Overlay "PODER ANCESTRAL"
+        if (typeof showPoderAncestralEffect === 'function') {
+            try { showPoderAncestralEffect(); } catch(e) {}
+        }
+        await _sleep(300);
+
+        // 2. Som
+        try { if (typeof playSfx === 'function') playSfx('skill1'); } catch(e) {}
+
+        // 3. Calcula tiles afetados
+        const paTiles = getPATiles(active, paKey, targetSnapshot);
+
+        // 4. ⭐ FX LEVE (1 pulso por tile, sem linha/coluna inteira)
+        paTiles.forEach((idx, i) => {
+            const tx = idx % 8, ty = Math.floor(idx / 8);
+            _fxLeveTile(tx, ty, element, i * 40);
+        });
+
+        await _sleep(400);
+
+        // 5. Dano no alvo (se ainda vivo)
+        if (target && !target.dead) {
+            const targetIdx = target.y * 8 + target.x;
+            if (paTiles.includes(targetIdx)) {
+                if (typeof applyDmg === 'function') applyDmg(target, totalAtk);
+            }
+        }
+
+        // 6. Efeitos extras do PA (cura, empurrão, etc.)
+        const paFn = STORY_HERO_PA[paKey];
+        if (paFn && typeof paFn.execute === 'function') {
+            try { await paFn.execute(active, target, totalAtk); }
+            catch (e) { console.warn('[V75] Erro no paFn:', e); }
+        }
+
+        // 7. Troca tiles (sem FX redundante — só conversão)
+        paTiles.forEach(idx => {
+            if (typeof grid !== 'undefined') grid[idx] = element;
+            const tile = document.querySelectorAll('#grid .tile')[idx];
+            if (tile) tile.className = `tile bg-${element}`;
+            if (element === 'TERRA' && typeof updateTitleStats === 'function') updateTitleStats('earth_tile');
+            else if (element === 'AR' && typeof updateTitleStats === 'function') updateTitleStats('air_tile');
+        });
+
+        if (typeof updateTitleStats === 'function') updateTitleStats('bravely_chain');
+    };
+
+    // ⭐ Marcadores para os outros setInterval não reinstalarem por cima
+    wrapped._v75 = true;
+    wrapped._v63Curupira = true;
+    wrapped._v67Curupira = true;
+    wrapped._v68Curupira = true;
+
+    window.triggerBravelyChain = wrapped;
+
+    // ═══════════════════════════════════════════════════════════
+    // DEBUG
+    // ═══════════════════════════════════════════════════════════
+    window._debugFXleveV75 = function() {
+        console.group('=== FX LEVE V75 ===');
+        console.log('V75 ativo?', window._fxLevePAV75 === true);
+        console.log('triggerBravelyChain._v75:', window.triggerBravelyChain?._v75 === true);
+        console.log('triggerBravelyChain._v68Curupira:', window.triggerBravelyChain?._v68Curupira === true);
+        console.log('spawnElementPulse existe?', typeof spawnElementPulse === 'function');
+        console.groupEnd();
+    };
+
+    // Teste manual: roda o FX leve em N tiles aleatórios
+    window._testFXleveV75 = function(quantidade) {
+        quantidade = quantidade || 15;
+        const elementos = ['FOGO', 'AGUA', 'TERRA', 'AR'];
+        for (let i = 0; i < quantidade; i++) {
+            const idx = Math.floor(Math.random() * 64);
+            const x = idx % 8, y = Math.floor(idx / 8);
+            const el = elementos[Math.floor(Math.random() * 4)];
+            _fxLeveTile(x, y, el, i * 40);
+        }
+        console.log(`[V75] Teste: ${quantidade} pulsos leves disparados`);
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V75] FX leve nos PAs (mobile-friendly)');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• 1 pulso leve por tile (não mais linha/coluna inteira)');
+    console.log('• Anhanga-Mirim: 240 → 15 elementos (~16× mais leve)');
+    console.log('• Aplica em todos os heróis novos');
+    console.log('• NÃO afeta: base (Tupã/Sumé/Caipora) nem Curupira (V68)');
+    console.log('• Não afeta PvP/Coop');
+    console.log('');
+    console.log('💡 Debug: window._debugFXleveV75()');
+    console.log('💡 Teste: window._testFXleveV75(15)');
     console.log('═══════════════════════════════════════════════════');
 })();
