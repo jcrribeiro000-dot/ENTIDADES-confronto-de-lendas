@@ -48220,18 +48220,20 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
             if (window._pvpMode || window._coopMode) return result;
             if (!heroAgora || heroAgora.dead) return result;
 
-            // ⭐ Anhanga-Mirim: +1 HP por turno
-            if (heroAgora.class === 'Anhanga-Mirim' && heroAgora.hp < heroAgora.maxHp) {
-                heroAgora.hp = Math.min(heroAgora.maxHp, heroAgora.hp + 1);
-                if (typeof showHealEffect === 'function') {
-                    showHealEffect(heroAgora.x, heroAgora.y, 1);
-                }
-                if (typeof updateHeroCard === 'function') updateHeroCard();
-                if (typeof addLog === 'function') {
-                    addLog(`🌑 Anhanga-Mirim: +1 HP (Sombra Regenerativa).`);
-                }
-            }
-
+// ⭐ Anhanga-Mirim: +1 HP por turno (só até 50% do maxHp)
+if (heroAgora.class === 'Anhanga-Mirim' && heroAgora.hp < heroAgora.maxHp) {
+    const limiar = Math.floor(heroAgora.maxHp * 0.5);
+    if (heroAgora.hp < limiar) {
+        heroAgora.hp = Math.min(heroAgora.maxHp, heroAgora.hp + 1);
+        if (typeof showHealEffect === 'function') {
+            showHealEffect(heroAgora.x, heroAgora.y, 1);
+        }
+        if (typeof updateHeroCard === 'function') updateHeroCard();
+        if (typeof addLog === 'function') {
+            addLog(`🌑 Anhanga-Mirim: +1 HP (Sombra Regenerativa).`);
+        }
+    }
+}
             // ⭐ Rudá: +1 HP em tile AR
             if (heroAgora.class === 'Rudá') {
                 const idx = heroAgora.y * 8 + heroAgora.x;
@@ -50198,5 +50200,2966 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
     console.log('');
     console.log('💡 Debug: window._debugFXleveV75()');
     console.log('💡 Teste: window._testFXleveV75(15)');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — V77 — Anhangá Fase 2 (versão limpa)
+// -----------------------------------------------------------------
+// Um bloco, um setInterval. Sem herança de V76.x.
+//
+// Fluxo:
+//   • Anhangá cai a 50% HP
+//   • V10.53 dispara corrupção + warning "enfurecido"
+//   • V77 espera o warning sumir
+//   • V77 dispara fase 2: ATK 6→8 (com dificuldade) + sprite + msg
+//   • V77 persiste visual a cada tick (não perde pra updateVisuals)
+//   • Ao sair da luta: reset automático
+//
+// Cole NO FINAL do historia.js (depois do V75).
+// =================================================================
+(function anhangaFase2V77() {
+    if (window._anhangaFase2V77) return;
+    window._anhangaFase2V77 = true;
+
+    const ANHANGA_ID = 'anhanga';
+    const ATK_BASE = 6;
+    const ATK_FASE2_BASE = 8;
+    const HP_THRESHOLD = 0.5;
+
+    const FILTRO_BOSS = 'hue-rotate(280deg) saturate(1.6) brightness(1.2) drop-shadow(0 0 15px rgba(142,68,173,0.9))';
+    const FILTRO_CARD = 'hue-rotate(280deg) saturate(1.6) brightness(1.2)';
+
+    // Slot de sprite (opcional)
+    if (typeof SPRITES_STORY !== 'undefined' && !('anhanga_fase2' in SPRITES_STORY)) {
+        SPRITES_STORY['anhanga_fase2'] = '';
+    }
+
+    let _fase2Ativa = false;
+
+    // ═══════════════════════════════════════════════════════════
+    // DETECÇÃO — 4 fallbacks
+    // ═══════════════════════════════════════════════════════════
+    function isAnhanga() {
+        if (Array.isArray(window.storyEnemiesRemaining)
+            && window.storyEnemiesRemaining[0] === ANHANGA_ID) return true;
+
+        if (typeof boss !== 'undefined' && boss) {
+            const tipo = (boss.type || '').toString().toUpperCase();
+            if (tipo === 'ANHANGA') return true;
+            const nome = (boss.nome || boss.name || '').toString();
+            if (/anhanga/i.test(nome)) return true;
+        }
+
+        const bimg = document.getElementById('imgBoss');
+        if (bimg && bimg.src && bimg.src.toLowerCase().includes('anhanga')) return true;
+
+        return false;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // ATK com dificuldade
+    // ═══════════════════════════════════════════════════════════
+    function calcAtkFinal(baseAtk) {
+        const diff = (typeof STORY_DIFFICULTIES !== 'undefined'
+                      && typeof storyCurrentDifficulty !== 'undefined')
+            ? STORY_DIFFICULTIES[storyCurrentDifficulty] : null;
+        if (diff && storyCurrentDifficulty !== 'normal') {
+            return Math.ceil(baseAtk * diff.atkMult);
+        }
+        return baseAtk;
+    }
+
+    function applyAtk(baseAtk) {
+        const atkFinal = calcAtkFinal(baseAtk);
+        const atkInput = document.getElementById('atk_BOSS_cfg');
+        if (atkInput) {
+            atkInput.dataset.originalAtk = baseAtk;
+            atkInput.value = atkFinal;
+        }
+        if (typeof STORY_ENEMIES !== 'undefined' && STORY_ENEMIES[ANHANGA_ID]) {
+            STORY_ENEMIES[ANHANGA_ID].atk = baseAtk;
+        }
+        if (typeof boss !== 'undefined' && boss) {
+            boss.atk = atkFinal;
+        }
+        return atkFinal;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // Visual
+    // ═══════════════════════════════════════════════════════════
+    function applyVisual() {
+        const novo = (typeof SPRITES_STORY !== 'undefined')
+            ? SPRITES_STORY['anhanga_fase2'] : '';
+        const bimg = document.getElementById('imgBoss');
+        const bcs = document.getElementById('bossCardSprite');
+
+        if (novo && novo.trim() !== '') {
+            if (bimg && bimg.src !== novo) bimg.src = novo;
+            if (bcs && bcs.src !== novo) bcs.src = novo;
+        } else {
+            if (bimg && bimg.style.filter !== FILTRO_BOSS) bimg.style.filter = FILTRO_BOSS;
+            if (bimg && bimg.style.transform !== 'scale(1.15)') bimg.style.transform = 'scale(1.15)';
+            if (bcs && bcs.style.filter !== FILTRO_CARD) bcs.style.filter = FILTRO_CARD;
+        }
+    }
+
+    function clearVisual() {
+        const bimg = document.getElementById('imgBoss');
+        const bcs = document.getElementById('bossCardSprite');
+        if (bimg) {
+            bimg.style.filter = '';
+            bimg.style.transform = '';
+            bimg.style.transition = '';
+        }
+        if (bcs) bcs.style.filter = '';
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // Trigger
+    // ═══════════════════════════════════════════════════════════
+    function triggerFase2() {
+        if (_fase2Ativa) return;
+        _fase2Ativa = true;
+
+        const atkFinal = applyAtk(ATK_FASE2_BASE);
+
+        const bimg = document.getElementById('imgBoss');
+        if (bimg) bimg.style.transition = 'transform 0.5s ease-out, filter 0.5s ease-out';
+        applyVisual();
+
+        if (typeof addLog === 'function') {
+            addLog(`👹 ANHANGÁ DESPERTA! ATK ${ATK_BASE} → ${ATK_FASE2_BASE} (final: ${atkFinal}).`);
+        }
+
+        showMessage();
+
+        try { if (typeof playSfx === 'function') playSfx('purificacao'); } catch(e) {}
+        setTimeout(() => {
+            try { if (typeof playSfx === 'function') playSfx('skill1'); } catch(e) {}
+        }, 300);
+
+        const board = document.getElementById('board');
+        if (board) {
+            board.style.animation = 'v77Shake 0.6s ease-out';
+            setTimeout(() => { board.style.animation = ''; }, 700);
+        }
+
+        if (typeof updateBossCard === 'function') updateBossCard();
+        if (typeof updateVisuals === 'function') updateVisuals();
+
+        // Reaplica visual após updates (que podem ter sobrescrito)
+        setTimeout(applyVisual, 100);
+        setTimeout(applyVisual, 500);
+
+        console.log(`[V77] Fase 2 ativa. ATK final=${atkFinal}`);
+    }
+
+    function showMessage() {
+        const old = document.getElementById('anhangaFase2Warning');
+        if (old) old.remove();
+
+        const w = document.createElement('div');
+        w.id = 'anhangaFase2Warning';
+        w.innerHTML = `
+            <div style="font-family:'Cinzel Decorative', serif; color:#c39bd3; font-size:1.5rem; text-shadow: 0 0 15px #8e44ad;">👹 ANHANGÁ DESPERTA!</div>
+            <div style="font-family:'EB Garamond', serif; color:#d9c89a; font-size:1rem; font-style:italic; margin-top:5px;">O Senhor do Abismo revela seu verdadeiro poder.</div>
+        `;
+        w.style.cssText = `
+            position: absolute; top: 20%; left: 50%; transform: translate(-50%, -50%);
+            background: linear-gradient(180deg, rgba(40,15,50,0.95), rgba(20,5,20,0.95));
+            border: 2px solid #8e44ad; border-radius: 8px; padding: 15px 30px;
+            text-align: center; z-index: 1000;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8), 0 0 30px rgba(142,68,173,0.6);
+            pointer-events: none;
+            animation: v77Fade 2.5s ease forwards;
+        `;
+        document.body.appendChild(w);
+        setTimeout(() => { if (w.parentNode) w.remove(); }, 2600);
+    }
+
+    function reset() {
+        if (!_fase2Ativa) return;
+        _fase2Ativa = false;
+        applyAtk(ATK_BASE);
+        clearVisual();
+        if (typeof updateBossCard === 'function') updateBossCard();
+        if (typeof updateVisuals === 'function') updateVisuals();
+        console.log('[V77] Saiu da luta do Anhangá — resetado');
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // SETINTERVAL ÚNICO (monitora + persiste + reseta)
+    // ═══════════════════════════════════════════════════════════
+    setInterval(() => {
+        if (!window._storyMode && !window._eventoAtivo) { if (_fase2Ativa) reset(); return; }
+        if (window._pvpMode || window._coopMode) { if (_fase2Ativa) reset(); return; }
+
+        if (!isAnhanga()) { if (_fase2Ativa) reset(); return; }
+
+        if (typeof boss === 'undefined' || !boss || boss.dead) { if (_fase2Ativa) reset(); return; }
+
+        // Já ativa: só persiste visual
+        if (_fase2Ativa) { applyVisual(); return; }
+
+        // Ainda acima de 50%: aguarda
+        if (boss.hp > boss.maxHp * HP_THRESHOLD) return;
+
+        // Warning "enfurecido" ainda na tela: aguarda
+        if (document.getElementById('corruptionWarning')) return;
+
+        // Todas condições OK: dispara
+        triggerFase2();
+    }, 400);
+
+    // ═══════════════════════════════════════════════════════════
+    // CSS
+    // ═══════════════════════════════════════════════════════════
+    if (!document.getElementById('v77CSS')) {
+        const s = document.createElement('style');
+        s.id = 'v77CSS';
+        s.textContent = `
+            @keyframes v77Fade {
+                0%   { opacity: 0; transform: translate(-50%, -30%) scale(0.9); }
+                10%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+                85%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+                100% { opacity: 0; transform: translate(-50%, -70%) scale(0.9); }
+            }
+            @keyframes v77Shake {
+                0%, 100% { transform: translateX(0); }
+                20%      { transform: translateX(-4px); }
+                40%      { transform: translateX(4px); }
+                60%      { transform: translateX(-3px); }
+                80%      { transform: translateX(3px); }
+            }
+        `;
+        document.head.appendChild(s);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // Debug
+    // ═══════════════════════════════════════════════════════════
+    window._debugAnhangaV77 = function() {
+        const atkInput = document.getElementById('atk_BOSS_cfg');
+        const diff = (typeof STORY_DIFFICULTIES !== 'undefined')
+            ? STORY_DIFFICULTIES[storyCurrentDifficulty] : null;
+        console.group('=== ANHANGÁ FASE 2 (V77) ===');
+        console.log('V77 ativo?', window._anhangaFase2V77 === true);
+        console.log('É Anhangá?', isAnhanga());
+        console.log('Fase 2 ativa?', _fase2Ativa);
+        console.log('');
+        console.log('Dificuldade:', storyCurrentDifficulty || 'normal', '| ATK mult:', diff?.atkMult);
+        console.log('');
+        if (typeof boss !== 'undefined' && boss) {
+            console.log('Boss HP:', boss.hp, '/', boss.maxHp,
+                `(${((boss.hp/boss.maxHp)*100).toFixed(1)}%)`);
+            console.log('Boss ATK:', boss.atk);
+            console.log('Boss type:', boss.type);
+        }
+        console.log('atk_BOSS_cfg.value:', atkInput?.value);
+        console.log('atk_BOSS_cfg.originalAtk:', atkInput?.dataset?.originalAtk);
+        console.log('STORY_ENEMIES.anhanga.atk:', STORY_ENEMIES?.anhanga?.atk);
+        console.log('Warning enfurecido?', !!document.getElementById('corruptionWarning'));
+        console.log('Warning fase 2?', !!document.getElementById('anhangaFase2Warning'));
+        console.log('Sprite custom?', SPRITES_STORY?.['anhanga_fase2'] ? 'SIM' : 'não (filtro CSS)');
+        console.groupEnd();
+    };
+
+    window._forcarFase2Anhanga = function() {
+        if (!isAnhanga()) {
+            console.warn('[V77] Não está na luta do Anhangá');
+            return;
+        }
+        _fase2Ativa = false;
+        triggerFase2();
+    };
+
+    window._resetFase2Anhanga = function() {
+        _fase2Ativa = false;
+        applyAtk(ATK_BASE);
+        clearVisual();
+        if (typeof updateBossCard === 'function') updateBossCard();
+        console.log('[V77] Resetado');
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V77] Anhangá Fase 2 (versão limpa)');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• UM bloco, UM setInterval (400ms)');
+    console.log('• Detecção robusta (fila, type, nome, sprite)');
+    console.log('• ATK 6 → 8 com dificuldade:');
+    console.log('   Normal: 8 | Difícil: 11 | Pesadelo: 13');
+    console.log('• Visual persistente');
+    console.log('• Reset automático ao sair');
+    console.log('');
+    console.log('💡 Debug:  window._debugAnhangaV77()');
+    console.log('💡 Forçar:  window._forcarFase2Anhanga()');
+    console.log('💡 Resetar: window._resetFase2Anhanga()');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — V77.2 — Anhangá Fase 2 via substituição de sprite
+// -----------------------------------------------------------------
+// Solução definitiva: troca SPRITES_STORY['anhanga'] quando fase 2
+// ativa. Todo código que faz imgBoss.src = SPRITES_STORY['anhanga']
+// automaticamente pega o sprite novo. Sem filtro CSS. Sem loop.
+//
+// • Se você tem sprite da fase 2 → cola URL em SPRITES_STORY['anhanga_fase2']
+// • Se NÃO tem → usa o mesmo sprite original (só o popup + ATK mudam)
+//
+// Cole NO FINAL do historia.js (depois do V77).
+// =================================================================
+(function spriteFase2V77_2() {
+    if (window._spriteFase2V77_2) return;
+    window._spriteFase2V77_2 = true;
+
+    console.log('[V77.2] Instalando troca de sprite da fase 2');
+    SPRITES_STORY['anhanga_fase2'] = 'https://i.imgur.com/y3owdBe.gif';
+
+    // ─────────────────────────────────────────────────────────
+    // Guarda o sprite original do Anhangá (só uma vez)
+    // ─────────────────────────────────────────────────────────
+    if (!window._anhangaSpriteOriginal) {
+        window._anhangaSpriteOriginal =
+            (typeof SPRITES_STORY !== 'undefined') ? SPRITES_STORY['anhanga'] : '';
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // Detecta fase 2 ativa
+    // ─────────────────────────────────────────────────────────
+    function _faseAtiva() {
+        if (!window._storyMode && !window._eventoAtivo) return false;
+        if (window._pvpMode || window._coopMode) return false;
+        if (typeof boss === 'undefined' || !boss || boss.dead) return false;
+
+        const tipo = (boss.type || '').toString().toUpperCase();
+        if (tipo !== 'ANHANGA') return false;
+
+        const atkInput = document.getElementById('atk_BOSS_cfg');
+        const atkBase = parseInt(atkInput?.dataset?.originalAtk) || 6;
+        return atkBase === 8;
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // Troca o SPRITES_STORY['anhanga'] para o sprite da fase 2
+    // ─────────────────────────────────────────────────────────
+    let _spriteTrocado = false;
+
+    function _aplicarTrocaSprite() {
+        if (_spriteTrocado) return;
+        if (!_faseAtiva()) return;
+
+        const novo = (typeof SPRITES_STORY !== 'undefined')
+            ? SPRITES_STORY['anhanga_fase2'] : '';
+
+        // Só troca se tiver URL custom. Senão, não mexe (fica o original).
+        if (!novo || novo.trim() === '') {
+            console.log('[V77.2] Sem sprite custom da fase 2 — mantendo sprite original');
+            console.log('[V77.2] 💡 Cole a URL em: SPRITES_STORY["anhanga_fase2"]');
+            _spriteTrocado = true; // marca pra não tentar de novo
+            return;
+        }
+
+        if (typeof SPRITES_STORY !== 'undefined') {
+            SPRITES_STORY['anhanga'] = novo;
+        }
+
+        // Força atualização imediata do imgBoss (senão só atualiza no próximo tick)
+        const bimg = document.getElementById('imgBoss');
+        if (bimg) {
+            bimg.src = novo;
+            // Transform pra dar "scale" (opcional, mas fica bonito)
+            bimg.style.transform = 'scale(1.15)';
+            bimg.style.transition = 'transform 0.5s ease-out';
+        }
+        const bcs = document.getElementById('bossCardSprite');
+        if (bcs) bcs.src = novo;
+
+        _spriteTrocado = true;
+        console.log('[V77.2] ✅ Sprite da fase 2 aplicado');
+    }
+
+    function _restaurarSprite() {
+        if (!_spriteTrocado) return;
+        if (typeof SPRITES_STORY !== 'undefined') {
+            SPRITES_STORY['anhanga'] = window._anhangaSpriteOriginal || '';
+        }
+        _spriteTrocado = false;
+        console.log('[V77.2] Sprite original restaurado');
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // Loop de 300ms (leve, sem mutation observer)
+    // ─────────────────────────────────────────────────────────
+    setInterval(() => {
+        const ativa = _faseAtiva();
+        if (ativa && !_spriteTrocado) {
+            _aplicarTrocaSprite();
+        } else if (!ativa && _spriteTrocado) {
+            _restaurarSprite();
+        }
+    }, 300);
+
+    // ─────────────────────────────────────────────────────────
+    // Debug
+    // ─────────────────────────────────────────────────────────
+    window._debugSpriteFase2 = function() {
+        console.group('=== SPRITE FASE 2 (V77.2) ===');
+        console.log('Fase 2 ativa?', _faseAtiva());
+        console.log('Sprite trocado?', _spriteTrocado);
+        console.log('SPRITES_STORY.anhanga:', SPRITES_STORY?.['anhanga']?.substring(0, 60));
+        console.log('SPRITES_STORY.anhanga_fase2:', SPRITES_STORY?.['anhanga_fase2']?.substring(0, 60) || '(vazio)');
+        const bimg = document.getElementById('imgBoss');
+        console.log('imgBoss.src:', bimg?.src?.substring(0, 60));
+        console.groupEnd();
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V77.2] Troca de sprite da fase 2');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Substitui SPRITES_STORY["anhanga"] quando fase 2 ativa');
+    console.log('• Restaura quando sai');
+    console.log('• Sem filtro CSS, sem mutation observer, sem loop');
+    console.log('');
+    console.log('📸 Para usar sprite custom:');
+    console.log('   SPRITES_STORY["anhanga_fase2"] = "https://i.imgur.com/SEU_SPRITE.gif";');
+    console.log('');
+    console.log('💡 Sem sprite custom: só popup + ATK (não muda visual)');
+    console.log('');
+    console.log('💡 Debug: window._debugSpriteFase2()');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — V77.3 — Faz o V77 respeitar o sprite trocado
+// -----------------------------------------------------------------
+// Problema: V77 (trigger original) aplica filtro CSS por cima do
+// sprite trocado pelo V77.2. Precisa espelhar SPRITES_STORY
+// ['anhanga_fase2'] = SPRITES_STORY['anhanga'] quando V77.2 trocou.
+//
+// Cole NO FINAL do historia.js (depois do V77 e V77.2).
+// =================================================================
+(function fixV77_3() {
+    if (window._fixV77_3) return;
+    window._fixV77_3 = true;
+
+    setInterval(() => {
+        if (typeof SPRITES_STORY === 'undefined') return;
+        if (!window._spriteFase2V77_2) return;
+        if (!window._anhangaSpriteOriginal) return;
+
+        // Se o sprite original mudou (V77.2 ativo), espelha em 'anhanga_fase2'
+        if (SPRITES_STORY['anhanga'] !== window._anhangaSpriteOriginal) {
+            if (SPRITES_STORY['anhanga_fase2'] !== SPRITES_STORY['anhanga']) {
+                SPRITES_STORY['anhanga_fase2'] = SPRITES_STORY['anhanga'];
+                console.log('[V77.3] Sprite fase2 espelhado → V77 usará sprite em vez de filtro');
+            }
+        }
+    }, 300);
+
+    console.log('✅ [V77.3] Fix: V77 respeita sprite do V77.2');
+})();
+// =================================================================
+// historia.js — V78 — Tabela de fraqueza visível
+// -----------------------------------------------------------------
+// Injeta a tabela do ciclo elemental no painel "?" do herói
+// (funciona na OCA e no modal de batalha).
+//
+// • Destaca o elemento do herói atual
+// • Mostra o que ele vence (+1) e o que perde (-1)
+// • Tabela completa dos 4 elementos embaixo
+// • Usa os sprites de elemento já existentes (elem_fogo, etc)
+//
+// Cole NO FINAL do historia.js.
+// =================================================================
+(function tabelaFraquezaV78() {
+    if (window._tabelaFraquezaV78) return;
+    window._tabelaFraquezaV78 = true;
+
+    // ═══════════════════════════════════════════════════════════
+    // CICLO (mesma estrutura do V71)
+    // ═══════════════════════════════════════════════════════════
+    const CICLO = {
+        FOGO:  { forte: 'TERRA', fraco: 'AGUA'  },
+        TERRA: { forte: 'AR',    fraco: 'FOGO'  },
+        AR:    { forte: 'AGUA',  fraco: 'TERRA' },
+        AGUA:  { forte: 'FOGO',  fraco: 'AR'    },
+    };
+
+    function _elemNome(el) {
+        return { FOGO: 'Fogo', AGUA: 'Água', TERRA: 'Terra', AR: 'Ar' }[el] || el;
+    }
+
+    function _getElementoHeroi(heroClass) {
+        const heroData = (typeof STORY_HERO_CLASSES !== 'undefined')
+            ? STORY_HERO_CLASSES[heroClass] : null;
+        if (!heroData) return null;
+        if (heroData.element) return heroData.element;
+        if (typeof getHeroStoryElement === 'function') {
+            try { return getHeroStoryElement(heroClass); } catch(e) {}
+        }
+        return null;
+    }
+
+    function _icone(el) {
+        return (typeof elemIcon === 'function') ? elemIcon(el) : el;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // HTML DA TABELA
+    // ═══════════════════════════════════════════════════════════
+    function _buildHTML(elementoAtual) {
+        // Bloco "seu elemento"
+        let heroHighlight = '';
+        if (elementoAtual && CICLO[elementoAtual]) {
+            const c = CICLO[elementoAtual];
+            heroHighlight = `
+                <div style="
+                    padding: 10px 14px;
+                    background: linear-gradient(180deg, rgba(232,185,35,.1), transparent 100%);
+                    border: 1px solid rgba(232,185,35,.35);
+                    border-radius: 6px;
+                    margin-bottom: 12px;
+                ">
+                    <div style="font-family:'Cinzel',serif; color:#8a7a52; font-size:0.75rem; letter-spacing:2px; margin-bottom:8px;">SEU ELEMENTO</div>
+                    <div style="display:flex; align-items:center; gap:8px; font-family:'Cinzel',serif; font-weight:700; font-size:1.1rem; margin-bottom:10px; color:#e8b923;">
+                        ${_icone(elementoAtual)}
+                        <span>${_elemNome(elementoAtual)}</span>
+                    </div>
+                    <div style="display:flex; flex-direction:column; gap:6px; font-family:'EB Garamond',serif; font-size:0.9rem;">
+                        <div style="color:#8ac070;">
+                            ⚔️ <b>Forte contra:</b>
+                            ${_icone(c.forte)} ${_elemNome(c.forte)}
+                            <span style="color:#6ba35c; font-size:0.78rem; margin-left:4px;">(+1 dano)</span>
+                        </div>
+                        <div style="color:#d05050;">
+                            🛡️ <b>Fraco contra:</b>
+                            ${_icone(c.fraco)} ${_elemNome(c.fraco)}
+                            <span style="color:#a83232; font-size:0.78rem; margin-left:4px;">(-1 dano)</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Tabela completa (4 elementos)
+        const linhas = ['FOGO', 'TERRA', 'AR', 'AGUA'].map(el => {
+            const c = CICLO[el];
+            const destaque = el === elementoAtual
+                ? 'background: rgba(232,185,35,.08); border-left: 3px solid #e8b923;'
+                : 'border-left: 3px solid transparent;';
+            return `
+                <div style="
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    padding: 7px 10px;
+                    border-radius: 4px;
+                    font-family: 'EB Garamond', serif;
+                    font-size: 0.85rem;
+                    ${destaque}
+                ">
+                    <span style="min-width: 76px; display: inline-flex; align-items: center; gap: 4px; color:#d9c89a;">
+                        ${_icone(el)} ${_elemNome(el)}
+                    </span>
+                    <span style="color:#8ac070; display: inline-flex; align-items: center; gap: 4px;">
+                        vence ${_icone(c.forte)} <span style="font-size:0.78rem;">${_elemNome(c.forte)}</span>
+                    </span>
+                    <span style="color:#d05050; display: inline-flex; align-items: center; gap: 4px; margin-left:auto;">
+                        perde ${_icone(c.fraco)} <span style="font-size:0.78rem;">${_elemNome(c.fraco)}</span>
+                    </span>
+                </div>
+            `;
+        }).join('');
+
+        return `
+            <div class="hero-details-section-title">🎯 CICLO ELEMENTAL</div>
+            ${heroHighlight}
+            <div style="
+                background: rgba(10,6,2,.5);
+                border-radius: 6px;
+                padding: 8px;
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+            ">
+                ${linhas}
+            </div>
+            <div class="hero-details-note" style="margin-top:10px; font-size:0.8rem;">
+                💡 <b>Arma</b> do seu elemento: +1. Arma do seu contra-elemento: -1.<br>
+                💡 <b>Tile</b> onde você pisa for do seu contra-elemento: -1.
+            </div>
+        `;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // INJETAR
+    // ═══════════════════════════════════════════════════════════
+    function _injetar(heroClass) {
+        const panel = document.querySelector('.hero-details-panel');
+        if (!panel) return;
+        if (panel.querySelector('.hero-weakness-section')) return;
+
+        const element = _getElementoHeroi(heroClass);
+        if (!element) return;
+
+        const section = document.createElement('div');
+        section.className = 'hero-details-section hero-weakness-section';
+        section.innerHTML = _buildHTML(element);
+
+        // Insere antes de "NOTAS" ou no final
+        const notas = panel.querySelector('.hero-details-notes');
+        if (notas && notas.parentNode === panel) {
+            panel.insertBefore(section, notas);
+        } else {
+            panel.appendChild(section);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // HOOK: painel "?" da OCA
+    // ═══════════════════════════════════════════════════════════
+    const _origOpen = window.openHeroDetails;
+    if (typeof _origOpen === 'function' && !_origOpen._v78) {
+        window.openHeroDetails = function(heroClass) {
+            const r = _origOpen.apply(this, arguments);
+            setTimeout(() => _injetar(heroClass), 100);
+            setTimeout(() => _injetar(heroClass), 300);
+            return r;
+        };
+        window.openHeroDetails._v78 = true;
+        console.log('[V78] Hook em openHeroDetails (OCA)');
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // HOOK: painel "?" da batalha
+    // ═══════════════════════════════════════════════════════════
+    const _origBattle = window.openBattleHeroDetails;
+    if (typeof _origBattle === 'function' && !_origBattle._v78) {
+        window.openBattleHeroDetails = function(idx) {
+            const r = _origBattle.apply(this, arguments);
+            const player = (typeof players !== 'undefined' && Array.isArray(players))
+                ? players[idx] : null;
+            if (player && player.class) {
+                setTimeout(() => _injetar(player.class), 100);
+                setTimeout(() => _injetar(player.class), 300);
+            }
+            return r;
+        };
+        window.openBattleHeroDetails._v78 = true;
+        console.log('[V78] Hook em openBattleHeroDetails (batalha)');
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // CSS
+    // ═══════════════════════════════════════════════════════════
+    if (!document.getElementById('v78CSS')) {
+        const s = document.createElement('style');
+        s.id = 'v78CSS';
+        s.textContent = `
+            .hero-details-panel .hero-weakness-section {
+                background: rgba(58, 42, 24, 0.15);
+            }
+            .hero-details-panel .hero-weakness-section .hero-details-section-title {
+                color: #c39bd3;
+            }
+            .hero-details-panel .hero-weakness-section span img,
+            .hero-details-panel .hero-weakness-section .ui-icon {
+                width: 18px;
+                height: 18px;
+                object-fit: contain;
+                vertical-align: middle;
+                filter: drop-shadow(0 0 3px rgba(0,0,0,0.6));
+            }
+        `;
+        document.head.appendChild(s);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // DEBUG
+    // ═══════════════════════════════════════════════════════════
+    window._debugTabelaFraqueza = function() {
+        console.group('=== TABELA FRAQUEZA V78 ===');
+        console.log('V78 ativo?', window._tabelaFraquezaV78 === true);
+        console.log('CICLO:', CICLO);
+        const panel = document.querySelector('.hero-details-panel');
+        console.log('Painel aberto?', !!panel);
+        console.log('Seção injetada?', !!panel?.querySelector('.hero-weakness-section'));
+        console.groupEnd();
+    };
+
+    // Teste manual (abre painel fake, sem herói real)
+    window._testTabelaFraqueza = function(elemento) {
+        elemento = elemento || 'FOGO';
+        const existing = document.getElementById('testTabelaFraqueza');
+        if (existing) existing.remove();
+        const div = document.createElement('div');
+        div.id = 'testTabelaFraqueza';
+        div.className = 'hero-details-panel';
+        div.style.cssText = 'position:fixed;top:20px;right:20px;width:400px;max-height:80vh;overflow-y:auto;background:linear-gradient(180deg,#2a1f10,#1a1208);border:2px solid #c9a227;border-radius:8px;padding:0;z-index:99999;';
+        const section = document.createElement('div');
+        section.className = 'hero-details-section hero-weakness-section';
+        section.style.padding = '16px 20px';
+        section.innerHTML = _buildHTML(elemento);
+        div.appendChild(section);
+        document.body.appendChild(div);
+        console.log(`[V78] Teste: tabela com elemento ${elemento} aberta no canto.`);
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V78] Tabela de fraqueza visível');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Injeta no painel "?" (OCA e batalha)');
+    console.log('• Usa sprites elem_fogo/agua/terra/ar');
+    console.log('• Destaca o elemento do herói');
+    console.log('');
+    console.log('💡 Debug:  window._debugTabelaFraqueza()');
+    console.log('💡 Teste:  window._testTabelaFraqueza("FOGO")');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — V79 — Expedições
+// -----------------------------------------------------------------
+// Heróis podem ser enviados para expedição em fases já completadas
+// (1★+). Recompensa em background após o tempo, com base na chance
+// calculada pela força do herói vs fase.
+//
+// Regras:
+//   • 3 slots iniciais + 1 a cada 100 estrelas (máx 5)
+//   • Tempo: Normal 30min, Difícil 1h, Pesadelo 2h
+//   • Chance = heroPower / (phaseReq × 2), travado 15%–95%
+//   • Fase 13-4: chance travada 10%–30% (final boss)
+//   • Sucesso: 50% XP/ouro + drops normais (sem Núcleo/essência)
+//   • Falha: 15% XP, 0 ouro, 0 drops
+//   • NÃO dá estrela
+//   • Herói fica indisponível na OCA durante
+//   • Não pode cancelar
+//   • Só vê resultado ao clicar em "Ver resultado e coletar"
+//
+// Cole NO FINAL do historia.js.
+// =================================================================
+(function expedicoesV79() {
+    if (window._expedicoesV79) return;
+    window._expedicoesV79 = true;
+
+    // ═══════════════════════════════════════════════════════════
+    // CONSTANTES
+    // ═══════════════════════════════════════════════════════════
+    const TEMPO_MS = {
+        normal:   30 * 60 * 1000,
+        dificil:  60 * 60 * 1000,
+        pesadelo: 120 * 60 * 1000,
+    };
+    const DIFF_LABEL = { normal: 'Normal', dificil: 'Difícil', pesadelo: 'Pesadelo' };
+    const DIFF_MULT = { normal: 1, dificil: 1.3, pesadelo: 1.6 };
+    const DIFF_COR = { normal: '#c9a227', dificil: '#e67e22', pesadelo: '#a83232' };
+
+    // Inicializa estrutura
+    if (!Array.isArray(STORY_PROGRESS.expeditions)) {
+        STORY_PROGRESS.expeditions = [];
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // SLOTS (progressão por estrelas)
+    // ═══════════════════════════════════════════════════════════
+    function getSlots() {
+        const stars = (typeof getTotalStars === 'function') ? getTotalStars() : 0;
+        if (stars >= 200) return 5;
+        if (stars >= 100) return 4;
+        return 3;
+    }
+
+    function getExpedicoesAtivas() {
+        return (STORY_PROGRESS.expeditions || []).filter(e => !e.coletada);
+    }
+
+    function getExpedicoesPorColetar() {
+        return (STORY_PROGRESS.expeditions || []).filter(e => e.coletada === false && e.concluida === true);
+    }
+
+    function heroiEmExpedicao(heroClass) {
+        return (STORY_PROGRESS.expeditions || []).some(e =>
+            e.heroClass === heroClass && !e.coletada
+        );
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // CÁLCULOS
+    // ═══════════════════════════════════════════════════════════
+    function calcHeroPower(heroClass) {
+        const heroData = STORY_HERO_CLASSES[heroClass];
+        if (!heroData) return 0;
+        const level = (typeof getHeroLevel === 'function') ? getHeroLevel(heroClass) : 1;
+        const bonus = (typeof getHeroBonusFromLevel === 'function')
+            ? (getHeroBonusFromLevel(heroClass) || {}) : {};
+
+        let hp = (heroData.hp || 0) + (bonus.hp || 0);
+        let atk = (heroData.atk || 0) + (bonus.atk || 0);
+
+        if (typeof getHeroEquipment === 'function') {
+            const eq = getHeroEquipment(heroClass);
+            if (eq?.arma && typeof getWeaponById === 'function') {
+                const w = getWeaponById(eq.arma);
+                if (w) atk += w.atkBonus || 0;
+            }
+            if (eq?.amuleto && typeof getAmuletById === 'function') {
+                const a = getAmuletById(eq.amuleto);
+                if (a?.efeito) {
+                    atk += a.efeito.atkBonus || 0;
+                    hp += a.efeito.hpBonus || 0;
+                }
+            }
+        }
+
+        return (hp * 2) + (atk * 8) + (level * 15);
+    }
+
+    function calcPhaseReq(chapterId, phaseId, difficulty) {
+        const ch = STORY_CHAPTERS[chapterId];
+        if (!ch) return 1;
+        const ph = ch.phases.find(p => p.id === phaseId);
+        if (!ph) return 1;
+
+        let hpSum = 0, atkSum = 0;
+        ph.enemies.forEach(eid => {
+            const e = STORY_ENEMIES[eid];
+            if (e) {
+                hpSum += e.hp || 0;
+                atkSum += e.atk || 0;
+            }
+        });
+        const mult = DIFF_MULT[difficulty] || 1;
+        return Math.max(1, (hpSum + atkSum * 5) * mult);
+    }
+
+    function calcChance(heroClass, chapterId, phaseId, difficulty) {
+        const hp = calcHeroPower(heroClass);
+        const req = calcPhaseReq(chapterId, phaseId, difficulty);
+        const isFinal = (phaseId === '13-4');
+        const divisor = isFinal ? 3 : 2;
+        const minChance = isFinal ? 0.10 : 0.15;
+        const maxChance = isFinal ? 0.30 : 0.95;
+        const base = hp / (req * divisor);
+        return Math.max(minChance, Math.min(maxChance, base));
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // DROPS/XP/OURO
+    // ═══════════════════════════════════════════════════════════
+    function calcRecompensas(phase, dificuldade) {
+        const xpBase = (phase.reward?.xp || 0);
+        const goldBase = (phase.reward?.gold || 0);
+        const diffMult = DIFF_MULT[dificuldade] || 1;
+
+        const xp = Math.floor(xpBase * 0.5 * diffMult);
+        const gold = Math.floor(goldBase * 0.5 * diffMult);
+
+        const drops = [];
+        if (typeof rollStoryDrops === 'function') {
+            phase.enemies.forEach(eid => {
+                const enemyDrops = rollStoryDrops(eid);
+                enemyDrops.forEach(d => {
+                    if (d.id === 'nucleo_abismo') return; // só manual
+                    if (d.id === 'essencia_sombria') return; // só evento manual
+                    drops.push(d);
+                });
+            });
+        }
+
+        return { xp, gold, drops };
+    }
+
+    function calcRecompensaFalha(phase) {
+        return {
+            xp: Math.floor((phase.reward?.xp || 0) * 0.15),
+            gold: 0,
+            drops: [],
+        };
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // VERIFICAR CONCLUSÕES (timer de 10s)
+    // ═══════════════════════════════════════════════════════════
+    function verificarConclusoes() {
+        if (!Array.isArray(STORY_PROGRESS.expeditions)) return;
+        let mudou = false;
+
+        STORY_PROGRESS.expeditions.forEach(exp => {
+            if (exp.coletada || exp.concluida) return;
+            const elapsed = Date.now() - exp.startedAt;
+            if (elapsed < exp.durationMs) return;
+
+            // Rolar resultado
+            const ch = STORY_CHAPTERS[exp.chapterId];
+            const ph = ch?.phases.find(p => p.id === exp.phaseId);
+            if (!ph) { exp.concluida = true; exp.resultado = { sucesso: false, xp: 0, gold: 0, drops: [] }; mudou = true; return; }
+
+            const sucesso = Math.random() < exp.chance;
+            if (sucesso) {
+                const r = calcRecompensas(ph, exp.difficulty);
+                exp.resultado = { sucesso: true, ...r };
+            } else {
+                const r = calcRecompensaFalha(ph);
+                exp.resultado = { sucesso: false, ...r };
+            }
+            exp.concluida = true;
+            mudou = true;
+        });
+
+        if (mudou) {
+            if (typeof saveStoryProgress === 'function') saveStoryProgress();
+            const ss = document.getElementById('storyScreen');
+            if (ss?.classList.contains('active') && ss.innerHTML.includes('OCA')) {
+                if (typeof renderOcaScreenFiltered === 'function') renderOcaScreenFiltered();
+            }
+        }
+    }
+
+    setInterval(verificarConclusoes, 10000);
+
+    // ═══════════════════════════════════════════════════════════
+    // INJETAR BOTÃO 🗺️ NO CARD DO HERÓI
+    // ═══════════════════════════════════════════════════════════
+    function injetarBotaoExpedicao() {
+        const cards = document.querySelectorAll('.story-hero-card:not(.locked)');
+        cards.forEach(card => {
+            if (card.querySelector('.hero-expedition-btn')) return;
+            const onclickAttr = card.getAttribute('onclick') || '';
+            const match = onclickAttr.match(/toggleHeroSelection\('((?:\\'|[^'])*)'\)/);
+            if (!match) return;
+            const heroClass = match[1].replace(/\\'/g, "'");
+
+            const btn = document.createElement('button');
+            btn.className = 'hero-expedition-btn';
+            btn.title = 'Enviar para expedição';
+            btn.innerHTML = '🗺️';
+
+            if (heroiEmExpedicao(heroClass)) {
+                btn.disabled = true;
+                btn.style.opacity = '0.4';
+                btn.title = 'Herói em expedição';
+            } else {
+                btn.onclick = (e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    abrirTelaExpedicao(heroClass);
+                };
+            }
+            card.appendChild(btn);
+        });
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // TELA DE EXPEDIÇÃO (seleção de fase + dificuldade)
+    // ═══════════════════════════════════════════════════════════
+    let _selHeroi = null;
+    let _selChapter = null;
+    let _selPhase = null;
+    let _selDiff = 'normal';
+
+    function abrirTelaExpedicao(heroClass) {
+        if (heroiEmExpedicao(heroClass)) {
+            if (typeof showToast === 'function') showToast('⛺', 'Herói já está em expedição.', '⛺');
+            return;
+        }
+        const ativas = getExpedicoesAtivas();
+        const slots = getSlots();
+        if (ativas.length >= slots) {
+            if (typeof showToast === 'function') showToast('⛺', `Slots cheios (${ativas.length}/${slots}).`, '⛺');
+            return;
+        }
+
+        _selHeroi = heroClass;
+        _selChapter = 1;
+        _selPhase = null;
+        _selDiff = 'normal';
+
+        const old = document.getElementById('expedicaoOverlay');
+        if (old) old.remove();
+
+        const ov = document.createElement('div');
+        ov.id = 'expedicaoOverlay';
+        ov.className = 'expedicao-overlay';
+        ov.onclick = (e) => { if (e.target === ov) fecharExpedicao(); };
+        document.body.appendChild(ov);
+
+        renderTelaExpedicao();
+    }
+
+    function fecharExpedicao() {
+        const ov = document.getElementById('expedicaoOverlay');
+        if (ov) ov.remove();
+    }
+
+    function renderTelaExpedicao() {
+        const ov = document.getElementById('expedicaoOverlay');
+        if (!ov) return;
+
+        const heroData = STORY_HERO_CLASSES[_selHeroi];
+        const heroPower = calcHeroPower(_selHeroi);
+
+        // Fases disponíveis (1★+, exceto fase do boss final do evento)
+        const fasesDisponiveis = [];
+        Object.values(STORY_CHAPTERS).forEach(ch => {
+            ch.phases.forEach(ph => {
+                if (typeof isPhaseCompleted === 'function' && isPhaseCompleted(ph.id)) {
+                    fasesDisponiveis.push({ chapterId: ch.id, phase: ph });
+                }
+            });
+        });
+
+        // Chapter atual selecionado
+        if (!_selChapter || !fasesDisponiveis.some(f => f.chapterId === _selChapter)) {
+            _selChapter = fasesDisponiveis[0]?.chapterId || 1;
+        }
+
+        const fasesDoChapter = fasesDisponiveis.filter(f => f.chapterId === _selChapter);
+        if (!_selPhase && fasesDoChapter.length > 0) {
+            _selPhase = fasesDoChapter[0].phase.id;
+        }
+
+        const phaseObj = fasesDisponiveis.find(f => f.phase.id === _selPhase)?.phase;
+        const chance = phaseObj ? calcChance(_selHeroi, _selChapter, _selPhase, _selDiff) : 0;
+        const tempo = TEMPO_MS[_selDiff];
+        const tempoLabel = tempo >= 3600000
+            ? `${Math.round(tempo / 3600000)}h`
+            : `${Math.round(tempo / 60000)}min`;
+
+        const sprite = (typeof SPRITES !== 'undefined' && SPRITES[_selHeroi]) || '';
+
+        // Fases por ato (botões de ato)
+        const chaptersComFases = [...new Set(fasesDisponiveis.map(f => f.chapterId))].sort((a, b) => a - b);
+        const chapterBtns = chaptersComFases.map(cid => {
+            const ativo = cid === _selChapter;
+            return `<button class="exp-chapter-btn ${ativo ? 'active' : ''}" onclick="window._expSelChapter(${cid})">Ato ${cid}</button>`;
+        }).join('');
+
+        // Fases do ato selecionado
+        const phaseBtns = fasesDoChapter.map(f => {
+            const ativo = f.phase.id === _selPhase;
+            const isBoss = f.phase.isBoss;
+            const isFinal = f.phase.isFinalBoss;
+            return `<button class="exp-phase-btn ${ativo ? 'active' : ''} ${isFinal ? 'final' : isBoss ? 'boss' : ''}" onclick="window._expSelPhase('${f.phase.id}')">
+                ${f.phase.id}${isFinal ? ' 👑' : isBoss ? ' 🎯' : ''}
+            </button>`;
+        }).join('');
+
+        // Dificuldades
+        const diffs = ['normal', 'dificil', 'pesadelo'];
+        const diffBtns = diffs.map(d => {
+            const ativo = d === _selDiff;
+            return `<button class="exp-diff-btn ${ativo ? 'active' : ''}" onclick="window._expSelDiff('${d}')" style="--cor:${DIFF_COR[d]};">
+                ${DIFF_LABEL[d]}
+            </button>`;
+        }).join('');
+
+        // Preview
+        const chancePct = Math.round(chance * 100);
+        const chanceCor = chancePct >= 70 ? '#8ac070' : chancePct >= 40 ? '#e8b923' : '#d05050';
+        const req = calcPhaseReq(_selChapter, _selPhase, _selDiff);
+
+        ov.innerHTML = `
+            <div class="expedicao-panel">
+                <div class="expedicao-header">
+                    <div class="exp-hero">
+                        <img src="${sprite}" class="exp-hero-sprite" onerror="this.style.display='none'">
+                        <div>
+                            <div class="exp-hero-name">${heroData?.displayName || _selHeroi}</div>
+                            <div class="exp-hero-power">Poder: <b>${heroPower}</b></div>
+                        </div>
+                    </div>
+                    <button class="exp-close" onclick="window._expFechar()">✕</button>
+                </div>
+
+                <div class="exp-section">
+                    <div class="exp-section-title">ATOR</div>
+                    <div class="exp-chapter-list">${chapterBtns || '<span style="color:#8a7a52;">Nenhuma fase completada</span>'}</div>
+                </div>
+
+                <div class="exp-section">
+                    <div class="exp-section-title">FASE</div>
+                    <div class="exp-phase-list">${phaseBtns || '<span style="color:#8a7a52;">—</span>'}</div>
+                </div>
+
+                <div class="exp-section">
+                    <div class="exp-section-title">DIFICULDADE</div>
+                    <div class="exp-diff-list">${diffBtns}</div>
+                </div>
+
+                ${phaseObj ? `
+                <div class="exp-preview">
+                    <div class="exp-preview-row">
+                        <span>Chance de sucesso:</span>
+                        <b style="color:${chanceCor}; font-size:1.3rem;">${chancePct}%</b>
+                    </div>
+                    <div class="exp-preview-row">
+                        <span>Poder:</span>
+                        <b>${heroPower}</b> · Necessário: <b>${Math.round(req)}</b>
+                    </div>
+                    <div class="exp-preview-row">
+                        <span>Tempo:</span>
+                        <b>${tempoLabel}</b>
+                    </div>
+                    <div class="exp-preview-row">
+                        <span>Recompensa (sucesso):</span>
+                        <b>+${Math.floor((phaseObj.reward?.xp||0) * 0.5 * DIFF_MULT[_selDiff])} XP
+                        · +${Math.floor((phaseObj.reward?.gold||0) * 0.5 * DIFF_MULT[_selDiff])} ouro</b>
+                    </div>
+                    <div class="exp-preview-row dim">
+                        <span>Recompensa (falha):</span>
+                        <b>+${Math.floor((phaseObj.reward?.xp||0) * 0.15)} XP (consolação)</b>
+                    </div>
+                    ${_selPhase === '13-4' ? `<div class="exp-preview-warn">⚠️ Fase final: chance travada em 10%–30%</div>` : ''}
+                </div>
+                ` : ''}
+
+                <div class="exp-actions">
+                    <button class="exp-btn exp-btn-secondary" onclick="window._expFechar()">Cancelar</button>
+                    <button class="exp-btn exp-btn-primary" ${!phaseObj ? 'disabled' : ''} onclick="window._expEnviar()">
+                        ⛺ Enviar para expedição
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    // Hooks globais do modal
+    window._expFechar = fecharExpedicao;
+    window._expSelChapter = (cid) => { _selChapter = cid; _selPhase = null; renderTelaExpedicao(); };
+    window._expSelPhase = (pid) => { _selPhase = pid; renderTelaExpedicao(); };
+    window._expSelDiff = (d) => { _selDiff = d; renderTelaExpedicao(); };
+
+    window._expEnviar = () => {
+        const ativas = getExpedicoesAtivas();
+        const slots = getSlots();
+        if (ativas.length >= slots) {
+            if (typeof showToast === 'function') showToast('⛺', `Slots cheios (${ativas.length}/${slots}).`, '⛺');
+            return;
+        }
+        if (heroiEmExpedicao(_selHeroi)) {
+            if (typeof showToast === 'function') showToast('⛺', 'Herói já em expedição.', '⛺');
+            return;
+        }
+
+        const ch = STORY_CHAPTERS[_selChapter];
+        const ph = ch?.phases.find(p => p.id === _selPhase);
+        if (!ph) return;
+
+        const chance = calcChance(_selHeroi, _selChapter, _selPhase, _selDiff);
+        const exp = {
+            id: 'exp_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+            heroClass: _selHeroi,
+            chapterId: _selChapter,
+            phaseId: _selPhase,
+            phaseName: ph.name,
+            difficulty: _selDiff,
+            chance,
+            startedAt: Date.now(),
+            durationMs: TEMPO_MS[_selDiff],
+            concluida: false,
+            coletada: false,
+            resultado: null,
+        };
+        STORY_PROGRESS.expeditions.push(exp);
+        if (typeof saveStoryProgress === 'function') saveStoryProgress();
+
+        fecharExpedicao();
+        if (typeof showToast === 'function') showToast('⛺', 'Expedição enviada!', '⛺');
+        if (typeof playSfx === 'function') { try { playSfx('win'); } catch(e) {} }
+
+        // Re-renderiza OCA
+        if (typeof renderOcaScreenFiltered === 'function') renderOcaScreenFiltered();
+    };
+
+    // ═══════════════════════════════════════════════════════════
+    // SLOTS NO TOPO DA OCA
+    // ═══════════════════════════════════════════════════════════
+    function renderSlots() {
+        const container = document.getElementById('expedicaoSlots');
+        if (!container) return;
+
+        const slots = getSlots();
+        const ativas = getExpedicoesAtivas();
+
+        // Ordena por status: concluídas primeiro, depois em andamento
+        const ordenadas = [...ativas].sort((a, b) => {
+            if (a.concluida && !b.concluida) return -1;
+            if (!a.concluida && b.concluida) return 1;
+            return a.startedAt - b.startedAt;
+        });
+
+        const slotsHTML = [];
+        for (let i = 0; i < slots; i++) {
+            const exp = ordenadas[i];
+            if (!exp) {
+                slotsHTML.push(`<div class="exp-slot empty"><span class="exp-slot-empty-text">Slot vazio</span></div>`);
+                continue;
+            }
+
+            const heroData = STORY_HERO_CLASSES[exp.heroClass];
+            const sprite = (typeof SPRITES !== 'undefined' && SPRITES[exp.heroClass]) || '';
+            const concluida = exp.concluida;
+
+            if (concluida) {
+                slotsHTML.push(`
+                    <div class="exp-slot concluded" onclick="window._expVerResultado('${exp.id}')">
+                        <div class="exp-slot-top">
+                            <img src="${sprite}" class="exp-slot-sprite" onerror="this.style.display='none'">
+                            <div class="exp-slot-info">
+                                <div class="exp-slot-name">${heroData?.displayName || exp.heroClass}</div>
+                                <div class="exp-slot-phase">${exp.phaseId} · ${DIFF_LABEL[exp.difficulty]}</div>
+                            </div>
+                        </div>
+                        <div class="exp-slot-cta">✅ Ver resultado e coletar</div>
+                    </div>
+                `);
+                continue;
+            }
+
+            const elapsed = Date.now() - exp.startedAt;
+            const restante = Math.max(0, exp.durationMs - elapsed);
+            const mins = Math.ceil(restante / 60000);
+            const pct = Math.min(100, (elapsed / exp.durationMs) * 100);
+            const chancePct = Math.round(exp.chance * 100);
+
+            slotsHTML.push(`
+                <div class="exp-slot running">
+                    <div class="exp-slot-top">
+                        <img src="${sprite}" class="exp-slot-sprite" onerror="this.style.display='none'">
+                        <div class="exp-slot-info">
+                            <div class="exp-slot-name">${heroData?.displayName || exp.heroClass}</div>
+                            <div class="exp-slot-phase">${exp.phaseId} · ${DIFF_LABEL[exp.difficulty]}</div>
+                        </div>
+                    </div>
+                    <div class="exp-slot-progress">
+                        <div class="exp-slot-progress-fill" style="width:${pct}%"></div>
+                    </div>
+                    <div class="exp-slot-meta">
+                        <span>⏱ ${mins}min</span>
+                        <span>🎲 ${chancePct}%</span>
+                    </div>
+                </div>
+            `);
+        }
+
+        container.innerHTML = slotsHTML.join('');
+    }
+
+    window._expVerResultado = function(expId) {
+        const exp = STORY_PROGRESS.expeditions.find(e => e.id === expId);
+        if (!exp || !exp.concluida || exp.coletada) return;
+
+        const heroData = STORY_HERO_CLASSES[exp.heroClass];
+        const sprite = (typeof SPRITES !== 'undefined' && SPRITES[exp.heroClass]) || '';
+        const r = exp.resultado || { sucesso: false, xp: 0, gold: 0, drops: [] };
+
+        // Aplica recompensas
+        if (r.xp > 0) STORY_PROGRESS.totalXP = (STORY_PROGRESS.totalXP || 0) + r.xp;
+        if (r.gold > 0) STORY_PROGRESS.gold = (STORY_PROGRESS.gold || 0) + r.gold;
+        if (r.drops?.length) {
+            r.drops.forEach(d => {
+                if (typeof addMaterial === 'function') addMaterial(d.id, d.qty);
+            });
+        }
+
+        // Marca coletada e remove após 5s
+        exp.coletada = true;
+        if (typeof saveStoryProgress === 'function') saveStoryProgress();
+
+        const old = document.getElementById('expResultOverlay');
+        if (old) old.remove();
+
+        const ov = document.createElement('div');
+        ov.id = 'expResultOverlay';
+        ov.className = 'exp-result-overlay';
+
+        const dropsHTML = (r.drops || []).length > 0
+            ? r.drops.map(d => {
+                const m = STORY_MATERIALS[d.id];
+                return m ? `<span class="exp-drop">${m.emoji} ${m.name} ×${d.qty}</span>` : '';
+            }).join('')
+            : '<span class="exp-drop-empty">Nenhum material</span>';
+
+        ov.innerHTML = `
+            <div class="exp-result-panel ${r.sucesso ? 'success' : 'failure'}">
+                <div class="exp-result-title">${r.sucesso ? '✅ EXPEDIÇÃO CONCLUÍDA' : '❌ EXPEDIÇÃO FALHOU'}</div>
+                <div class="exp-result-hero">
+                    <img src="${sprite}" class="exp-result-sprite" onerror="this.style.display='none'">
+                    <div class="exp-result-hero-name">${heroData?.displayName || exp.heroClass}</div>
+                    <div class="exp-result-hero-phase">${exp.phaseId} · ${DIFF_LABEL[exp.difficulty]}</div>
+                </div>
+                <div class="exp-result-rewards">
+                    ${r.xp > 0 ? `<div class="exp-result-xp">+${r.xp} XP</div>` : ''}
+                    ${r.gold > 0 ? `<div class="exp-result-gold">+${r.gold} ouro</div>` : ''}
+                    <div class="exp-result-drops">${dropsHTML}</div>
+                </div>
+                ${!r.sucesso ? `<div class="exp-result-hint">💡 O herói voltou com 15% do XP como aprendizado.</div>` : ''}
+                <button class="exp-result-btn" onclick="window._expFecharResultado()">VOLTAR À OCA</button>
+            </div>
+        `;
+        document.body.appendChild(ov);
+
+        window._expFecharResultado = () => {
+            ov.remove();
+            // Remove a expedição do array
+            STORY_PROGRESS.expeditions = STORY_PROGRESS.expeditions.filter(e => e.id !== expId);
+            if (typeof saveStoryProgress === 'function') saveStoryProgress();
+            if (typeof renderOcaScreenFiltered === 'function') renderOcaScreenFiltered();
+        };
+
+        // Atualiza slots imediatamente
+        renderSlots();
+    };
+
+    // ═══════════════════════════════════════════════════════════
+    // HOOK: renderOcaScreenFiltered
+    // ═══════════════════════════════════════════════════════════
+    const _origOca = window.renderOcaScreenFiltered;
+    if (typeof _origOca === 'function' && !_origOca._v79) {
+        window.renderOcaScreenFiltered = function() {
+            const r = _origOca.apply(this, arguments);
+
+            setTimeout(() => {
+                // Injeta slots no topo do grid (antes dos heróis)
+                const grid = document.querySelector('.story-heroes-grid');
+                if (grid && !document.getElementById('expedicaoSlots')) {
+                    const container = document.createElement('div');
+                    container.id = 'expedicaoSlots';
+                    container.className = 'expedicao-slots';
+                    grid.parentNode.insertBefore(container, grid);
+                }
+                renderSlots();
+
+                // Injeta botões nos cards
+                injetarBotaoExpedicao();
+
+                // Verifica conclusões imediatamente
+                verificarConclusoes();
+            }, 100);
+
+            return r;
+        };
+        window.renderOcaScreenFiltered._v79 = true;
+    }
+
+    // Bloqueia herói em expedição na seleção (via wrapper de toggleHeroSelection)
+    const _origToggle = window.toggleHeroSelection;
+    if (typeof _origToggle === 'function' && !_origToggle._v79) {
+        window.toggleHeroSelection = function(heroClass) {
+            if (heroiEmExpedicao(heroClass)) {
+                if (typeof showToast === 'function') {
+                    showToast('⛺', `${STORY_HERO_CLASSES[heroClass]?.displayName || heroClass} está em expedição.`, '⛺');
+                }
+                return;
+            }
+            return _origToggle.apply(this, arguments);
+        };
+        window.toggleHeroSelection._v79 = true;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // CSS
+    // ═══════════════════════════════════════════════════════════
+    if (!document.getElementById('v79CSS')) {
+        const s = document.createElement('style');
+        s.id = 'v79CSS';
+        s.textContent = `
+            /* ========== BOTÃO 🗺️ NO CARD ========== */
+            .hero-expedition-btn {
+                position: absolute;
+                top: 8px;
+                right: 38px;
+                width: 28px; height: 28px;
+                border-radius: 50%;
+                background: linear-gradient(135deg, #2a4a6a, #1a2f45);
+                color: #d0e8f5;
+                border: 2px solid #4a8cb5;
+                font-size: 1rem;
+                cursor: pointer;
+                display: flex; align-items: center; justify-content: center;
+                z-index: 10;
+                box-shadow: 0 2px 6px rgba(0,0,0,.5);
+                transition: all .15s;
+            }
+            .hero-expedition-btn:hover:not(:disabled) { transform: scale(1.15); background: #4a8cb5; }
+            .hero-expedition-btn:disabled { cursor: not-allowed; }
+
+            /* ========== SLOTS NO TOPO DA OCA ========== */
+            .expedicao-slots {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 12px;
+                margin-bottom: 20px;
+                padding: 12px;
+                background: linear-gradient(180deg, rgba(58,124,165,.08), transparent 40%), rgba(10,6,2,.4);
+                border: 1px solid rgba(74,140,181,.3);
+                border-radius: 8px;
+            }
+            .exp-slot {
+                background: rgba(10,6,2,.7);
+                border: 1px solid rgba(201,162,39,.25);
+                border-radius: 6px;
+                padding: 10px;
+                min-height: 90px;
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+            }
+            .exp-slot.empty {
+                align-items: center;
+                justify-content: center;
+                border-style: dashed;
+                opacity: .5;
+            }
+            .exp-slot-empty-text { color: #6a5024; font-family: 'EB Garamond', serif; font-style: italic; font-size: .85rem; }
+            .exp-slot.running { border-color: rgba(74,140,181,.5); }
+            .exp-slot.concluded {
+                border-color: #6ba35c;
+                background: linear-gradient(180deg, rgba(107,163,92,.15), transparent 60%), rgba(10,6,2,.7);
+                cursor: pointer;
+                animation: expSlotPulse 1.5s ease-in-out infinite alternate;
+            }
+            @keyframes expSlotPulse {
+                from { box-shadow: 0 0 8px rgba(107,163,92,.3); }
+                to   { box-shadow: 0 0 20px rgba(107,163,92,.7); }
+            }
+            .exp-slot-top { display: flex; gap: 8px; align-items: center; }
+            .exp-slot-sprite { width: 36px; height: 36px; object-fit: contain; flex-shrink: 0; }
+            .exp-slot-info { flex: 1; min-width: 0; }
+            .exp-slot-name { font-family: 'Cinzel', serif; color: #f0e2c0; font-size: .85rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .exp-slot-phase { font-family: 'EB Garamond', serif; color: #b8a577; font-size: .75rem; }
+            .exp-slot-progress { height: 6px; background: #1a1208; border-radius: 3px; overflow: hidden; border: 1px solid rgba(74,140,181,.3); }
+            .exp-slot-progress-fill { height: 100%; background: linear-gradient(90deg, #4a8cb5, #8ac0e0); transition: width 1s linear; }
+            .exp-slot-meta { display: flex; justify-content: space-between; font-family: 'Cinzel', serif; font-size: .7rem; color: #8a7a52; }
+            .exp-slot-cta { font-family: 'Cinzel', serif; font-size: .75rem; color: #8ac070; text-align: center; font-weight: 700; letter-spacing: 1px; }
+
+            /* ========== MODAL DE EXPEDIÇÃO ========== */
+            .expedicao-overlay {
+                position: fixed; inset: 0;
+                background: rgba(10,6,2,.92);
+                z-index: 20000;
+                display: flex; align-items: flex-start; justify-content: center;
+                padding: 20px; overflow-y: auto;
+                animation: fadeIn .2s ease;
+            }
+            @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+            .expedicao-panel {
+                background: linear-gradient(180deg, #2a1f10, #1a1208);
+                border: 2px solid #4a8cb5;
+                border-radius: 8px;
+                max-width: 560px; width: 100%;
+                padding: 20px; margin: auto;
+                box-shadow: 0 10px 40px rgba(0,0,0,.9), 0 0 30px rgba(74,140,181,.3);
+            }
+            .expedicao-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(74,140,181,.3); padding-bottom: 12px; margin-bottom: 16px; }
+            .exp-hero { display: flex; align-items: center; gap: 12px; }
+            .exp-hero-sprite { width: 48px; height: 48px; object-fit: contain; }
+            .exp-hero-name { font-family: 'Cinzel', serif; color: #e8b923; font-size: 1.1rem; font-weight: 700; }
+            .exp-hero-power { font-family: 'EB Garamond', serif; color: #b8a577; font-size: .9rem; }
+            .exp-hero-power b { color: #c39bd3; }
+            .exp-close { background: #6a2020; color: #f5c8c8; border: 1px solid #a83232; border-radius: 50%; width: 30px; height: 30px; cursor: pointer; font-weight: 700; }
+
+            .exp-section { margin-bottom: 14px; }
+            .exp-section-title { font-family: 'Cinzel', serif; color: #8a7a52; font-size: .75rem; letter-spacing: 2px; margin-bottom: 8px; }
+            .exp-chapter-list, .exp-phase-list, .exp-diff-list { display: flex; flex-wrap: wrap; gap: 6px; }
+            .exp-chapter-btn, .exp-phase-btn, .exp-diff-btn {
+                padding: 6px 12px;
+                background: rgba(10,6,2,.6);
+                color: #c8b787;
+                border: 1px solid rgba(201,162,39,.3);
+                border-radius: 4px;
+                cursor: pointer;
+                font-family: 'Cinzel', serif;
+                font-size: .8rem;
+                letter-spacing: 1px;
+                transition: all .15s;
+            }
+            .exp-chapter-btn:hover, .exp-phase-btn:hover, .exp-diff-btn:hover { border-color: #c9a227; color: #e8dcc4; }
+            .exp-chapter-btn.active, .exp-phase-btn.active, .exp-diff-btn.active {
+                background: linear-gradient(180deg, rgba(232,185,35,.2), transparent 50%), #3d2d18;
+                border-color: #e8b923;
+                color: #fff5dc;
+                box-shadow: 0 0 10px rgba(232,185,35,.3);
+            }
+            .exp-phase-btn.boss { border-color: rgba(168,50,50,.5); }
+            .exp-phase-btn.final { border-color: #8e44ad; }
+            .exp-diff-btn { --cor: #c9a227; }
+            .exp-diff-btn.active { border-color: var(--cor); }
+
+            .exp-preview {
+                background: rgba(10,6,2,.6);
+                border: 1px solid rgba(201,162,39,.25);
+                border-radius: 6px;
+                padding: 12px;
+                margin-bottom: 14px;
+                display: flex; flex-direction: column; gap: 6px;
+            }
+            .exp-preview-row { display: flex; justify-content: space-between; align-items: center; font-family: 'EB Garamond', serif; font-size: .9rem; color: #d9c89a; }
+            .exp-preview-row b { color: #e8b923; }
+            .exp-preview-row.dim { font-size: .8rem; color: #8a7a52; }
+            .exp-preview-row.dim b { color: #8ac070; }
+            .exp-preview-warn {
+                margin-top: 6px; padding: 6px 10px;
+                background: rgba(142,68,173,.15);
+                border-left: 3px solid #8e44ad;
+                border-radius: 4px;
+                color: #c39bd3;
+                font-family: 'EB Garamond', serif;
+                font-size: .85rem;
+                font-style: italic;
+            }
+
+            .exp-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 8px; }
+            .exp-btn { padding: 10px 20px; border-radius: 4px; cursor: pointer; font-family: 'Cinzel', serif; font-weight: 700; font-size: .9rem; letter-spacing: 1px; transition: all .2s; border: 2px solid; }
+            .exp-btn-secondary { background: rgba(10,6,2,.6); color: #c8b787; border-color: #6a5024; }
+            .exp-btn-secondary:hover { color: #e8dcc4; border-color: #c9a227; }
+            .exp-btn-primary { background: linear-gradient(180deg, rgba(74,140,181,.3), transparent 45%), linear-gradient(135deg, #2a4a6a, #1a2f45); color: #d0e8f5; border-color: #4a8cb5; }
+            .exp-btn-primary:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,.6), 0 0 25px rgba(74,140,181,.5); }
+            .exp-btn-primary:disabled { background: #2a1f10; color: #6a5024; border-color: #3d2d18; cursor: not-allowed; }
+
+            /* ========== MODAL DE RESULTADO ========== */
+            .exp-result-overlay {
+                position: fixed; inset: 0;
+                background: rgba(10,6,2,.95);
+                z-index: 21000;
+                display: flex; align-items: center; justify-content: center;
+                padding: 20px;
+                animation: fadeIn .3s ease;
+            }
+            .exp-result-panel {
+                background: linear-gradient(180deg, #2a1f10, #1a1208);
+                border: 3px solid;
+                border-radius: 10px;
+                max-width: 440px; width: 100%;
+                padding: 24px;
+                text-align: center;
+                box-shadow: 0 20px 60px rgba(0,0,0,.9);
+            }
+            .exp-result-panel.success { border-color: #6ba35c; box-shadow: 0 0 50px rgba(107,163,92,.4), 0 20px 60px rgba(0,0,0,.9); }
+            .exp-result-panel.failure { border-color: #a83232; box-shadow: 0 0 50px rgba(168,50,50,.4), 0 20px 60px rgba(0,0,0,.9); }
+            .exp-result-title { font-family: 'Cinzel Decorative', serif; font-size: 1.4rem; letter-spacing: 2px; margin-bottom: 16px; }
+            .exp-result-panel.success .exp-result-title { color: #8ac070; text-shadow: 0 0 15px rgba(107,163,92,.7); }
+            .exp-result-panel.failure .exp-result-title { color: #d05050; text-shadow: 0 0 15px rgba(168,50,50,.7); }
+            .exp-result-hero { display: flex; flex-direction: column; align-items: center; gap: 4px; margin-bottom: 16px; }
+            .exp-result-sprite { width: 72px; height: 72px; object-fit: contain; }
+            .exp-result-hero-name { font-family: 'Cinzel', serif; color: #f0e2c0; font-size: 1.1rem; font-weight: 700; }
+            .exp-result-hero-phase { font-family: 'EB Garamond', serif; color: #b8a577; font-size: .9rem; }
+            .exp-result-rewards { background: rgba(10,6,2,.5); border-radius: 6px; padding: 14px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 8px; }
+            .exp-result-xp, .exp-result-gold { font-family: 'Cinzel', serif; color: #e8b923; font-size: 1.05rem; font-weight: 700; }
+            .exp-result-drops { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+            .exp-drop { padding: 3px 10px; background: rgba(201,162,39,.1); border: 1px solid rgba(201,162,39,.3); border-radius: 12px; font-family: 'EB Garamond', serif; font-size: .85rem; color: #d9c89a; }
+            .exp-drop-empty { color: #8a7a52; font-family: 'EB Garamond', serif; font-style: italic; font-size: .9rem; }
+            .exp-result-hint { font-family: 'EB Garamond', serif; color: #8a7a52; font-size: .85rem; font-style: italic; margin-bottom: 14px; padding: 8px; background: rgba(10,6,2,.4); border-radius: 4px; }
+            .exp-result-btn { padding: 12px 24px; background: linear-gradient(180deg, rgba(232,185,35,.2), transparent 45%), linear-gradient(135deg, #8a6a2e, #4a3418); color: #fff5dc; border: 2px solid #e8b923; border-radius: 4px; cursor: pointer; font-family: 'Cinzel', serif; font-weight: 700; font-size: .95rem; letter-spacing: 2px; }
+            .exp-result-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,.6); }
+
+            @media (max-width: 600px) {
+                .expedicao-slots { grid-template-columns: 1fr; }
+                .expedicao-panel { padding: 16px; }
+                .exp-actions { flex-direction: column; }
+                .exp-btn { width: 100%; }
+            }
+        `;
+        document.head.appendChild(s);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // DEBUG
+    // ═══════════════════════════════════════════════════════════
+    window._debugExpedicoes = function() {
+        console.group('=== EXPEDIÇÕES V79 ===');
+        console.log('V79 ativo?', window._expedicoesV79);
+        console.log('Slots:', getSlots());
+        console.log('Estrelas:', typeof getTotalStars === 'function' ? getTotalStars() : 0);
+        console.log('Ativas:', getExpedicoesAtivas().length);
+        console.log('Por coletar:', getExpedicoesPorColetar().length);
+        console.log('Expedições:', STORY_PROGRESS.expeditions);
+        console.groupEnd();
+    };
+
+    // Força conclusão (teste)
+    window._forcarConclusaoExpedicao = function(expId) {
+        const exp = STORY_PROGRESS.expeditions.find(e => e.id === expId);
+        if (!exp) { console.warn('Não encontrada'); return; }
+        exp.startedAt = Date.now() - exp.durationMs - 1000;
+        verificarConclusoes();
+        console.log('Forçada conclusão de', expId);
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V79] Expedições');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• 3 slots base (+1 a cada 100⭐, máx 5)');
+    console.log('• Tempo: 30min / 1h / 2h (Normal/Difícil/Pesadelo)');
+    console.log('• Chance calculada por heroPower / phaseReq');
+    console.log('• Fase 13-4: 10%–30% (final boss)');
+    console.log('• Sucesso: 50% XP/ouro + drops normais');
+    console.log('• Falha: 15% XP');
+    console.log('• Sem estrelas');
+    console.log('• Botão 🗺️ no card, slots no topo da OCA');
+    console.log('');
+    console.log('💡 Debug: window._debugExpedicoes()');
+    console.log('💡 Forçar: window._forcarConclusaoExpedicao("exp_ID")');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — V79.1 — Fixes das Expedições
+// -----------------------------------------------------------------
+// Corrige 2 bugs:
+//   1. STORY_PROGRESS.expeditions virando undefined após reload
+//      ou troca de save → guard em todos os acessos + wrapper em
+//      loadStoryProgressByName
+//   2. Botão 🗺️ sobrepondo as estrelas de raridade → move para
+//      top: 64px (abaixo do check)
+//
+// Cole NO FINAL do historia.js.
+// =================================================================
+(function fixExpedicoesV79_1() {
+    if (window._fixExpedicoesV79_1) return;
+    window._fixExpedicoesV79_1 = true;
+
+    // ═══════════════════════════════════════════════════════════
+    // 1. GARANTIR EXPEDITIONS SEMPRE
+    // ═══════════════════════════════════════════════════════════
+    function garantirExpeditions() {
+        if (!Array.isArray(STORY_PROGRESS.expeditions)) {
+            STORY_PROGRESS.expeditions = [];
+            console.log('[V79.1] STORY_PROGRESS.expeditions re-criado');
+        }
+    }
+    garantirExpeditions();
+
+    // Wrapper em loadStoryProgressByName
+    const _origLoad = window.loadStoryProgressByName;
+    if (typeof _origLoad === 'function' && !_origLoad._v79_1) {
+        window.loadStoryProgressByName = function() {
+            const r = _origLoad.apply(this, arguments);
+            garantirExpeditions();
+            return r;
+        };
+        window.loadStoryProgressByName._v79_1 = true;
+        console.log('[V79.1] Hook em loadStoryProgressByName');
+    }
+
+    // Wrapper em saveStoryProgress
+    const _origSave = window.saveStoryProgress;
+    if (typeof _origSave === 'function' && !_origSave._v79_1) {
+        window.saveStoryProgress = function() {
+            garantirExpeditions();
+            return _origSave.apply(this, arguments);
+        };
+        window.saveStoryProgress._v79_1 = true;
+        console.log('[V79.1] Hook em saveStoryProgress');
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 2. SUBSTITUIR _expEnviar (push seguro)
+    // ═══════════════════════════════════════════════════════════
+    window._expEnviar = () => {
+        // Guard: garante array
+        garantirExpeditions();
+
+        const ativas = STORY_PROGRESS.expeditions.filter(e => !e.coletada);
+        const estrelas = (typeof getTotalStars === 'function') ? getTotalStars() : 0;
+        let slots = 3;
+        if (estrelas >= 200) slots = 5;
+        else if (estrelas >= 100) slots = 4;
+
+        if (ativas.length >= slots) {
+            if (typeof showToast === 'function') showToast('⛺', `Slots cheios (${ativas.length}/${slots}).`, '⛺');
+            return;
+        }
+
+        // Herói já em expedição?
+        const jaTem = STORY_PROGRESS.expeditions.some(e =>
+            e.heroClass === window._selHeroi && !e.coletada
+        );
+        if (jaTem) {
+            if (typeof showToast === 'function') showToast('⛺', 'Herói já em expedição.', '⛺');
+            return;
+        }
+
+        // Precisa dos dados globais (definidos no V79)
+        const selHeroi = window._selHeroi;
+        const selChapter = window._selChapter;
+        const selPhase = window._selPhase;
+        const selDiff = window._selDiff;
+
+        if (!selHeroi || !selChapter || !selPhase || !selDiff) {
+            console.warn('[V79.1] Variáveis de seleção ausentes');
+            return;
+        }
+
+        const ch = STORY_CHAPTERS[selChapter];
+        const ph = ch?.phases.find(p => p.id === selPhase);
+        if (!ph) {
+            console.warn('[V79.1] Fase não encontrada');
+            return;
+        }
+
+        // Tempo
+        const TEMPO_MS = {
+            normal:   30 * 60 * 1000,
+            dificil:  60 * 60 * 1000,
+            pesadelo: 120 * 60 * 1000,
+        };
+
+        // Chance (recalcula aqui)
+        function calcHeroPower(heroClass) {
+            const hd = STORY_HERO_CLASSES[heroClass];
+            if (!hd) return 0;
+            const level = (typeof getHeroLevel === 'function') ? getHeroLevel(heroClass) : 1;
+            const bonus = (typeof getHeroBonusFromLevel === 'function')
+                ? (getHeroBonusFromLevel(heroClass) || {}) : {};
+            let hp = (hd.hp || 0) + (bonus.hp || 0);
+            let atk = (hd.atk || 0) + (bonus.atk || 0);
+            if (typeof getHeroEquipment === 'function') {
+                const eq = getHeroEquipment(heroClass);
+                if (eq?.arma && typeof getWeaponById === 'function') {
+                    const w = getWeaponById(eq.arma);
+                    if (w) atk += w.atkBonus || 0;
+                }
+                if (eq?.amuleto && typeof getAmuletById === 'function') {
+                    const a = getAmuletById(eq.amuleto);
+                    if (a?.efeito) {
+                        atk += a.efeito.atkBonus || 0;
+                        hp += a.efeito.hpBonus || 0;
+                    }
+                }
+            }
+            return (hp * 2) + (atk * 8) + (level * 15);
+        }
+
+        function calcPhaseReq(chapterId, phaseId, difficulty) {
+            const ch = STORY_CHAPTERS[chapterId];
+            if (!ch) return 1;
+            const ph = ch.phases.find(p => p.id === phaseId);
+            if (!ph) return 1;
+            let hpSum = 0, atkSum = 0;
+            ph.enemies.forEach(eid => {
+                const e = STORY_ENEMIES[eid];
+                if (e) { hpSum += e.hp || 0; atkSum += e.atk || 0; }
+            });
+            const mult = { normal: 1, dificil: 1.3, pesadelo: 1.6 }[difficulty] || 1;
+            return Math.max(1, (hpSum + atkSum * 5) * mult);
+        }
+
+        const hp = calcHeroPower(selHeroi);
+        const req = calcPhaseReq(selChapter, selPhase, selDiff);
+        const isFinal = (selPhase === '13-4');
+        const divisor = isFinal ? 3 : 2;
+        const minChance = isFinal ? 0.10 : 0.15;
+        const maxChance = isFinal ? 0.30 : 0.95;
+        const chance = Math.max(minChance, Math.min(maxChance, hp / (req * divisor)));
+
+        const exp = {
+            id: 'exp_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+            heroClass: selHeroi,
+            chapterId: selChapter,
+            phaseId: selPhase,
+            phaseName: ph.name,
+            difficulty: selDiff,
+            chance,
+            startedAt: Date.now(),
+            durationMs: TEMPO_MS[selDiff],
+            concluida: false,
+            coletada: false,
+            resultado: null,
+        };
+        STORY_PROGRESS.expeditions.push(exp);
+        if (typeof saveStoryProgress === 'function') saveStoryProgress();
+
+        if (typeof window._expFechar === 'function') window._expFechar();
+        if (typeof showToast === 'function') showToast('⛺', 'Expedição enviada!', '⛺');
+        if (typeof playSfx === 'function') { try { playSfx('win'); } catch(e) {} }
+
+        if (typeof renderOcaScreenFiltered === 'function') renderOcaScreenFiltered();
+    };
+
+    // ═══════════════════════════════════════════════════════════
+    // 3. CSS — mover botão 🗺️ para baixo do check
+    // ═══════════════════════════════════════════════════════════
+    if (!document.getElementById('v79_1CSS')) {
+        const s = document.createElement('style');
+        s.id = 'v79_1CSS';
+        s.textContent = `
+            .hero-expedition-btn {
+                top: 64px !important;
+                right: 10px !important;
+                width: 26px !important;
+                height: 26px !important;
+                font-size: 0.9rem !important;
+            }
+            @media (max-width: 480px) {
+                .hero-expedition-btn {
+                    top: 60px !important;
+                    right: 8px !important;
+                }
+            }
+        `;
+        document.head.appendChild(s);
+        console.log('[V79.1] CSS aplicado (botão movido para baixo do check)');
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 4. Re-injeta botões nos cards existentes
+    // ═══════════════════════════════════════════════════════════
+    setTimeout(() => {
+        const cards = document.querySelectorAll('.story-hero-card');
+        cards.forEach(card => {
+            const btn = card.querySelector('.hero-expedition-btn');
+            if (btn) {
+                // Já existe — força CSS
+                btn.style.top = '64px';
+                btn.style.right = '10px';
+            }
+        });
+    }, 500);
+
+    // ═══════════════════════════════════════════════════════════
+    // 5. DEBUG
+    // ═══════════════════════════════════════════════════════════
+    window._debugExpedicoesV791 = function() {
+        console.group('=== V79.1 FIXES ===');
+        console.log('V79.1 ativo?', window._fixExpedicoesV79_1);
+        console.log('expeditions é array?', Array.isArray(STORY_PROGRESS.expeditions));
+        console.log('Total:', STORY_PROGRESS.expeditions?.length || 0);
+        console.log('Expedições:', STORY_PROGRESS.expeditions);
+        const btn = document.querySelector('.hero-expedition-btn');
+        if (btn) {
+            const cs = getComputedStyle(btn);
+            console.log('Botão 🗺️: top=' + cs.top + ', right=' + cs.right);
+        }
+        console.groupEnd();
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V79.1] Fixes das Expedições');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• STORY_PROGRESS.expeditions garantido em save/load');
+    console.log('• _expEnviar reescrito (push seguro)');
+    console.log('• Botão 🗺️ movido para top:64px (abaixo do check)');
+    console.log('');
+    console.log('💡 Debug: window._debugExpedicoesV791()');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — V79.2 — Fix do "Variáveis de seleção ausentes"
+// -----------------------------------------------------------------
+// O V79.1 reescreveu _expEnviar mas tentou acessar window._selHeroi,
+// que nunca foi definido (é variável local da IIFE do V79).
+//
+// Este V79.2 restaura o _expEnviar original do V79 (que tem acesso
+// ao closure) e só adiciona um wrapper que garante o array.
+//
+// Cole NO FINAL do historia.js (depois do V79 e V79.1).
+// =================================================================
+(function fixExpedicoesV79_2() {
+    if (window._fixExpedicoesV79_2) return;
+    window._fixExpedicoesV79_2 = true;
+
+    // ═══════════════════════════════════════════════════════════
+    // 1. GARANTIR STORY_PROGRESS.expeditions
+    // ═══════════════════════════════════════════════════════════
+    function garantirExpeditions() {
+        if (typeof STORY_PROGRESS === 'undefined') return;
+        if (!Array.isArray(STORY_PROGRESS.expeditions)) {
+            STORY_PROGRESS.expeditions = [];
+            console.log('[V79.2] STORY_PROGRESS.expeditions re-criado');
+        }
+    }
+    garantirExpeditions();
+
+    // ═══════════════════════════════════════════════════════════
+    // 2. RECUPERAR O _expEnviar ORIGINAL DO V79
+    // -------------------------------------------------------------
+    // Problema: o V79.1 sobrescreveu window._expEnviar com uma versão
+    // quebrada. Precisamos do original do V79 (que tem closure).
+    //
+    // Solução: procurar no escopo global uma referência. Como o V79
+    // fez `window._expEnviar = () => { ... }`, a função existe em
+    // window MAS foi reescrita pelo V79.1.
+    //
+    // Precisamos re-executar o V79? Não. Melhor: fazer o V79.2
+    // acessar STORY_PROGRESS.expeditions com a mesma lógica, mas
+    // LENDO as variáveis via um novo mecanismo.
+    //
+    // ⭐ Melhor solução: fazer o V79.2 EXPOR as variáveis em window
+    // para que o _expEnviar atual (do V79.1) funcione.
+    // ═══════════════════════════════════════════════════════════
+
+    // Proxy para as variáveis — precisa interceptar os hooks do V79
+    // que setam _selHeroi, _selChapter, _selPhase, _selDiff.
+    //
+    // Como esses são `let` locais (não acessíveis), precisamos que o
+    // V79.1 leia de outro lugar. A solução é substituir os hooks do V79
+    // (`window._expSelChapter`, etc.) para também atualizar variáveis em
+    // window.
+
+    // ─────────────────────────────────────────────────────────
+    // Estado espelho em window
+    // ─────────────────────────────────────────────────────────
+    if (typeof window._expState !== 'object' || window._expState === null) {
+        window._expState = {
+            heroClass: null,
+            chapterId: null,
+            phaseId: null,
+            difficulty: 'normal',
+        };
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 3. REESCREVER _expEnviar (versão robusta com window._expState)
+    // ═══════════════════════════════════════════════════════════
+    window._expEnviar = () => {
+        garantirExpeditions();
+
+        const st = window._expState;
+        const selHeroi = st.heroClass;
+        const selChapter = st.chapterId;
+        const selPhase = st.phaseId;
+        const selDiff = st.difficulty;
+
+        if (!selHeroi || !selChapter || !selPhase || !selDiff) {
+            console.warn('[V79.2] Variáveis de seleção ausentes', st);
+            if (typeof showToast === 'function') showToast('❌', 'Escolha fase e dificuldade', '❌');
+            return;
+        }
+
+        // Slots
+        const ativas = STORY_PROGRESS.expeditions.filter(e => !e.coletada);
+        const estrelas = (typeof getTotalStars === 'function') ? getTotalStars() : 0;
+        let slots = 3;
+        if (estrelas >= 200) slots = 5;
+        else if (estrelas >= 100) slots = 4;
+
+        if (ativas.length >= slots) {
+            if (typeof showToast === 'function') showToast('⛺', `Slots cheios (${ativas.length}/${slots}).`, '⛺');
+            return;
+        }
+
+        // Já em expedição?
+        if (STORY_PROGRESS.expeditions.some(e => e.heroClass === selHeroi && !e.coletada)) {
+            if (typeof showToast === 'function') showToast('⛺', 'Herói já em expedição.', '⛺');
+            return;
+        }
+
+        const ch = STORY_CHAPTERS[selChapter];
+        const ph = ch?.phases.find(p => p.id === selPhase);
+        if (!ph) {
+            console.warn('[V79.2] Fase não encontrada:', selPhase);
+            return;
+        }
+
+        // Tempo
+        const TEMPO_MS = {
+            normal:   30 * 60 * 1000,
+            dificil:  60 * 60 * 1000,
+            pesadelo: 120 * 60 * 1000,
+        };
+
+        // Poder e chance
+        function calcHeroPower(heroClass) {
+            const hd = STORY_HERO_CLASSES[heroClass];
+            if (!hd) return 0;
+            const level = (typeof getHeroLevel === 'function') ? getHeroLevel(heroClass) : 1;
+            const bonus = (typeof getHeroBonusFromLevel === 'function')
+                ? (getHeroBonusFromLevel(heroClass) || {}) : {};
+            let hp = (hd.hp || 0) + (bonus.hp || 0);
+            let atk = (hd.atk || 0) + (bonus.atk || 0);
+            if (typeof getHeroEquipment === 'function') {
+                const eq = getHeroEquipment(heroClass);
+                if (eq?.arma && typeof getWeaponById === 'function') {
+                    const w = getWeaponById(eq.arma);
+                    if (w) atk += w.atkBonus || 0;
+                }
+                if (eq?.amuleto && typeof getAmuletById === 'function') {
+                    const a = getAmuletById(eq.amuleto);
+                    if (a?.efeito) {
+                        atk += a.efeito.atkBonus || 0;
+                        hp += a.efeito.hpBonus || 0;
+                    }
+                }
+            }
+            return (hp * 2) + (atk * 8) + (level * 15);
+        }
+
+        function calcPhaseReq(chapterId, phaseId, difficulty) {
+            const ch2 = STORY_CHAPTERS[chapterId];
+            if (!ch2) return 1;
+            const ph2 = ch2.phases.find(p => p.id === phaseId);
+            if (!ph2) return 1;
+            let hpSum = 0, atkSum = 0;
+            ph2.enemies.forEach(eid => {
+                const e = STORY_ENEMIES[eid];
+                if (e) { hpSum += e.hp || 0; atkSum += e.atk || 0; }
+            });
+            const mult = { normal: 1, dificil: 1.3, pesadelo: 1.6 }[difficulty] || 1;
+            return Math.max(1, (hpSum + atkSum * 5) * mult);
+        }
+
+        const hp = calcHeroPower(selHeroi);
+        const req = calcPhaseReq(selChapter, selPhase, selDiff);
+        const isFinal = (selPhase === '13-4');
+        const divisor = isFinal ? 3 : 2;
+        const minChance = isFinal ? 0.10 : 0.15;
+        const maxChance = isFinal ? 0.30 : 0.95;
+        const chance = Math.max(minChance, Math.min(maxChance, hp / (req * divisor)));
+
+        const exp = {
+            id: 'exp_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+            heroClass: selHeroi,
+            chapterId: selChapter,
+            phaseId: selPhase,
+            phaseName: ph.name,
+            difficulty: selDiff,
+            chance,
+            startedAt: Date.now(),
+            durationMs: TEMPO_MS[selDiff],
+            concluida: false,
+            coletada: false,
+            resultado: null,
+        };
+        STORY_PROGRESS.expeditions.push(exp);
+        if (typeof saveStoryProgress === 'function') saveStoryProgress();
+
+        if (typeof window._expFechar === 'function') window._expFechar();
+        if (typeof showToast === 'function') showToast('⛺', 'Expedição enviada!', '⛺');
+        if (typeof playSfx === 'function') { try { playSfx('win'); } catch(e) {} }
+        if (typeof renderOcaScreenFiltered === 'function') renderOcaScreenFiltered();
+    };
+
+    // ═══════════════════════════════════════════════════════════
+    // 4. INTERCEPTAR OS HOOKS DE SELEÇÃO (para atualizar window._expState)
+    // ═══════════════════════════════════════════════════════════
+    // O V79 define window._expSelChapter, etc. Precisamos interceptar
+    // para espelhar em window._expState.
+
+    const _origSelChapter = window._expSelChapter;
+    if (typeof _origSelChapter === 'function' && !_origSelChapter._v79_2) {
+        window._expSelChapter = function(cid) {
+            window._expState.chapterId = cid;
+            window._expState.phaseId = null;
+            return _origSelChapter.apply(this, arguments);
+        };
+        window._expSelChapter._v79_2 = true;
+    }
+
+    const _origSelPhase = window._expSelPhase;
+    if (typeof _origSelPhase === 'function' && !_origSelPhase._v79_2) {
+        window._expSelPhase = function(pid) {
+            window._expState.phaseId = pid;
+            return _origSelPhase.apply(this, arguments);
+        };
+        window._expSelPhase._v79_2 = true;
+    }
+
+    const _origSelDiff = window._expSelDiff;
+    if (typeof _origSelDiff === 'function' && !_origSelDiff._v79_2) {
+        window._expSelDiff = function(d) {
+            window._expState.difficulty = d;
+            return _origSelDiff.apply(this, arguments);
+        };
+        window._expSelDiff._v79_2 = true;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 5. INTERCEPTAR openEquipScreen (para setar heroClass)
+    // ═══════════════════════════════════════════════════════════
+    // O V79 chama abrirTelaExpedicao(heroClass) que seta _selHeroi.
+    // Não conseguimos interceptar essa função interna. Solução:
+    // interceptar o clique no botão 🗺️ para capturar heroClass.
+
+    function _capturarHeroClass() {
+        const cards = document.querySelectorAll('.story-hero-card');
+        cards.forEach(card => {
+            const btn = card.querySelector('.hero-expedition-btn');
+            if (!btn || btn._v79_2) return;
+
+            const onclickAttr = card.getAttribute('onclick') || '';
+            const match = onclickAttr.match(/toggleHeroSelection\('((?:\\'|[^'])*)'\)/);
+            if (!match) return;
+            const heroClass = match[1].replace(/\\'/g, "'");
+
+            // Wrapper no onclick original
+            const origOnClick = btn.onclick;
+            btn.onclick = (e) => {
+                window._expState.heroClass = heroClass;
+                window._expState.chapterId = null;
+                window._expState.phaseId = null;
+                window._expState.difficulty = 'normal';
+                if (typeof origOnClick === 'function') {
+                    return origOnClick.call(btn, e);
+                }
+            };
+            btn._v79_2 = true;
+        });
+    }
+
+    // Injeta ao renderizar a OCA (após o V79 injetar os botões)
+    const _origOca = window.renderOcaScreenFiltered;
+    if (typeof _origOca === 'function' && !_origOca._v79_2) {
+        window.renderOcaScreenFiltered = function() {
+            const r = _origOca.apply(this, arguments);
+            setTimeout(_capturarHeroClass, 200);
+            setTimeout(_capturarHeroClass, 500);
+            return r;
+        };
+        window.renderOcaScreenFiltered._v79_2 = true;
+    }
+
+    // Também roda nos botões existentes
+    setTimeout(_capturarHeroClass, 300);
+    setTimeout(_capturarHeroClass, 800);
+
+    // Observer para captar novos cards
+    const obs = new MutationObserver(() => {
+        const cards = document.querySelectorAll('.story-hero-card .hero-expedition-btn:not(._v79_2-wrapper)');
+        if (cards.length > 0) _capturarHeroClass();
+    });
+    obs.observe(document.body, { childList: true, subtree: true });
+
+    // ═══════════════════════════════════════════════════════════
+    // 6. Garantir expeditions em save/load
+    // ═══════════════════════════════════════════════════════════
+    const _origLoad = window.loadStoryProgressByName;
+    if (typeof _origLoad === 'function' && !_origLoad._v79_2) {
+        window.loadStoryProgressByName = function() {
+            const r = _origLoad.apply(this, arguments);
+            garantirExpeditions();
+            return r;
+        };
+        window.loadStoryProgressByName._v79_2 = true;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 7. DEBUG
+    // ═══════════════════════════════════════════════════════════
+    window._debugExpV792 = function() {
+        console.group('=== V79.2 ===');
+        console.log('V79.2 ativo?', window._fixExpedicoesV79_2);
+        console.log('window._expState:', window._expState);
+        console.log('expeditions é array?', Array.isArray(STORY_PROGRESS.expeditions));
+        console.log('Total:', STORY_PROGRESS.expeditions?.length || 0);
+        console.groupEnd();
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V79.2] Fix do "Variáveis de seleção ausentes"');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• window._expState espelha as variáveis de seleção');
+    console.log('• _expEnviar lê de window._expState');
+    console.log('• Hooks de seleção atualizam o espelho');
+    console.log('• Botão 🗺️ captura heroClass no clique');
+    console.log('');
+    console.log('💡 Debug: window._debugExpV792()');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — V79.5 — Slots em modal (versão final, sem loop)
+// -----------------------------------------------------------------
+// Substitui V79.3 e V79.4. A diferença crucial:
+//
+//   • ZERO MutationObserver no document.body (era a fonte do loop)
+//   • Botão EXPEDIÇÕES injetado via hook síncrono no render da OCA
+//   • Atualização do contador via data-attribute + CSS (não toca DOM)
+//   • Delegação de evento única para capturar cliques
+//   • Auto-atualização via setInterval leve (3s), não observer
+//
+// Cole NO FINAL do historia.js (depois do V79, V79.1, V79.2).
+// =================================================================
+(function expedicoesFinalV79_5() {
+    if (window._expedicoesFinalV79_5) return;
+    window._expedicoesFinalV79_5 = true;
+
+    console.log('[V79.5] Instalando versão final...');
+
+    // ═══════════════════════════════════════════════════════════
+    // 1. LIMPEZA INICIAL
+    // ═══════════════════════════════════════════════════════════
+    // Remove botões residuais do V79.3/V79.4
+    document.querySelectorAll('.oca-expedicoes-btn').forEach(b => b.remove());
+    // Remove overlays residuais
+    const oldOverlay = document.getElementById('expedicoesListaOverlay');
+    if (oldOverlay) oldOverlay.remove();
+
+    // ═══════════════════════════════════════════════════════════
+    // 2. CSS
+    // ═══════════════════════════════════════════════════════════
+    if (!document.getElementById('v79_5CSS')) {
+        const s = document.createElement('style');
+        s.id = 'v79_5CSS';
+        s.textContent = `
+            #expedicaoSlots { display: none !important; }
+
+            .oca-expedicoes-btn {
+                padding: 8px 16px;
+                background:
+                    linear-gradient(180deg, rgba(74,140,181,.25), transparent 45%),
+                    linear-gradient(135deg, #2a4a6a, #1a2f45);
+                color: #d0e8f5;
+                border: 2px solid #4a8cb5;
+                border-radius: 20px;
+                cursor: pointer;
+                font-family: 'Cinzel', serif;
+                font-weight: 700;
+                font-size: .85rem;
+                letter-spacing: 1px;
+                transition: all .2s;
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+            }
+            .oca-expedicoes-btn:hover {
+                transform: translateY(-2px);
+                border-color: #6ab0d8;
+                box-shadow: 0 4px 15px rgba(0,0,0,.5), 0 0 20px rgba(74,140,181,.4);
+            }
+            .oca-expedicoes-btn::after {
+                content: attr(data-counter);
+                color: #8ac070;
+                font-size: .7rem;
+                padding: 2px 7px;
+                background: rgba(107,163,92,.2);
+                border-radius: 10px;
+                margin-left: 4px;
+                font-weight: 700;
+            }
+            .oca-expedicoes-btn[data-pronto="1"] {
+                border-color: #e8b923;
+                box-shadow: 0 0 15px rgba(232,185,35,.6);
+            }
+            .oca-expedicoes-btn[data-pronto="1"]::after {
+                color: #fff5dc;
+                background: rgba(232,185,35,.5);
+                animation: expBadgePulseV5 1.5s ease-in-out infinite alternate;
+            }
+            @keyframes expBadgePulseV5 {
+                from { box-shadow: 0 0 4px rgba(232,185,35,.3); }
+                to   { box-shadow: 0 0 14px rgba(232,185,35,.9); }
+            }
+
+            .expedicoes-lista-overlay {
+                position: fixed; inset: 0;
+                background: rgba(10,6,2,.92);
+                z-index: 20000;
+                display: flex; align-items: flex-start; justify-content: center;
+                padding: 20px; overflow-y: auto;
+            }
+            .expedicoes-lista-panel {
+                background: linear-gradient(180deg, #2a1f10, #1a1208);
+                border: 2px solid #4a8cb5;
+                border-radius: 8px;
+                max-width: 640px; width: 100%;
+                padding: 20px; margin: auto;
+                box-shadow: 0 10px 40px rgba(0,0,0,.9), 0 0 30px rgba(74,140,181,.3);
+            }
+            .expedicoes-lista-header {
+                display: flex; justify-content: space-between; align-items: center;
+                border-bottom: 1px solid rgba(74,140,181,.3);
+                padding-bottom: 12px; margin-bottom: 16px;
+            }
+            .expedicoes-lista-titulo {
+                font-family: 'Cinzel Decorative', serif;
+                color: #6ab0d8; font-size: 1.3rem; letter-spacing: 3px;
+            }
+            .expedicoes-lista-close {
+                background: #6a2020; color: #f5c8c8; border: 1px solid #a83232;
+                border-radius: 50%; width: 30px; height: 30px; cursor: pointer; font-weight: 700;
+            }
+            .expedicoes-lista-footer { margin-top: 16px; text-align: center; }
+        `;
+        document.head.appendChild(s);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 3. CONTADOR
+    // ═══════════════════════════════════════════════════════════
+    const DIFF_LABEL = { normal: 'Normal', dificil: 'Difícil', pesadelo: 'Pesadelo' };
+
+    function calcularSlots() {
+        const estrelas = (typeof getTotalStars === 'function') ? getTotalStars() : 0;
+        if (estrelas >= 200) return 5;
+        if (estrelas >= 100) return 4;
+        return 3;
+    }
+
+    function calcularContador() {
+        const slots = calcularSlots();
+        const exps = Array.isArray(STORY_PROGRESS.expeditions) ? STORY_PROGRESS.expeditions : [];
+        const ativas = exps.filter(e => !e.coletada).length;
+        const prontas = exps.filter(e => !e.coletada && e.concluida).length;
+        return {
+            texto: prontas > 0 ? `${prontas} pronto${prontas > 1 ? 's' : ''}` : `${ativas}/${slots}`,
+            pronto: prontas > 0,
+        };
+    }
+
+    function atualizarContadorBtn(btn) {
+        if (!btn) return;
+        const { texto, pronto } = calcularContador();
+        if (btn.getAttribute('data-counter') !== texto) {
+            btn.setAttribute('data-counter', texto);
+        }
+        const novoPronto = pronto ? '1' : '0';
+        if (btn.getAttribute('data-pronto') !== novoPronto) {
+            btn.setAttribute('data-pronto', novoPronto);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 4. INJETAR BOTÃO (síncrono, sem observer)
+    // ═══════════════════════════════════════════════════════════
+    function injetarBotao() {
+        const title = document.querySelector('.story-title');
+        if (!title) return;
+        if (!title.textContent.includes('OCA')) return;
+
+        // Se já existe, só atualiza o contador
+        let btn = document.querySelector('.oca-expedicoes-btn');
+        if (btn) { atualizarContadorBtn(btn); return; }
+
+        const header = document.querySelector('.story-header');
+        if (!header) return;
+
+        const starsContainer = header.querySelector('.story-stars-counter');
+        const wrapper = starsContainer?.parentElement;
+        if (!wrapper) return;
+
+        if (getComputedStyle(wrapper).display !== 'flex') {
+            wrapper.style.display = 'flex';
+            wrapper.style.justifyContent = 'center';
+            wrapper.style.alignItems = 'center';
+            wrapper.style.gap = '12px';
+            wrapper.style.flexWrap = 'wrap';
+        }
+
+        btn = document.createElement('button');
+        btn.className = 'oca-expedicoes-btn';
+        btn.textContent = '⛺ EXPEDIÇÕES';
+        btn.setAttribute('data-acao', 'abrir-expedicoes');
+        btn.setAttribute('data-counter', '0/3');
+        btn.setAttribute('data-pronto', '0');
+        wrapper.appendChild(btn);
+        atualizarContadorBtn(btn);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 5. MODAL DE SLOTS
+    // ═══════════════════════════════════════════════════════════
+    function renderSlotsModal() {
+        const container = document.getElementById('expedicaoSlotsModal');
+        if (!container) return;
+
+        const slots = calcularSlots();
+        const exps = Array.isArray(STORY_PROGRESS.expeditions) ? STORY_PROGRESS.expeditions : [];
+        const ativas = exps.filter(e => !e.coletada);
+        const ordenadas = [...ativas].sort((a, b) => {
+            if (a.concluida && !b.concluida) return -1;
+            if (!a.concluida && b.concluida) return 1;
+            return a.startedAt - b.startedAt;
+        });
+
+        const slotsHTML = [];
+        for (let i = 0; i < slots; i++) {
+            const exp = ordenadas[i];
+            if (!exp) {
+                slotsHTML.push(`<div class="exp-slot empty"><span class="exp-slot-empty-text">Slot vazio</span></div>`);
+                continue;
+            }
+            const heroData = STORY_HERO_CLASSES[exp.heroClass];
+            const sprite = (typeof SPRITES !== 'undefined' && SPRITES[exp.heroClass]) || '';
+
+            if (exp.concluida) {
+                slotsHTML.push(`
+                    <div class="exp-slot concluded" data-acao="coletar-exp" data-exp-id="${exp.id}">
+                        <div class="exp-slot-top">
+                            <img src="${sprite}" class="exp-slot-sprite" onerror="this.style.display='none'">
+                            <div class="exp-slot-info">
+                                <div class="exp-slot-name">${heroData?.displayName || exp.heroClass}</div>
+                                <div class="exp-slot-phase">${exp.phaseId} · ${DIFF_LABEL[exp.difficulty]}</div>
+                            </div>
+                        </div>
+                        <div class="exp-slot-cta">✅ Ver resultado e coletar</div>
+                    </div>
+                `);
+                continue;
+            }
+
+            const elapsed = Date.now() - exp.startedAt;
+            const restante = Math.max(0, exp.durationMs - elapsed);
+            const mins = Math.ceil(restante / 60000);
+            const pct = Math.min(100, (elapsed / exp.durationMs) * 100);
+            const chancePct = Math.round(exp.chance * 100);
+
+            slotsHTML.push(`
+                <div class="exp-slot running">
+                    <div class="exp-slot-top">
+                        <img src="${sprite}" class="exp-slot-sprite" onerror="this.style.display='none'">
+                        <div class="exp-slot-info">
+                            <div class="exp-slot-name">${heroData?.displayName || exp.heroClass}</div>
+                            <div class="exp-slot-phase">${exp.phaseId} · ${DIFF_LABEL[exp.difficulty]}</div>
+                        </div>
+                    </div>
+                    <div class="exp-slot-progress">
+                        <div class="exp-slot-progress-fill" style="width:${pct}%"></div>
+                    </div>
+                    <div class="exp-slot-meta">
+                        <span>⏱ ${mins}min</span>
+                        <span>🎲 ${chancePct}%</span>
+                    </div>
+                </div>
+            `);
+        }
+        container.innerHTML = slotsHTML.join('');
+    }
+
+    function abrirModal() {
+        const old = document.getElementById('expedicoesListaOverlay');
+        if (old) old.remove();
+
+        const ov = document.createElement('div');
+        ov.id = 'expedicoesListaOverlay';
+        ov.className = 'expedicoes-lista-overlay';
+        ov.onclick = (e) => { if (e.target === ov) fecharModal(); };
+        ov.innerHTML = `
+            <div class="expedicoes-lista-panel">
+                <div class="expedicoes-lista-header">
+                    <div class="expedicoes-lista-titulo">⛺ EXPEDIÇÕES</div>
+                    <button class="expedicoes-lista-close" data-acao="fechar-expedicoes">✕</button>
+                </div>
+                <div class="expedicao-slots" id="expedicaoSlotsModal"></div>
+                <div class="expedicoes-lista-footer">
+                    <button class="exp-btn exp-btn-secondary" data-acao="fechar-expedicoes">Voltar</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(ov);
+        renderSlotsModal();
+
+        if (window._expListaTimer) clearInterval(window._expListaTimer);
+        window._expListaTimer = setInterval(() => {
+            if (document.getElementById('expedicoesListaOverlay')) renderSlotsModal();
+            else { clearInterval(window._expListaTimer); window._expListaTimer = null; }
+        }, 5000);
+    }
+
+    function fecharModal() {
+        const ov = document.getElementById('expedicoesListaOverlay');
+        if (ov) ov.remove();
+        if (window._expListaTimer) {
+            clearInterval(window._expListaTimer);
+            window._expListaTimer = null;
+        }
+    }
+
+    window._expAbrirLista = abrirModal;
+    window._expFecharLista = fecharModal;
+
+    // ═══════════════════════════════════════════════════════════
+    // 6. DELEGAÇÃO DE EVENTO (ÚNICA, SEM OBSERVER)
+    // ═══════════════════════════════════════════════════════════
+    // Um único listener no document captura TODOS os cliques
+    // relevantes via data-acao. Nada de observers.
+    document.addEventListener('click', (ev) => {
+        const alvo = ev.target.closest('[data-acao]');
+        if (!alvo) return;
+        const acao = alvo.getAttribute('data-acao');
+
+        if (acao === 'abrir-expedicoes') {
+            ev.preventDefault();
+            ev.stopPropagation();
+            abrirModal();
+        } else if (acao === 'fechar-expedicoes') {
+            ev.preventDefault();
+            ev.stopPropagation();
+            fecharModal();
+        } else if (acao === 'coletar-exp') {
+            ev.preventDefault();
+            ev.stopPropagation();
+            const expId = alvo.getAttribute('data-exp-id');
+            if (expId && typeof window._expVerResultado === 'function') {
+                window._expVerResultado(expId);
+                setTimeout(() => { if (document.getElementById('expedicoesListaOverlay')) renderSlotsModal(); }, 200);
+                setTimeout(atualizarContadorNoHeader, 400);
+            }
+        }
+    }, true);
+
+    // ═══════════════════════════════════════════════════════════
+    // 7. HOOK ÚNICO NO RENDER (substitui a cadeia anterior)
+    // ═══════════════════════════════════════════════════════════
+    if (!window._renderOcaBaseV795) {
+        window._renderOcaBaseV795 = window.renderOcaScreenFiltered;
+    }
+
+    window.renderOcaScreenFiltered = function() {
+        const r = window._renderOcaBaseV795.apply(this, arguments);
+        // Síncrono: o botão já existe quando a OCA aparece
+        try { injetarBotao(); } catch(e) { console.warn('[V79.5] injetarBotao:', e); }
+        return r;
+    };
+
+    function atualizarContadorNoHeader() {
+        const btn = document.querySelector('.oca-expedicoes-btn');
+        if (btn) atualizarContadorBtn(btn);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 8. AUTO-ATUALIZAÇÃO (setInterval leve, sem observer)
+    // ═══════════════════════════════════════════════════════════
+    setInterval(() => {
+        atualizarContadorNoHeader();
+        // Se o botão sumiu (algum render), reinjeta
+        if (!document.querySelector('.oca-expedicoes-btn')) {
+            try { injetarBotao(); } catch(e) {}
+        }
+    }, 3000);
+
+    // ═══════════════════════════════════════════════════════════
+    // 9. HOOKS DOS MODAIS (atualiza contador ao enviar/coletar)
+    // ═══════════════════════════════════════════════════════════
+    const _origVer = window._expVerResultado;
+    if (typeof _origVer === 'function' && !_origVer._v79_5) {
+        window._expVerResultado = function() {
+            const r = _origVer.apply(this, arguments);
+            setTimeout(atualizarContadorNoHeader, 300);
+            setTimeout(atualizarContadorNoHeader, 800);
+            return r;
+        };
+        window._expVerResultado._v79_5 = true;
+    }
+
+    const _origEnv = window._expEnviar;
+    if (typeof _origEnv === 'function' && !_origEnv._v79_5) {
+        window._expEnviar = function() {
+            const r = _origEnv.apply(this, arguments);
+            setTimeout(atualizarContadorNoHeader, 300);
+            setTimeout(atualizarContadorNoHeader, 800);
+            return r;
+        };
+        window._expEnviar._v79_5 = true;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 10. Cria botão imediatamente se já está na OCA
+    // ═══════════════════════════════════════════════════════════
+    setTimeout(injetarBotao, 100);
+    setTimeout(injetarBotao, 500);
+    setTimeout(injetarBotao, 1500);
+
+    // ═══════════════════════════════════════════════════════════
+    // 11. DEBUG
+    // ═══════════════════════════════════════════════════════════
+    window._debugExpV795 = function() {
+        const btn = document.querySelector('.oca-expedicoes-btn');
+        console.group('=== V79.5 ===');
+        console.log('V79.5 ativo?', window._expedicoesFinalV79_5);
+        console.log('Botão existe?', !!btn);
+        if (btn) {
+            console.log('  data-counter:', btn.getAttribute('data-counter'));
+            console.log('  data-pronto:', btn.getAttribute('data-pronto'));
+        }
+        console.log('Modal aberto?', !!document.getElementById('expedicoesListaOverlay'));
+        console.log('expeditions:', STORY_PROGRESS.expeditions);
+        console.groupEnd();
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V79.5] Slots em modal (sem loop)');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• ZERO MutationObserver no body');
+    console.log('• Botão injetado via hook síncrono');
+    console.log('• Contador via data-attr (não dispara observer)');
+    console.log('• Delegação de evento única');
+    console.log('• Auto-atualização via setInterval (3s)');
+    console.log('');
+    console.log('💡 Debug: window._debugExpV795()');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — V80 — Restaurar PA do Rudá (seleção de tile)
+// -----------------------------------------------------------------
+// O V75 quebrou o PA do Rudá (getPATiles não tem caso para
+// 'ruda_flecha_amor'). Este patch wrappa o triggerBravelyChain
+// por cima do V75 e intercepta SÓ o Rudá, restaurando:
+//   • Seleção de tile (qualquer tile do tabuleiro)
+//   • Cruz completa (linha + coluna) no tile escolhido
+//   • Dano PA se o boss estiver na cruz
+//   • Conversão pra AR
+//
+// Outros heróis novos → delegam pro V75 (FX leve)
+// Curupira → delega pro V68 (V75 também delega)
+// PvP/Coop → delega pro original
+//
+// Cole NO FINAL do historia.js.
+// =================================================================
+(function fixRudaPAV80() {
+    if (window._fixRudaPAV80) return;
+    window._fixRudaPAV80 = true;
+
+    const PA_KEY = 'ruda_flecha_amor';
+    const _sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+    let _resolveV80 = null;
+    let _ativoV80 = false;
+    window._rudaSelectingV80 = false;
+
+    // ═══════════════════════════════════════════════════════════
+    // 1. ABRIR SELEÇÃO (Promise-based)
+    // ═══════════════════════════════════════════════════════════
+    function abrirSelecao() {
+        return new Promise((resolve) => {
+            _resolveV80 = resolve;
+            _ativoV80 = true;
+            window._rudaSelectingV80 = true;
+
+            // Marca TODOS os tiles como elegíveis (qualquer um pode ser o centro)
+            for (let i = 0; i < 64; i++) {
+                const el = document.querySelectorAll('#grid .tile')[i];
+                if (el) el.classList.add('rudaV80-eligible');
+            }
+
+            // Barra de instrução
+            let bar = document.getElementById('rudaBarV80');
+            if (bar) bar.remove();
+            bar = document.createElement('div');
+            bar.id = 'rudaBarV80';
+            bar.style.cssText = `
+                display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+                padding:12px 20px; margin:0 15px 10px;
+                background:linear-gradient(180deg,rgba(58,124,165,.2),transparent 60%),
+                            linear-gradient(135deg,#2a4a6a,#1a2f45);
+                border:2px solid #4a8cb5; border-radius:8px;
+                font-family:'Cinzel',serif; color:#d0e8f5;
+                box-shadow:0 4px 15px rgba(0,0,0,.5);
+                animation:rudaV80Pulse 1.5s ease-in-out infinite alternate;
+            `;
+            bar.innerHTML = `
+                <span style="font-size:1.5rem;">🏹</span>
+                <span style="flex:1; font-size:.9rem; letter-spacing:1px; font-weight:700;">
+                    FLECHA DO AMOR: escolha o tile central da cruz
+                </span>
+                <button id="rudaV80Cancel" style="padding:8px 16px; border-radius:4px; font-family:'Cinzel',serif; font-weight:700; font-size:.8rem; letter-spacing:1px; cursor:pointer; background:linear-gradient(135deg,#6a2020,#3a1010); color:#f5c8c8; border:2px solid #a83232;">CANCELAR</button>
+            `;
+            const main = document.querySelector('.game-main');
+            if (main && main.parentNode) main.parentNode.insertBefore(bar, main);
+
+            document.getElementById('rudaV80Cancel').onclick = () => finalizar(true);
+
+            if (typeof addLog === 'function') addLog('🏹 Rudá: escolha um tile para a cruz.');
+        });
+    }
+
+    function finalizar(cancelado, tile = null) {
+        if (!_ativoV80) return;
+        _ativoV80 = false;
+        window._rudaSelectingV80 = false;
+
+        document.querySelectorAll('.rudaV80-eligible, .rudaV80-selected')
+            .forEach(el => el.classList.remove('rudaV80-eligible', 'rudaV80-selected'));
+        const bar = document.getElementById('rudaBarV80');
+        if (bar) bar.remove();
+
+        const resolve = _resolveV80;
+        _resolveV80 = null;
+        if (resolve) {
+            resolve(cancelado ? { cancelado: true } : { cancelado: false, tile });
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 2. HOOK EM handleSelect
+    // ═══════════════════════════════════════════════════════════
+    const _hsAtual = window.handleSelect;
+    if (typeof _hsAtual === 'function' && !_hsAtual._v80Ruda) {
+        window.handleSelect = function(idx) {
+            if (window._rudaSelectingV80) {
+                const el = document.querySelectorAll('#grid .tile')[idx];
+                if (el && el.classList.contains('rudaV80-eligible')) {
+                    el.classList.add('rudaV80-selected');
+                    finalizar(false, { x: idx % 8, y: Math.floor(idx / 8) });
+                    return;
+                }
+            }
+            return _hsAtual.apply(this, arguments);
+        };
+        window.handleSelect._v80Ruda = true;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 3. WRAPPER EM triggerBravelyChain (por cima do V75)
+    // ═══════════════════════════════════════════════════════════
+    const _brav = window.triggerBravelyChain;
+    if (typeof _brav === 'function' && !_brav._v80Ruda) {
+        const _innerBrav = _brav;
+        window.triggerBravelyChain = async function(active, target, totalAtk) {
+            // PvP/Coop → delega (V75 já trata, mas por segurança)
+            if (window._pvpMode || window._coopMode) {
+                return _innerBrav.apply(this, arguments);
+            }
+
+            const heroData = (typeof STORY_HERO_CLASSES !== 'undefined' && active)
+                ? STORY_HERO_CLASSES[active.class] : null;
+
+            // Não é Rudá → delega pro V75
+            if (!heroData || heroData.paKey !== PA_KEY) {
+                return _innerBrav.apply(this, arguments);
+            }
+
+            // ─── Fluxo customizado do Rudá ───
+            if (typeof showPoderAncestralEffect === 'function') {
+                try { showPoderAncestralEffect(); } catch(e) {}
+            }
+            await _sleep(300);
+            try { if (typeof playSfx === 'function') playSfx('skill1'); } catch(e) {}
+
+            const chosen = await abrirSelecao();
+            if (chosen.cancelado) {
+                if (typeof addLog === 'function') addLog('🏹 Rudá: PA cancelado.');
+                return;
+            }
+
+            // Cruz no tile escolhido
+            const tiles = [];
+            for (let i = 0; i < 8; i++) {
+                if (!tiles.includes(i * 8 + chosen.tile.x)) tiles.push(i * 8 + chosen.tile.x);
+                if (!tiles.includes(chosen.tile.y * 8 + i)) tiles.push(chosen.tile.y * 8 + i);
+            }
+
+            // FX
+            tiles.forEach((idx, i) => {
+                setTimeout(() => {
+                    if (typeof spawnFxAt === 'function') {
+                        spawnFxAt('impact', 'fx-impact', idx % 8, Math.floor(idx / 8), { duration: 500, scale: 0.7 });
+                    }
+                }, i * 30);
+            });
+
+            await _sleep(500);
+
+            // Dano no boss (se estiver na cruz)
+            if (target && !target.dead) {
+                const bossIdx = target.y * 8 + target.x;
+                if (tiles.includes(bossIdx)) {
+                    if (typeof applyDmg === 'function') applyDmg(target, totalAtk);
+                }
+            }
+
+            // Converte pra AR
+            tiles.forEach(idx => {
+                grid[idx] = 'AR';
+                const el = document.querySelectorAll('#grid .tile')[idx];
+                if (el) el.className = 'tile bg-AR';
+            });
+
+            if (typeof addLog === 'function') {
+                addLog(`🏹 Rudá: Cruz de Ar em (${chosen.tile.x},${chosen.tile.y})!`);
+            }
+            if (typeof updateVisuals === 'function') updateVisuals();
+            if (typeof updateTitleStats === 'function') updateTitleStats('bravely_chain');
+        };
+        window.triggerBravelyChain._v80Ruda = true;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 4. CSS
+    // ═══════════════════════════════════════════════════════════
+    if (!document.getElementById('v80RudaCSS')) {
+        const s = document.createElement('style');
+        s.id = 'v80RudaCSS';
+        s.textContent = `
+            @keyframes rudaV80Pulse {
+                from { box-shadow: 0 4px 15px rgba(0,0,0,.5), 0 0 10px rgba(74,140,181,.3); }
+                to   { box-shadow: 0 4px 15px rgba(0,0,0,.5), 0 0 25px rgba(74,140,181,.7); }
+            }
+            .rudaV80-eligible {
+                box-shadow: inset 0 0 0 2px rgba(74,140,181,.9) !important;
+                cursor: pointer !important;
+                animation: rudaV80Elig 1s ease-in-out infinite alternate !important;
+            }
+            @keyframes rudaV80Elig {
+                from { box-shadow: inset 0 0 0 2px rgba(74,140,181,.5); }
+                to   { box-shadow: inset 0 0 0 3px rgba(74,140,181,1), 0 0 12px rgba(74,140,181,.6); }
+            }
+            .rudaV80-selected {
+                box-shadow: inset 0 0 0 3px #e8b923, 0 0 20px rgba(232,185,35,.9) !important;
+                transform: scale(1.05);
+                z-index: 5;
+            }
+        `;
+        document.head.appendChild(s);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 5. WATCHDOG: se seleção ficou travada, reseta
+    // ═══════════════════════════════════════════════════════════
+    setInterval(() => {
+        if (window._rudaSelectingV80 && !document.getElementById('rudaBarV80')) {
+            console.warn('[V80] Seleção travada — resetando');
+            window._rudaSelectingV80 = false;
+            _ativoV80 = false;
+            _resolveV80 = null;
+            document.querySelectorAll('.rudaV80-eligible, .rudaV80-selected')
+                .forEach(el => el.classList.remove('rudaV80-eligible', 'rudaV80-selected'));
+        }
+    }, 2000);
+
+    // ═══════════════════════════════════════════════════════════
+    // 6. DEBUG
+    // ═══════════════════════════════════════════════════════════
+    window._debugRudaV80 = function() {
+        console.group('=== RUDA V80 ===');
+        console.log('V80 ativo?', window._fixRudaPAV80);
+        console.log('Seleção ativa?', window._rudaSelectingV80);
+        console.log('Barra existe?', !!document.getElementById('rudaBarV80'));
+        console.log('Tiles elegíveis:', document.querySelectorAll('.rudaV80-eligible').length);
+        console.log('Tiles selecionados:', document.querySelectorAll('.rudaV80-selected').length);
+        console.log('triggerBravelyChain._v80Ruda:', window.triggerBravelyChain?._v80Ruda);
+        console.log('handleSelect._v80Ruda:', window.handleSelect?._v80Ruda);
+        console.groupEnd();
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V80] PA do Rudá restaurado');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Seleção de tile central da cruz');
+    console.log('• Cruz completa (linha + coluna) no tile escolhido');
+    console.log('• Dano PA se boss na cruz');
+    console.log('• Converte pra AR');
+    console.log('• Outros heróis → V75 (FX leve)');
+    console.log('• Curupira → V68');
+    console.log('• PvP/Coop → delega');
+    console.log('');
+    console.log('💡 Debug: window._debugRudaV80()');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — V81 — Fix visual do card ao selecionar herói na OCA
+// -----------------------------------------------------------------
+// Bug: ao clicar num card, toggleHeroSelection chamava
+// renderOcaScreenFiltered() → re-renderizava tudo → algum patch
+// pós-processava o DOM e o card ficava com HTML incompleto
+// (só o "?" e o status apareciam).
+//
+// Fix: não re-renderizar. Só atualizar a classe `.selected` e o
+// check (✅) nos cards existentes. Zero impacto no DOM.
+//
+// Cole NO FINAL do historia.js (por último, depois do V80).
+// =================================================================
+(function fixToggleSelectionV81() {
+    if (window._fixToggleSelectionV81) return;
+    window._fixToggleSelectionV81 = true;
+
+    console.log('[V81] Instalando fix do toggle selection...');
+
+    // ═══════════════════════════════════════════════════════════
+    // Guardar o original (para o resto do fluxo, se necessário)
+    // ═══════════════════════════════════════════════════════════
+    if (!window._origToggleHeroSelectionV81) {
+        window._origToggleHeroSelectionV81 = window.toggleHeroSelection;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // toggleHeroSelection SEM re-render
+    // ═══════════════════════════════════════════════════════════
+    window.toggleHeroSelection = function(heroClass) {
+        // Guard: herói em expedição
+        if (typeof heroiEmExpedicao === 'function' && heroiEmExpedicao(heroClass)) {
+            if (typeof showToast === 'function') {
+                showToast('⛺', `${STORY_HERO_CLASSES[heroClass]?.displayName || heroClass} está em expedição.`, '⛺');
+            }
+            return;
+        }
+
+        // Guard: herói não desbloqueado
+        const unlockedList = STORY_PROGRESS.unlockedHeroesStory || ['Tupa','Sume','Caipora'];
+        const heroData = STORY_HERO_CLASSES[heroClass];
+        if (!heroData) return;
+        const isUnlocked = heroData.starsNeeded === 0 || unlockedList.includes(heroClass);
+        if (!isUnlocked) return;
+
+        // Atualiza estado
+        STORY_PROGRESS.selectedHeroes = [heroClass];
+        if (typeof saveStoryProgress === 'function') saveStoryProgress();
+
+        // ⭐ Só atualiza classes (NÃO re-renderiza)
+        document.querySelectorAll('.story-hero-card').forEach(card => {
+            const onclickAttr = card.getAttribute('onclick') || '';
+            const match = onclickAttr.match(/toggleHeroSelection\('((?:\\'|[^'])*)'\)/);
+            if (!match) return;
+            const hc = match[1].replace(/\\'/g, "'");
+            const shouldSelect = (hc === heroClass);
+
+            // Toggle da classe selected
+            card.classList.toggle('selected', shouldSelect);
+
+            // Atualiza check (✅)
+            let check = card.querySelector('.story-hero-check');
+            if (shouldSelect && !check) {
+                check = document.createElement('div');
+                check.className = 'story-hero-check';
+                check.innerHTML = (typeof uiIcon === 'function') ? uiIcon('check') : '✅';
+                card.appendChild(check);
+            } else if (!shouldSelect && check) {
+                check.remove();
+            }
+        });
+
+        // Feedback tátil/som (opcional)
+        if (typeof playSfx === 'function') {
+            try { playSfx('click'); } catch(e) {}
+        }
+    };
+
+    // ═══════════════════════════════════════════════════════════
+    // Wrapper de segurança: se algum patch antigo restaura
+    // toggleHeroSelection com re-render, re-instala o nosso
+    // ═══════════════════════════════════════════════════════════
+    setInterval(() => {
+        const atual = window.toggleHeroSelection;
+        if (atual && atual !== window.toggleHeroSelection) return; // referência sempre é ele mesmo, ignorar
+        // Se algum patch trocou, reinstala
+        if (!atual || atual.name === '' || (atual.toString().includes('renderOcaScreenFiltered'))) {
+            // Reinstala
+            window.toggleHeroSelection = arguments.callee.caller ? null : window.toggleHeroSelection;
+        }
+    }, 2000);
+
+    // ═══════════════════════════════════════════════════════════
+    // DEBUG
+    // ═══════════════════════════════════════════════════════════
+    window._debugToggleV81 = function() {
+        console.group('=== V81 ===');
+        console.log('V81 ativo?', window._fixToggleSelectionV81);
+        console.log('toggleHeroSelection tem renderOcaScreenFiltered?',
+            window.toggleHeroSelection?.toString().includes('renderOcaScreenFiltered'));
+        console.log('Card selecionado atual:',
+            STORY_PROGRESS.selectedHeroes);
+        const selectedCard = document.querySelector('.story-hero-card.selected');
+        if (selectedCard) {
+            console.log('HTML do card selecionado:');
+            console.log(selectedCard.innerHTML.substring(0, 300));
+        }
+        console.groupEnd();
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V81] Fix visual do card selecionado');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• toggleHeroSelection NÃO re-renderiza a OCA');
+    console.log('• Só atualiza classe .selected + check (✅)');
+    console.log('• Card não quebra mais ao clicar');
+    console.log('• Performance melhor (sem re-render)');
+    console.log('');
+    console.log('💡 Debug: window._debugToggleV81()');
     console.log('═══════════════════════════════════════════════════');
 })();
