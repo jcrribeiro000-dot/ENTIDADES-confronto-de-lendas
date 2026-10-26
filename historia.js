@@ -56142,121 +56142,7 @@ if (heroAgora.class === 'Anhanga-Mirim' && heroAgora.hp < heroAgora.maxHp) {
 
     console.log('✅ [V86.0] Expedição Unificada Definitiva carregada.');
 })();
-// =================================================================
-// historia.js — V87.3 — Música da Aldeia (Com volume audível)
-// =================================================================
-(function musicaAldeiaV87_3() {
-    if (window._musicaAldeiaV87_3) return;
-    window._musicaAldeiaV87_3 = true;
 
-    const MUSIC_URL = 'faldeia.mp3'; 
-    // ⭐ AUMENTEI de 0.3 para 0.6 para você conseguir ouvir a diferença
-    const AMBIENT_MULTIPLIER = 0.6; 
-
-    const bgm = new Audio(MUSIC_URL);
-    bgm.loop = true;
-    bgm.preload = 'auto';
-    window._bgmAldeia = bgm;
-
-    let userInteracted = false;
-    let isTryingToPlay = false;
-
-    // Desbloqueia o áudio no clique
-    document.addEventListener('click', function unlockAudio() {
-        userInteracted = true;
-        if (typeof window.tentarTocarAldeia === 'function') {
-            window.tentarTocarAldeia();
-        }
-    });
-
-    function updateVolume() {
-        const masterVol = (typeof STORY_SETTINGS !== 'undefined' && STORY_SETTINGS.musicVolume !== undefined) 
-            ? STORY_SETTINGS.musicVolume 
-            : 70;
-        bgm.volume = (masterVol / 100) * AMBIENT_MULTIPLIER;
-        console.log(`🔊 [V87.3] Volume atualizado. Slider: ${masterVol}% | Volume Final: ${bgm.volume.toFixed(2)}`);
-    }
-
-    window.tentarTocarAldeia = function() {
-        if (!userInteracted) return;
-        if (!bgm.paused || isTryingToPlay) return;
-        
-        isTryingToPlay = true;
-        updateVolume();
-        
-        bgm.play().then(() => {
-            console.log('🎵 [V87.3] Música da Aldeia tocando.');
-            isTryingToPlay = false;
-        }).catch(e => {
-            console.warn('🔇 [V87.3] Navegador bloqueou.', e);
-            isTryingToPlay = false;
-        });
-    };
-
-    window.pararAldeia = function() {
-        if (!bgm.paused) {
-            bgm.pause();
-            console.log('⏸️ [V87.3] Música pausada.');
-        }
-    };
-
-    // ⭐ O VIGIA (Agora deixa a música tocar também nas Configurações)
-    setInterval(() => {
-        const screen = document.getElementById('storyScreen');
-        if (!screen || !screen.classList.contains('active')) {
-            window.pararAldeia();
-            return;
-        }
-
-        const titleEl = screen.querySelector('.story-title') 
-                     || screen.querySelector('.story-ald-title');
-        if (!titleEl) return;
-        
-        const titleTxt = titleEl.textContent.toUpperCase();
-
-        // Se estiver na Aldeia OU nas Configurações (pra você ouvir o slider funcionar)
-        if (titleTxt.includes('ALDEIA') || titleTxt.includes('CONFIGURAÇÕES')) {
-            window.tentarTocarAldeia();
-        } else {
-            window.pararAldeia();
-        }
-    }, 1000);
-
-    // Play ao clicar em voltar
-    document.addEventListener('click', function(e) {
-        const btn = e.target.closest('button, .story-back-btn, .story-result-btn');
-        if (!btn) return;
-        
-        const txt = (btn.textContent || '').toUpperCase();
-        const onclickAttr = btn.getAttribute('onclick') || '';
-        
-        const voltaPraAldeia = txt.includes('ALDEIA') 
-                            || onclickAttr.includes('renderAldeiaScreen')
-                            || onclickAttr.includes('returnFromStoryVictory')
-                            || onclickAttr.includes('eventoVoltarAldeia');
-        
-        if (voltaPraAldeia) {
-            userInteracted = true;
-            setTimeout(() => {
-                if (typeof window.tentarTocarAldeia === 'function') {
-                    window.tentarTocarAldeia();
-                }
-            }, 100);
-        }
-    }, true);
-
-    // Hook do volume (Atualiza em tempo real)
-    const _origApplyMusic = window.applyMusicVolume;
-    if (typeof _origApplyMusic === 'function' && !_origApplyMusic._v87_3) {
-        window.applyMusicVolume = function(pct) {
-            _origApplyMusic.apply(this, arguments);
-            updateVolume();
-        };
-        window.applyMusicVolume._v87_3 = true;
-    }
-
-    console.log('✅ [V87.3] Música da Aldeia (Volume em tempo real) ativada.');
-})();
 // =================================================================
 // historia.js — V90 — Temas dos Menus (Baseado no V87.2)
 // =================================================================
@@ -56389,5 +56275,369 @@ if (heroAgora.class === 'Anhanga-Mirim' && heroAgora.hp < heroAgora.maxHp) {
     }
 
     console.log('✅ [V90] Temas dos Menus ativados (Base V87.2).');
+})();
+// =================================================================
+// aldeia.js — V91 — Fix música vazando para QUALQUER tela fora da Aldeia
+// -----------------------------------------------------------------
+// O V87.3 tem um listener de clique global (unlockAudio) que chama
+// tentarTocarAldeia() em QUALQUER clique, sem verificar em que tela
+// está. Isso dispara o play e o vigia de 1s do V87.3 pausa logo depois
+// → efeito de "toca brevemente" ao clicar em qualquer lugar.
+//
+// Solução:
+//   1. tentarTocarAldeia vira no-op (clique não toca mais)
+//   2. Watchdog de 100ms pausa _bgmAldeia se estiver fora da Aldeia
+//   3. tentarTocarMusica do V90 respeita estado de jogo
+//
+// Cole NO FINAL do aldeia.js (depois do V90).
+// =================================================================
+(function fixMusicaVazandoV91() {
+    if (window._fixMusicaVazandoV91) return;
+    window._fixMusicaVazandoV91 = true;
+
+    // ─────────────────────────────────────────────────────────
+    // Verificadores de estado
+    // ─────────────────────────────────────────────────────────
+    function estaNaAldeiaOuConfig() {
+        const screen = document.getElementById('storyScreen');
+        if (!screen) return false;
+        if (!screen.classList.contains('active')) return false;
+        if (getComputedStyle(screen).display === 'none') return false;
+        const titleEl = screen.querySelector('.story-title');
+        if (!titleEl) return false;
+        const txt = titleEl.textContent.toUpperCase();
+        return txt.includes('ALDEIA') || txt.includes('CONFIGURAÇÕES');
+    }
+
+    function estaEmJogo() {
+        const gameScreen = document.getElementById('gameScreen');
+        return gameScreen
+            && gameScreen.classList.contains('active')
+            && getComputedStyle(gameScreen).display !== 'none';
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // 1. Pausa o áudio antigo imediatamente
+    // ─────────────────────────────────────────────────────────
+    if (window._bgmAldeia && !window._bgmAldeia.paused) {
+        try { window._bgmAldeia.pause(); } catch (e) {}
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // 2. Neutraliza funções do V87.3
+    //    - tentarTocarAldeia → no-op (cliques não tocam mais)
+    //    - pararAldeia       → força pause de tudo
+    // ─────────────────────────────────────────────────────────
+    window.tentarTocarAldeia = function () {
+        // no-op intencional: V90 cuida de toda a música
+    };
+
+    window.pararAldeia = function () {
+        if (window._bgmAldeia && !window._bgmAldeia.paused) {
+            try { window._bgmAldeia.pause(); } catch (e) {}
+        }
+    };
+
+    // ─────────────────────────────────────────────────────────
+    // 3. ⭐ WATCHDOG — pausa _bgmAldeia em no máximo 100ms
+    //    Mesmo se algum clique / listener antigo escapar e chamar
+    //    bgm.play(), a pausa chega em até 100ms.
+    // ─────────────────────────────────────────────────────────
+    setInterval(() => {
+        const bgm = window._bgmAldeia;
+        if (!bgm) return;
+        if (bgm.paused) return;
+        if (estaNaAldeiaOuConfig()) return;  // deixa tocar
+
+        try { bgm.pause(); } catch (e) {}
+    }, 100);
+
+    // ─────────────────────────────────────────────────────────
+    // 4. Endurece tentarTocarMusica do V90 (para o _bgmGlobal)
+    //    O V90 já pausa em jogo, mas reforçamos a checagem
+    // ─────────────────────────────────────────────────────────
+    const _orig = window.tentarTocarMusica;
+    if (typeof _orig === 'function' && !_orig._v91Fix) {
+        window.tentarTocarMusica = function () {
+            const bgm = window._bgmGlobal;
+            if (!bgm) return;
+
+            if (estaEmJogo()) {
+                if (!bgm.paused) {
+                    try { bgm.pause(); } catch (e) {}
+                }
+                return;
+            }
+            return _orig.apply(this, arguments);
+        };
+        window.tentarTocarMusica._v91Fix = true;
+    }
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V91] Música da Aldeia contida');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• tentarTocarAldeia → no-op (cliques não tocam)');
+    console.log('• Watchdog de 100ms pausa _bgmAldeia fora da Aldeia');
+    console.log('• tentarTocarMusica reforçado contra jogo');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// aldeia.js — V91.1 — Fix: música da Aldeia não estava tocando
+// -----------------------------------------------------------------
+// Reimplementa tentarTocarMusica do zero para evitar a cadeia
+// de wrappers (V90 → V91) que pode estar escolhendo a música errada.
+//
+// Prioridades:
+//   1. gameScreen ativo       → pausa
+//   2. Aldeia (múltiplas det.)→ faldeia.mp3
+//   3. Menus com .story-title → fmenu.wav
+//   4. Nenhum dos dois        → pausa
+//
+// Cole NO FINAL do aldeia.js (depois do V90 e V91).
+// =================================================================
+(function fixMusicaAldeiaV91_1() {
+    if (window._fixMusicaAldeiaV91_1) return;
+    window._fixMusicaAldeiaV91_1 = true;
+
+    // ─── CONFIG ───
+    const MUSIC_ALDEIA = 'faldeia.mp3';
+    const MUSIC_MENU   = 'fmenu.wav';
+    const AMBIENT_MULT = 0.6;
+
+    // ─── Interação do usuário (autoplay) ───
+    let _userInteracted = false;
+    document.addEventListener('click', () => { _userInteracted = true; }, { capture: true });
+    document.addEventListener('touchstart', () => { _userInteracted = true; }, { capture: true });
+
+    // ─── DETECÇÃO ───
+    function estaEmJogo() {
+        const g = document.getElementById('gameScreen');
+        return g && g.classList.contains('active')
+            && getComputedStyle(g).display !== 'none';
+    }
+
+    function estaNaAldeia() {
+        const s = document.getElementById('storyScreen');
+        if (!s) return false;
+        if (!s.classList.contains('active')) return false;
+        if (getComputedStyle(s).display === 'none') return false;
+
+        // 1. Container visual da Aldeia (mais confiável)
+        if (s.querySelector('.aldeia-visual-wrap')) return true;
+
+        // 2. Título específico da Aldeia
+        const t1 = s.querySelector('.story-ald-title');
+        if (t1 && t1.textContent.trim().toUpperCase() === 'ALDEIA') return true;
+
+        // 3. Fallback: story-title com conteúdo "ALDEIA"
+        const t2 = s.querySelector('.story-title');
+        if (t2 && t2.textContent.trim().toUpperCase() === 'ALDEIA') return true;
+
+        return false;
+    }
+
+    function estaEmMenu() {
+        const s = document.getElementById('storyScreen');
+        if (!s) return false;
+        if (!s.classList.contains('active')) return false;
+        if (getComputedStyle(s).display === 'none') return false;
+        // Tem título de menu E não é Aldeia
+        return !!s.querySelector('.story-title') && !estaNaAldeia();
+    }
+
+    // ─── CONTROLES DE ÁUDIO ───
+    function trocarFonte(bgm, url) {
+        // Compara só o nome do arquivo (evita problemas com path relativo/absoluto)
+        const atual = bgm.src || '';
+        if (atual.endsWith(url)) return false;
+        bgm.src = url;
+        bgm.load();
+        console.log(`🎵 [V91.1] Trocando para ${url}`);
+        return true;
+    }
+
+    function atualizarVolume(bgm) {
+        const vol = (typeof STORY_SETTINGS !== 'undefined' && STORY_SETTINGS.musicVolume !== undefined)
+            ? STORY_SETTINGS.musicVolume : 70;
+        bgm.volume = (vol / 100) * AMBIENT_MULT;
+    }
+
+    function tocar(bgm) {
+        if (!bgm.paused) return;
+        if (!_userInteracted) return;
+        const p = bgm.play();
+        if (p && p.catch) {
+            p.catch(e => {
+                // Silencioso: autoplay bloqueado antes da primeira interação
+            });
+        }
+    }
+
+    function pausar(bgm) {
+        if (!bgm.paused) {
+            try { bgm.pause(); } catch (e) {}
+        }
+    }
+
+    // ─── SUBSTITUI tentarTocarMusica INTEIRO ───
+    window.tentarTocarMusica = function() {
+        const bgm = window._bgmGlobal;
+        if (!bgm) return;
+
+        // 1. Batalha → pausa
+        if (estaEmJogo()) {
+            pausar(bgm);
+            return;
+        }
+
+        // 2. Aldeia → faldeia.mp3
+        if (estaNaAldeia()) {
+            trocarFonte(bgm, MUSIC_ALDEIA);
+            atualizarVolume(bgm);
+            tocar(bgm);
+            return;
+        }
+
+        // 3. Menus → fmenu.wav
+        if (estaEmMenu()) {
+            trocarFonte(bgm, MUSIC_MENU);
+            atualizarVolume(bgm);
+            tocar(bgm);
+            return;
+        }
+
+        // 4. Qualquer outra tela → pausa
+        pausar(bgm);
+    };
+    window.tentarTocarMusica._v91_1 = true;
+
+    // ─── DEBUG ───
+    window._debugMusicaV91_1 = function() {
+        const bgm = window._bgmGlobal;
+        const s = document.getElementById('storyScreen');
+        console.group('=== MÚSICA V91.1 ===');
+        console.log('src atual:', bgm?.src?.split('/').pop() || '(vazio)');
+        console.log('paused:', bgm?.paused);
+        console.log('volume:', bgm?.volume?.toFixed(2));
+        console.log('userInteracted:', _userInteracted);
+        console.log('');
+        console.log('storyScreen ativo:', s?.classList.contains('active'));
+        console.log('storyScreen display:', s ? getComputedStyle(s).display : '?');
+        console.log('tem .aldeia-visual-wrap:', !!s?.querySelector('.aldeia-visual-wrap'));
+        console.log('story-ald-title:', s?.querySelector('.story-ald-title')?.textContent?.trim() || '(não existe)');
+        console.log('story-title:', s?.querySelector('.story-title')?.textContent?.trim() || '(não existe)');
+        console.log('');
+        console.log('estaEmJogo():', estaEmJogo());
+        console.log('estaNaAldeia():', estaNaAldeia());
+        console.log('estaEmMenu():', estaEmMenu());
+        console.groupEnd();
+    };
+
+    // ─── Chama imediatamente para corrigir o estado atual ───
+    setTimeout(() => window.tentarTocarMusica(), 100);
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V91.1] Música da Aldeia corrigida');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• tentarTocarMusica reimplementado do zero');
+    console.log('• Detecção da Aldeia por 3 critérios independentes');
+    console.log('• Debug: window._debugMusicaV91_1()');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// historia.js — V92.1 — Fix: drops da expedição usam a dificuldade
+//                       DA PRÓPRIA EXPEDIÇÃO
+// -----------------------------------------------------------------
+// O calcRecompensas do V79 chama rollStoryDrops(eid) sem o 2º
+// argumento. Isso faz o V92 usar storyCurrentDifficulty (errado
+// quando a expedição tem uma dificuldade diferente da última
+// partida da História).
+//
+// Solução: override de _expVerResultado pra recalcular os drops
+// com exp.difficulty ANTES da função original aplicar as recompensas.
+// Sem dupla aplicação (a original lê exp.resultado.drops).
+//
+// Cole NO FINAL do historia.js (depois do V92).
+// =================================================================
+(function fixDropsExpedicaoV92_1() {
+    if (window._fixDropsExpedicaoV92_1) return;
+    window._fixDropsExpedicaoV92_1 = true;
+
+    const _orig = window._expVerResultado;
+    if (typeof _orig !== 'function') {
+        console.warn('[V92.1] _expVerResultado não existe. Abortando.');
+        return;
+    }
+    if (_orig._v92_1) return;
+
+    window._expVerResultado = function (expId) {
+        const exp = STORY_PROGRESS?.expeditions?.find(e => e.id === expId);
+
+        // Guard: só age se a expedição está pronta pra coletar
+        if (!exp || !exp.concluida || exp.coletada) {
+            return _orig.apply(this, arguments);
+        }
+
+        // Recalcula drops SE:
+        //   - teve sucesso
+        //   - tem drops computados (evita expedição sem drops)
+        //   - tem chapterId/phaseId (event expeditions não têm)
+        if (exp.resultado?.sucesso
+            && exp.resultado.drops
+            && exp.chapterId
+            && exp.phaseId) {
+            const ch = STORY_CHAPTERS[exp.chapterId];
+            const ph = ch?.phases.find(p => p.id === exp.phaseId);
+            if (ph) {
+                const newDrops = [];
+                ph.enemies.forEach(eid => {
+                    // ⭐ Agora passa exp.difficulty como override
+                    const enemyDrops = window.rollStoryDrops(eid, exp.difficulty);
+                    enemyDrops.forEach(d => {
+                        if (d.id === 'nucleo_abismo') return;
+                        if (d.id === 'essencia_sombria') return;
+                        newDrops.push(d);
+                    });
+                });
+                exp.resultado.drops = newDrops;
+                console.log(`[V92.1] Drops recalculados (${exp.difficulty}):`, newDrops);
+            }
+        }
+
+        return _orig.apply(this, arguments);
+    };
+    window._expVerResultado._v92_1 = true;
+
+    // Diagnóstico
+    window._debugDropsExpV921 = function () {
+        const exps = STORY_PROGRESS?.expeditions || [];
+        console.group('=== DROPS EXPEDIÇÃO V92.1 ===');
+        console.log('V92.1 ativo?', window._fixDropsExpedicaoV92_1);
+        exps.forEach(e => {
+            console.log(`[${e.id}]`, {
+                heroClass: e.heroClass,
+                dificuldade: e.difficulty,
+                concluida: e.concluida,
+                coletada: e.coletada,
+                drops: e.resultado?.drops || '(ainda não computado)',
+            });
+        });
+        console.log('');
+        console.log('storyCurrentDifficulty (última partida):', storyCurrentDifficulty);
+        console.groupEnd();
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V92.1] Drops da expedição com dificuldade CORRETA');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Agora usa exp.difficulty (não storyCurrentDifficulty)');
+    console.log('• Recalcula drops antes de aplicar (sem dupla aplicação)');
+    console.log('• Funciona pra Normal/Difícil/Pesadelo da expedição');
+    console.log('');
+    console.log('💡 Debug: window._debugDropsExpV921()');
+    console.log('═══════════════════════════════════════════════════');
 })();
 
