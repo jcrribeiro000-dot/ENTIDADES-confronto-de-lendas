@@ -7,7 +7,7 @@
 //    instalar a nova versão e apagar o cache antigo.
 // =================================================================
 
-const CACHE_VERSION = 'v33'; // ← MUDE A CADA DEPLOY
+const CACHE_VERSION = 'v34'; // ← MUDE A CADA DEPLOY
 const CACHE_NAME    = `entidades-cache-${CACHE_VERSION}`;
 
 // =================================================================
