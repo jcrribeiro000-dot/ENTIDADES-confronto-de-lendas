@@ -16,7 +16,7 @@
 // ================================================================
 const A_SPRITES = {
     Tupa:    'https://i.imgur.com/R2WKPky.gif',   // ✓
-    Sume:    'https://i.imgur.com/qoKCarB.gif',   // ✓
+    Sume:    'https://i.imgur.com/xXwuVKW.gif',   // ✓
     Caipora: 'https://i.imgur.com/3bayQJu.gif',   // ✓
 
     BOITATA:     'https://i.imgur.com/4PEG3BL.gif',   // ✓
@@ -28,8 +28,8 @@ const A_SPRITES = {
     LOBISOMEM:   'https://i.imgur.com/EL12OX1.gif',   // ✓
     CUCA:        'https://i.imgur.com/ubm1PCp.gif',   // ✓
     BOTO:        'https://i.imgur.com/InSAq1W.gif',   // ✓
-    BOI:         'https://i.imgur.com/tP2hyxJ.gif',   // ✓
-    JACI:        'https://i.imgur.com/vnRilxj.gif',   // ✓
+    BOI:         'https://i.imgur.com/EOLfnHU.gif',   // ✓
+    JACI:        'https://i.imgur.com/h1BTjLU.gif',   // ✓
     GUARACI:     'https://i.imgur.com/ViX8EKj.gif',   // ✓
     ANHANGA:     'https://i.imgur.com/q43m2km.gif',   // ✓
 
