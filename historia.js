@@ -56143,74 +56143,251 @@ if (heroAgora.class === 'Anhanga-Mirim' && heroAgora.hp < heroAgora.maxHp) {
     console.log('✅ [V86.0] Expedição Unificada Definitiva carregada.');
 })();
 // =================================================================
-// historia.js — V90.1 — Música da Aldeia (Otimizado para GitHub)
+// historia.js — V87.3 — Música da Aldeia (Com volume audível)
 // =================================================================
-(function musicaAldeiaV90_1() {
-    if (window._musicaAldeiaV90_1) return;
-    window._musicaAldeiaV90_1 = true;
+(function musicaAldeiaV87_3() {
+    if (window._musicaAldeiaV87_3) return;
+    window._musicaAldeiaV87_3 = true;
 
     const MUSIC_URL = 'faldeia.mp3'; 
-    const AMBIENT_MULTIPLIER = 0.3; 
+    // ⭐ AUMENTEI de 0.3 para 0.6 para você conseguir ouvir a diferença
+    const AMBIENT_MULTIPLIER = 0.6; 
 
-    const bgm = document.createElement('audio');
-    bgm.id = 'bgmAldeiaV90';
-    bgm.src = MUSIC_URL;
+    const bgm = new Audio(MUSIC_URL);
     bgm.loop = true;
     bgm.preload = 'auto';
-    bgm.volume = 0; 
-    document.documentElement.appendChild(bgm);
+    window._bgmAldeia = bgm;
 
-    // Impede o motor do jogo de pausar o áudio
-    Object.defineProperty(bgm, 'pause', {
-        value: function() { bgm.volume = 0; },
-        writable: false
+    let userInteracted = false;
+    let isTryingToPlay = false;
+
+    // Desbloqueia o áudio no clique
+    document.addEventListener('click', function unlockAudio() {
+        userInteracted = true;
+        if (typeof window.tentarTocarAldeia === 'function') {
+            window.tentarTocarAldeia();
+        }
     });
 
-    let isNaAldeia = false;
-
-    function setVol() {
-        const vol = (typeof STORY_SETTINGS !== 'undefined' && STORY_SETTINGS.musicVolume !== undefined) 
-            ? STORY_SETTINGS.musicVolume : 70;
-        bgm.volume = isNaAldeia ? ((vol / 100) * AMBIENT_MULTIPLIER) : 0;
+    function updateVolume() {
+        const masterVol = (typeof STORY_SETTINGS !== 'undefined' && STORY_SETTINGS.musicVolume !== undefined) 
+            ? STORY_SETTINGS.musicVolume 
+            : 70;
+        bgm.volume = (masterVol / 100) * AMBIENT_MULTIPLIER;
+        console.log(`🔊 [V87.3] Volume atualizado. Slider: ${masterVol}% | Volume Final: ${bgm.volume.toFixed(2)}`);
     }
 
-    // Desbloqueia no primeiro clique
-    document.addEventListener('pointerdown', function unlock() {
-        bgm.play().catch(() => {});
-        document.removeEventListener('pointerdown', unlock);
-    });
+    window.tentarTocarAldeia = function() {
+        if (!userInteracted) return;
+        if (!bgm.paused || isTryingToPlay) return;
+        
+        isTryingToPlay = true;
+        updateVolume();
+        
+        bgm.play().then(() => {
+            console.log('🎵 [V87.3] Música da Aldeia tocando.');
+            isTryingToPlay = false;
+        }).catch(e => {
+            console.warn('🔇 [V87.3] Navegador bloqueou.', e);
+            isTryingToPlay = false;
+        });
+    };
 
-    // Checa a tela de forma otimizada (sem sobrecarregar o DOM)
+    window.pararAldeia = function() {
+        if (!bgm.paused) {
+            bgm.pause();
+            console.log('⏸️ [V87.3] Música pausada.');
+        }
+    };
+
+    // ⭐ O VIGIA (Agora deixa a música tocar também nas Configurações)
     setInterval(() => {
         const screen = document.getElementById('storyScreen');
-        if (!screen) return;
-
-        // Verifica se estamos na tela da Aldeia
-        const estaNaAldeiaAgora = screen.classList.contains('active') && 
-                                  screen.querySelector('.story-ald-title') !== null;
-
-        // Se mudou de tela, atualiza o estado
-        if (estaNaAldeiaAgora !== isNaAldeia) {
-            isNaAldeia = estaNaAldeiaAgora;
-            
-            // Se entrou na aldeia, tenta garantir que o áudio está rodando
-            if (isNaAldeia && bgm.paused) {
-                bgm.play().catch(() => {});
-            }
-            
-            setVol();
+        if (!screen || !screen.classList.contains('active')) {
+            window.pararAldeia();
+            return;
         }
-    }, 500);
 
-    // Atualiza o volume se o jogador mexer no slider
+        const titleEl = screen.querySelector('.story-title') 
+                     || screen.querySelector('.story-ald-title');
+        if (!titleEl) return;
+        
+        const titleTxt = titleEl.textContent.toUpperCase();
+
+        // Se estiver na Aldeia OU nas Configurações (pra você ouvir o slider funcionar)
+        if (titleTxt.includes('ALDEIA') || titleTxt.includes('CONFIGURAÇÕES')) {
+            window.tentarTocarAldeia();
+        } else {
+            window.pararAldeia();
+        }
+    }, 1000);
+
+    // Play ao clicar em voltar
+    document.addEventListener('click', function(e) {
+        const btn = e.target.closest('button, .story-back-btn, .story-result-btn');
+        if (!btn) return;
+        
+        const txt = (btn.textContent || '').toUpperCase();
+        const onclickAttr = btn.getAttribute('onclick') || '';
+        
+        const voltaPraAldeia = txt.includes('ALDEIA') 
+                            || onclickAttr.includes('renderAldeiaScreen')
+                            || onclickAttr.includes('returnFromStoryVictory')
+                            || onclickAttr.includes('eventoVoltarAldeia');
+        
+        if (voltaPraAldeia) {
+            userInteracted = true;
+            setTimeout(() => {
+                if (typeof window.tentarTocarAldeia === 'function') {
+                    window.tentarTocarAldeia();
+                }
+            }, 100);
+        }
+    }, true);
+
+    // Hook do volume (Atualiza em tempo real)
     const _origApplyMusic = window.applyMusicVolume;
-    if (typeof _origApplyMusic === 'function') {
+    if (typeof _origApplyMusic === 'function' && !_origApplyMusic._v87_3) {
         window.applyMusicVolume = function(pct) {
             _origApplyMusic.apply(this, arguments);
-            setVol();
+            updateVolume();
         };
+        window.applyMusicVolume._v87_3 = true;
     }
 
-    console.log('✅ [V90.1] Música da Aldeia (GitHub Otimizada) ativada.');
+    console.log('✅ [V87.3] Música da Aldeia (Volume em tempo real) ativada.');
+})();
+// =================================================================
+// historia.js — V90 — Temas dos Menus (Baseado no V87.2)
+// =================================================================
+(function temasMenusV90() {
+    if (window._temasMenusV90) return;
+    window._temasMenusV90 = true;
+
+    // ═══════════════════════════════════════════════════════════
+    // 🎵 CONFIGURAÇÃO DE MÚSICAS
+    // ═══════════════════════════════════════════════════════════
+    const MUSIC_ALDEIA = 'faldeia.mp3'; 
+    const MUSIC_MENU   = 'fmenu.wav'; // ⚠️ Lembre-se de ter esse arquivo na pasta
+    const AMBIENT_MULTIPLIER = 0.6; 
+
+    // ═══════════════════════════════════════════════════════════
+
+    const bgm = new Audio();
+    bgm.loop = true;
+    bgm.preload = 'auto';
+    window._bgmGlobal = bgm;
+
+    let userInteracted = false;
+    let isTryingToPlay = false;
+    let currentSrc = '';
+
+    // Log de erro se o arquivo não existir
+    bgm.addEventListener('error', () => {
+        console.error(`🚨 [V90] O ARQUIVO DE MÚSICA (${currentSrc}) NÃO FOI ENCONTRADO!`);
+    });
+
+    // Desbloqueia o áudio no clique
+    document.addEventListener('click', function unlockAudio() {
+        userInteracted = true;
+        if (typeof window.tentarTocarMusica === 'function') {
+            window.tentarTocarMusica();
+        }
+    });
+
+    function updateVolume() {
+        const masterVol = (typeof STORY_SETTINGS !== 'undefined' && STORY_SETTINGS.musicVolume !== undefined) 
+            ? STORY_SETTINGS.musicVolume 
+            : 70;
+        bgm.volume = (masterVol / 100) * AMBIENT_MULTIPLIER;
+    }
+
+    // ⭐ A mesma função do V87.2, mas agora escolhe o arquivo baseado na tela
+    window.tentarTocarMusica = function() {
+        if (!userInteracted) return;
+        
+        const screen = document.getElementById('storyScreen');
+        const gameScreen = document.getElementById('gameScreen');
+        
+        // Se estiver em batalha, não toca música de menu
+        if (gameScreen && gameScreen.classList.contains('active')) {
+            if (!bgm.paused) bgm.pause();
+            return;
+        }
+
+        if (!screen || !screen.classList.contains('active')) return;
+
+        const titleEl = screen.querySelector('.story-title') || screen.querySelector('.story-ald-title');
+        if (!titleEl) return;
+        
+        const titleTxt = titleEl.textContent.toUpperCase();
+        
+        // Define qual música deve tocar
+        let novoSrc = MUSIC_MENU; // Fallback padrão para menus
+        if (titleTxt.includes('ALDEIA')) {
+            novoSrc = MUSIC_ALDEIA;
+        }
+
+        // Se mudou de tema, troca o arquivo
+        if (currentSrc !== novoSrc) {
+            currentSrc = novoSrc;
+            bgm.src = novoSrc;
+            bgm.load();
+        }
+
+        // Toca (se estiver pausado)
+        if (bgm.paused && !isTryingToPlay) {
+            isTryingToPlay = true;
+            updateVolume();
+            
+            bgm.play().then(() => {
+                console.log(`🎵 [V90] Tocando tema: ${currentSrc}`);
+                isTryingToPlay = false;
+            }).catch(e => {
+                console.warn(`🔇 [V90] Navegador bloqueou a música: ${e.name}`);
+                isTryingToPlay = false;
+            });
+        } else {
+            updateVolume();
+        }
+    };
+
+    // ⭐ O VIGIA (Idêntico ao V87.2)
+    setInterval(() => {
+        window.tentarTocarMusica();
+    }, 1000);
+
+    // Play ao clicar em voltar
+    document.addEventListener('click', function(e) {
+        const btn = e.target.closest('button, .story-back-btn, .story-result-btn');
+        if (!btn) return;
+        
+        const txt = (btn.textContent || '').toUpperCase();
+        const onclickAttr = btn.getAttribute('onclick') || '';
+        
+        const voltaPraAldeia = txt.includes('ALDEIA') 
+                            || onclickAttr.includes('renderAldeiaScreen')
+                            || onclickAttr.includes('returnFromStoryVictory')
+                            || onclickAttr.includes('eventoVoltarAldeia');
+        
+        if (voltaPraAldeia) {
+            userInteracted = true;
+            setTimeout(() => {
+                window.tentarTocarMusica();
+            }, 100);
+        }
+    }, true);
+
+    // Hook do volume
+    const _origApplyMusic = window.applyMusicVolume;
+    if (typeof _origApplyMusic === 'function' && !_origApplyMusic._v90) {
+        window.applyMusicVolume = function(pct) {
+            _origApplyMusic.apply(this, arguments);
+            updateVolume();
+        };
+        window.applyMusicVolume._v90 = true;
+    }
+
+    console.log('✅ [V90] Temas dos Menus ativados (Base V87.2).');
 })();
 

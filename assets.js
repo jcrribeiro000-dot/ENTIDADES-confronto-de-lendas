@@ -20,14 +20,14 @@ const A_SPRITES = {
     Caipora: 'https://i.imgur.com/3bayQJu.gif',   // ✓
 
     BOITATA:     'https://i.imgur.com/4PEG3BL.gif',   // ✓
-    MAPINGUARI:  'https://i.imgur.com/TWRsZmS.gif',   // ✓
+    MAPINGUARI:  'https://i.imgur.com/oIhDjT8.gif',   // ✓
     SACI:        'https://i.imgur.com/NTcI6G2.gif',   // ✓
     IARA:        'https://i.imgur.com/NxMl4Cj.gif',   // ✓
     MULA:        'https://i.imgur.com/SpEsN9P.gif',   // ✓
     CORPOSECO:   'https://i.imgur.com/5Tkoqxg.gif',   // ✓
     LOBISOMEM:   'https://i.imgur.com/EL12OX1.gif',   // ✓
     CUCA:        'https://i.imgur.com/ubm1PCp.gif',   // ✓
-    BOTO:        'https://i.imgur.com/InSAq1W.gif',   // ✓
+    BOTO:        'https://i.imgur.com/Soc8uvn.gif',   // ✓
     BOI:         'https://i.imgur.com/EOLfnHU.gif',   // ✓
     JACI:        'https://i.imgur.com/h1BTjLU.gif',   // ✓
     GUARACI:     'https://i.imgur.com/ViX8EKj.gif',   // ✓
