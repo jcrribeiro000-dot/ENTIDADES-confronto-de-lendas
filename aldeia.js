@@ -3313,85 +3313,449 @@
     console.log('═══════════════════════════════════════════════════');
 })();
 // =================================================================
-// 🎯 V56 — Fix mínimo: loadStoryProgressByName preenche saveName
+// aldeia.js — V58 — Unificação de Interfaces (Inventário e Layout)
 // -----------------------------------------------------------------
-// Bug de 1 linha: loadStoryProgressByName usava `STORY_PROGRESS.saveName
-// || saveName` mas NÃO garantia que STORY_PROGRESS.saveName ficasse
-// preenchido. renderAldeiaScreen então mostrava o modal indevidamente.
-//
-// Fix: apenas preenche STORY_PROGRESS.saveName após o load.
-// Não interfere em render, modal, showScreen, observers, nada.
+// 1. Remove o botão "Voltar ao Menu" da Aldeia visual
+// 2. Inventário: Botão "Esconder/Mostrar Itens" + Clique para info
 // =================================================================
-(function fixSaveNameV56() {
-    if (window._fixSaveNameV56) return;
-    window._fixSaveNameV56 = true;
+(function unificarInterfacesV58() {
+    if (window._unificarInterfacesV58) return;
+    window._unificarInterfacesV58 = true;
 
-    // ── Fix 1: loadStoryProgressByName sempre preenche saveName ──
-    const _origLoad = window.loadStoryProgressByName;
-    if (typeof _origLoad === 'function' && !_origLoad._v56) {
-        window.loadStoryProgressByName = function(name) {
-            const r = _origLoad.apply(this, arguments);
-            if (r && typeof STORY_PROGRESS !== 'undefined' && STORY_PROGRESS) {
-                if (!STORY_PROGRESS.saveName) {
-                    STORY_PROGRESS.saveName = name;
-                    try { if (typeof saveStoryProgress === 'function') saveStoryProgress(); } catch(e) {}
-                }
+    // ═══════════════════════════════════════════════════════════
+    // 1. CSS GLOBAL (Botão de voltar + Efeito hover do inventário)
+    // ═══════════════════════════════════════════════════════════
+    if (!document.getElementById('aldeiaUIComplementsV58')) {
+        const style = document.createElement('style');
+        style.id = 'aldeiaUIComplementsV58';
+        style.textContent = `
+            /* ⭐ Remove a barra inferior (onde fica o botão de voltar) */
+            .aldeia-bottom-bar {
+                display: none !important;
             }
-            return r;
-        };
-        window.loadStoryProgressByName._v56 = true;
-        console.log('[V56] loadStoryProgressByName: saveName garantido.');
+
+            /* ⭐ Efeito hover nos materiais do inventário */
+            .tesouraria-item {
+                transition: all 0.2s ease;
+            }
+            .tesouraria-item:hover {
+                border-color: #c9a227 !important;
+                transform: translateY(-2px);
+                box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            }
+        `;
+        document.head.appendChild(style);
+        console.log('✅ [V58] CSS: Botão de voltar removido e hover do inventário ativado.');
     }
 
-    // ── Fix 2: após criar/confirmar save, força Aldeia ──
-    const _origConfirm = window.confirmStorySaveName;
-    if (typeof _origConfirm === 'function' && !_origConfirm._v56) {
-        window.confirmStorySaveName = function() {
-            const r = _origConfirm.apply(this, arguments);
-            setTimeout(() => {
-                if (typeof STORY_CURRENT_SAVE_NAME === 'undefined' || !STORY_CURRENT_SAVE_NAME) return;
+    // ═══════════════════════════════════════════════════════════
+    // 2. INVENTÁRIO OTIMIZADO
+    // ═══════════════════════════════════════════════════════════
+    // Estado global: começa mostrando os itens
+    window._invMostrarMateriais = true;
 
-                // Sincroniza
-                if (typeof STORY_PROGRESS !== 'undefined' && STORY_PROGRESS && !STORY_PROGRESS.saveName) {
-                    STORY_PROGRESS.saveName = STORY_CURRENT_SAVE_NAME;
-                }
-
-                // Limpa flag de "usuário quer menu"
-                try { sessionStorage.removeItem('_v47_userQuerMenu'); } catch(e) {}
-
-                // Esconde título/intro + remove modal + força Aldeia
-                ['titleScreen','introScreen'].forEach(id => {
-                    const el = document.getElementById(id);
-                    if (el) el.style.setProperty('display', 'none', 'important');
-                });
-                const modal = document.getElementById('storySaveNameModal');
-                if (modal) modal.remove();
-                const story = document.getElementById('storyScreen');
-                if (story) {
-                    story.style.setProperty('display', 'flex', 'important');
-                    story.classList.add('active');
-                }
-                if (typeof renderAldeiaScreen === 'function') renderAldeiaScreen();
-                console.log('[V56] ✅ Aldeia forçada após criar save.');
-            }, 100);
-            return r;
-        };
-        window.confirmStorySaveName._v56 = true;
-        console.log('[V56] confirmStorySaveName: força Aldeia.');
-    }
-
-    // ── Debug ──
-    window._debugV56 = function() {
-        console.log('═══ [V56] ═══');
-        try { console.log('STORY_CURRENT_SAVE_NAME:', STORY_CURRENT_SAVE_NAME); } catch(e) {}
-        try { console.log('STORY_PROGRESS.saveName:', STORY_PROGRESS?.saveName); } catch(e) {}
-        console.log('Modal aberto?', !!document.getElementById('storySaveNameModal'));
-        const title = document.getElementById('titleScreen');
-        const story = document.getElementById('storyScreen');
-        console.log('Title display:', title ? getComputedStyle(title).display : '?');
-        console.log('Story display:', story ? getComputedStyle(story).display : '?');
-        console.log('═══════════════');
+    // Função para o botão de esconder/mostrar
+    window.toggleInvMateriais = function() {
+        window._invMostrarMateriais = !window._invMostrarMateriais;
+        if (typeof renderTesourariaScreen === 'function') {
+            renderTesourariaScreen();
+        }
     };
 
-    console.log('✅ [V56] Fix mínimo do saveName ativado.');
+    // Sobrescreve a função de renderização do inventário
+    window.renderTesourariaInventario = function(materialIds) {
+        // Se o script original não tiver carregado as variáveis, aborta com segurança
+        if (typeof STORY_PROGRESS === 'undefined') return '';
+
+        const eqMap = STORY_PROGRESS.heroEquipment || {};
+        const armasEquipadas = new Set();
+        const amuletosEquipados = new Set();
+        for (const hc in eqMap) {
+            if (eqMap[hc].arma) armasEquipadas.add(eqMap[hc].arma);
+            if (eqMap[hc].amuleto) amuletosEquipados.add(eqMap[hc].amuleto);
+        }
+
+        const armas = (STORY_PROGRESS.craftedWeapons || [])
+            .filter(uid => !armasEquipadas.has(uid))
+            .map(uid => typeof getWeaponById === 'function' ? getWeaponById(uid) : null)
+            .filter(Boolean);
+
+        const amuletos = (STORY_PROGRESS.craftedAmulets || [])
+            .filter(uid => !amuletosEquipados.has(uid))
+            .map(uid => typeof getAmuletById === 'function' ? getAmuletById(uid) : null)
+            .filter(Boolean);
+
+        if (materialIds.length === 0 && armas.length === 0 && amuletos.length === 0) {
+            return `<div class="tesouraria-empty">
+                <div class="tesouraria-empty-icon">📦</div>
+                <div class="tesouraria-empty-text">Inventário vazio.</div>
+            </div>`;
+        }
+
+        materialIds.sort((a, b) => (window.getMaterialPrice?.(b) || 2) - (window.getMaterialPrice?.(a) || 2));
+        const inv_count = (id) => STORY_PROGRESS.inventory[id] || 0;
+        const totalValue = materialIds.reduce((sum, id) => sum + (window.getMaterialPrice?.(id) || 2) * inv_count(id), 0);
+
+        // ─── MATERIAIS ───
+        const cardsHTML = materialIds.map(id => {
+            const m = STORY_MATERIALS[id] || { emoji: '❓', name: '?' };
+            const qty = STORY_PROGRESS.inventory[id] || 0;
+            const price = window.getMaterialPrice?.(id) || 2;
+            const temModal = typeof window.openMaterialInfoModal === 'function';
+            
+            return `<div class="tesouraria-item" ${temModal ? `onclick="window.openMaterialInfoModal('${id}')"` : ''} style="${temModal ? 'cursor:pointer;' : ''}" title="${temModal ? 'Clique para ver onde conseguir' : ''}">
+                <div class="tesouraria-item-icon">${m.emoji}</div>
+                <div class="tesouraria-item-name">${m.name}</div>
+                <div class="tesouraria-item-qty">×${qty}</div>
+                <div class="tesouraria-item-price">${typeof uiIcon === 'function' ? uiIcon('gold') : '💰'} ${price} / un.</div>
+            </div>`;
+        }).join('');
+
+        const btnLabel = window._invMostrarMateriais ? '🙈 Ocultar Itens' : '👁️ Mostrar Itens';
+        const btnToggleHTML = `<button onclick="window.toggleInvMateriais()" style="margin-left:12px; padding:4px 12px; background:#3d2d18; color:#e8b923; border:1px solid #6a5024; border-radius:12px; cursor:pointer; font-family:'Cinzel',serif; font-size:0.75rem; font-weight:bold; transition:all .2s;">${btnLabel}</button>`;
+
+        const gridHTML = window._invMostrarMateriais 
+            ? `<div class="tesouraria-grid" style="margin-top:10px;">${cardsHTML}</div>`
+            : `<div style="text-align:center; padding:20px; color:#8a7a52; font-family:'EB Garamond',serif; font-style:italic; background:rgba(10,6,2,.3); border-radius:6px; margin-top:10px;">Os materiais estão ocultos para economizar espaço.</div>`;
+
+        // ─── EQUIPAMENTOS ───
+        const renderWeaponRow = (w) => {
+            const ti = typeof getTierInfo === 'function' ? getTierInfo(w.tier) : { aura: 'simples', nome: 'Simples' };
+            const icon = typeof getWeaponIcon === 'function' ? getWeaponIcon(w.uid, 'normal') : (w.emoji || '⚔️');
+            const podeUpar = w.tier < (window.TIER_MAX || 2);
+            return `<div class="inv-equip-row tier-row-${ti.aura}">
+                <div class="inv-equip-icon tier-aura-${ti.aura}">${icon}</div>
+                <div class="inv-equip-info">
+                    <div class="inv-equip-name">${w.nome} <span class="tier-badge tier-badge-${ti.aura}">${ti.nome}</span></div>
+                    <div class="inv-equip-meta">+${w.atkBonus} ATK ${w.elemento === 'ANY' ? '· ✨' : `· ${typeof elemIcon==='function'?elemIcon(w.elemento):''} ${w.elemento}`}</div>
+                </div>
+                ${podeUpar ? `<button class="forge-btn" style="padding:4px 10px; font-size:.8rem;" onclick="window._abrirUpgradeModalV85('${w.uid}')">⬆️ UPAR</button>` : `<span style="color:#e8b923; font-size:.75rem; font-weight:700; padding:4px 8px;">MAX</span>`}
+                <button class="forge-btn danger" style="padding:4px 8px;" onclick="handleDismantleWeapon('${w.uid}')">🔥</button>
+            </div>`;
+        };
+
+        const renderAmuletRow = (a) => {
+            const ti = typeof getTierInfo === 'function' ? getTierInfo(a.tier) : { aura: 'simples', nome: 'Simples' };
+            const icon = typeof getAmuletIcon === 'function' ? getAmuletIcon(a.uid, 'normal') : (a.emoji || '🧿');
+            const podeUpar = a.tier < (window.TIER_MAX || 2);
+            const ef = a.efeito || {};
+            const efeitos = [];
+            if (ef.elementOverride) efeitos.push(`${typeof elemIcon==='function'?elemIcon(ef.elementOverride):''} ${ef.elementOverride}`);
+            if (ef.hpBonus)     efeitos.push(`+${ef.hpBonus} HP`);
+            if (ef.atkBonus)    efeitos.push(`+${ef.atkBonus} ATK`);
+            if (ef.healPerTurn) efeitos.push(`+${ef.healPerTurn} HP/t`);
+            
+            return `<div class="inv-equip-row tier-row-${ti.aura}">
+                <div class="inv-equip-icon tier-aura-${ti.aura}">${icon}</div>
+                <div class="inv-equip-info">
+                    <div class="inv-equip-name">${a.nome} <span class="tier-badge tier-badge-${ti.aura}">${ti.nome}</span></div>
+                    <div class="inv-equip-meta">${efeitos.join(' · ') || '—'}</div>
+                </div>
+                ${podeUpar ? `<button class="forge-btn" style="padding:4px 10px; font-size:.8rem;" onclick="window._abrirUpgradeModalV85('${a.uid}')">⬆️ UPAR</button>` : `<span style="color:#e8b923; font-size:.75rem; font-weight:700; padding:4px 8px;">MAX</span>`}
+                <button class="forge-btn danger" style="padding:4px 8px;" onclick="handleDismantleAmulet('${a.uid}')">🔥</button>
+            </div>`;
+        };
+
+        const weaponsHTML = armas.length ? armas.map(renderWeaponRow).join('') : `<div class="inv-empty-line">Nenhuma arma não equipada.</div>`;
+        const amuletsHTML = amuletos.length ? amuletos.map(renderAmuletRow).join('') : `<div class="inv-empty-line">Nenhum amuleto não equipado.</div>`;
+
+        return `
+            <div class="tesouraria-total" style="display:flex; justify-content:center; align-items:center; flex-wrap:wrap;">
+                <span>Valor do inventário: <b>${typeof uiIcon === 'function' ? uiIcon('gold') : '💰'} ${totalValue}</b></span>
+                ${btnToggleHTML}
+            </div>
+            ${gridHTML}
+            <div class="inv-equipment-section">
+                <div class="inv-equipment-title">⚔️ ARMAS (não equipadas)</div>
+                <div class="inv-equip-list">${weaponsHTML}</div>
+                <div class="inv-equipment-title" style="margin-top:16px;">🧿 AMULETOS (não equipados)</div>
+                <div class="inv-equip-list">${amuletsHTML}</div>
+                <div class="inv-equipment-hint">💡 Clique nos materiais para ver onde consegui-los.</div>
+            </div>
+        `;
+    };
+
+    console.log('✅ [V58] Interface unificada carregada (Inventário + Botão voltar).');
+})();
+// =================================================================
+// aldeia.js — V60.1 — Fundos Distintos (FIX z-index)
+// -----------------------------------------------------------------
+// Aplica a imagem DIRETO na #storyScreen (não numa camada irmã).
+// A #storyScreen tem z-index:9700 e background opaco — qualquer
+// camada em z-index menor fica invisível atrás dela.
+// =================================================================
+(function fundosDistintosV60() {
+    if (window._fundosDistintosV60) return;
+    window._fundosDistintosV60 = true;
+
+    // ═══════════════════════════════════════════════════════════
+    // 🖼️ CONFIGURAÇÃO
+    // ═══════════════════════════════════════════════════════════
+    window.INTERFACE_BACKGROUNDS = window.INTERFACE_BACKGROUNDS || {
+        'oca':        { wide: 'https://i.imgur.com/HB9c4ao.jpeg', mobile: '' },
+        'atos':       { wide: 'https://i.imgur.com/R2AyONo.jpeg', mobile: 'https://i.imgur.com/Nvz8pVj.jpeg' },
+        'tesouraria': { wide: '', mobile: '' },
+        'loja':       { wide: '', mobile: '' },
+        'evento':     { wide: '', mobile: '' },
+        'pvp':        { wide: '', mobile: '' },
+        'coop':       { wide: '', mobile: '' },
+        'ritual':     { wide: '', mobile: '' },
+        'bestiario':  { wide: '', mobile: '' },
+    };
+
+    function isMobile() {
+        return window.matchMedia('(max-width: 700px)').matches
+            || window.matchMedia('(orientation: portrait)').matches;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // APLICA / LIMPA
+    // ═══════════════════════════════════════════════════════════
+    function limparFundo(screen) {
+        screen.style.backgroundImage = '';
+        screen.style.backgroundSize = '';
+        screen.style.backgroundPosition = '';
+        screen.style.backgroundRepeat = '';
+        screen.style.backgroundColor = '';
+    }
+
+    function aplicarFundo(screen, bgUrl) {
+        const img = new Image();
+        img.onload = () => {
+            screen.style.backgroundImage =
+                `linear-gradient(rgba(10,6,2,0.60), rgba(10,6,2,0.60)), url('${bgUrl}')`;
+            screen.style.backgroundSize = 'cover, cover';
+            screen.style.backgroundPosition = 'center, center';
+            screen.style.backgroundRepeat = 'no-repeat, no-repeat';
+            screen.style.backgroundColor = '#1a1208'; // fallback
+            console.log(`🖼️ [V60.1] Fundo aplicado: ${bgUrl}`);
+        };
+        img.onerror = () => {
+            console.error(`🚨 [V60.1] Falha ao carregar: ${bgUrl}`);
+            limparFundo(screen);
+        };
+        img.src = bgUrl;
+    }
+
+    function detectarTela(titleTxt) {
+        if (titleTxt.includes('OCA')) return 'oca';
+        if (titleTxt.includes('ATOS')) return 'atos';
+        if (titleTxt.includes('TESOURARIA')) return 'tesouraria';
+        if (titleTxt.includes('CURANDEIRO') || titleTxt.includes('ESCAMBO')) return 'loja';
+        if (titleTxt.includes('SEMANA DAS SOMBRAS')) return 'evento';
+        if (titleTxt.includes('PVP')) return 'pvp';
+        if (titleTxt.includes('COOP')) return 'coop';
+        if (titleTxt.includes('RITUAL')) return 'ritual';
+        if (titleTxt.includes('BESTIÁRIO')) return 'bestiario';
+        return null;
+    }
+
+    function atualizarFundoDaTela() {
+        const screen = document.getElementById('storyScreen');
+        if (!screen) return;
+
+        // ⭐ LIMPA sempre antes (ao voltar pra Aldeia, o fundo custom some)
+        limparFundo(screen);
+
+        if (!screen.classList.contains('active')) return;
+
+        const titleEl = screen.querySelector('.story-title');
+        if (!titleEl) return;
+
+        const telaKey = detectarTela(titleEl.textContent.toUpperCase());
+        if (!telaKey) return;
+
+        const config = window.INTERFACE_BACKGROUNDS[telaKey];
+        if (!config) return;
+
+        const mob = isMobile();
+        let bgUrl = mob ? config.mobile : config.wide;
+        if (!bgUrl && mob) bgUrl = config.wide;
+        if (!bgUrl && !mob) bgUrl = config.mobile;
+
+        if (bgUrl && bgUrl.trim() !== '') {
+            aplicarFundo(screen, bgUrl);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // OBSERVERS (observa SÓ a #storyScreen, não o body)
+    // ═══════════════════════════════════════════════════════════
+    let _debounce = null;
+    function agendar() {
+        clearTimeout(_debounce);
+        _debounce = setTimeout(atualizarFundoDaTela, 60);
+    }
+
+    function init() {
+        const screen = document.getElementById('storyScreen');
+        if (!screen) {
+            setTimeout(init, 300);
+            return;
+        }
+
+        // MutationObserver na storyScreen inteira
+        const obs = new MutationObserver(agendar);
+        obs.observe(screen, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+
+        // Também observa mudanças de active via polling leve (5s) como fallback
+        setInterval(() => {
+            const s = document.getElementById('storyScreen');
+            if (!s) return;
+            const titleEl = s.querySelector('.story-title');
+            if (titleEl) {
+                const esperado = detectarTela(titleEl.textContent.toUpperCase());
+                if (esperado) {
+                    // Se ainda não aplicou, aplica
+                    const temBg = s.style.backgroundImage && s.style.backgroundImage.includes('url(');
+                    if (!temBg) atualizarFundoDaTela();
+                }
+            }
+        }, 5000);
+
+        atualizarFundoDaTela();
+        console.log('✅ [V60.1] Sistema de fundos distintos ativado (aplica na #storyScreen).');
+    }
+
+    window.addEventListener('resize', agendar);
+    window.addEventListener('orientationchange', () => setTimeout(atualizarFundoDaTela, 300));
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+
+    // API pública
+    window.setInterfaceBg = function (tela, urlWide, urlMobile) {
+        if (!window.INTERFACE_BACKGROUNDS[tela]) {
+            window.INTERFACE_BACKGROUNDS[tela] = { wide: '', mobile: '' };
+        }
+        if (urlWide !== undefined) window.INTERFACE_BACKGROUNDS[tela].wide = urlWide;
+        if (urlMobile !== undefined) window.INTERFACE_BACKGROUNDS[tela].mobile = urlMobile;
+        atualizarFundoDaTela();
+        console.log(`🖼️ Fundo da tela "${tela}" atualizado:`, window.INTERFACE_BACKGROUNDS[tela]);
+    };
+})();
+// =================================================================
+// aldeia.js — V91 — Modo Aplicativo (anti-navegador)
+// -----------------------------------------------------------------
+// Só ativa quando o jogo roda instalado (PWA standalone).
+// No navegador normal (desenvolvimento), NÃO bloqueia nada.
+//
+// Requer no <head> do index.html (NÃO pode ser via JS):
+//   <meta name="viewport" content="width=device-width, initial-scale=1.0,
+//         maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+//   <meta name="apple-mobile-web-app-capable" content="yes">
+//   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+//   <meta name="mobile-web-app-capable" content="yes">
+//   <meta name="theme-color" content="#1a1208">
+//
+// E no manifest.json:
+//   "display": "standalone"
+// =================================================================
+(function modoAplicativoV91() {
+    if (window._modoAplicativoV91) return;
+    window._modoAplicativoV91 = true;
+
+    // ─── Detecção ───
+    function isStandalone() {
+        return window.matchMedia('(display-mode: standalone)').matches
+            || window.matchMedia('(display-mode: fullscreen)').matches
+            || window.matchMedia('(display-mode: minimal-ui)').matches
+            || window.navigator.standalone === true; // iOS Safari
+    }
+
+    if (!isStandalone()) {
+        console.log('🌐 [V91] Rodando no navegador — modo aplicativo DESATIVADO.');
+        return;
+    }
+
+    console.log('📱 [V91] Rodando como app instalado — modo aplicativo ATIVO.');
+
+    // ─── CSS ───
+    if (!document.getElementById('v91AppCSS')) {
+        const style = document.createElement('style');
+        style.id = 'v91AppCSS';
+        style.textContent = `
+            /* Bloqueia pull-to-refresh e bounce do iOS SEM quebrar scroll interno */
+            html, body {
+                overscroll-behavior-y: contain;
+                overscroll-behavior-x: contain;
+            }
+
+            /* Impede seleção de texto em toda a UI */
+            * {
+                -webkit-user-select: none;
+                -moz-user-select: none;
+                -ms-user-select: none;
+                user-select: none;
+                -webkit-touch-callout: none;
+                -webkit-tap-highlight-color: transparent;
+            }
+
+            /* Permite seleção SÓ em inputs (nome de save, etc) */
+            input, textarea {
+                -webkit-user-select: text !important;
+                user-select: text !important;
+            }
+
+            /* Fundo escuro nas bordas (safe-area) — evita faixa branca no iOS */
+            html, body {
+                background-color: #0d0805;
+                height: 100dvh;
+                overflow: hidden;
+            }
+
+            /* Conteúdo principal ocupa altura dinâmica */
+            #gameScreen, #storyScreen {
+                height: 100dvh !important;
+            }
+
+            /* #storyScreen mantém scroll interno (não sobrescreve overflow-y: auto) */
+
+            /* Barras de UI respeitam notch e barra de gestos */
+            .aldeia-top-bar,
+            .aldeia-bottom-bar,
+            .story-header,
+            .story-footer,
+            .aldeia-calib-bar {
+                padding-top: max(env(safe-area-inset-top), 8px);
+                padding-bottom: max(env(safe-area-inset-bottom), 8px);
+                padding-left: env(safe-area-inset-left);
+                padding-right: env(safe-area-inset-right);
+            }
+
+            /* Botão "voltar" flutuante não fica sob o notch */
+            #floatingBackBtn {
+                top: max(env(safe-area-inset-top), 10px);
+                left: max(env(safe-area-inset-left), 10px);
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // ─── JS ───
+    // Menu de contexto (clique longo)
+    document.addEventListener('contextmenu', (e) => e.preventDefault(), true);
+
+    // Arrastar imagens/elementos
+    document.addEventListener('dragstart', (e) => e.preventDefault(), true);
+
+    // Pinça para zoom (iOS Safari)
+    document.addEventListener('gesturestart', (e) => e.preventDefault(), true);
+    document.addEventListener('gesturechange', (e) => e.preventDefault(), true);
+    document.addEventListener('gestureend', (e) => e.preventDefault(), true);
+
+    // Double-tap to zoom (iOS Safari)
+    let _lastTouchEnd = 0;
+    document.addEventListener('touchend', (e) => {
+        const now = Date.now();
+        if (now - _lastTouchEnd <= 300) {
+            e.preventDefault();
+        }
+        _lastTouchEnd = now;
+    }, { passive: false });
+
+    console.log('✅ [V91] Anti-navegador ativado (menu, drag, zoom, refresh-drag).');
 })();
