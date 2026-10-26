@@ -3492,15 +3492,15 @@
     // 🖼️ CONFIGURAÇÃO
     // ═══════════════════════════════════════════════════════════
     window.INTERFACE_BACKGROUNDS = window.INTERFACE_BACKGROUNDS || {
-        'oca':        { wide: 'https://i.imgur.com/HB9c4ao.jpeg', mobile: '' },
+        'oca':        { wide: 'https://i.imgur.com/HB9c4ao.jpeg', mobile: 'https://i.imgur.com/LaoJuyF.jpeg' },
         'atos':       { wide: 'https://i.imgur.com/R2AyONo.jpeg', mobile: 'https://i.imgur.com/Nvz8pVj.jpeg' },
-        'tesouraria': { wide: '', mobile: '' },
-        'loja':       { wide: '', mobile: '' },
-        'evento':     { wide: '', mobile: '' },
-        'pvp':        { wide: '', mobile: '' },
-        'coop':       { wide: '', mobile: '' },
-        'ritual':     { wide: '', mobile: '' },
-        'bestiario':  { wide: '', mobile: '' },
+        'tesouraria': { wide: 'https://i.imgur.com/Z8D5wpO.jpeg', mobile: 'https://i.imgur.com/dTXPHi4.jpeg' },
+        'loja':       { wide: 'https://i.imgur.com/EZjkZGq.jpeg', mobile: 'https://i.imgur.com/lbR77Ta.jpeg' },
+        'evento':     { wide: 'https://i.imgur.com/lpUg7TX.jpeg', mobile: 'https://i.imgur.com/cCB8qX5.jpeg' },
+        'pvp':        { wide: 'https://i.imgur.com/4NjlozW.jpeg', mobile: 'https://i.imgur.com/MLbXoQj.jpeg' },
+        'coop':       { wide: 'https://i.imgur.com/uSImbPP.jpeg', mobile: 'https://i.imgur.com/4Lo60gV.jpeg' },
+        'ritual':     { wide: 'https://i.imgur.com/PbCqOwg.jpeg', mobile: 'https://i.imgur.com/rbiOooI.jpeg' },
+        'bestiario':  { wide: 'https://i.imgur.com/cjAclBV.jpeg', mobile: 'https://i.imgur.com/7qrW4Bh.jpeg' },
     };
 
     function isMobile() {
