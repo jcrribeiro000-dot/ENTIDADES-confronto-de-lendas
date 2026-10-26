@@ -56143,72 +56143,66 @@ if (heroAgora.class === 'Anhanga-Mirim' && heroAgora.hp < heroAgora.maxHp) {
     console.log('✅ [V86.0] Expedição Unificada Definitiva carregada.');
 })();
 // =================================================================
-// historia.js — V90 — Música da Aldeia (Observer + Anti-Pause)
-// -----------------------------------------------------------------
-// Solução robusta para Chrome/Edge em ambiente file://
+// historia.js — V90.1 — Música da Aldeia (Otimizado para GitHub)
 // =================================================================
-(function musicaAldeiaV90() {
-    if (window._musicaAldeiaV90) return;
-    window._musicaAldeiaV90 = true;
+(function musicaAldeiaV90_1() {
+    if (window._musicaAldeiaV90_1) return;
+    window._musicaAldeiaV90_1 = true;
 
     const MUSIC_URL = 'faldeia.mp3'; 
     const AMBIENT_MULTIPLIER = 0.3; 
 
-    // 1. Cria o elemento de áudio e coloca no DOM raiz (fora do #storyScreen)
     const bgm = document.createElement('audio');
     bgm.id = 'bgmAldeiaV90';
     bgm.src = MUSIC_URL;
     bgm.loop = true;
     bgm.preload = 'auto';
-    bgm.volume = 0; // Começa mutado
+    bgm.volume = 0; 
     document.documentElement.appendChild(bgm);
 
-    // ⭐ O SEGREDO: Impede o jogo de pausar a música
-    // Nós sobrescrevemos o método pause do próprio elemento.
+    // Impede o motor do jogo de pausar o áudio
     Object.defineProperty(bgm, 'pause', {
-        value: function() {
-            // O jogo tenta pausar, mas a gente só zera o volume.
-            bgm.volume = 0; 
-        },
+        value: function() { bgm.volume = 0; },
         writable: false
     });
 
-    // Função para aplicar o volume correto
+    let isNaAldeia = false;
+
     function setVol() {
         const vol = (typeof STORY_SETTINGS !== 'undefined' && STORY_SETTINGS.musicVolume !== undefined) 
             ? STORY_SETTINGS.musicVolume : 70;
-        // Se estivermos na aldeia, aplica o volume. Se não, fica 0.
-        if (document.getElementById('storyScreen')?.innerHTML.includes('ALDEIA')) {
-            bgm.volume = (vol / 100) * AMBIENT_MULTIPLIER;
-        } else {
-            bgm.volume = 0;
-        }
+        bgm.volume = isNaAldeia ? ((vol / 100) * AMBIENT_MULTIPLIER) : 0;
     }
 
-    // 2. Tenta desbloquear o áudio no primeiro clique do jogador
+    // Desbloqueia no primeiro clique
     document.addEventListener('pointerdown', function unlock() {
         bgm.play().catch(() => {});
         document.removeEventListener('pointerdown', unlock);
     });
 
-    // 3. Observer: Monitora quando a tela muda para ajustar o volume
-    const observer = new MutationObserver(() => {
+    // Checa a tela de forma otimizada (sem sobrecarregar o DOM)
+    setInterval(() => {
         const screen = document.getElementById('storyScreen');
         if (!screen) return;
 
-        // Se o áudio foi bloqueado pelo navegador e estamos na aldeia, tenta dar play
-        if (bgm.paused && screen.classList.contains('active')) {
-            bgm.play().catch(() => {});
+        // Verifica se estamos na tela da Aldeia
+        const estaNaAldeiaAgora = screen.classList.contains('active') && 
+                                  screen.querySelector('.story-ald-title') !== null;
+
+        // Se mudou de tela, atualiza o estado
+        if (estaNaAldeiaAgora !== isNaAldeia) {
+            isNaAldeia = estaNaAldeiaAgora;
+            
+            // Se entrou na aldeia, tenta garantir que o áudio está rodando
+            if (isNaAldeia && bgm.paused) {
+                bgm.play().catch(() => {});
+            }
+            
+            setVol();
         }
+    }, 500);
 
-        // Ajusta o volume baseado na tela atual
-        setVol();
-    });
-
-    // Começa a observar o body para detectar qualquer mudança de tela
-    observer.observe(document.body, { childList: true, subtree: true });
-
-    // Hook para atualizar o slider de configurações
+    // Atualiza o volume se o jogador mexer no slider
     const _origApplyMusic = window.applyMusicVolume;
     if (typeof _origApplyMusic === 'function') {
         window.applyMusicVolume = function(pct) {
@@ -56217,6 +56211,6 @@ if (heroAgora.class === 'Anhanga-Mirim' && heroAgora.hp < heroAgora.maxHp) {
         };
     }
 
-    console.log('✅ [V90] Música da Aldeia (Observer) ativada.');
+    console.log('✅ [V90.1] Música da Aldeia (GitHub Otimizada) ativada.');
 })();
 
