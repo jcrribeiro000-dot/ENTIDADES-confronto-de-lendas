@@ -56640,4 +56640,171 @@ if (heroAgora.class === 'Anhanga-Mirim' && heroAgora.hp < heroAgora.maxHp) {
     console.log('💡 Debug: window._debugDropsExpV921()');
     console.log('═══════════════════════════════════════════════════');
 })();
+// =================================================================
+// historia.js — V10.55.1 — Fix: corrupção some visualmente ao
+// converter o tile (por PA, skill de boss, etc.) mas continua bloqueando
+// -----------------------------------------------------------------
+// Causa: toda skill que converte tile faz `el.className = 'tile bg-X'`,
+// que remove a classe .tile-corrupted (pentagrama + fundo preto) mas
+// deixa órfão:
+//   • window._corruptedTiles com o índice (bloqueio em handleSelect)
+//   • <div class="corruption-fx"> dentro do tile (glow roxo residual)
+//
+// Fix:
+//   1. CSS: esconde .corruption-fx em tiles sem .tile-corrupted
+//   2. MutationObserver detecta tiles que perderam .tile-corrupted
+//      → remove do array + remove filho + spawna smoke de purificação
+//   3. Safety net de 1s (recupera se o observer não pegou)
+// =================================================================
+(function fixCorrupcaoVisualV1055_1() {
+    if (window._fixCorrupcaoVisualV1055_1) return;
+    window._fixCorrupcaoVisualV1055_1 = true;
 
+    // ─────────────────────────────────────────────────────────────
+    // 1. CSS imediato — esconde .corruption-fx órfão
+    // ─────────────────────────────────────────────────────────────
+    if (!document.getElementById('fixCorruptTileVisualCSS')) {
+        const s = document.createElement('style');
+        s.id = 'fixCorruptTileVisualCSS';
+        s.textContent = `
+            /* .corruption-fx só aparece se o tile AINDA tem .tile-corrupted */
+            .tile:not(.tile-corrupted) .corruption-fx {
+                display: none !important;
+            }
+        `;
+        document.head.appendChild(s);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 2. Helper que limpa um tile corrompido corretamente
+    // ─────────────────────────────────────────────────────────────
+    function _limparTileCorrompido(idx, opts) {
+        opts = opts || {};
+
+        const tile = document.querySelectorAll('#grid .tile')[idx];
+        if (!tile) return;
+
+        if (!Array.isArray(window._corruptedTiles)) return;
+        if (!window._corruptedTiles.includes(idx)) return; // já não estava
+
+        // Remove do array
+        window._corruptedTiles = window._corruptedTiles.filter(x => x !== idx);
+
+        // Remove o filho órfão
+        const fx = tile.querySelector('.corruption-fx');
+        if (fx) fx.remove();
+
+        // Remove classe residual (por garantia)
+        tile.classList.remove('tile-corrupted');
+
+        // Smoke de purificação (feedback visual)
+        if (!opts.silencioso) {
+            const board = document.getElementById('board');
+            const s = (typeof getStep === 'function') ? getStep() : 59;
+            if (board) {
+                const smoke = document.createElement('div');
+                smoke.className = 'corruption-smoke-fx';
+                smoke.style.left = ((idx % 8) * s + 8) + 'px';
+                smoke.style.top = (Math.floor(idx / 8) * s + 8) + 'px';
+                smoke.style.width = s + 'px';
+                smoke.style.height = s + 'px';
+                smoke.style.animationDelay = (Math.random() * 0.3) + 's';
+                board.appendChild(smoke);
+                setTimeout(() => { if (smoke.parentNode) smoke.remove(); }, 1600);
+            }
+        }
+    }
+    window._limparTileCorrompido = _limparTileCorrompido;
+
+    // ─────────────────────────────────────────────────────────────
+    // 3. MutationObserver — detecta tiles convertidos por skill
+    // ─────────────────────────────────────────────────────────────
+    function _setupObserver() {
+        const grid = document.getElementById('grid');
+        if (!grid) { setTimeout(_setupObserver, 500); return; }
+
+        const observer = new MutationObserver(() => {
+            if (!Array.isArray(window._corruptedTiles) || window._corruptedTiles.length === 0) return;
+
+            const tiles = grid.querySelectorAll('.tile');
+            let purificados = 0;
+
+            const idxs = window._corruptedTiles.slice();
+            idxs.forEach(idx => {
+                const tile = tiles[idx];
+                if (!tile) return;
+                if (!tile.classList.contains('tile-corrupted')) {
+                    _limparTileCorrompido(idx, { silencioso: false });
+                    purificados++;
+                }
+            });
+
+            if (purificados > 0) {
+                if (typeof addLog === 'function') {
+                    addLog(`✨ ${purificados} corrupção(ões) purificada(s) pelo efeito.`);
+                }
+                if (typeof playSfx === 'function') {
+                    try { playSfx('purificacao'); } catch(e) {}
+                }
+                console.log(`[V10.55.1] ${purificados} tile(s) purificado(s) via observer`);
+            }
+        });
+
+        observer.observe(grid, {
+            attributes: true,
+            attributeFilter: ['class'],
+            subtree: true,
+        });
+
+        console.log('[V10.55.1] Observer de corrupção instalado');
+    }
+    _setupObserver();
+
+    // ─────────────────────────────────────────────────────────────
+    // 4. Safety net de 1s
+    // ─────────────────────────────────────────────────────────────
+    setInterval(() => {
+        if (!Array.isArray(window._corruptedTiles) || window._corruptedTiles.length === 0) return;
+        const tiles = document.querySelectorAll('#grid .tile');
+        const idxs = window._corruptedTiles.slice();
+        idxs.forEach(idx => {
+            const tile = tiles[idx];
+            if (tile && !tile.classList.contains('tile-corrupted')) {
+                _limparTileCorrompido(idx, { silencioso: true });
+            }
+        });
+    }, 1000);
+
+    // ─────────────────────────────────────────────────────────────
+    // 5. Debug
+    // ─────────────────────────────────────────────────────────────
+    window._debugCorrupcaoVisual = function() {
+        const tiles = document.querySelectorAll('#grid .tile');
+        const info = (window._corruptedTiles || []).map(idx => {
+            const tile = tiles[idx];
+            return {
+                idx,
+                existe: !!tile,
+                temClasse: tile?.classList.contains('tile-corrupted'),
+                temFx: !!tile?.querySelector('.corruption-fx'),
+                bgAtual: Array.from(tile?.classList || []).find(c => c.startsWith('bg-')),
+            };
+        });
+        console.group('=== [V10.55.1] Corrupção visual ===');
+        console.log('Total no array:', (window._corruptedTiles || []).length);
+        console.table(info);
+        console.groupEnd();
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V10.55.1] Fix visual da corrupção');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• CSS: .corruption-fx escondido em tiles sem .tile-corrupted');
+    console.log('• Observer detecta tiles convertidos por skill');
+    console.log('• Remove do array + spawna smoke de purificação');
+    console.log('• Safety net de 1s como backup');
+    console.log('');
+    console.log('💡 Debug: window._debugCorrupcaoVisual()');
+    console.log('═══════════════════════════════════════════════════');
+})();

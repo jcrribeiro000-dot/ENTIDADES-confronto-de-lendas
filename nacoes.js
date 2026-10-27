@@ -3143,9 +3143,11 @@
                 } catch (e) { console.error('[V2.6] erro ao marcar:', e); }
             }
 
-            window._nacaoAtivo = false;
-            window._eventoAtivo = false;
-            window._nacaoBatalha = { ativa: false };
+            if (emNacao) {
+                    window._nacaoAtivo = false;
+                    window._eventoAtivo = false;
+                    window._nacaoBatalha = { ativa: false };
+           }
             return _origFinish.apply(this, arguments);
         };
         window.finishStoryPhase._v26Fix = true;
@@ -5053,4 +5055,496 @@
     };
 
     console.log('✅ [V2.16] Preço da Loja das Nações centralizado.');
+})();
+// =================================================================
+// nacoes.js — V2.17 — Fix CRÍTICO: recursão em getEnemySkillGrid
+// -----------------------------------------------------------------
+// Causa: V25.0 (historia.js, Bloco 91) chama getEnemySkillGrid() dentro
+// de getEnemySkillGridPrecise() como fallback. Como o V25.0 também faz
+// window.getEnemySkillGrid = getEnemySkillGridPrecise, o fallback vira
+// recursão infinita para QUALQUER inimigo sem pattern em
+// STORY_ENEMY_SKILL_PATTERNS — incluindo os 21 bosses das nações e os
+// 8 do evento. Resultado: RangeError, bestiário não abre.
+//
+// Fix: substituir getEnemySkillGrid por versão sem recursão + fallback
+// 3×3 no centro + patterns visuais para os bosses de nação/evento.
+// =================================================================
+(function fixGetEnemySkillGridV217() {
+    if (window._fixGetEnemySkillGridV217) return;
+    window._fixGetEnemySkillGridV217 = true;
+
+    // Referência à versão atual (que é a getEnemySkillGridPrecise do V25.0)
+    const _preciseRef = window.getEnemySkillGrid;
+
+    // -------------------------------------------------------------
+    // Fallback genérico — 3×3 no centro, sem recursão
+    // -------------------------------------------------------------
+    function _fallbackGrid() {
+        const gridSize = 8, CX = 3, CY = 4;
+        const afetados = Array.from({ length: gridSize }, () => Array(gridSize).fill(false));
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dy = -1; dy <= 1; dy++) {
+                const nx = CX + dx, ny = CY + dy;
+                if (nx >= 0 && nx < gridSize && ny >= 0 && ny < gridSize) afetados[ny][nx] = true;
+            }
+        }
+        let html = '<div class="pa-mini-grid" style="grid-template-columns:repeat(8,18px);grid-template-rows:repeat(8,18px);gap:1px;">';
+        for (let y = 0; y < gridSize; y++) {
+            for (let x = 0; x < gridSize; x++) {
+                const isEnemy = (x === CX && y === CY);
+                const isAfetado = afetados[y][x];
+                let cls = 'pa-mini-tile';
+                if (isEnemy) cls += ' pa-mini-hero bg-AR';
+                else if (isAfetado) cls += ' pa-mini-afetado bg-AR';
+                else cls += ' pa-mini-vazio';
+                html += `<div class="${cls}" style="width:18px;height:18px;font-size:11px;">${isEnemy ? '👹' : ''}</div>`;
+            }
+        }
+        html += '</div>';
+        return html;
+    }
+
+    // -------------------------------------------------------------
+    // Wrapper sem recursão
+    // -------------------------------------------------------------
+    window.getEnemySkillGrid = function(enemyId, skillKey) {
+        const patterns = (typeof STORY_ENEMY_SKILL_PATTERNS !== 'undefined')
+            ? STORY_ENEMY_SKILL_PATTERNS : {};
+        const pattern = patterns[enemyId]?.[skillKey === 'skill1' ? 's1' : 's2'];
+
+        // Com pattern → deixa o Precise fazer o trabalho (não vai recursar
+        // porque ele só chama getEnemySkillGrid quando NÃO tem pattern)
+        if (pattern && typeof _preciseRef === 'function') {
+            try {
+                return _preciseRef.call(this, enemyId, skillKey);
+            } catch (e) {
+                console.warn('[V2.17] Precise falhou:', enemyId, e);
+                return _fallbackGrid();
+            }
+        }
+
+        // Sem pattern → fallback, sem recursão
+        return _fallbackGrid();
+    };
+
+    // Sincroniza a variável local (alguns patches podem chamar `getEnemySkillGrid` direto)
+    try { getEnemySkillGrid = window.getEnemySkillGrid; } catch (e) {}
+
+    // -------------------------------------------------------------
+    // Patterns visuais para os 21 bosses de nação e 8 do evento
+    // (opcional — sem isso, o bestiário deles mostra 3×3 genérico)
+    // -------------------------------------------------------------
+    if (typeof STORY_ENEMY_SKILL_PATTERNS !== 'undefined') {
+        const PATTERNS_NACAO = {
+            // Nações — todos os deuses usam padrões do Ato 1..13
+            nacao_yucahu:           { s1: { tipo:'area', raio:1 },          s2: { tipo:'global' } },
+            nacao_atabey:           { s1: { tipo:'linha', raio:3 },         s2: { tipo:'global' } },
+            nacao_juracan:          { s1: { tipo:'area', raio:2 },          s2: { tipo:'area', raio:1 } },
+            nacao_quetzalcoatl:     { s1: { tipo:'diagonal_infinita' },     s2: { tipo:'area', raio:1 } },
+            nacao_tezcatlipoca:     { s1: { tipo:'cruz_infinita' },         s2: { tipo:'area', raio:2 } },
+            nacao_huitzilopochtli:  { s1: { tipo:'cruz_infinita' },         s2: { tipo:'global' } },
+            nacao_kukulkan:         { s1: { tipo:'linha', raio:7 },         s2: { tipo:'diagonal_infinita' } },
+            nacao_chaac:            { s1: { tipo:'area', raio:2 },          s2: { tipo:'linha', raio:7 } },
+            nacao_ixchel:           { s1: { tipo:'area', raio:2 },          s2: { tipo:'global' } },
+            nacao_illapa:           { s1: { tipo:'linha', raio:7 },         s2: { tipo:'global' } },
+            nacao_mamaquilla:       { s1: { tipo:'area', raio:2 },          s2: { tipo:'cruz_infinita' } },
+            nacao_supay:            { s1: { tipo:'global' },                 s2: { tipo:'area', raio:2 } },
+            nacao_antu:             { s1: { tipo:'linha', raio:7 },         s2: { tipo:'area', raio:2 } },
+            nacao_pillan:           { s1: { tipo:'area', raio:1 },          s2: { tipo:'global' } },
+            nacao_wekufe:           { s1: { tipo:'area', raio:2 },          s2: { tipo:'area', raio:1 } },
+            nacao_bochica:          { s1: { tipo:'linha', raio:7 },         s2: { tipo:'global' } },
+            nacao_bachue:           { s1: { tipo:'area', raio:2 },          s2: { tipo:'area', raio:1 } },
+            nacao_chibchacum:       { s1: { tipo:'cruz_infinita' },         s2: { tipo:'area', raio:2 } },
+            nacao_maii:             { s1: { tipo:'area', raio:1 },          s2: { tipo:'global' } },
+            nacao_spiderwoman:      { s1: { tipo:'area', raio:2 },          s2: { tipo:'cruz_infinita' } },
+            nacao_hashchelti:       { s1: { tipo:'custom', tiles:[{x:-2,y:-2},{x:2,y:-2},{x:-2,y:2},{x:2,y:2},{x:0,y:0}] }, s2: { tipo:'global' } },
+            // Evento semanal
+            teju_jagua:             { s1: { tipo:'cruz_infinita' },         s2: { tipo:'global' } },
+            mboi_tui:               { s1: { tipo:'linha', raio:7 },         s2: { tipo:'global' } },
+            monai:                  { s1: { tipo:'area', raio:1 },          s2: { tipo:'global' } },
+            jasy_jatere:            { s1: { tipo:'area', raio:1 },          s2: { tipo:'global' } },
+            kurupi:                 { s1: { tipo:'global' },                 s2: { tipo:'area', raio:1 } },
+            ao_ao:                  { s1: { tipo:'diagonal_infinita' },     s2: { tipo:'custom', tiles:[{x:2,y:2},{x:-2,y:2},{x:2,y:-2},{x:-2,y:-2}] } },
+            luison:                 { s1: { tipo:'custom', tiles:[{x:-3,y:0},{x:-2,y:0},{x:-1,y:0},{x:1,y:0},{x:2,y:0},{x:3,y:0}] }, s2: { tipo:'global' } },
+            pesadelo:               { s1: { tipo:'global' },                 s2: { tipo:'global' } },
+        };
+        Object.assign(STORY_ENEMY_SKILL_PATTERNS, PATTERNS_NACAO);
+        console.log('[V2.17] Patterns visuais adicionados para', Object.keys(PATTERNS_NACAO).length, 'bosses.');
+    }
+
+    // -------------------------------------------------------------
+    // Teste rápido
+    // -------------------------------------------------------------
+    try {
+        const test = window.getEnemySkillGrid('nacao_yucahu', 'skill1');
+        console.log('[V2.17] Teste nacao_yucahu OK:', test.length > 50 ? 'renderizado' : 'FALHOU');
+    } catch (e) {
+        console.error('[V2.17] Teste falhou:', e);
+    }
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V2.17] getEnemySkillGrid corrigido');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Recursão infinita removida (fallback sem recursão)');
+    console.log('• Patterns visuais adicionados para bosses de nação + evento');
+    console.log('• Bestiário deve abrir normalmente');
+    console.log('═══════════════════════════════════════════════════');
+})();
+(function filtrarNacoesDoBestiarioV218() {
+    if (window._filtrarNacoesDoBestiarioV218) return;
+    window._filtrarNacoesDoBestiarioV218 = true;
+
+    const _orig = window.renderBestiaryScreen;
+    if (typeof _orig !== 'function') return;
+
+    window.renderBestiaryScreen = function() {
+        const r = _orig.apply(this, arguments);
+        setTimeout(() => {
+            const grid = document.querySelector('.bestiary-grid');
+            if (!grid) return;
+            // Remove cards de nação (id começando com nacao_)
+            grid.querySelectorAll('.bestiary-card').forEach(card => {
+                const nameEl = card.querySelector('.bestiary-card-name');
+                if (!nameEl) return;
+                // Os cards de nação aparecem como "???" — verifica data via título
+                const titleEl = card.querySelector('.bestiary-card-meta');
+                if (titleEl && titleEl.textContent.includes('· Boss') &&
+                    titleEl.textContent.includes('Ato')) {
+                    // Este padrão é do bestiário de nação mapeado como se fosse ato
+                    // Deixa passar — só remove se casar com a assinatura específica
+                }
+                // Melhor: filtra pelo conteúdo do nome "???" E title contendo "Boss"
+                if (nameEl.textContent.trim() === '???' &&
+                    titleEl && titleEl.textContent.includes('Desconhecido')) {
+                    // Card fantasma de nação no bestiário do evento
+                    card.remove();
+                }
+            });
+        }, 100);
+        return r;
+    };
+
+    console.log('✅ [V2.18] Bestiário do evento: cards de nação fantasma removidos.');
+})();
+// =================================================================
+// nacoes.js — V2.21 — Fix: #gameScreen fantasma + botão flutuante
+// -----------------------------------------------------------------
+// Sintoma: após vitória de fase de nação, #gameScreen continua com
+// .active + display:flex escondido atrás do #storyScreen. Isso faz
+// updateFloatingBtnVisibility (historia.js) esconder o botão de
+// voltar, porque a lógica é "se #gameScreen.active, esconder botão".
+//
+// Causa: V2.11 (topo da cadeia finishStoryPhase) retorna cedo em
+// vitória de nação, sem chamar V2.8/V2.6/_origFinish. E o único
+// código que fecha #gameScreen está no V2.10, que só roda via
+// eventoFinalizarPartida (fase BOSS e Pesadelo).
+//
+// Fix:
+//   1. Wrappers em TODOS os renders de menu fecham #gameScreen
+//   2. Safety net detecta gameScreen fantasma (ativo + sem batalha real)
+//   3. Safety net re-mostra o botão flutuante quando #gameScreen está fechado
+// =================================================================
+(function limparGameScreenFantasmaV221() {
+    if (window._limparGameScreenFantasmaV221) return;
+    window._limparGameScreenFantasmaV221 = true;
+
+    function _fecharGameScreen() {
+        const gs = document.getElementById('gameScreen');
+        if (!gs) return;
+        gs.classList.remove('active');
+        gs.style.display = 'none';
+    }
+
+    // ═════════════════════════════════════════════════════════
+    // 1. Fechar #gameScreen ao renderizar telas de menu
+    // ═════════════════════════════════════════════════════════
+    ['renderAldeiaScreen', 'renderSeteNacoesScreen', 'renderFasesNacao',
+     'renderOcaScreenFiltered', 'renderRitualScreen', 'renderAtosScreen',
+     'renderChapterPhases', 'renderLojaNacoes', 'renderLojaScreenCompleta',
+     'renderTesourariaScreen', 'renderBestiaryScreen', 'renderEventoSemanalScreen']
+        .forEach(nome => {
+            const _orig = window[nome];
+            if (typeof _orig !== 'function' || _orig._v221) return;
+            window[nome] = function() {
+                _fecharGameScreen();
+                return _orig.apply(this, arguments);
+            };
+            window[nome]._v221 = true;
+        });
+
+    // ═════════════════════════════════════════════════════════
+    // 2. Safety net: detecta #gameScreen fantasma
+    // ═════════════════════════════════════════════════════════
+    setInterval(() => {
+        const ss = document.getElementById('storyScreen');
+        const gs = document.getElementById('gameScreen');
+        if (!ss || !gs) return;
+        if (!ss.classList.contains('active')) return;
+        if (!gs.classList.contains('active')) return;
+
+        // #gameScreen está .active, mas #storyScreen também.
+        // É batalha real (boss vivo + flags)?
+        const bossVivo = typeof boss !== 'undefined' && boss && !boss.dead;
+        const emBatalhaReal = bossVivo && (
+            window._storyMode === true ||
+            window._eventoAtivo === true ||
+            (window._nacaoBatalha && window._nacaoBatalha.ativa === true) ||
+            window._nacaoAtivo === true
+        );
+
+        if (!emBatalhaReal) {
+            console.log('[V2.21] #gameScreen fantasma — fechando');
+            _fecharGameScreen();
+        }
+    }, 500);
+
+    // ═════════════════════════════════════════════════════════
+    // 3. Safety net: re-mostrar botão flutuante
+    // ═════════════════════════════════════════════════════════
+    setInterval(() => {
+        const btn = document.getElementById('floatingBackBtn');
+        const ss = document.getElementById('storyScreen');
+        const gs = document.getElementById('gameScreen');
+        if (!btn || !ss) return;
+
+        const ssAtivo = ss.classList.contains('active') &&
+                        getComputedStyle(ss).display !== 'none';
+        if (!ssAtivo) {
+            if (btn.style.display !== 'none') btn.style.display = 'none';
+            return;
+        }
+
+        // #gameScreen "de verdade" visível?
+        const gsAtivoReal = gs &&
+                           gs.classList.contains('active') &&
+                           getComputedStyle(gs).display !== 'none';
+
+        // Aldeia tem título diferente (a tela principal não usa .story-title)
+        const naAldeia = !!ss.querySelector('.story-ald-title') ||
+                        (ss.querySelector('.story-title')?.textContent?.trim().toUpperCase() === 'ALDEIA');
+
+        const shouldShow = !gsAtivoReal && !naAldeia;
+
+        if (shouldShow && btn.style.display !== 'flex') {
+            btn.style.display = 'flex';
+        } else if (!shouldShow && btn.style.display !== 'none') {
+            btn.style.display = 'none';
+        }
+    }, 500);
+
+    // ═════════════════════════════════════════════════════════
+    // 4. Debug
+    // ═════════════════════════════════════════════════════════
+    window._debugGameScreenV221 = function() {
+        const gs = document.getElementById('gameScreen');
+        const ss = document.getElementById('storyScreen');
+        const btn = document.getElementById('floatingBackBtn');
+        console.group('=== [V2.21] #gameScreen ===');
+        console.log('gameScreen.active:', gs?.classList.contains('active'));
+        console.log('gameScreen.display:', gs?.style.display);
+        console.log('storyScreen.active:', ss?.classList.contains('active'));
+        console.log('storyScreen.display:', ss?.style.display);
+        console.log('botão display:', btn?.style.display);
+        console.log('boss:', boss ? { hp: boss.hp, dead: boss.dead } : 'null');
+        console.log('flags:', {
+            _storyMode: window._storyMode,
+            _eventoAtivo: window._eventoAtivo,
+            _nacaoAtivo: window._nacaoAtivo,
+            _nacaoBatalha: window._nacaoBatalha?.ativa,
+        });
+        console.groupEnd();
+    };
+
+    window._forcarFecharGameScreen = function() {
+        _fecharGameScreen();
+        console.log('✅ #gameScreen fechado');
+    };
+
+    console.log('✅ [V2.21] Fix #gameScreen fantasma');
+    console.log('💡 Debug: window._debugGameScreenV221()');
+    console.log('💡 Forçar: window._forcarFecharGameScreen()');
+})();
+// =================================================================
+// nacoes.js — V2.22 — Fix: progresso de nação reseta ao voltar
+// -----------------------------------------------------------------
+// Causa: V2.0._getProg usa semana calculada ('2026-10-27') como
+// fallback. V2.8/V2.10 usam 'fallback' literal. Quando getWeekId
+// não está definido, os dois valores NUNCA batem → _getProg reseta
+// o progresso toda vez que renderSeteNacoesScreen roda.
+//
+// Fix:
+//   1. Define window.getWeekId (fallback consistente)
+//   2. Migra saves antigos com 'fallback' pra semana atual
+//   3. Safety net: preserva progresso se reset indevido for detectado
+// =================================================================
+(function fixSemanaNacoesV222() {
+    if (window._fixSemanaNacoesV222) return;
+    window._fixSemanaNacoesV222 = true;
+
+    // ─────────────────────────────────────────────────────────────
+    // 1. Define getWeekId se não existe (fallback consistente)
+    // ─────────────────────────────────────────────────────────────
+    if (typeof window.getWeekId !== 'function') {
+        window.getWeekId = function() {
+            const d = new Date();
+            const dia = d.getDay();
+            d.setDate(d.getDate() - (dia === 0 ? 6 : dia - 1));
+            return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        };
+        console.log('[V2.22] window.getWeekId() definido (fallback consistente)');
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 2. Migra saves antigos com 'fallback' ou formato inválido
+    // ─────────────────────────────────────────────────────────────
+    function migrarSaves() {
+        if (typeof STORY_PROGRESS === 'undefined') return 0;
+        if (!STORY_PROGRESS.nacaoProgressoPorDificuldade) return 0;
+
+        const semanaAtual = window.getWeekId();
+        let migrados = 0;
+        let preservados = 0;
+
+        Object.keys(STORY_PROGRESS.nacaoProgressoPorDificuldade).forEach(diff => {
+            const bucket = STORY_PROGRESS.nacaoProgressoPorDificuldade[diff];
+            if (!bucket) return;
+
+            Object.keys(bucket).forEach(nacaoId => {
+                const prog = bucket[nacaoId];
+                if (!prog) return;
+
+                const semanaValida = /^\d{4}-\d{2}-\d{2}$/.test(prog.semana || '');
+
+                if (!semanaValida) {
+                    // 'fallback', null, undefined, formato inválido → força semana atual
+                    prog.semana = semanaAtual;
+                    migrados++;
+                } else if (prog.semana === semanaAtual) {
+                    // já está correto
+                } else {
+                    // semana válida mas diferente → mudança de semana REAL (não migra)
+                    preservados++;
+                }
+            });
+        });
+
+        if (migrados > 0 && typeof saveStoryProgress === 'function') {
+            saveStoryProgress();
+            console.log(`[V2.22] ${migrados} progressos migrados pra semana ${semanaAtual}`);
+        }
+
+        return migrados;
+    }
+
+    migrarSaves();
+    setTimeout(migrarSaves, 500);
+
+    // ─────────────────────────────────────────────────────────────
+    // 3. Re-migra após load de save
+    // ─────────────────────────────────────────────────────────────
+    const _origLoad = window.loadStoryProgressByName;
+    if (typeof _origLoad === 'function' && !_origLoad._v222) {
+        window.loadStoryProgressByName = function() {
+            const r = _origLoad.apply(this, arguments);
+            if (r) setTimeout(migrarSaves, 150);
+            return r;
+        };
+        window.loadStoryProgressByName._v222 = true;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 4. Safety net: preserva progresso se reset indevido
+    // -------------------------------------------------------------
+    // Observa STORY_PROGRESS.nacaoProgressoPorDificuldade. Se um
+    // reset acontecer na MESMA semana (fasesConcluidas vira [] mas
+    // semana continua igual), restaura do backup.
+    // ─────────────────────────────────────────────────────────────
+    let _snapshotAnterior = null;
+
+    function _fazerSnapshot() {
+        if (typeof STORY_PROGRESS === 'undefined') return;
+        if (!STORY_PROGRESS.nacaoProgressoPorDificuldade) return;
+        try {
+            _snapshotAnterior = JSON.parse(JSON.stringify(
+                STORY_PROGRESS.nacaoProgressoPorDificuldade
+            ));
+        } catch (e) {}
+    }
+
+    function _checarReset() {
+        if (!_snapshotAnterior || typeof STORY_PROGRESS === 'undefined') return;
+        const atual = STORY_PROGRESS.nacaoProgressoPorDificuldade;
+        if (!atual) return;
+
+        const semanaAtual = window.getWeekId();
+        let corrigido = false;
+
+        Object.keys(_snapshotAnterior).forEach(diff => {
+            const antes = _snapshotAnterior[diff];
+            const agora = atual[diff];
+            if (!antes || !agora) return;
+
+            Object.keys(antes).forEach(nacaoId => {
+                const pAntes = antes[nacaoId];
+                const pAgora = agora[nacaoId];
+                if (!pAntes || !pAgora) return;
+
+                // Reset suspeito: antes tinha fases, agora está vazio,
+                // e a semana atual NÃO mudou.
+                if (Array.isArray(pAntes.fasesConcluidas) &&
+                    pAntes.fasesConcluidas.length > 0 &&
+                    (!pAgora.fasesConcluidas || pAgora.fasesConcluidas.length === 0) &&
+                    pAntes.semana === semanaAtual &&
+                    pAgora.semana === semanaAtual) {
+
+                    console.warn(`[V2.22] Reset suspeito detectado: ${diff}/${nacaoId}. Restaurando.`);
+                    pAgora.fasesConcluidas = pAntes.fasesConcluidas.slice();
+                    pAgora.bossDerrotados = (pAntes.bossDerrotados || []).slice();
+                    corrigido = true;
+                }
+            });
+        });
+
+        if (corrigido && typeof saveStoryProgress === 'function') {
+            saveStoryProgress();
+        }
+    }
+
+    setTimeout(_fazerSnapshot, 800);
+
+    // Snapshot a cada 3s; verifica reset a cada 1.5s
+    setInterval(_fazerSnapshot, 3000);
+    setInterval(_checarReset, 1500);
+
+    // ─────────────────────────────────────────────────────────────
+    // 5. Debug
+    // ─────────────────────────────────────────────────────────────
+    window._debugSemanaV222 = function() {
+        console.group('=== [V2.22] Semana Nacoes ===');
+        console.log('getWeekId():', window.getWeekId());
+        console.log('Progresso atual:', JSON.parse(JSON.stringify(
+            STORY_PROGRESS.nacaoProgressoPorDificuldade || {}
+        )));
+        console.log('Snapshot anterior:', _snapshotAnterior);
+        console.groupEnd();
+    };
+
+    window._forcarMigrarSemana = function() {
+        const n = migrarSaves();
+        console.log(`✅ ${n} progressos migrados`);
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V2.22] Fix semana de nações');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• window.getWeekId() definido (fallback consistente)');
+    console.log('• Saves antigos com "fallback" migrados');
+    console.log('• Safety net restaura progresso se reset indevido');
+    console.log('• Reset semanal REAL (segunda) continua funcionando');
+    console.log('');
+    console.log('💡 Debug:  window._debugSemanaV222()');
+    console.log('💡 Forçar: window._forcarMigrarSemana()');
+    console.log('═══════════════════════════════════════════════════');
 })();
