@@ -5273,7 +5273,7 @@
             window[nome]._v221 = true;
         });
 
-    // ═════════════════════════════════════════════════════════
+     // ═════════════════════════════════════════════════════════
     // 2. Safety net: detecta #gameScreen fantasma
     // ═════════════════════════════════════════════════════════
     setInterval(() => {
@@ -5283,22 +5283,27 @@
         if (!ss.classList.contains('active')) return;
         if (!gs.classList.contains('active')) return;
 
-        // #gameScreen está .active, mas #storyScreen também.
-        // É batalha real (boss vivo + flags)?
-        const bossVivo = typeof boss !== 'undefined' && boss && !boss.dead;
-        const emBatalhaReal = bossVivo && (
+        const emBatalhaReal =
             window._storyMode === true ||
             window._eventoAtivo === true ||
             (window._nacaoBatalha && window._nacaoBatalha.ativa === true) ||
-            window._nacaoAtivo === true
-        );
+            window._nacaoAtivo === true;
 
-        if (!emBatalhaReal) {
+        const emTransicao =
+            document.getElementById('purificacaoOverlay') ||
+            document.getElementById('storyPurificationOverlay') ||
+            document.getElementById('storySaciFinalOverlay') ||
+            document.getElementById('storySaciDialogOverlay') ||
+            document.getElementById('storyVictoryOverlay') ||
+            document.getElementById('nacaoVictoryOverlay') ||
+            document.querySelector('.story-saci-dialog-overlay') ||
+            document.querySelector('.story-result-overlay');
+
+        if (!emBatalhaReal && !emTransicao) {
             console.log('[V2.21] #gameScreen fantasma — fechando');
             _fecharGameScreen();
         }
     }, 500);
-
     // ═════════════════════════════════════════════════════════
     // 3. Safety net: re-mostrar botão flutuante
     // ═════════════════════════════════════════════════════════
