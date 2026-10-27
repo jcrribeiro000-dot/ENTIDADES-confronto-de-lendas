@@ -41,12 +41,12 @@
     // ═══════════════════════════════════════════════════════════
     const SPRITES_NACAO = {
         nacao_yucahu:'https://i.imgur.com/X2UY7TU.gif', nacao_atabey:'', nacao_juracan:'',
-        nacao_quetzalcoatl:'', nacao_tezcatlipoca:'', nacao_huitzilopochtli:'',
-        nacao_kukulkan:'', nacao_chaac:'', nacao_ixchel:'',
-        nacao_illapa:'', nacao_mamaquilla:'', nacao_supay:'',
-        nacao_antu:'', nacao_pillan:'', nacao_wekufe:'',
-        nacao_bochica:'', nacao_bachue:'', nacao_chibchacum:'',
-        nacao_maii:'', nacao_spiderwoman:'', nacao_hashchelti:'',
+        nacao_quetzalcoatl:'https://i.imgur.com/AcQkgO1.gif', nacao_tezcatlipoca:'', nacao_huitzilopochtli:'',
+        nacao_kukulkan:'https://i.imgur.com/V3XmBYU.gif', nacao_chaac:'', nacao_ixchel:'',
+        nacao_illapa:'', nacao_mamaquilla:'https://i.imgur.com/u2JCJgU.gif', nacao_supay:'https://i.imgur.com/kg1U6nB.gif',
+        nacao_antu:'https://i.imgur.com/9qt8HIv.gif', nacao_pillan:'https://i.imgur.com/LRRy8eM.gif', nacao_wekufe:'https://i.imgur.com/H5kJgxj.gif',
+        nacao_bochica:'https://i.imgur.com/Y0pwmcj.gif', nacao_bachue:'https://i.imgur.com/YlGSDD8.gif', nacao_chibchacum:'',
+        nacao_maii:'https://i.imgur.com/Ot6f7hV.gif', nacao_spiderwoman:'', nacao_hashchelti:'',
         heroi_Abya:'', essencia_ancestral:'',
     };
 
