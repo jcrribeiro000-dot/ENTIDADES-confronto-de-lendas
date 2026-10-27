@@ -4886,13 +4886,22 @@
     console.log('═══════════════════════════════════════════════════');
 })();
 // =================================================================
-// OCA — V2.15 — Reescrita limpa e correção de textos de desbloqueio
+// nacoes.js — V2.15 CORRIGIDA — Wrapper (não substitui mais a OCA)
+// -----------------------------------------------------------------
+// Antes: reescrevia renderOcaScreenFiltered por completo, matando:
+//   • V9.4 (raridade)
+//   • V42.0 (stats Lv 11 em verde)
+//   • V43.1 (aura Lv 11)
+//   • Sistema de líder (aldeia.js)
+//
+// Agora: apenas envelopa. Adiciona o texto de unlock via
+// post-processing, sem tocar na estrutura renderizada.
 // =================================================================
-(function fixOcaV215() {
-    if (window._fixOcaV215) return;
-    window._fixOcaV215 = true;
+(function fixOcaV215_wrapper() {
+    if (window._fixOcaV215_wrapper) return;
+    window._fixOcaV215_wrapper = true;
 
-    // 1. Força a trava (starsNeeded = null) para todos os heróis especiais
+    // 1. Trava starsNeeded = null nos heróis especiais
     const especiais = ['Abya', 'Rudá', 'Anhanga-Mirim', 'Curupira', 'Kianumanka-Manã'];
     especiais.forEach(h => {
         if (typeof STORY_HERO_CLASSES !== 'undefined' && STORY_HERO_CLASSES[h]) {
@@ -4900,7 +4909,7 @@
         }
     });
 
-    // 2. Limpa o save do jogador (caso algum tenha vazado)
+    // 2. Valida desbloqueios (remove quem não deveria)
     const validarDesbloqueios = () => {
         if (typeof STORY_PROGRESS === 'undefined') return;
         const cleared = STORY_PROGRESS.clearedDifficulties || [];
@@ -4910,13 +4919,9 @@
         const checar = (hero, condicao) => {
             if (!condicao) {
                 const idx = STORY_PROGRESS.unlockedHeroesStory.indexOf(hero);
-                if (idx !== -1) {
-                    STORY_PROGRESS.unlockedHeroesStory.splice(idx, 1);
-                    console.log(`[V2.15] ${hero} foi bloqueado (não cumpriu o requisito).`);
-                }
+                if (idx !== -1) STORY_PROGRESS.unlockedHeroesStory.splice(idx, 1);
             }
         };
-
         checar('Anhanga-Mirim', cleared.includes('pesadelo'));
         checar('Curupira', cleared.includes('normal'));
         checar('Kianumanka-Manã', cleared.includes('dificil'));
@@ -4925,173 +4930,60 @@
     };
     validarDesbloqueios();
 
-    // 3. Reescreve a renderização da OCA
-    window.renderOcaScreenFiltered = function() {
-        const screen = document.getElementById('storyScreen');
-        if (!screen) return;
-        const saveEl = getSaveElement();
+    // 3. ⭐ WRAPPER — só post-processing, sem reescrever
+    const _orig = window.renderOcaScreenFiltered;
+    if (typeof _orig === 'function' && !_orig._v215fix) {
+        window.renderOcaScreenFiltered = function() {
+            const r = _orig.apply(this, arguments);
 
-        const unlockedList = STORY_PROGRESS.unlockedHeroesStory || ['Tupa', 'Sume', 'Caipora'];
-        const allHeroes = Object.values(STORY_HERO_CLASSES);
+            setTimeout(() => {
+                document.querySelectorAll('.story-hero-card.locked').forEach(card => {
+                    const heroClass = card.getAttribute('data-hero');
+                    if (!heroClass) return;
 
-        let filtered = allHeroes.slice();
-        if (typeof ocaFilterRole !== 'undefined' && ocaFilterRole !== 'all') {
-            filtered = filtered.filter(h => h.role === ocaFilterRole);
-        }
+                    const heroData = (typeof STORY_HERO_CLASSES !== 'undefined')
+                        ? STORY_HERO_CLASSES[heroClass] : null;
+                    if (!heroData) return;
 
-        const html = filtered.map(hero => {
-            const isUnlocked = hero.starsNeeded === 0 || unlockedList.includes(hero.className);
-            const isSelected = STORY_PROGRESS.selectedHeroes.includes(hero.className);
+                    const lockInfo = card.querySelector('.story-hero-lock-info');
+                    if (!lockInfo) return;
 
-            let spriteSrc = '';
-            if (hero.spriteKey) {
-                const url = SPRITES_STORY[hero.spriteKey];
-                spriteSrc = url && url.trim() !== '' ? url : '';
-            } else if (typeof SPRITES !== 'undefined' && SPRITES[hero.className]) {
-                spriteSrc = SPRITES[hero.className];
-            }
-
-            const emoji = hero.spriteKey ? (EMOJI_STORY[hero.spriteKey] || '?') : '';
-            const el = hero.element || saveEl;
-            const elDisplay = hero.element ? hero.element : `${saveEl} (dinâmico)`;
-
-            // Se estiver bloqueado
-            if (!isUnlocked) {
-                const spriteBlock = spriteSrc
-                    ? `<img src="${spriteSrc}" class="story-hero-sprite" alt="${hero.displayName}">`
-                    : `<div class="story-hero-sprite" style="display:flex;align-items:center;justify-content:center;font-size:3.5rem;">${emoji}</div>`;
-
-                // ⭐ AQUI ESTÁ A CORREÇÃO DOS TEXTOS
-                let reqTxt = `${hero.starsNeeded} ⭐`;
-                if (hero.unlockReq) {
-                    if (hero.unlockReq.type === 'special') {
-                        reqTxt = hero.className === 'Abya' ? '7 Fragmentos Ancestrais' : '7 Fragmentos do Evento';
-                    } else if (hero.unlockReq.type === 'clear') {
-                        const diffName = { 'normal': 'Normal', 'dificil': 'Difícil', 'pesadelo': 'Pesadelo' }[hero.unlockReq.difficulty];
-                        reqTxt = `Zerar o ${diffName}`;
-                    }
-                }
-
-                return `<div class="story-hero-card locked" data-hero="${hero.className}">
-                    ${spriteBlock}
-                    <div class="story-hero-name">?????</div>
-                    <div class="story-hero-element" style="color:#5a4a30;">${hero.role}</div>
-                    <div class="story-hero-lock-info">Desbloqueie ao<br><b>${reqTxt}</b></div>
-                    <div class="story-hero-lock-icon">🔒</div>
-                </div>`;
-            }
-
-            // Se estiver desbloqueado
-            const spriteBlock = spriteSrc
-                ? `<img src="${spriteSrc}" class="story-hero-sprite" alt="${hero.displayName}">`
-                : `<div class="story-hero-sprite" style="display:flex;align-items:center;justify-content:center;font-size:3.5rem;">${emoji}</div>`;
-
-            const lv = getHeroLevel(hero.className);
-            const rarity = (typeof getHeroRarity === 'function') ? getHeroRarity(hero.className) : (hero.rarity || 1);
-
-            return `<div class="story-hero-card ${isSelected ? 'selected' : ''}" data-rarity="${rarity}" data-hero="${hero.className}" onclick="toggleHeroSelection('${hero.className.replace(/'/g, "\\'")}')">
-                ${spriteBlock}
-                <div class="story-hero-name">${hero.displayName}</div>
-                <div class="story-hero-element elem-${el}">${elemIcon(el)} ${elDisplay}</div>
-                <div class="story-hero-level">${hero.role} · HP ${hero.hp} · ATK ${hero.atk}</div>
-                <div class="story-hero-xp">Nível ${lv}</div>
-                ${isSelected ? `<div class="story-hero-check">${uiIcon('check')}</div>` : ''}
-            </div>`;
-        }).join('');
-
-        const totalStars = getTotalStars();
-        const maxStars = getMaxTotalStars();
-
-        screen.innerHTML = `
-            <div class="story-container">
-                <div class="story-header">
-                    <h1 class="story-title">🏠 OCA</h1>
-                    <p class="story-subtitle">Escolha 1 herói por fase</p>
-                    <div style="text-align:center;margin-top:10px;">
-                        <span class="story-stars-counter"><span class="story-stars-icon">⭐</span>${totalStars} / ${maxStars}</span>
-                    </div>
-                </div>
-                <div class="oca-filters">
-                    <button class="oca-filter-btn ${ocaFilterRole === 'all' ? 'active' : ''}" onclick="ocaFilterRole='all'; renderOcaScreenFiltered();">Todos</button>
-                    <button class="oca-filter-btn ${ocaFilterRole === 'Guerreiro' ? 'active' : ''}" onclick="ocaFilterRole='Guerreiro'; renderOcaScreenFiltered();">⚔️ Guerreiros</button>
-                    <button class="oca-filter-btn ${ocaFilterRole === 'Mago' ? 'active' : ''}" onclick="ocaFilterRole='Mago'; renderOcaScreenFiltered();">🔮 Magos</button>
-                    <button class="oca-filter-btn ${ocaFilterRole === 'Arqueiro' ? 'active' : ''}" onclick="ocaFilterRole='Arqueiro'; renderOcaScreenFiltered();">🏹 Arqueiros</button>
-                </div>
-                <div class="story-heroes-grid">${html}</div>
-                <div class="story-footer"><button class="story-back-btn" onclick="renderAldeiaScreen()">← VOLTAR À ALDEIA</button></div>
-            </div>`;
-
-        // Pós-processamento (injeta botões "?" ⚔️ 🗺️ e badges de raridade/stat11)
-        setTimeout(() => {
-            document.querySelectorAll('.story-hero-card').forEach(card => {
-                const heroClass = card.getAttribute('data-hero');
-                if (!heroClass) return;
-
-                if (!card.classList.contains('locked')) {
-                    if (!card.querySelector('.hero-details-btn') && typeof openHeroDetails === 'function') {
-                        const btn = document.createElement('button');
-                        btn.className = 'hero-details-btn'; btn.innerHTML = '?'; btn.title = 'Ver detalhes';
-                        btn.onclick = (e) => { e.stopPropagation(); e.preventDefault(); openHeroDetails(heroClass); };
-                        card.appendChild(btn);
-                    }
-                    if (!card.querySelector('.hero-equip-btn') && typeof openEquipScreen === 'function') {
-                        const btn = document.createElement('button');
-                        btn.className = 'hero-equip-btn'; btn.innerHTML = '⚔️'; btn.title = 'Equipamentos';
-                        btn.onclick = (e) => { e.stopPropagation(); e.preventDefault(); openEquipScreen(heroClass); };
-                        card.appendChild(btn);
-                    }
-                    if (!card.querySelector('.hero-expedition-btn') && typeof abrirTelaExpedicaoV86 === 'function') {
-                        const btn = document.createElement('button');
-                        btn.className = 'hero-expedition-btn'; btn.innerHTML = '🗺️'; btn.title = 'Enviar para expedição';
-                        btn.onclick = (e) => { e.stopPropagation(); e.preventDefault(); window.abrirTelaExpedicaoV86(heroClass, 'normal'); };
-                        card.appendChild(btn);
-                    }
-                    if (!card.querySelector('.stat11-oca-badge') && typeof getStat11DoHeroi === 'function') {
-                        const stat = getStat11DoHeroi(heroClass);
-                        if (stat) {
-                            const badge = document.createElement('div');
-                            badge.className = 'stat11-oca-badge';
-                            if (stat.tipo === 'jackpot') badge.innerHTML = `<span style="color:#e8b923;">👑</span> Jackpot`;
-                            else {
-                                const meta = window.STAT_META?.[stat.tipo] || { nome: 'ATK', cor: '#fff' };
-                                const tierMeta = window.TIER_META?.[stat.tier] || { cor: '#fff', icon: '★' };
-                                const sinal = stat.valor > 0 ? '+' : '';
-                                badge.innerHTML = `<span style="color:${tierMeta.cor};">${tierMeta.icon}</span> ${sinal}${stat.valor} ${meta.nome}`;
-                            }
-                            card.appendChild(badge);
+                    let reqTxt = '???';
+                    if (heroData.unlockReq) {
+                        if (heroData.unlockReq.type === 'special') {
+                            reqTxt = heroClass === 'Abya'
+                                ? '7 Fragmentos Ancestrais'
+                                : '7 Fragmentos do Evento';
+                        } else if (heroData.unlockReq.type === 'clear') {
+                            const diffs = { normal: 'Normal', dificil: 'Difícil', pesadelo: 'Pesadelo' };
+                            reqTxt = `Zerar o ${diffs[heroData.unlockReq.difficulty] || heroData.unlockReq.difficulty}`;
+                        } else if (heroData.unlockReq.type === 'stars') {
+                            reqTxt = `${heroData.starsNeeded} ⭐`;
                         }
+                    } else if (heroData.starsNeeded !== null && heroData.starsNeeded !== undefined) {
+                        reqTxt = `${heroData.starsNeeded} ⭐`;
                     }
-                    if (typeof window._updateAllCardStatsV821 === 'function') {
-                        setTimeout(() => window._updateAllCardStatsV821(), 50);
-                    }
-                }
-            });
-        }, 100);
-    };
 
-    // 4. Garante que checkHeroUnlocks não quebre no futuro
+                    lockInfo.innerHTML = `Desbloqueie ao<br><b>${reqTxt}</b>`;
+                });
+            }, 150);
+
+            return r;
+        };
+        window.renderOcaScreenFiltered._v215fix = true;
+        console.log('[V2.15-FIX] OCA: wrapper aplicado (patches anteriores preservados)');
+    }
+
+    // 4. Hook checkHeroUnlocks (mantém o comportamento original)
     const _origCheck = window.checkHeroUnlocks;
-    if (typeof _origCheck === 'function' && !_origCheck._v215) {
+    if (typeof _origCheck === 'function' && !_origCheck._v215fix) {
         window.checkHeroUnlocks = function() {
             const r = _origCheck.apply(this, arguments);
             validarDesbloqueios();
             return r;
         };
-        window.checkHeroUnlocks._v215 = true;
+        window.checkHeroUnlocks._v215fix = true;
     }
-
-    // Força um re-render se a OCA estiver aberta
-    if (typeof renderOcaScreenFiltered === 'function') renderOcaScreenFiltered();
-
-    console.log('');
-    console.log('═══════════════════════════════════════════════════');
-    console.log('✅ [V2.15] OCA Reescrita e Blindada');
-    console.log('═══════════════════════════════════════════════════');
-    console.log('• Abya: agora mostra "7 Fragmentos Ancestrais"');
-    console.log('• Rudá: agora mostra "7 Fragmentos do Evento"');
-    console.log('• Anhanga: agora mostra "Zerar o Pesadelo"');
-    console.log('• Todos os outros heróis especiais corrigidos');
-    console.log('═══════════════════════════════════════════════════');
 })();
 // Cole no final do nacoes.js
 (function centralizarPrecoLojaV216() {
