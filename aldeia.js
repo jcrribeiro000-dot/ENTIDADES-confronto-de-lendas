@@ -4905,3 +4905,211 @@
     console.log('💡 Debug: window._debugPerfilV102()');
     console.log('═══════════════════════════════════════════════════');
 })();
+// =================================================================
+// FIX V227 — Fundo das sub-telas da Aldeia sendo limpo pelo V2.26
+// -----------------------------------------------------------------
+// O V2.26 (Sete Nações) tem um watchdog com bug que reinstala
+// o observer a cada 2s e chama _aplicarFundo(null), limpando
+// o backgroundImage de OCA, Atos, Tesouraria, Loja, Ritual,
+// Bestiário, PvP, Coop e Evento Semanal.
+//
+// Este fix intercepta a limpeza via MutationObserver (attribute
+// style) e reaplica o fundo do V60.1 imediatamente.
+// =================================================================
+(function fixFundoAldeiaV227() {
+    if (window._fixFundoAldeiaV227) return;
+    window._fixFundoAldeiaV227 = true;
+
+    function _getTelaKey(titulo) {
+        const T = (titulo || '').toUpperCase();
+        if (T.includes('OCA')) return 'oca';
+        if (T.includes('ATOS')) return 'atos';
+        if (T.includes('TESOURARIA')) return 'tesouraria';
+        if (T.includes('CURANDEIRO') || T.includes('ESCAMBO')) return 'loja';
+        if (T.includes('SEMANA DAS SOMBRAS')) return 'evento';
+        if (T.includes('PVP')) return 'pvp';
+        if (T.includes('COOP')) return 'coop';
+        if (T.includes('RITUAL')) return 'ritual';
+        if (T.includes('BESTIÁRIO')) return 'bestiario';
+        return null;
+    }
+
+    function _getURLDaTela(telaKey) {
+        const config = window.INTERFACE_BACKGROUNDS?.[telaKey];
+        if (!config) return null;
+        const isMobile = window.matchMedia('(max-width: 700px)').matches
+                        || window.matchMedia('(orientation: portrait)').matches;
+        let bgUrl = isMobile ? config.mobile : config.wide;
+        if (!bgUrl && isMobile) bgUrl = config.wide;
+        if (!bgUrl && !isMobile) bgUrl = config.mobile;
+        return (bgUrl && bgUrl.trim() !== '') ? bgUrl : null;
+    }
+
+    function _reaplicarFundo() {
+        const screen = document.getElementById('storyScreen');
+        if (!screen || !screen.classList.contains('active')) return;
+
+        // Aldeia principal (tem .aldeia-visual-wrap) → não mexe
+        if (screen.querySelector('.aldeia-visual-wrap')) return;
+
+        const titleEl = screen.querySelector('.story-title');
+        if (!titleEl) return;
+
+        const telaKey = _getTelaKey(titleEl.textContent || '');
+        if (!telaKey) return;   // não é sub-tela da Aldeia
+
+        const bgUrl = _getURLDaTela(telaKey);
+        if (!bgUrl) return;
+
+        const bgAtual = screen.style.backgroundImage || '';
+        if (bgAtual && bgAtual.includes('url(')) return;   // já tem
+
+        screen.style.backgroundImage =
+            `linear-gradient(rgba(10,6,2,0.60), rgba(10,6,2,0.60)), url('${bgUrl}')`;
+        screen.style.backgroundSize = 'cover, cover';
+        screen.style.backgroundPosition = 'center, center';
+        screen.style.backgroundRepeat = 'no-repeat, no-repeat';
+        screen.style.backgroundColor = '#1a1208';
+    }
+
+    // ─── MutationObserver no atributo style (imediato) ───
+    let _curScreen = null;
+    let _curObserver = null;
+
+    function _attach() {
+        const screen = document.getElementById('storyScreen');
+        if (!screen) { setTimeout(_attach, 300); return; }
+        if (_curObserver && _curScreen === screen) return;
+        if (_curObserver) _curObserver.disconnect();
+        _curScreen = screen;
+        _curObserver = new MutationObserver(_reaplicarFundo);
+        _curObserver.observe(screen, { attributes: true, attributeFilter: ['style'] });
+    }
+
+    _attach();
+    setInterval(() => {
+        const screen = document.getElementById('storyScreen');
+        if (screen && screen !== _curScreen) _attach();
+    }, 1000);
+
+    // ─── Fallback 500ms (caso o observer falhe em algum browser) ───
+    setInterval(_reaplicarFundo, 500);
+
+    // ─── Inicial ───
+    setTimeout(_reaplicarFundo, 100);
+    setTimeout(_reaplicarFundo, 500);
+    setTimeout(_reaplicarFundo, 1500);
+
+    window._debugFundoV227 = function() {
+        const screen = document.getElementById('storyScreen');
+        const title = screen?.querySelector('.story-title')?.textContent?.trim();
+        console.group('═══ [V227] Fundo Aldeia ═══');
+        console.log('Título:', title || '(vazio)');
+        console.log('Tela key:', _getTelaKey(title || '') || '(nenhuma)');
+        console.log('Tem bg?', screen?.style.backgroundImage?.includes('url(') ? 'SIM' : 'NÃO');
+        console.log('Bg:', screen?.style.backgroundImage?.substring(0, 90) || '(vazio)');
+        console.log('Observer ativo?', !!_curObserver);
+        console.groupEnd();
+    };
+
+    console.log('✅ [V227] Fundo das sub-telas da Aldeia protegido.');
+    console.log('   (V2.26 estava limpando a cada 2s — agora reaplicamos imediato)');
+    console.log('   💡 Debug: window._debugFundoV227()');
+})();
+// =================================================================
+// FIX V228 — Aldeia forçada em wide (desktop)
+// -----------------------------------------------------------------
+// • isMobile() do V1.2/V60.1 inclui "(orientation: portrait)"
+// • Zoom alto ou janela em retrato → cai no branch "contain"
+// • Solução: em desktop (innerWidth > 700), forçar sempre:
+//     - bgImage (wide) com cover
+//     - wrap em 100vw × 100vh
+// =================================================================
+(function fixAldeiaDesktopWideV228() {
+    if (window._fixAldeiaDesktopWideV228) return;
+    window._fixAldeiaDesktopWideV228 = true;
+
+    const BP = 700;
+    const isDesktop = () => window.innerWidth > BP;
+
+    function aplicarWide() {
+        if (!isDesktop()) return;
+        const wrap = document.getElementById('aldeiaVisualWrap');
+        if (!wrap) return;
+
+        const cfg = window.ALDEIA_CONFIG || {};
+        const url = cfg.bgImage;
+        if (!url || url.trim() === '') return;
+
+        // ─── Forçar tamanho fullscreen ───
+        wrap.style.position = 'fixed';
+        wrap.style.width = '100vw';
+        wrap.style.height = '100vh';
+        wrap.style.minWidth = '100vw';
+        wrap.style.minHeight = '100vh';
+        wrap.style.maxWidth = '100vw';
+        wrap.style.maxHeight = '100vh';
+        wrap.style.left = '0';
+        wrap.style.top = '0';
+        wrap.style.right = 'auto';
+        wrap.style.bottom = 'auto';
+        wrap.style.transform = 'none';   // limpa transform residual
+        wrap.style.zoom = '1';
+
+        // ─── Forçar background WIDE com cover ───
+        wrap.style.backgroundImage = `url('${url}')`;
+        wrap.style.backgroundSize = 'cover';
+        wrap.style.backgroundPosition = 'center center';
+        wrap.style.backgroundRepeat = 'no-repeat';
+        wrap.style.backgroundAttachment = 'scroll';
+    }
+
+    // ─── Hook no render da aldeia ───
+    const _orig = window.renderAldeiaScreen;
+    if (typeof _orig === 'function' && !_orig._v228) {
+        window.renderAldeiaScreen = function() {
+            const r = _orig.apply(this, arguments);
+            setTimeout(aplicarWide, 30);
+            setTimeout(aplicarWide, 150);
+            setTimeout(aplicarWide, 500);
+            setTimeout(aplicarWide, 1500);
+            return r;
+        };
+        window.renderAldeiaScreen._v228 = true;
+    }
+
+    // ─── Watchdog (impede que algum patch tardio bagunce) ───
+    setInterval(aplicarWide, 1200);
+
+    // ─── Reage a resize/zoom ───
+    let _rt = null;
+    window.addEventListener('resize', () => {
+        clearTimeout(_rt);
+        _rt = setTimeout(aplicarWide, 200);
+    });
+
+    // ─── Debug ───
+    window._debugAldeiaDesktop = function() {
+        const wrap = document.getElementById('aldeiaVisualWrap');
+        const cfg = window.ALDEIA_CONFIG || {};
+        console.group('═══ [V228] Aldeia Desktop ═══');
+        console.log('Window:', window.innerWidth, 'x', window.innerHeight);
+        console.log('Zoom CSS:', window.devicePixelRatio);
+        console.log('isDesktop:', isDesktop());
+        console.log('MatchMedia max-700:', window.matchMedia('(max-width: 700px)').matches);
+        console.log('MatchMedia portrait:', window.matchMedia('(orientation: portrait)').matches);
+        if (wrap) {
+            const r = wrap.getBoundingClientRect();
+            console.log('Wrap rect:', { x: r.x|0, y: r.y|0, w: r.width|0, h: r.height|0 });
+            console.log('BG size:', wrap.style.backgroundSize);
+            console.log('BG image:', (wrap.style.backgroundImage || '').substring(0, 70));
+            console.log('Transform:', getComputedStyle(wrap).transform);
+        }
+        console.log('CFG.bgImage:', (cfg.bgImage || '').substring(0, 70));
+        console.log('CFG.mobileBgImage:', (cfg.mobileBgImage || '').substring(0, 70));
+        console.groupEnd();
+    };
+
+    console.log('✅ [V228] Aldeia desktop forçada em wide + cover.');
+    console.log('   💡 Debug: window._debugAldeiaDesktop()');
+})();
