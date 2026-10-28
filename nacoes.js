@@ -345,31 +345,31 @@
     const ARMAS = {
         // TAÍNOS (AGUA)
         arma_nacao_tainos_tacape: { id:'arma_nacao_tainos_tacape', nome:'Macana da Colheita', tipo:'tacape', elemento:'TERRA', atkBonus:5, elementoBonus:5, boss:'nacao_tainos', emoji:'🪓' },
-        arma_nacao_tainos_flecha: { id:'arma_nacao_tainos_flecha', nome:'Arco da Maré', tipo:'flecha', elemento:'AGUA', atkBonus:5, elementoBonus:5, boss:'nacao_tainos', emoji:'🏹' },
+        arma_nacao_tainos_flecha: { id:'arma_nacao_tainos_flecha', nome:'Flecha da Maré', tipo:'flecha', elemento:'AGUA', atkBonus:5, elementoBonus:5, boss:'nacao_tainos', emoji:'🏹' },
         arma_nacao_tainos_cajado: { id:'arma_nacao_tainos_cajado', nome:'Cajado do Furacão', tipo:'cajado', elemento:'AR', atkBonus:5, elementoBonus:5, boss:'nacao_tainos', emoji:'🪄' },
         // ASTECAS (FOGO)
         arma_nacao_astecas_tacape: { id:'arma_nacao_astecas_tacape', nome:'Macuahuitl de Vento', tipo:'tacape', elemento:'AR', atkBonus:5, elementoBonus:5, boss:'nacao_astecas', emoji:'🪓' },
-        arma_nacao_astecas_flecha: { id:'arma_nacao_astecas_flecha', nome:'Arco do Espelho', tipo:'flecha', elemento:'FOGO', atkBonus:5, elementoBonus:5, boss:'nacao_astecas', emoji:'🏹' },
+        arma_nacao_astecas_flecha: { id:'arma_nacao_astecas_flecha', nome:'Flecha do Espelho', tipo:'flecha', elemento:'FOGO', atkBonus:5, elementoBonus:5, boss:'nacao_astecas', emoji:'🏹' },
         arma_nacao_astecas_cajado: { id:'arma_nacao_astecas_cajado', nome:'Cajado do Sol Negro', tipo:'cajado', elemento:'FOGO', atkBonus:5, elementoBonus:5, boss:'nacao_astecas', emoji:'🪄' },
         // MAIAS (TERRA)
         arma_nacao_maias_tacape: { id:'arma_nacao_maias_tacape', nome:'Macuahuitl da Serpente', tipo:'tacape', elemento:'AR', atkBonus:5, elementoBonus:5, boss:'nacao_maias', emoji:'🪓' },
-        arma_nacao_maias_flecha: { id:'arma_nacao_maias_flecha', nome:'Arco da Chuva', tipo:'flecha', elemento:'AGUA', atkBonus:5, elementoBonus:5, boss:'nacao_maias', emoji:'🏹' },
+        arma_nacao_maias_flecha: { id:'arma_nacao_maias_flecha', nome:'Flecha da Chuva', tipo:'flecha', elemento:'AGUA', atkBonus:5, elementoBonus:5, boss:'nacao_maias', emoji:'🏹' },
         arma_nacao_maias_cajado: { id:'arma_nacao_maias_cajado', nome:'Cajado Lunar', tipo:'cajado', elemento:'AGUA', atkBonus:5, elementoBonus:5, boss:'nacao_maias', emoji:'🪄' },
         // INCAS (AR)
         arma_nacao_incas_tacape: { id:'arma_nacao_incas_tacape', nome:'Estrela do Trovão', tipo:'tacape', elemento:'AR', atkBonus:5, elementoBonus:5, boss:'nacao_incas', emoji:'🪓' },
-        arma_nacao_incas_flecha: { id:'arma_nacao_incas_flecha', nome:'Arco da Prata', tipo:'flecha', elemento:'AGUA', atkBonus:5, elementoBonus:5, boss:'nacao_incas', emoji:'🏹' },
+        arma_nacao_incas_flecha: { id:'arma_nacao_incas_flecha', nome:'Flecha da Prata', tipo:'flecha', elemento:'AGUA', atkBonus:5, elementoBonus:5, boss:'nacao_incas', emoji:'🏹' },
         arma_nacao_incas_cajado: { id:'arma_nacao_incas_cajado', nome:'Cajado do Submundo', tipo:'cajado', elemento:'TERRA', atkBonus:5, elementoBonus:5, boss:'nacao_incas', emoji:'🪄' },
         // MAPUCHES (FOGO)
         arma_nacao_mapuches_tacape: { id:'arma_nacao_mapuches_tacape', nome:'Luma do Sol', tipo:'tacape', elemento:'FOGO', atkBonus:5, elementoBonus:5, boss:'nacao_mapuches', emoji:'🪓' },
-        arma_nacao_mapuches_flecha: { id:'arma_nacao_mapuches_flecha', nome:'Arco do Vulcão', tipo:'flecha', elemento:'FOGO', atkBonus:5, elementoBonus:5, boss:'nacao_mapuches', emoji:'🏹' },
+        arma_nacao_mapuches_flecha: { id:'arma_nacao_mapuches_flecha', nome:'Flecha do Vulcão', tipo:'flecha', elemento:'FOGO', atkBonus:5, elementoBonus:5, boss:'nacao_mapuches', emoji:'🏹' },
         arma_nacao_mapuches_cajado: { id:'arma_nacao_mapuches_cajado', nome:'Cajado dos Espíritos', tipo:'cajado', elemento:'TERRA', atkBonus:5, elementoBonus:5, boss:'nacao_mapuches', emoji:'🪄' },
         // CHIBCHAS (TERRA)
         arma_nacao_chibchas_tacape: { id:'arma_nacao_chibchas_tacape', nome:'Macana Dourada', tipo:'tacape', elemento:'TERRA', atkBonus:5, elementoBonus:5, boss:'nacao_chibchas', emoji:'🪓' },
-        arma_nacao_chibchas_flecha: { id:'arma_nacao_chibchas_flecha', nome:'Arco da Lagoa', tipo:'flecha', elemento:'AGUA', atkBonus:5, elementoBonus:5, boss:'nacao_chibchas', emoji:'🏹' },
+        arma_nacao_chibchas_flecha: { id:'arma_nacao_chibchas_flecha', nome:'Flecha da Lagoa', tipo:'flecha', elemento:'AGUA', atkBonus:5, elementoBonus:5, boss:'nacao_chibchas', emoji:'🏹' },
         arma_nacao_chibchas_cajado: { id:'arma_nacao_chibchas_cajado', nome:'Cajado do Terremoto', tipo:'cajado', elemento:'TERRA', atkBonus:5, elementoBonus:5, boss:'nacao_chibchas', emoji:'🪄' },
         // NAVAJOS (AR)
         arma_nacao_navajos_tacape: { id:'arma_nacao_navajos_tacape', nome:'Atlatl do Coiote', tipo:'tacape', elemento:'TERRA', atkBonus:5, elementoBonus:5, boss:'nacao_navajos', emoji:'🪓' },
-        arma_nacao_navajos_flecha: { id:'arma_nacao_navajos_flecha', nome:'Arco da Tecelã', tipo:'flecha', elemento:'AR', atkBonus:5, elementoBonus:5, boss:'nacao_navajos', emoji:'🏹' },
+        arma_nacao_navajos_flecha: { id:'arma_nacao_navajos_flecha', nome:'Flecha da Tecelã', tipo:'flecha', elemento:'AR', atkBonus:5, elementoBonus:5, boss:'nacao_navajos', emoji:'🏹' },
         arma_nacao_navajos_cajado: { id:'arma_nacao_navajos_cajado', nome:'Cajado do Céu', tipo:'cajado', elemento:'AR', atkBonus:5, elementoBonus:5, boss:'nacao_navajos', emoji:'🪄' },
     };
 
@@ -5609,5 +5609,517 @@
     console.log('• Card "CONCLUÍDO" agora mostra "↻ REJOGAR"');
     console.log('• Botão reabilitado quando completo');
     console.log('• Rejogar cobra o custo normal de ouro por fase');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// nacoes.js — V2.24 — Sprites das armas, amuletos e fragmentos
+// -----------------------------------------------------------------
+// Cole os links nas 3 tabelas abaixo. Elas são injetadas nas
+// tabelas do historia.js:
+//   • NACAO_ARMAS_SPRITES    → EVENTO_SPRITES
+//   → renderizado em: Loja das Nações, Tesouraria, Equipar
+//   • NACAO_AMULETOS_SPRITES → STORY_AMULET_SPRITES
+//   → renderizado em: Tesouraria, Equipar
+//   • NACAO_FRAGMENTOS_SPRITES → STORY_MATERIAL_SPRITES + SPRITES_STORY
+//   → renderizado em: barra de progresso (renderSeteNacoesScreen) + Tesouraria
+//
+// ⚠️ Deixe '' (vazio) pra usar o emoji fallback.
+// =================================================================
+(function spritesNacoesV224() {
+    if (window._spritesNacoesV224) return;
+    window._spritesNacoesV224 = true;
+
+    // ─────────────────────────────────────────────────────────────
+    // 1. AS 21 ARMAS — cole os URLs entre as aspas
+    // ─────────────────────────────────────────────────────────────
+    const NACAO_ARMAS_SPRITES = {
+        // TAÍNOS
+        'arma_nacao_tainos_tacape': 'https://i.imgur.com/jErejeH.png',
+        'arma_nacao_tainos_flecha': '',
+        'arma_nacao_tainos_cajado': '',
+        // ASTECAS
+        'arma_nacao_astecas_tacape': 'https://i.imgur.com/puIbGum.png',
+        'arma_nacao_astecas_flecha': '',
+        'arma_nacao_astecas_cajado': '',
+        // MAIAS
+        'arma_nacao_maias_tacape': 'https://i.imgur.com/TrczXWd.png',
+        'arma_nacao_maias_flecha': '',
+        'arma_nacao_maias_cajado': '',
+        // INCAS
+        'arma_nacao_incas_tacape': 'https://i.imgur.com/WdogafC.png',
+        'arma_nacao_incas_flecha': '',
+        'arma_nacao_incas_cajado': '',
+        // MAPUCHES
+        'arma_nacao_mapuches_tacape': 'https://i.imgur.com/IhASPgP.png',
+        'arma_nacao_mapuches_flecha': '',
+        'arma_nacao_mapuches_cajado': '',
+        // CHIBCHAS
+        'arma_nacao_chibchas_tacape': 'https://i.imgur.com/OhKNR9r.png',
+        'arma_nacao_chibchas_flecha': '',
+        'arma_nacao_chibchas_cajado': '',
+        // NAVAJOS
+        'arma_nacao_navajos_tacape': 'https://i.imgur.com/UAth7wr.png',
+        'arma_nacao_navajos_flecha': '',
+        'arma_nacao_navajos_cajado': '',
+    };
+
+    // ─────────────────────────────────────────────────────────────
+    // 2. OS 7 AMULETOS
+    // ─────────────────────────────────────────────────────────────
+    const NACAO_AMULETOS_SPRITES = {
+        'amuleto_nacao_tainos': 'https://i.imgur.com/AeYbqVo.png',
+        'amuleto_nacao_astecas': 'https://i.imgur.com/2jW3wj3.png',
+        'amuleto_nacao_maias': 'https://i.imgur.com/BdlqNlg.png',
+        'amuleto_nacao_incas': 'https://i.imgur.com/nZOkx6G.png',
+        'amuleto_nacao_mapuches': 'https://i.imgur.com/hue6wua.png',
+        'amuleto_nacao_chibchas': 'https://i.imgur.com/isHRv2k.png',
+        'amuleto_nacao_navajos': 'https://i.imgur.com/Yea7J8a.png',
+    };
+
+    // ─────────────────────────────────────────────────────────────
+    // 3. OS 7 FRAGMENTOS
+    // ─────────────────────────────────────────────────────────────
+    const NACAO_FRAGMENTOS_SPRITES = {
+        'fragmento_nacao_tainos': 'https://i.imgur.com/K9fBYSO.png',
+        'fragmento_nacao_astecas': 'https://i.imgur.com/CzyoCDQ.png',
+        'fragmento_nacao_maias': 'https://i.imgur.com/iTFUNac.png',
+        'fragmento_nacao_incas': 'https://i.imgur.com/v1R5JOA.png',
+        'fragmento_nacao_mapuches': 'https://i.imgur.com/CVlMP9R.png',
+        'fragmento_nacao_chibchas': 'https://i.imgur.com/AiXAuyL.png',
+        'fragmento_nacao_navajos': 'https://i.imgur.com/N70E8gG.png',
+    };
+
+    // ─────────────────────────────────────────────────────────────
+    // 4. INJETA nas tabelas do historia.js
+    // ─────────────────────────────────────────────────────────────
+    let injetados = 0;
+
+    if (typeof EVENTO_SPRITES !== 'undefined') {
+        Object.assign(EVENTO_SPRITES, NACAO_ARMAS_SPRITES);
+        Object.keys(NACAO_ARMAS_SPRITES).forEach(k => {
+            if (NACAO_ARMAS_SPRITES[k]) injetados++;
+        });
+    }
+
+    if (typeof STORY_AMULET_SPRITES !== 'undefined') {
+        Object.assign(STORY_AMULET_SPRITES, NACAO_AMULETOS_SPRITES);
+        Object.keys(NACAO_AMULETOS_SPRITES).forEach(k => {
+            if (NACAO_AMULETOS_SPRITES[k]) injetados++;
+        });
+    }
+
+    if (typeof STORY_MATERIAL_SPRITES !== 'undefined') {
+        Object.assign(STORY_MATERIAL_SPRITES, NACAO_FRAGMENTOS_SPRITES);
+    }
+    if (typeof SPRITES_STORY !== 'undefined') {
+        Object.assign(SPRITES_STORY, NACAO_FRAGMENTOS_SPRITES);
+        Object.keys(NACAO_FRAGMENTOS_SPRITES).forEach(k => {
+            if (NACAO_FRAGMENTOS_SPRITES[k]) injetados++;
+        });
+    }
+
+    console.log(`[V2.24] ${injetados} sprites injetados (armas + amuletos + fragmentos).`);
+    if (injetados === 0) {
+        console.log('[V2.24] Nenhum sprite configurado ainda. Cole os URLs no bloco V2.24.');
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 5. PATCH: Loja das Nações usa getWeaponIcon
+    // -------------------------------------------------------------
+    // V2.16 hardcoded "a.emoji || '⚔️'". Precisa usar o helper.
+    // ─────────────────────────────────────────────────────────────
+    const _origRenderLoja = window.renderLojaNacoes;
+    if (typeof _origRenderLoja === 'function' && !_origRenderLoja._v224) {
+        window.renderLojaNacoes = function() {
+            const r = _origRenderLoja.apply(this, arguments);
+
+            setTimeout(() => {
+                const cards = document.querySelectorAll('.nacao-shop-card');
+                cards.forEach(card => {
+                    const nameEl = card.querySelector('.nacao-shop-name');
+                    const iconEl = card.querySelector('.nacao-shop-icon');
+                    if (!nameEl || !iconEl) return;
+                    if (iconEl.dataset.iconPatched === '1') return;
+
+                    // Acha a arma pelo nome
+                    const arma = Object.values(window.NACAO_ARMAS || {}).find(a => a.nome === nameEl.textContent.trim());
+                    if (!arma) return;
+
+                    const url = NACAO_ARMAS_SPRITES[arma.id];
+                    if (url && url.trim() !== '') {
+                        iconEl.innerHTML = `<img src="${url}" alt="${arma.nome}" style="width:64px;height:64px;object-fit:contain;">`;
+                    }
+                    // Sem URL → deixa o emoji original
+
+                    iconEl.dataset.iconPatched = '1';
+                });
+            }, 100);
+
+            return r;
+        };
+        window.renderLojaNacoes._v224 = true;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 6. PATCH: nacaoIcon aceita fragmentos via STORY_MATERIAL_SPRITES
+    // -------------------------------------------------------------
+    // renderSeteNacoesScreen usa nacaoIcon(fid) pra fragmentos,
+    // mas nacaoIcon só olha SPRITES_STORY. Já cobrimos acima
+    // (Object.assign SPRITES_STORY). Este patch é redundância
+    // pra quando o URL está só em STORY_MATERIAL_SPRITES.
+    // ─────────────────────────────────────────────────────────────
+    const _origNacaoIcon = window.nacaoIcon;
+    if (typeof _origNacaoIcon === 'function' && !_origNacaoIcon._v224) {
+        window.nacaoIcon = function(key, size) {
+            // Tenta material sprite primeiro (se for fragmento)
+            if (typeof STORY_MATERIAL_SPRITES !== 'undefined' &&
+                key.startsWith('fragmento_nacao_') &&
+                STORY_MATERIAL_SPRITES[key] && STORY_MATERIAL_SPRITES[key].trim() !== '') {
+                const url = STORY_MATERIAL_SPRITES[key];
+                const cls = size === 'large' ? 'nacao-icon nacao-icon-lg' : 'nacao-icon';
+                return `<img src="${url}" class="${cls}" alt="${key}">`;
+            }
+            return _origNacaoIcon.apply(this, arguments);
+        };
+        window.nacaoIcon._v224 = true;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 7. Debug
+    // ─────────────────────────────────────────────────────────────
+    window._debugSpritesNacoes = function() {
+        console.group('=== [V2.24] Sprites das nações ===');
+        const armas = Object.keys(NACAO_ARMAS_SPRITES).filter(k => NACAO_ARMAS_SPRITES[k]);
+        const amus  = Object.keys(NACAO_AMULETOS_SPRITES).filter(k => NACAO_AMULETOS_SPRITES[k]);
+        const frags = Object.keys(NACAO_FRAGMENTOS_SPRITES).filter(k => NACAO_FRAGMENTOS_SPRITES[k]);
+        console.log(`Armas: ${armas.length}/21 configuradas`);
+        console.log(`Amuletos: ${amus.length}/7 configurados`);
+        console.log(`Fragmentos: ${frags.length}/7 configurados`);
+        console.log('');
+        console.log('Exemplo de renderização:');
+        if (typeof getWeaponIcon === 'function') {
+            console.log('  arma_nacao_tainos_tacape →', getWeaponIcon('arma_nacao_tainos_tacape', 'normal').slice(0, 80));
+        }
+        if (typeof getAmuletIcon === 'function') {
+            console.log('  amuleto_nacao_tainos →', getAmuletIcon('amuleto_nacao_tainos', 'normal').slice(0, 80));
+        }
+        if (typeof getMaterialIcon === 'function') {
+            console.log('  fragmento_nacao_tainos →', getMaterialIcon('fragmento_nacao_tainos', 'normal').slice(0, 80));
+        }
+        console.groupEnd();
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V2.24] Sprites das nações');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Cole URLs nas 3 tabelas no topo do V2.24');
+    console.log('• Loja das Nações renderiza armas via getWeaponIcon');
+    console.log('• Barra de progresso renderiza fragmentos via nacaoIcon');
+    console.log('');
+    console.log('💡 Debug: window._debugSpritesNacoes()');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// nacoes.js — V2.26 — Fundos temáticos das Sete Nações (wide + mobile)
+// -----------------------------------------------------------------
+// Cada nação tem 2 URLs:
+//   • desktop: 16:9 ou mais (1920×1080, 2400×1350, 2560×1440)
+//   • mobile:  vertical (1080×1920 ou 900×1600)
+//
+// Detecta mobile via viewport width <= 768px (ajustável).
+// Escuta resize / orientationchange e troca automaticamente.
+//
+// ⚠️ Cole os URLs entre as aspas. Vazio = usa o CSS padrão.
+// =================================================================
+(function fundosNacoesV226() {
+    if (window._fundosNacoesV226) return;
+    window._fundosNacoesV226 = true;
+
+    // ─────────────────────────────────────────────────────────────
+    // ⭐ CONFIG — cole URLs aqui
+    // ─────────────────────────────────────────────────────────────
+    const BREAKPOINT_MOBILE = 768; // px — abaixo disso usa mobile
+
+    const NACAO_BACKGROUNDS = {
+        'evento': {
+            desktop: 'https://i.imgur.com/T1TsRdi.jpeg',   // mapa wide 16:9
+            mobile:  'https://i.imgur.com/c3ToOWA.jpeg',   // mapa vertical 9:16
+        },
+        'tainos': {
+            desktop: 'https://i.imgur.com/4AcwFkH.jpeg',
+            mobile:  'https://i.imgur.com/e6gWJAl.jpeg',
+        },
+        'astecas': {
+            desktop: 'https://i.imgur.com/jPVCZqh.jpeg',
+            mobile:  'https://i.imgur.com/iWk1dGR.jpeg',
+        },
+        'maias': {
+            desktop: 'https://i.imgur.com/XjIC7Qc.jpeg',
+            mobile:  'https://i.imgur.com/OIGo51j.jpeg',
+        },
+        'incas': {
+            desktop: 'https://i.imgur.com/3N81mN4.jpeg',
+            mobile:  'https://i.imgur.com/p1M0Gbz.jpeg',
+        },
+        'mapuches': {
+            desktop: 'https://i.imgur.com/5EMgV8I.jpeg',
+            mobile:  'https://i.imgur.com/P183zrN.jpeg',
+        },
+        'chibchas': {
+            desktop: 'https://i.imgur.com/KqlUmqT.jpeg',
+            mobile:  'https://i.imgur.com/ubOUWzH.jpeg',
+        },
+        'navajos': {
+            desktop: 'https://i.imgur.com/6AwL4WC.jpeg',
+            mobile:  'https://i.imgur.com/oKBPTmA.jpeg',
+        },
+    };
+
+    // ─────────────────────────────────────────────────────────────
+    // Utilitários
+    // ─────────────────────────────────────────────────────────────
+    function _isMobile() {
+        return window.innerWidth <= BREAKPOINT_MOBILE;
+    }
+
+    function _resolverURL(chave) {
+        const entry = NACAO_BACKGROUNDS[chave];
+        if (!entry) return null;
+        const url = _isMobile() ? entry.mobile : entry.desktop;
+        if (!url || String(url).trim() === '') return null;
+        return String(url).trim();
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Aplica / remove o fundo
+    // ─────────────────────────────────────────────────────────────
+    function _aplicarFundo(url) {
+        const screen = document.getElementById('storyScreen');
+        if (!screen) return;
+
+        if (url) {
+            // Mobile: overlay mais escuro (texto pequeno precisa de mais contraste)
+            const overlayAlpha = _isMobile()
+                ? { top: 0.82, bottom: 0.94 }
+                : { top: 0.78, bottom: 0.92 };
+
+            screen.style.backgroundImage = `
+                radial-gradient(ellipse at top, rgba(201,162,39,.12), transparent 55%),
+                linear-gradient(rgba(10,6,2,${overlayAlpha.top}), rgba(10,6,2,${overlayAlpha.bottom})),
+                url('${url}')
+            `;
+            screen.style.backgroundSize = 'auto, auto, cover';
+            screen.style.backgroundPosition = 'center center';
+            screen.style.backgroundRepeat = 'no-repeat';
+            screen.style.backgroundAttachment = 'scroll';
+        } else {
+            screen.style.backgroundImage = '';
+            screen.style.backgroundSize = '';
+            screen.style.backgroundPosition = '';
+            screen.style.backgroundRepeat = '';
+            screen.style.backgroundAttachment = '';
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Descobre a chave do fundo baseado no título da tela
+    // ─────────────────────────────────────────────────────────────
+    function _resolverChave() {
+        const screen = document.getElementById('storyScreen');
+        if (!screen || !screen.classList.contains('active')) return null;
+        const titleEl = screen.querySelector('.story-title');
+        if (!titleEl) return null;
+
+        const raw = titleEl.textContent || '';
+        const title = raw.replace(/^[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\s]+/u, '').toUpperCase().trim();
+
+        // Tela principal do evento
+        if (title.includes('AS SETE NAÇÕES') || title === 'SETE NAÇÕES') return 'evento';
+
+        // Loja das Nações (mantém a imagem do mapa)
+        if (title.includes('LOJA DAS NAÇÕES')) return 'evento';
+
+        // Fases de uma nação (título = nome da nação)
+        if (typeof NACOES !== 'undefined') {
+            for (const id in NACOES) {
+                const nome = NACOES[id].nome.toUpperCase().trim();
+                if (title === nome || title.startsWith(nome)) return id;
+            }
+        }
+
+        return null; // qualquer outra tela → fundo padrão
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Atualiza o fundo (considera mobile/desktop + tela atual)
+    // ─────────────────────────────────────────────────────────────
+    let _ultimaChave = null;
+    let _ultimaURL = null;
+
+    function _atualizarFundo(force) {
+        const chave = _resolverChave();
+        const url = chave ? _resolverURL(chave) : null;
+
+        // Se nada mudou e não é force, não faz nada
+        if (!force && chave === _ultimaChave && url === _ultimaURL) return;
+        _ultimaChave = chave;
+        _ultimaURL = url;
+
+        _aplicarFundo(url);
+        if (url) {
+            console.log(`[V2.26] Fundo: ${chave} (${_isMobile() ? 'mobile' : 'desktop'})`);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Observer no #storyScreen (sobrevive a wrappers)
+    // ─────────────────────────────────────────────────────────────
+    let _observer = null;
+
+    function _instalarObserver() {
+        const screen = document.getElementById('storyScreen');
+        if (!screen) { setTimeout(_instalarObserver, 300); return; }
+
+        if (_observer) _observer.disconnect();
+
+        _observer = new MutationObserver(() => {
+            _atualizarFundo(false);
+        });
+
+        _observer.observe(screen, {
+            childList: true,
+            subtree: true,
+            characterData: true,
+        });
+
+        _atualizarFundo(true);
+        console.log('[V2.26] Observer de fundo instalado.');
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Resize / orientationchange → troca desktop ↔ mobile
+    // ─────────────────────────────────────────────────────────────
+    let _resizeTimer = null;
+
+    function _onResize() {
+        clearTimeout(_resizeTimer);
+        _resizeTimer = setTimeout(() => {
+            _atualizarFundo(true); // force = re-aplica com a URL correta
+        }, 150); // debounce
+    }
+
+    window.addEventListener('resize', _onResize);
+    window.addEventListener('orientationchange', () => {
+        setTimeout(() => _atualizarFundo(true), 250); // deixa o navegador reflowar
+    });
+
+    // matchMedia listener — mais preciso que resize pra trocar breakpoint
+    try {
+        const mq = window.matchMedia(`(max-width: ${BREAKPOINT_MOBILE}px)`);
+        if (mq.addEventListener) {
+            mq.addEventListener('change', () => _atualizarFundo(true));
+        } else if (mq.addListener) {
+            mq.addListener(() => _atualizarFundo(true));
+        }
+    } catch(e) {}
+
+    // ─────────────────────────────────────────────────────────────
+    // Watchdog 1: se o #storyScreen for recriado, reinstala
+    // ─────────────────────────────────────────────────────────────
+    setInterval(() => {
+        const screen = document.getElementById('storyScreen');
+        if (!screen) return;
+        if (!_observer) { _instalarObserver(); return; }
+        if (screen !== _observer._screen) {
+            _observer._screen = screen;
+            _instalarObserver();
+        }
+    }, 2000);
+
+    // ─────────────────────────────────────────────────────────────
+    // Watchdog 2: aplica fundo em telas abertas por fora do observer
+    // ─────────────────────────────────────────────────────────────
+    setInterval(() => {
+        const screen = document.getElementById('storyScreen');
+        if (!screen || !screen.classList.contains('active')) return;
+        _atualizarFundo(false);
+    }, 1000);
+
+    // ─────────────────────────────────────────────────────────────
+    // Debug
+    // ─────────────────────────────────────────────────────────────
+    window._debugFundosV226 = function() {
+        const screen = document.getElementById('storyScreen');
+        const titleEl = screen?.querySelector('.story-title');
+        const chave = _resolverChave();
+        console.group('=== [V2.26] Fundos das Nações ===');
+        console.log('Tela mobile?', _isMobile(), `(width: ${window.innerWidth}px)`);
+        console.log('Título atual:', titleEl?.textContent?.trim() || '(sem título)');
+        console.log('Chave resolvida:', chave || '(nenhuma)');
+        if (chave) {
+            const entry = NACAO_BACKGROUNDS[chave];
+            console.log('  Desktop:', entry.desktop ? '✅' : '⬜');
+            console.log('  Mobile: ', entry.mobile ? '✅' : '⬜');
+            console.log('  Usando: ', _isMobile() ? 'mobile' : 'desktop');
+        }
+        console.log('');
+        console.log('Background inline:', screen?.style.backgroundImage?.slice(0, 120) || '(vazio)');
+        console.log('');
+        console.log('Todas as URLs:');
+        Object.keys(NACAO_BACKGROUNDS).forEach(k => {
+            const e = NACAO_BACKGROUNDS[k];
+            console.log(`  ${k.padEnd(10)} desktop:${e.desktop ? '✅' : '⬜'}  mobile:${e.mobile ? '✅' : '⬜'}`);
+        });
+        console.groupEnd();
+    };
+
+    window._testFundoNacao = function(id, forceMode) {
+        if (!NACAO_BACKGROUNDS[id]) {
+            console.warn(`[V2.26] Sem chave "${id}".`);
+            return;
+        }
+        const modo = forceMode || (_isMobile() ? 'mobile' : 'desktop');
+        const url = NACAO_BACKGROUNDS[id][modo];
+        if (!url) {
+            console.warn(`[V2.26] Chave "${id}" não tem URL para "${modo}".`);
+            return;
+        }
+        _aplicarFundo(url);
+        console.log(`[V2.26] Fundo aplicado: ${id} (${modo})`);
+    };
+
+    window._limparFundoNacao = function() {
+        _aplicarFundo(null);
+        console.log('[V2.26] Fundo limpo');
+    };
+
+    window._simularMobile = function() {
+        // Útil pra testar sem redimensionar o navegador
+        _aplicarFundo(null);
+        _ultimaChave = null;
+        _ultimaURL = null;
+        _atualizarFundo(true);
+    };
+
+    // Inicia
+    _instalarObserver();
+    setTimeout(_instalarObserver, 1000);
+    setTimeout(_instalarObserver, 3000);
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V2.26] Fundos temáticos das Sete Nações');
+    console.log('   (wide + mobile)');
+    console.log('═══════════════════════════════════════════════════');
+    console.log(`• Breakpoint mobile: ${BREAKPOINT_MOBILE}px`);
+    console.log('• Cole URLs no topo do V2.26 (desktop + mobile)');
+    console.log('• Troca automática em resize/orientationchange');
+    console.log('• Overlay mais escuro no mobile (legibilidade)');
+    console.log('');
+    console.log('💡 Debug:  window._debugFundosV226()');
+    console.log('💡 Testar: window._testFundoNacao("tainos")');
+    console.log('          window._testFundoNacao("tainos", "mobile")');
+    console.log('💡 Limpar: window._limparFundoNacao()');
     console.log('═══════════════════════════════════════════════════');
 })();
