@@ -4586,3 +4586,322 @@
     console.log('💡 Forçar: window._v98ForcarAldeia()');
     console.log('═══════════════════════════════════════════════════');
 })();
+// =================================================================
+// aldeia.js — V101 — Layout Aldeia: header 1 linha + sem scroll mobile
+// -----------------------------------------------------------------
+// Problemas resolvidos:
+//   1. Header empilhava em 2 linhas (mobile) → empurrava ícones
+//   2. Icones-wrap com min-height: 100vh (V1.3) → scroll em mobile
+//   3. #storyScreen com padding forçava overflow
+//
+// Estratégia:
+//   • Header SEMPRE em 1 linha (compacta font-size/padding em mobile)
+//   • Sem mudança de altura vertical em desktop (preserva alinhamento)
+//   • Icones-wrap min-height: 0 (deixa o flex calcular)
+//   • #storyScreen sem padding/scroll quando Aldeia aberta
+//
+// Cole NO FINAL do aldeia.js (depois do V100).
+// =================================================================
+(function fixLayoutAldeiaV101() {
+    if (window._fixLayoutAldeiaV101) return;
+    window._fixLayoutAldeiaV101 = true;
+
+    const style = document.createElement('style');
+    style.id = 'v101AldeiaLayoutCSS';
+    style.textContent = `
+        /* ═══════════════════════════════════════════════════════
+           #storyScreen: sem scroll e sem padding na Aldeia
+           ═══════════════════════════════════════════════════════ */
+        #storyScreen:has(.aldeia-visual-wrap) {
+            overflow: hidden !important;
+            padding: 0 !important;
+            height: 100vh !important;
+            height: 100dvh !important;
+            max-height: 100dvh !important;
+        }
+
+        /* ═══════════════════════════════════════════════════════
+           WRAP: altura total, sem scroll
+           ═══════════════════════════════════════════════════════ */
+        .aldeia-visual-wrap {
+            height: 100vh !important;
+            height: 100dvh !important;
+            min-height: 100vh !important;
+            max-height: 100dvh !important;
+            overflow: hidden !important;
+        }
+
+        /* ═══════════════════════════════════════════════════════
+           ICONES WRAP: ocupa o espaço restante (flex)
+           ═══════════════════════════════════════════════════════ */
+        .aldeia-visual-wrap > .aldeia-icones-wrap {
+            flex: 1 1 auto !important;
+            min-height: 0 !important;
+            height: auto !important;
+            position: relative !important;
+        }
+
+        /* ═══════════════════════════════════════════════════════
+           HEADER: 1 linha SEMPRE (override do V3.2 mobile)
+           ═══════════════════════════════════════════════════════ */
+        @media (max-width: 768px) {
+            .aldeia-visual-wrap > .aldeia-top-bar,
+            .aldeia-visual-wrap > .modern-ald-header {
+                flex-direction: row !important;
+                flex-wrap: nowrap !important;
+                align-items: center !important;
+                justify-content: space-between !important;
+                width: 100% !important;
+                padding: 6px 8px !important;
+                gap: 4px !important;
+                box-sizing: border-box !important;
+            }
+
+            .aldeia-visual-wrap > .modern-ald-header .modern-profile-btn {
+                padding: 3px 6px !important;
+                gap: 4px !important;
+                width: auto !important;
+                flex-shrink: 1 !important;
+                min-width: 0 !important;
+            }
+            .aldeia-visual-wrap > .modern-ald-header .modern-profile-avatar-wrap {
+                width: 28px !important;
+                height: 28px !important;
+                flex-shrink: 0 !important;
+            }
+            .aldeia-visual-wrap > .modern-ald-header .modern-profile-element {
+                display: none !important;
+            }
+            .aldeia-visual-wrap > .modern-ald-header .modern-profile-info {
+                min-width: 0 !important;
+            }
+            .aldeia-visual-wrap > .modern-ald-header .modern-profile-name {
+                font-size: 0.65rem !important;
+                max-width: 60px !important;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                line-height: 1.1;
+                letter-spacing: 0 !important;
+            }
+            .aldeia-visual-wrap > .modern-ald-header .modern-profile-leader {
+                display: none !important;
+            }
+            .aldeia-visual-wrap > .modern-ald-header .modern-stats-container {
+                gap: 2px !important;
+                flex-wrap: nowrap !important;
+                width: auto !important;
+                justify-content: flex-end !important;
+                flex-shrink: 1 !important;
+                min-width: 0 !important;
+            }
+            .aldeia-visual-wrap > .modern-ald-header .modern-stat-pill {
+                padding: 3px 5px !important;
+                gap: 2px !important;
+            }
+            .aldeia-visual-wrap > .modern-ald-header .modern-stat-icon {
+                font-size: 0.7rem !important;
+            }
+            .aldeia-visual-wrap > .modern-ald-header .modern-stat-val {
+                font-size: 0.6rem !important;
+                letter-spacing: 0 !important;
+            }
+            .aldeia-visual-wrap > .modern-ald-header .modern-config-btn {
+                width: 26px !important;
+                height: 26px !important;
+                font-size: 0.8rem !important;
+                margin-left: 2px !important;
+                flex-shrink: 0 !important;
+            }
+        }
+
+        @media (max-width: 420px) {
+            .aldeia-visual-wrap > .modern-ald-header .modern-stat-val {
+                font-size: 0.55rem !important;
+            }
+            .aldeia-visual-wrap > .modern-ald-header .modern-profile-name {
+                max-width: 45px !important;
+            }
+            .aldeia-visual-wrap > .modern-ald-header .modern-stat-pill {
+                padding: 2px 4px !important;
+            }
+        }
+
+        /* ═══════════════════════════════════════════════════════
+           MOBILE: neutraliza min-height:100vh do V1.3 no icones-wrap
+           ═══════════════════════════════════════════════════════ */
+        @media (max-width: 700px) {
+            .aldeia-visual-wrap > .aldeia-icones-wrap {
+                min-height: 0 !important;
+                height: auto !important;
+            }
+        }
+    `;
+    document.head.appendChild(style);
+
+    // Re-renderiza se a Aldeia está aberta agora
+    setTimeout(() => {
+        const ss = document.getElementById('storyScreen');
+        if (ss && ss.classList.contains('active')
+            && ss.querySelector('.aldeia-visual-wrap')
+            && typeof renderAldeiaScreen === 'function') {
+            renderAldeiaScreen();
+        }
+    }, 150);
+
+    // ─── Debug ───
+    window._debugLayoutV101 = function() {
+        const wrap = document.querySelector('.aldeia-visual-wrap');
+        const header = document.querySelector('.modern-ald-header');
+        const icons = document.querySelector('.aldeia-icones-wrap');
+        const story = document.getElementById('storyScreen');
+        console.group('=== [V101] Layout Aldeia ===');
+        console.log('Viewport:', window.innerWidth, 'x', window.innerHeight);
+        console.log('');
+        if (wrap) {
+            const r = wrap.getBoundingClientRect();
+            console.log('wrap:', { h: r.height, scrollH: wrap.scrollHeight, overflow: getComputedStyle(wrap).overflow });
+            console.log('wrap scrollable?', wrap.scrollHeight > r.height + 5);
+        }
+        if (header) {
+            const r = header.getBoundingClientRect();
+            const cs = getComputedStyle(header);
+            console.log('header:', { h: Math.round(r.height), direction: cs.flexDirection, wrap: cs.flexWrap });
+        }
+        if (icons) {
+            const r = icons.getBoundingClientRect();
+            console.log('icons-wrap:', { top: Math.round(r.top), h: Math.round(r.height) });
+        }
+        if (story) {
+            console.log('storyScreen scrollable?', story.scrollHeight > story.clientHeight + 5);
+        }
+        console.log('');
+        console.log('✅ Se header < 70px e wrap scrollable=false → ok');
+        console.groupEnd();
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V101] Layout da Aldeia corrigido');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Header SEMPRE em 1 linha (compacta em mobile)');
+    console.log('• Desktop: altura vertical preservada (~55-60px)');
+    console.log('• Mobile: sem scroll (min-height:100vh neutralizado)');
+    console.log('• #storyScreen sem padding na Aldeia');
+    console.log('');
+    console.log('💡 Debug: window._debugLayoutV101()');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// aldeia.js — V102 — Perfil: nome maior + sem botão cobrindo
+// -----------------------------------------------------------------
+// • Aumenta max-width do nome (60px → 160px desktop / 95px mobile)
+// • Remove o botão "← VOLTAR" absoluto que cobria o título do perfil
+// • Não altera posições de ícones nem scroll mobile (V101 já tratou)
+//
+// Cole NO FINAL do aldeia.js (depois do V101).
+// =================================================================
+(function ajustePerfilHeaderV102() {
+    if (window._ajustePerfilHeaderV102) return;
+    window._ajustePerfilHeaderV102 = true;
+
+    // ═══════════════════════════════════════════════════════════
+    // 1. CSS — mais espaço para o nome do jogador
+    // ═══════════════════════════════════════════════════════════
+    if (!document.getElementById('v102PerfilCSS')) {
+        const style = document.createElement('style');
+        style.id = 'v102PerfilCSS';
+        style.textContent = `
+            /* Desktop: nome pode ocupar até 160px */
+            .aldeia-visual-wrap > .modern-ald-header .modern-profile-btn {
+                flex-shrink: 0 !important;
+            }
+            .aldeia-visual-wrap > .modern-ald-header .modern-profile-name {
+                max-width: 160px !important;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            /* Mobile: aumenta de 60px (V101) para 95px */
+            @media (max-width: 768px) {
+                .aldeia-visual-wrap > .modern-ald-header .modern-profile-btn {
+                    max-width: 50% !important;
+                }
+                .aldeia-visual-wrap > .modern-ald-header .modern-profile-name {
+                    max-width: 95px !important;
+                    font-size: 0.7rem !important;
+                }
+                /* Compacta os stats pra caber tudo em 1 linha */
+                .aldeia-visual-wrap > .modern-ald-header .modern-stats-container {
+                    gap: 2px !important;
+                }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 2. Remove o "← VOLTAR" da tela de perfil
+    // ═══════════════════════════════════════════════════════════
+    const _origPerfil = window._abrirTelaPerfilV3;
+    if (typeof _origPerfil === 'function') {
+        window._abrirTelaPerfilV3 = function() {
+            const r = _origPerfil.apply(this, arguments);
+
+            setTimeout(() => {
+                const screen = document.getElementById('storyScreen');
+                if (!screen) return;
+
+                const container = screen.querySelector('.story-container');
+                if (!container) return;
+
+                // O botão está no primeiro <div> do container
+                const topDiv = container.children[0];
+                if (!topDiv) return;
+
+                const backBtn = topDiv.querySelector('.story-back-btn');
+                if (backBtn && backBtn.textContent.includes('VOLTAR')) {
+                    backBtn.remove();
+
+                    // Como o botão era o motivo do margin-top no título,
+                    // zera para o título ficar centralizado no topo.
+                    const title = topDiv.querySelector('.story-title');
+                    if (title) title.style.marginTop = '0';
+                }
+            }, 20);
+
+            return r;
+        };
+        window._abrirTelaPerfilV3._v102 = true;
+    }
+
+    // Debug
+    window._debugPerfilV102 = function() {
+        const screen = document.getElementById('storyScreen');
+        const header = screen?.querySelector('.modern-profile-name');
+        const perfilBackBtn = screen?.querySelector('.story-container > div > .story-back-btn');
+        console.group('=== [V102] Perfil ===');
+        if (header) {
+            const r = header.getBoundingClientRect();
+            console.log('Nome no header:', header.textContent.trim());
+            console.log('Largura renderizada:', Math.round(r.width), 'px');
+            console.log('max-width CSS:', getComputedStyle(header).maxWidth);
+        } else {
+            console.log('Header não encontrado (Aldeia não aberta?)');
+        }
+        console.log('Botão VOLTAR no perfil?', !!perfilBackBtn);
+        console.groupEnd();
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V102] Perfil ajustado');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Nome do jogador: até 160px (desktop) / 95px (mobile)');
+    console.log('• Botão "← VOLTAR" removido da tela de perfil');
+    console.log('• Floating back button (🏠) continua funcionando');
+    console.log('');
+    console.log('💡 Debug: window._debugPerfilV102()');
+    console.log('═══════════════════════════════════════════════════');
+})();
