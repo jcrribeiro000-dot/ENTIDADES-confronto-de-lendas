@@ -40,14 +40,14 @@
     // SPRITES / SONS (vazios = usa emoji/fallback)
     // ═══════════════════════════════════════════════════════════
     const SPRITES_NACAO = {
-        nacao_yucahu:'https://i.imgur.com/X2UY7TU.gif', nacao_atabey:'', nacao_juracan:'',
-        nacao_quetzalcoatl:'https://i.imgur.com/AcQkgO1.gif', nacao_tezcatlipoca:'', nacao_huitzilopochtli:'',
-        nacao_kukulkan:'https://i.imgur.com/V3XmBYU.gif', nacao_chaac:'', nacao_ixchel:'',
-        nacao_illapa:'', nacao_mamaquilla:'https://i.imgur.com/u2JCJgU.gif', nacao_supay:'https://i.imgur.com/kg1U6nB.gif',
-        nacao_antu:'https://i.imgur.com/9qt8HIv.gif', nacao_pillan:'https://i.imgur.com/LRRy8eM.gif', nacao_wekufe:'https://i.imgur.com/H5kJgxj.gif',
-        nacao_bochica:'https://i.imgur.com/Y0pwmcj.gif', nacao_bachue:'https://i.imgur.com/YlGSDD8.gif', nacao_chibchacum:'',
-        nacao_maii:'https://i.imgur.com/Ot6f7hV.gif', nacao_spiderwoman:'', nacao_hashchelti:'',
-        heroi_Abya:'', essencia_ancestral:'',
+        nacao_yucahu:'https://i.imgur.com/X2UY7TU.gif', nacao_atabey:'https://i.imgur.com/I5G3k9X.gif', nacao_juracan:'https://i.imgur.com/KLFzINl.gif',
+        nacao_quetzalcoatl:'https://i.imgur.com/AcQkgO1.gif', nacao_tezcatlipoca:'https://i.imgur.com/BPObfz2.gif', nacao_huitzilopochtli:'https://i.imgur.com/C3kd9mB.gif',
+        nacao_kukulkan:'https://i.imgur.com/V3XmBYU.gif', nacao_chaac:'https://i.imgur.com/uT6TKbb.gif', nacao_ixchel:'https://i.imgur.com/I5G3k9X.gif',
+        nacao_illapa:'https://i.imgur.com/9ICAqQE.gif', nacao_mamaquilla:'https://i.imgur.com/u2JCJgU.gif', nacao_supay:'https://i.imgur.com/kg1U6nB.gif',
+        nacao_antu:'https://i.imgur.com/9qt8HIv.gif', nacao_pillan:'https://i.imgur.com/LRRy8eM.gif', nacao_wekufe:'https://i.imgur.com/I1cQwNe.gif',
+        nacao_bochica:'https://i.imgur.com/Y0pwmcj.gif', nacao_bachue:'https://i.imgur.com/YlGSDD8.gif', nacao_chibchacum:'https://i.imgur.com/ZrD5m4C.gif',
+        nacao_maii:'https://i.imgur.com/Ot6f7hV.gif', nacao_spiderwoman:'https://i.imgur.com/arKbQji.gif', nacao_hashchelti:'https://i.imgur.com/H5kJgxj.gif',
+        heroi_Abya:'https://i.imgur.com/3gom0Dy.gif', essencia_ancestral:'https://i.imgur.com/Rigf9eE.png',
     };
 
     const EMOJIS_NACAO = {
@@ -5551,5 +5551,63 @@
     console.log('');
     console.log('💡 Debug:  window._debugSemanaV222()');
     console.log('💡 Forçar: window._forcarMigrarSemana()');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// nacoes.js — V2.23 — Permitir rejogar nação completa
+// -----------------------------------------------------------------
+// Causa: renderSeteNacoesScreen desabilita o botão do card quando
+// completo === true. Mas o _nacaoEntrar e _iniciarFaseNacao NÃO
+// bloqueiam — o bloqueio é só visual. O jogador podia rejogar
+// as fases dentro da nação, mas nunca conseguia entrar de novo
+// depois de completar as 3, porque o card principal sumia o botão.
+//
+// Fix: post-processing nos cards completos — reabilita o botão
+// e muda o texto pra "↻ REJOGAR".
+// =================================================================
+(function permitirRejogarV223() {
+    if (window._permitirRejogarV223) return;
+    window._permitirRejogarV223 = true;
+
+    const _origRender = window.renderSeteNacoesScreen;
+    if (typeof _origRender !== 'function') {
+        console.warn('[V2.23] renderSeteNacoesScreen não existe.');
+        return;
+    }
+
+    window.renderSeteNacoesScreen = function() {
+        const r = _origRender.apply(this, arguments);
+
+        setTimeout(() => {
+            document.querySelectorAll('.nacao-card').forEach(card => {
+                const badge = card.querySelector('.nacao-badge');
+                const btn = card.querySelector('.nacao-card-btn');
+                if (!badge || !btn) return;
+
+                // Card concluído → liberar rejogo
+                if (badge.classList.contains('concluido')) {
+                    btn.disabled = false;
+                    btn.textContent = '↻ REJOGAR';
+                    // Estilo dourado (mesmo do ENTRAR)
+                    btn.style.background =
+                        'linear-gradient(180deg, rgba(232,185,35,.2), transparent 45%), ' +
+                        'linear-gradient(135deg, #8a6a2e, #4a3418)';
+                    btn.style.color = '#fff5dc';
+                    btn.style.borderColor = '#e8b923';
+                    btn.style.cursor = 'pointer';
+                }
+            });
+        }, 60);
+
+        return r;
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V2.23] Nação completa agora permite rejogar');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Card "CONCLUÍDO" agora mostra "↻ REJOGAR"');
+    console.log('• Botão reabilitado quando completo');
+    console.log('• Rejogar cobra o custo normal de ouro por fase');
     console.log('═══════════════════════════════════════════════════');
 })();
