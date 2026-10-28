@@ -3759,3 +3759,830 @@
 
     console.log('✅ [V91] Anti-navegador ativado (menu, drag, zoom, refresh-drag).');
 })();
+// =================================================================
+// aldeia.js — V3.2 — INJEÇÃO DO CABEÇALHO E FIX DEFINITIVO DO SAVE
+// =================================================================
+(function aldeiaV32() {
+    if (window._aldeiaV32) return;
+    window._aldeiaV32 = true;
+
+    // ═══════════════════════════════════════════════════════════
+    // 1. FIX DO FLUXO DE SAVE (Cai direto na Aldeia e bloqueia Título)
+    // ═══════════════════════════════════════════════════════════
+    const _origShowStory = window.showStoryScreen;
+    window.showStoryScreen = function() {
+        // Esconde a tela de título à força
+        const title = document.getElementById('titleScreen');
+        if (title) { title.style.display = 'none'; title.classList.remove('active'); }
+        
+        // Mostra a Aldeia
+        const ss = document.getElementById('storyScreen');
+        if (ss) { ss.style.display = 'flex'; ss.classList.add('active'); }
+
+        if (!STORY_CURRENT_SAVE_NAME) {
+            const lastUsed = (typeof getLastUsedSaveName === 'function') ? getLastUsedSaveName() : null;
+            if (lastUsed && typeof loadStoryProgressByName === 'function') {
+                loadStoryProgressByName(lastUsed);
+            }
+        }
+        
+        if (STORY_CURRENT_SAVE_NAME) {
+            window.renderAldeiaScreen();
+        } else if (typeof showStorySaveNameModal === 'function') {
+            showStorySaveNameModal({ allowCancel: true, title: 'NOVO SAVE' });
+        }
+    };
+
+    // Quando cria o save, não deixa o jogo fugir para o menu
+    const _origConfirm = window.confirmStorySaveName;
+    window.confirmStorySaveName = function() {
+        const inp = document.getElementById('storySaveNameInput');
+        if (!inp) return;
+        const name = inp.value.trim();
+        if (!name) { alert('Digite um nome para o save!'); return; }
+        if (name.length < 2) { alert('O nome precisa ter pelo menos 2 caracteres.'); return; }
+
+        const exists = (typeof listStorySaves === 'function') ? listStorySaves().some(s => s.name.toLowerCase() === name.toLowerCase()) : false;
+        if (exists) {
+            if (!confirm(`Já existe um save "${name}". Carregar?`)) return;
+            if (typeof loadStoryProgressByName === 'function') loadStoryProgressByName(name);
+        } else {
+            if (typeof createNewStorySave === 'function') createNewStorySave(name);
+        }
+        
+        const m = document.getElementById('storySaveNameModal');
+        if (m) m.remove();
+        
+        window.showStoryScreen(); // Força ir pra Aldeia
+    };
+
+
+    // ═══════════════════════════════════════════════════════════
+    // 2. INJEÇÃO DO NOVO CABEÇALHO (Mantendo os botões intactos)
+    // ═══════════════════════════════════════════════════════════
+    const _origRenderAldeia = window.renderAldeiaScreen;
+    window.renderAldeiaScreen = function() {
+        // Roda o render visual original (que desenha o mapa e os botões)
+        const r = _origRenderAldeia.apply(this, arguments);
+        
+        // Aguarda o DOM montar para substituir APENAS a barra superior
+        setTimeout(() => {
+            const screen = document.getElementById('storyScreen');
+            if (!screen || !screen.classList.contains('active')) return;
+
+            // Encontra a barra superior da aldeia visual
+            const topBar = screen.querySelector('.aldeia-top-bar');
+            if (!topBar) return; // Se não achar, é porque a Aldeia visual não montou
+
+            // ─── DADOS DO JOGADOR ───
+            const gold = STORY_PROGRESS.gold || 0;
+            const xp = STORY_PROGRESS.totalXP || 0;
+            const stars = (typeof getTotalStars === 'function') ? getTotalStars() : 0;
+            const maxStars = (typeof getMaxTotalStars === 'function') ? getMaxTotalStars() : 576;
+            const saveEl = (typeof getSaveElement === 'function') ? getSaveElement() : 'FOGO';
+            const saveName = STORY_CURRENT_SAVE_NAME || 'Jogador';
+            
+            const leaderId = STORY_PROGRESS.leader;
+            const leaderData = (leaderId && STORY_HERO_CLASSES) ? STORY_HERO_CLASSES[leaderId] : null;
+            const leaderName = leaderData ? leaderData.displayName : (leaderId || 'Sem Líder');
+            
+            let avatarURL = '';
+            if (leaderId && typeof SPRITES !== 'undefined' && SPRITES[leaderId]) {
+                avatarURL = SPRITES[leaderId];
+            } else {
+                const selHero = (STORY_PROGRESS.selectedHeroes && STORY_PROGRESS.selectedHeroes[0]) || 'Tupa';
+                avatarURL = (typeof SPRITES !== 'undefined' && SPRITES[selHero]) ? SPRITES[selHero] : '';
+            }
+
+            // Substitui o visual da barra superior
+            topBar.innerHTML = `
+                <!-- Perfil do Jogador -->
+                <div class="modern-profile-btn" onclick="window._abrirTelaPerfilV3()">
+                    <div class="modern-profile-avatar-wrap">
+                        ${avatarURL ? `<img src="${avatarURL}" class="modern-profile-avatar">` : `<div class="modern-profile-avatar-empty">👤</div>`}
+                        <div class="modern-profile-element elem-${saveEl}">${typeof elemIcon === 'function' ? elemIcon(saveEl) : ''}</div>
+                    </div>
+                    <div class="modern-profile-info">
+                        <div class="modern-profile-name">${saveName}</div>
+                        <div class="modern-profile-leader">👑 ${leaderName}</div>
+                    </div>
+                </div>
+
+                <!-- Status e Configurações -->
+                <div class="modern-stats-container">
+                    <div class="modern-stat-pill">
+                        <span class="modern-stat-icon">${typeof uiIcon === 'function' ? uiIcon('gold') : '💰'}</span>
+                        <span class="modern-stat-val">${gold}</span>
+                    </div>
+                    <div class="modern-stat-pill">
+                        <span class="modern-stat-icon">${typeof uiIcon === 'function' ? uiIcon('xp') : '⭐'}</span>
+                        <span class="modern-stat-val">${xp} XP</span>
+                    </div>
+                    <div class="modern-stat-pill">
+                        <span class="modern-stat-icon" style="color:#f1c40f;">⭐</span>
+                        <span class="modern-stat-val">${stars} / ${maxStars}</span>
+                    </div>
+                    <button class="modern-config-btn" onclick="window.renderStorySettingsScreen()" title="Configurações">
+                        ⚙️
+                    </button>
+                </div>
+            `;
+            
+            // Remove a classe antiga para não herdar estilos errados
+            topBar.classList.remove('aldeia-top-bar');
+            
+        }, 80); // 80ms garante que o V1.5 montou o HTML
+        
+        return r;
+    };
+
+
+    // ═══════════════════════════════════════════════════════════
+    // 3. TELA DE PERFIL DO JOGADOR
+    // ═══════════════════════════════════════════════════════════
+    window._abrirTelaPerfilV3 = function() {
+        const screen = document.getElementById('storyScreen');
+        if (!screen) return;
+
+        const saveEl = (typeof getSaveElement === 'function') ? getSaveElement() : 'FOGO';
+        const xp = STORY_PROGRESS.totalXP || 0;
+        const gold = STORY_PROGRESS.gold || 0;
+        const stars = (typeof getTotalStars === 'function') ? getTotalStars() : 0;
+        
+        const leaderId = STORY_PROGRESS.leader;
+        const leaderData = (leaderId && STORY_HERO_CLASSES) ? STORY_HERO_CLASSES[leaderId] : null;
+        const leaderName = leaderData ? leaderData.displayName : (leaderId || 'Nenhum escolhido');
+        
+        let avatarURL = '';
+        if (leaderId && typeof SPRITES !== 'undefined' && SPRITES[leaderId]) {
+            avatarURL = SPRITES[leaderId];
+        } else {
+            const selHero = (STORY_PROGRESS.selectedHeroes && STORY_PROGRESS.selectedHeroes[0]) || 'Tupa';
+            avatarURL = (typeof SPRITES !== 'undefined' && SPRITES[selHero]) ? SPRITES[selHero] : '';
+        }
+
+        screen.innerHTML = `
+            <div class="story-container">
+                <div style="position:relative; text-align:center; margin-bottom:30px;">
+                    <button class="story-back-btn" onclick="renderAldeiaScreen()" style="position:absolute; left:0; top:0;">← VOLTAR</button>
+                    <h1 class="story-title" style="margin-top:20px;">PERFIL DO JOGADOR</h1>
+                </div>
+
+                <div class="profile-main-card">
+                    <div class="profile-big-avatar-wrap">
+                        ${avatarURL ? `<img src="${avatarURL}" class="profile-big-avatar">` : `<div class="profile-big-avatar-empty">👤</div>`}
+                        <div class="profile-big-element elem-${saveEl}">${elemIcon(saveEl)} ${saveEl}</div>
+                    </div>
+
+                    <div class="profile-details">
+                        <h2 class="profile-name">${STORY_CURRENT_SAVE_NAME || 'Jogador'}</h2>
+                        <div class="profile-leader-title">Líder do Grupo: <b>${leaderName}</b></div>
+                        
+                        <div class="profile-stats-grid">
+                            <div class="profile-stat-box">
+                                <div class="p-stat-icon">${uiIcon('gold')}</div>
+                                <div class="p-stat-val">${gold}</div>
+                                <div class="p-stat-label">Ouro</div>
+                            </div>
+                            <div class="profile-stat-box">
+                                <div class="p-stat-icon">${uiIcon('xp')}</div>
+                                <div class="p-stat-val">${xp}</div>
+                                <div class="p-stat-label">XP Total</div>
+                            </div>
+                            <div class="profile-stat-box">
+                                <div class="p-stat-icon" style="color:#f1c40f;">⭐</div>
+                                <div class="p-stat-val">${stars}</div>
+                                <div class="p-stat-label">Estrelas</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="profile-sections-grid">
+                    <div class="profile-section-card">
+                        <h3 class="profile-section-title">💾 GERENCIAR SAVE</h3>
+                        <p class="profile-section-desc">Gerencie seus dados ou comece uma nova jornada.</p>
+                        <div class="profile-btn-row">
+                            <button class="profile-action-btn" onclick="changeStorySave()">🔄 TROCAR SAVE</button>
+                            <button class="profile-action-btn" onclick="showStorySaveNameModal({allowCancel:true,title:'NOVO SAVE'})">✨ NOVO SAVE</button>
+                        </div>
+                    </div>
+
+                    <div class="profile-section-card">
+                        <h3 class="profile-section-title">🏆 CONQUISTAS</h3>
+                        <p class="profile-section-desc">Acompanhe seu progresso e feitos lendários.</p>
+                        <div class="profile-placeholder-box">🚧 Em desenvolvimento</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    };
+
+    // ═══════════════════════════════════════════════════════════
+    // 4. CSS DO CABEÇALHO MODERNO (Afeta apenas a barra de cima)
+    // ═══════════════════════════════════════════════════════════
+    if (!document.getElementById('aldeiaV32CSS')) {
+        const style = document.createElement('style');
+        style.id = 'aldeiaV32CSS';
+        style.textContent = `
+            /* ============ NOVO CABEÇALHO ============ */
+            .modern-ald-header {
+                display: flex; justify-content: space-between; align-items: center;
+                width: 100%; padding: 12px 20px;
+                background: linear-gradient(90deg, rgba(15,10,5,0.9), rgba(30,20,10,0.9));
+                border: 1px solid rgba(201,162,39,0.3); border-radius: 12px;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.6); backdrop-filter: blur(8px);
+                gap: 15px; flex-wrap: wrap; box-sizing: border-box;
+            }
+
+            .modern-profile-btn {
+                display: flex; align-items: center; gap: 12px; cursor: pointer;
+                padding: 8px 16px; border-radius: 8px; transition: all 0.2s;
+                background: rgba(10,6,2,0.5); border: 1px solid rgba(201,162,39,0.2);
+            }
+            .modern-profile-btn:hover {
+                background: rgba(201,162,39,0.15); border-color: #c9a227;
+                transform: translateY(-2px); box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            }
+            .modern-profile-avatar-wrap {
+                position: relative; width: 48px; height: 48px; border-radius: 50%;
+                background: radial-gradient(circle, #3a2a18, #1a1208);
+                border: 2px solid #c9a227; display: flex; align-items: center;
+                justify-content: center; box-shadow: 0 0 10px rgba(201,162,39,0.3);
+            }
+            .modern-profile-avatar { width: 100%; height: 100%; object-fit: contain; border-radius: 50%; }
+            .modern-profile-avatar-empty { font-size: 1.5rem; color: #8a7a52; }
+            .modern-profile-element {
+                position: absolute; bottom: -5px; right: -5px; width: 20px; height: 20px;
+                background: #1a1208; border: 1px solid #c9a227; border-radius: 50%;
+                display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.8);
+            }
+            .modern-profile-element img { width: 14px; height: 14px; object-fit: contain; }
+            .modern-profile-info { display: flex; flex-direction: column; }
+            .modern-profile-name {
+                font-family: 'Cinzel', serif; color: #e8b923; font-weight: 700;
+                font-size: 1.05rem; letter-spacing: 1px; text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+            }
+            .modern-profile-leader { font-family: 'EB Garamond', serif; color: #b8a577; font-size: 0.85rem; font-style: italic; }
+
+            /* Stats */
+            .modern-stats-container { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+            .modern-stat-pill {
+                display: flex; align-items: center; gap: 6px; padding: 6px 14px;
+                background: rgba(10,6,2,0.6); border: 1px solid rgba(201,162,39,0.3);
+                border-radius: 20px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);
+            }
+            .modern-stat-icon { font-size: 1rem; display: flex; align-items: center; }
+            .modern-stat-icon img { width: 16px; height: 16px; object-fit: contain; }
+            .modern-stat-val { font-family: 'Cinzel', serif; color: #f0e2c0; font-weight: 700; font-size: 0.85rem; letter-spacing: 1px; }
+            .modern-config-btn {
+                width: 36px; height: 36px; border-radius: 50%;
+                background: linear-gradient(135deg, #3d2d18, #2a1f10);
+                border: 1px solid #6a5024; color: #c8b787; font-size: 1.1rem;
+                cursor: pointer; display: flex; align-items: center; justify-content: center;
+                transition: all 0.2s; margin-left: 5px;
+            }
+            .modern-config-btn:hover { transform: rotate(90deg); border-color: #c9a227; color: #fff; }
+
+            /* ============ TELA DE PERFIL ============ */
+            .profile-main-card {
+                background: linear-gradient(180deg, rgba(201,162,39,0.1), transparent 40%), rgba(20,15,10,0.8);
+                border: 2px solid #6a5024; border-radius: 12px; padding: 30px;
+                display: flex; align-items: center; gap: 30px; margin-bottom: 25px;
+                box-shadow: 0 10px 30px rgba(0,0,0,0.6); flex-wrap: wrap;
+            }
+            .profile-big-avatar-wrap {
+                position: relative; width: 120px; height: 120px; border-radius: 50%;
+                background: radial-gradient(circle, #3a2a18, #1a1208); border: 4px solid #e8b923;
+                display: flex; align-items: center; justify-content: center;
+                box-shadow: 0 0 30px rgba(232,185,35,0.4); flex-shrink: 0;
+            }
+            .profile-big-avatar { width: 100%; height: 100%; object-fit: contain; border-radius: 50%; }
+            .profile-big-avatar-empty { font-size: 4rem; color: #8a7a52; }
+            .profile-big-element {
+                position: absolute; bottom: -10px; right: -10px; padding: 4px 12px;
+                background: #1a1208; border: 2px solid #c9a227; border-radius: 20px;
+                font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.8rem;
+                display: flex; align-items: center; gap: 5px; box-shadow: 0 4px 10px rgba(0,0,0,0.8);
+            }
+            .profile-big-element img { width: 16px; height: 16px; }
+            .profile-details { flex: 1; min-width: 250px; }
+            .profile-name { font-family: 'Cinzel Decorative', serif; color: #e8b923; font-size: 2rem; margin: 0 0 5px 0; letter-spacing: 2px; text-shadow: 0 0 15px rgba(232,185,35,0.5); }
+            .profile-leader-title { font-family: 'EB Garamond', serif; color: #b8a577; font-size: 1.1rem; font-style: italic; margin-bottom: 20px; }
+            .profile-leader-title b { color: #f0e2c0; font-family: 'Cinzel', serif; font-style: normal; }
+            .profile-stats-grid { display: flex; gap: 15px; flex-wrap: wrap; }
+            .profile-stat-box { background: rgba(10,6,2,0.6); border: 1px solid rgba(201,162,39,0.3); border-radius: 8px; padding: 10px 20px; text-align: center; flex: 1; min-width: 100px; }
+            .p-stat-icon { font-size: 1.5rem; margin-bottom: 5px; }
+            .p-stat-icon img { width: 24px; height: 24px; object-fit: contain; }
+            .p-stat-val { font-family: 'Cinzel', serif; color: #e8b923; font-weight: 700; font-size: 1.2rem; }
+            .p-stat-label { font-family: 'EB Garamond', serif; color: #8a7a52; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; }
+            
+            .profile-sections-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+            .profile-section-card { background: rgba(20,15,10,0.8); border: 1px solid #3d2d18; border-radius: 8px; padding: 20px; }
+            .profile-section-title { font-family: 'Cinzel', serif; color: #e8b923; font-size: 1rem; margin: 0 0 10px 0; letter-spacing: 1px; border-bottom: 1px solid rgba(201,162,39,0.2); padding-bottom: 8px; }
+            .profile-section-desc { font-family: 'EB Garamond', serif; color: #b8a577; font-size: 0.95rem; font-style: italic; margin-bottom: 15px; }
+            .profile-btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
+            .profile-action-btn { padding: 10px 15px; background: linear-gradient(135deg, #3d2d18, #2a1f10); border: 1px solid #6a5024; color: #f0e2c0; border-radius: 6px; font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.85rem; cursor: pointer; transition: all 0.2s; flex: 1; }
+            .profile-action-btn:hover { border-color: #c9a227; color: #fff; transform: translateY(-2px); }
+            .profile-placeholder-box { background: rgba(0,0,0,0.3); border: 1px dashed #3d2d18; padding: 20px; text-align: center; color: #6a5024; font-family: 'EB Garamond', serif; border-radius: 6px; }
+
+            /* Responsividade */
+            @media (max-width: 768px) {
+                .modern-ald-header { flex-direction: column; padding: 15px; }
+                .modern-profile-btn { width: 100%; justify-content: center; }
+                .modern-stats-container { width: 100%; justify-content: center; }
+                .modern-config-btn { margin-left: 0; }
+            }
+            @media (max-width: 600px) {
+                .profile-main-card { flex-direction: column; text-align: center; padding: 20px; }
+                .profile-stats-grid { justify-content: center; }
+                .profile-btn-row { flex-direction: column; }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    console.log('✅ [Aldeia V3.2] Cabeçalho Moderno Injetado e Save Consertado.');
+})();
+// =================================================================
+// aldeia.js — V95 — Fix definitivo do cabeçalho (uma barra única)
+// -----------------------------------------------------------------
+// O V3.2 injeta o HTML do header moderno no .aldeia-top-bar e depois
+// remove a classe .aldeia-top-bar — mas ESQUECE de aplicar uma classe
+// com display:flex. Resultado: profile (esquerda) e stats (direita)
+// empilham verticalmente em vez de ficarem lado a lado.
+//
+// Fix: aplica .modern-ald-header (que já tem display:flex + visual
+// polido definido no CSS do V3.2).
+//
+// Resultado: Save + Leader + Gold + XP + Stars + Config
+//            TUDO em UMA linha horizontal no topo da Aldeia.
+// =================================================================
+(function fixHeaderUnificadoV95() {
+    if (window._fixHeaderUnificadoV95) return;
+    window._fixHeaderUnificadoV95 = true;
+
+    const _origRender = window.renderAldeiaScreen;
+
+    window.renderAldeiaScreen = function() {
+        const r = _origRender.apply(this, arguments);
+
+        // Roda em 3 tempos pra pegar o momento exato pós-V3.2
+        const fixar = () => {
+            const screen = document.getElementById('storyScreen');
+            if (!screen || !screen.classList.contains('active')) return;
+
+            const profileBtn = screen.querySelector('.modern-profile-btn');
+            if (!profileBtn) return;
+
+            const headerDiv = profileBtn.parentElement;
+            if (headerDiv && !headerDiv.classList.contains('modern-ald-header')) {
+                headerDiv.classList.add('modern-ald-header');
+                headerDiv.classList.remove('aldeia-top-bar');
+                console.log('[V95] Header unificado aplicado (flex ativo)');
+            }
+
+            // Esconde duplicatas clássicas (fallback do _renderAldeiaClassic)
+            screen.querySelectorAll('.story-ald-eheader, .story-ald-save-info').forEach(el => {
+                el.style.display = 'none';
+            });
+        };
+
+        setTimeout(fixar, 100);
+        setTimeout(fixar, 300);
+        setTimeout(fixar, 700);
+
+        return r;
+    };
+
+    // Debug rápido
+    window._debugHeaderV95 = function() {
+        const screen = document.getElementById('storyScreen');
+        const headerDiv = screen?.querySelector('.modern-profile-btn')?.parentElement;
+        console.group('=== [V95] Header Aldeia ===');
+        console.log('Header classe:', headerDiv?.className || '(não encontrado)');
+        console.log('Header display:', headerDiv ? getComputedStyle(headerDiv).display : '-');
+        console.log('Header tem stats?', !!screen?.querySelector('.modern-stats-container'));
+        console.log('Header tem config?', !!screen?.querySelector('.modern-config-btn'));
+        console.log('Eheader clássico visível?',
+            screen?.querySelector('.story-ald-eheader')
+            && getComputedStyle(screen.querySelector('.story-ald-eheader')).display !== 'none');
+        console.groupEnd();
+    };
+
+    // Se a Aldeia já está aberta, re-renderiza agora
+    setTimeout(() => {
+        const ss = document.getElementById('storyScreen');
+        if (ss && ss.classList.contains('active')
+            && ss.querySelector('.modern-profile-btn')) {
+            const profileBtn = ss.querySelector('.modern-profile-btn');
+            const headerDiv = profileBtn.parentElement;
+            if (headerDiv && !headerDiv.classList.contains('modern-ald-header')) {
+                headerDiv.classList.add('modern-ald-header');
+                headerDiv.classList.remove('aldeia-top-bar');
+                console.log('[V95] Corrigido em runtime (sem re-render)');
+            }
+        }
+    }, 600);
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V95] Cabeçalho unificado da Aldeia');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Save + Leader + Gold + XP + Stars + Config');
+    console.log('  agora em UMA única linha horizontal');
+    console.log('• Duplicatas clássicas escondidas (se existirem)');
+    console.log('• Debug: window._debugHeaderV95()');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// aldeia.js — V96 — Cabeçalho translúcido (glassmorphism)
+// -----------------------------------------------------------------
+// O V3.2 usa .modern-ald-header com 90% de opacidade. Este patch
+// reduz para ~35% + blur forte (glass), mantendo legibilidade.
+//
+// • Header: 90% → 35% + blur(14px)
+// • Chips internos (profile, stats, config): ~25-30% + blur(6px)
+// • Borda dourada levemente reforçada pra delimitar
+// • Fallback para navegadores sem backdrop-filter (volta a 85%)
+// • Ajuste em tempo real via window._setHeaderOpacity(0.35)
+//
+// Cole NO FINAL do aldeia.js (depois do V95).
+// =================================================================
+(function headerTransparenteV96() {
+    if (window._headerTransparenteV96) return;
+    window._headerTransparenteV96 = true;
+
+    // ─────────────────────────────────────────────────────────────
+    // Opacidades configuráveis (edite aqui se quiser)
+    // ─────────────────────────────────────────────────────────────
+    const OP_HEADER = 0.35;   // 0.0 = invisível, 1.0 = opaco (era 0.9)
+    const OP_CHIP   = 0.30;   // profile/stat pills
+    const OP_CONFIG = 0.55;   // botão ⚙️ (um pouco mais opaco pra destacar)
+    const BLUR_HEADER = 14;   // px
+    const BLUR_CHIP   = 6;    // px
+
+    function _buildCSS(opHeader, opChip, opConfig, blurH, blurC) {
+        return `
+            /* ═══════════ HEADER PRINCIPAL ═══════════ */
+            .modern-ald-header {
+                background:
+                    linear-gradient(90deg,
+                        rgba(15, 10, 5, ${opHeader}),
+                        rgba(30, 20, 10, ${opHeader})) !important;
+                -webkit-backdrop-filter: blur(${blurH}px) saturate(1.2) !important;
+                backdrop-filter: blur(${blurH}px) saturate(1.2) !important;
+                border-color: rgba(201, 162, 39, 0.5) !important;
+                box-shadow:
+                    0 4px 18px rgba(0, 0, 0, 0.45),
+                    0 0 25px rgba(201, 162, 39, 0.12),
+                    inset 0 0 25px rgba(201, 162, 39, 0.04) !important;
+            }
+
+            /* ═══════════ PROFILE (avatar + save + leader) ═══════════ */
+            .modern-ald-header .modern-profile-btn {
+                background: rgba(10, 6, 2, ${opChip}) !important;
+                -webkit-backdrop-filter: blur(${blurC}px) !important;
+                backdrop-filter: blur(${blurC}px) !important;
+                border-color: rgba(201, 162, 39, 0.35) !important;
+            }
+            .modern-ald-header .modern-profile-btn:hover {
+                background: rgba(201, 162, 39, 0.18) !important;
+                border-color: #c9a227 !important;
+            }
+
+            /* ═══════════ STAT PILLS (gold / xp / stars) ═══════════ */
+            .modern-ald-header .modern-stat-pill {
+                background: rgba(10, 6, 2, ${opChip}) !important;
+                -webkit-backdrop-filter: blur(${blurC}px) !important;
+                backdrop-filter: blur(${blurC}px) !important;
+                border-color: rgba(201, 162, 39, 0.4) !important;
+                box-shadow:
+                    inset 0 1px 3px rgba(0, 0, 0, 0.35),
+                    0 0 8px rgba(201, 162, 39, 0.08) !important;
+            }
+
+            /* ═══════════ BOTÃO CONFIG ═══════════ */
+            .modern-ald-header .modern-config-btn {
+                background: linear-gradient(
+                    135deg,
+                    rgba(61, 45, 24, ${opConfig}),
+                    rgba(42, 31, 16, ${opConfig})
+                ) !important;
+                -webkit-backdrop-filter: blur(${blurC}px) !important;
+                backdrop-filter: blur(${blurC}px) !important;
+                border-color: rgba(201, 162, 39, 0.6) !important;
+            }
+
+            /* ═══════════ FALLBACK (Safari antigo / navegador sem blur) ═══════════ */
+            @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+                .modern-ald-header {
+                    background: linear-gradient(90deg,
+                        rgba(15, 10, 5, 0.88),
+                        rgba(30, 20, 10, 0.88)) !important;
+                }
+                .modern-ald-header .modern-profile-btn,
+                .modern-ald-header .modern-stat-pill {
+                    background: rgba(10, 6, 2, 0.78) !important;
+                }
+                .modern-ald-header .modern-config-btn {
+                    background: linear-gradient(135deg, #3d2d18, #2a1f10) !important;
+                }
+            }
+
+            /* ═══════════ MOBILE: mantém blur mas com padding mais justo ═══════════ */
+            @media (max-width: 768px) {
+                .modern-ald-header {
+                    -webkit-backdrop-filter: blur(${Math.round(blurH * 0.8)}px) saturate(1.15) !important;
+                    backdrop-filter: blur(${Math.round(blurH * 0.8)}px) saturate(1.15) !important;
+                }
+            }
+        `;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Injeta (idempotente — substitui se já existir)
+    // ─────────────────────────────────────────────────────────────
+    function _aplicarCSS(opHeader, opChip, opConfig, blurH, blurC) {
+        const old = document.getElementById('headerTranspV96CSS');
+        if (old) old.remove();
+
+        const s = document.createElement('style');
+        s.id = 'headerTranspV96CSS';
+        s.textContent = _buildCSS(opHeader, opChip, opConfig, blurH, blurC);
+        document.head.appendChild(s);
+
+        console.log(
+            `[V96] Header aplicado: opacidade=${opHeader}, ` +
+            `blur=${blurH}px, chips=${opChip}`
+        );
+    }
+
+    _aplicarCSS(OP_HEADER, OP_CHIP, OP_CONFIG, BLUR_HEADER, BLUR_CHIP);
+
+    // ─────────────────────────────────────────────────────────────
+    // API em tempo real (sem re-render)
+    // ─────────────────────────────────────────────────────────────
+    // Exemplo:
+    //   window._setHeaderOpacity(0.25)   → mais transparente
+    //   window._setHeaderOpacity(0.7)    → mais opaco
+    window._setHeaderOpacity = function(newOp) {
+        newOp = Math.max(0, Math.min(1, Number(newOp) || 0.35));
+        _aplicarCSS(newOp, newOp * 0.85, Math.max(newOp, 0.55), BLUR_HEADER, BLUR_CHIP);
+        return newOp;
+    };
+
+    // Ajusta só o blur
+    window._setHeaderBlur = function(newBlur) {
+        newBlur = Math.max(0, Math.min(30, Number(newBlur) || 14));
+        _aplicarCSS(OP_HEADER, OP_CHIP, OP_CONFIG, newBlur, BLUR_CHIP);
+        return newBlur;
+    };
+
+    // ─────────────────────────────────────────────────────────────
+    // Debug
+    // ─────────────────────────────────────────────────────────────
+    window._debugHeaderV96 = function() {
+        const header = document.querySelector('.modern-ald-header');
+        console.group('=== [V96] Header translúcido ===');
+        if (!header) {
+            console.log('Header não encontrado (Aldeia não está aberta?)');
+            console.groupEnd();
+            return;
+        }
+        const cs = getComputedStyle(header);
+        console.log('background:', cs.backgroundImage || cs.background);
+        console.log('backdrop-filter:', cs.backdropFilter || cs.webkitBackdropFilter);
+        console.log('display:', cs.display);
+        console.log('');
+        console.log('💡 Ajustar:');
+        console.log('   window._setHeaderOpacity(0.25)   ← mais transparente');
+        console.log('   window._setHeaderOpacity(0.6)    ← mais opaco');
+        console.log('   window._setHeaderBlur(20)        ← mais blur');
+        console.groupEnd();
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V96] Cabeçalho translúcido (glassmorphism)');
+    console.log('═══════════════════════════════════════════════════');
+    console.log(`• Header: 90% → ${Math.round(OP_HEADER * 100)}% opaco`);
+    console.log(`• Blur: 8px → ${BLUR_HEADER}px`);
+    console.log(`• Chips internos: ~${Math.round(OP_CHIP * 100)}% opaco`);
+    console.log('• Fundo da Aldeia visível através do header');
+    console.log('');
+    console.log('💡 Ajuste em tempo real:');
+    console.log('   window._setHeaderOpacity(0.25)   ← mais transparente');
+    console.log('   window._setHeaderOpacity(0.6)    ← mais opaco');
+    console.log('   window._setHeaderBlur(20)        ← mais blur');
+    console.log('   window._debugHeaderV96()         ← inspecionar');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// aldeia.js — V98 — Fix DEFINITIVO: criar save cai na Aldeia SEM FLASH
+// -----------------------------------------------------------------
+// Substitui o V97 (que piscava por causa de 6 renders em 2s).
+//
+// Estratégia:
+//   1. UMA renderização só (sem timeouts de reforço)
+//   2. Debounce condicional do renderAldeiaScreen: durante a
+//      "janela de save" (3s), apenas o PRIMEIRO render roda.
+//      Todos os outros (de V97, V47.1, V47.2, intervalos esquecidos)
+//      são bloqueados silenciosamente.
+//   3. Monitor contínuo leve que NÃO re-renderiza — só troca CSS
+//      se o título aparecer por algum motivo.
+//
+// Cole NO FINAL do aldeia.js (depois do V96).
+// =================================================================
+(function fixCriarSaveSemFlashV98() {
+    if (window._fixCriarSaveSemFlashV98) return;
+    window._fixCriarSaveSemFlashV98 = true;
+
+    // ═══════════════════════════════════════════════════════════
+    // 0. DEBOUNCE CONDICIONAL DO renderAldeiaScreen
+    // -------------------------------------------------------------
+    // Durante a janela de save (3s), apenas o 1º render roda.
+    // Fora dela, comportamento normal.
+    // ═══════════════════════════════════════════════════════════
+    let _janelaSave = false;
+    let _jaRenderizouNaJanela = false;
+
+    if (!window._renderAldeiaDebouncedV98) {
+        window._renderAldeiaDebouncedV98 = true;
+        const _origRender = window.renderAldeiaScreen;
+
+        window.renderAldeiaScreen = function() {
+            if (_janelaSave) {
+                if (_jaRenderizouNaJanela) {
+                    console.log('[V98] render bloqueado (janela de save)');
+                    return;
+                }
+                const r = _origRender.apply(this, arguments);
+                // Só marca como feito se aldeia realmente apareceu
+                const ss = document.getElementById('storyScreen');
+                if (ss?.querySelector('.aldeia-visual-wrap')) {
+                    _jaRenderizouNaJanela = true;
+                    console.log('[V98] ✅ primeiro render da janela liberado');
+                }
+                return r;
+            }
+            return _origRender.apply(this, arguments);
+        };
+    }
+
+    // ─── Helpers ───
+    function temSave() {
+        try { return !!localStorage.getItem('entity_story_current_save'); }
+        catch (e) { return false; }
+    }
+
+    function querMenu() {
+        if (window._userPediuMenu) return true;
+        try { return sessionStorage.getItem('_v47_userQuerMenu') === '1'; }
+        catch (e) { return false; }
+    }
+
+    function limparFlagMenu() {
+        window._userPediuMenu = false;
+        try { sessionStorage.removeItem('_v47_userQuerMenu'); } catch (e) {}
+    }
+
+    function aldeiaVisivel() {
+        const ss = document.getElementById('storyScreen');
+        if (!ss) return false;
+        if (!ss.classList.contains('active')) return false;
+        if (getComputedStyle(ss).display === 'none') return false;
+        return !!ss.querySelector('.aldeia-visual-wrap');
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // Força aldeia — só renderiza se necessário
+    // ═══════════════════════════════════════════════════════════
+    function forcarAldeia(forceRender) {
+        ['titleScreen', 'modeScreen', 'challengeScreen', 'playersScreen',
+         'configScreen', 'tutorialScreen', 'introScreen'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.style.setProperty('display', 'none', 'important');
+                el.classList.remove('active');
+            }
+        });
+
+        const ss = document.getElementById('storyScreen');
+        if (ss) {
+            ss.style.setProperty('display', 'flex', 'important');
+            ss.classList.add('active');
+        }
+
+        const precisaRender = forceRender || !ss?.querySelector('.aldeia-visual-wrap');
+        if (precisaRender && typeof window.renderAldeiaScreen === 'function') {
+            try { window.renderAldeiaScreen(); }
+            catch (e) { console.error('[V98] render falhou:', e); }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // confirmStorySaveName — 1 render só, sem timeouts
+    // ═══════════════════════════════════════════════════════════
+    window.confirmStorySaveName = function() {
+        const inp = document.getElementById('storySaveNameInput');
+        if (!inp) return;
+        const name = inp.value.trim();
+        if (!name) { alert('Digite um nome para o save!'); return; }
+        if (name.length < 2) { alert('O nome precisa ter pelo menos 2 caracteres.'); return; }
+
+        const exists = (typeof listStorySaves === 'function')
+            ? listStorySaves().some(s => s.name.toLowerCase() === name.toLowerCase())
+            : false;
+
+        if (exists) {
+            if (!confirm(`Já existe um save "${name}". Carregar?`)) return;
+            if (typeof loadStoryProgressByName === 'function') loadStoryProgressByName(name);
+        } else {
+            if (typeof createNewStorySave === 'function') createNewStorySave(name);
+        }
+
+        const m = document.getElementById('storySaveNameModal');
+        if (m) m.remove();
+
+        limparFlagMenu();
+
+        // ⭐ Ativa janela de proteção (3s, só 1º render roda)
+        _janelaSave = true;
+        _jaRenderizouNaJanela = false;
+        setTimeout(() => {
+            _janelaSave = false;
+            _jaRenderizouNaJanela = false;
+            console.log('[V98] janela de save encerrada');
+        }, 3000);
+
+        // ⭐ UMA renderização só
+        forcarAldeia(true);
+    };
+
+    // ═══════════════════════════════════════════════════════════
+    // Monitor contínuo — NÃO re-renderiza, só troca CSS
+    // ═══════════════════════════════════════════════════════════
+    setInterval(() => {
+        if (!temSave()) return;
+        if (querMenu()) return;
+        if (aldeiaVisivel()) return;
+
+        const gs = document.getElementById('gameScreen');
+        if (gs && gs.classList.contains('active')) return;
+
+        const title = document.getElementById('titleScreen');
+        if (!title) return;
+
+        const titleVisivel = title.classList.contains('active')
+            && title.style.display !== 'none'
+            && getComputedStyle(title).display !== 'none';
+
+        if (titleVisivel) {
+            console.log('[V98] Título detectado → forçando aldeia (sem re-render)');
+            forcarAldeia(false);
+        }
+    }, 500);
+
+    // ═══════════════════════════════════════════════════════════
+    // Debug
+    // ═══════════════════════════════════════════════════════════
+    window._debugV98 = function() {
+        console.group('=== [V98] Save → Aldeia (sem flash) ===');
+        console.log('temSave?', temSave());
+        console.log('querMenu?', querMenu());
+        console.log('aldeiaVisivel?', aldeiaVisivel());
+        console.log('');
+        console.log('janela de save ativa?', _janelaSave);
+        console.log('já renderizou na janela?', _jaRenderizouNaJanela);
+        console.log('');
+        const title = document.getElementById('titleScreen');
+        const story = document.getElementById('storyScreen');
+        console.log('title display:', title ? getComputedStyle(title).display : '-');
+        console.log('title active:', title?.classList.contains('active'));
+        console.log('story display:', story ? getComputedStyle(story).display : '-');
+        console.log('story active:', story?.classList.contains('active'));
+        console.log('story tem wrap?', !!story?.querySelector('.aldeia-visual-wrap'));
+        console.groupEnd();
+    };
+
+    window._v98ForcarAldeia = function() {
+        limparFlagMenu();
+        forcarAldeia(true);
+        console.log('[V98] Aldeia forçada');
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V98] Criar save → Aldeia SEM FLASH');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Janela de 3s pós-save: apenas 1 render roda');
+    console.log('• Todos os outros renders da janela são BLOQUEADOS');
+    console.log('• Sem timeouts de reforço (era a causa das piscadas)');
+    console.log('• Monitor de 500ms só troca CSS, não re-renderiza');
+    console.log('• Respeita botão "Menu Principal"');
+    console.log('');
+    console.log('💡 Debug: window._debugV98()');
+    console.log('💡 Forçar: window._v98ForcarAldeia()');
+    console.log('═══════════════════════════════════════════════════');
+})();
