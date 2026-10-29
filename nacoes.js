@@ -7124,3 +7124,50 @@
     console.log('💡 Debug: window._debugDropsNacao()');
     console.log('═══════════════════════════════════════════════════');
 })();
+// ═══════════════════════════════════════════════════════════
+// FIX EMERGENCIAL — nacoes.js restaura calcularEstrelas
+// Cola NO FINAL do nacoes.js
+// ═══════════════════════════════════════════════════════════
+(function fixEstrelasNoNacoes() {
+    if (window._fixEstrelasNoNacoes) return;
+    window._fixEstrelasNoNacoes = true;
+
+    window.calcularEstrelas = function(score, maxScore) {
+        if (!maxScore || maxScore <= 0) return 1;
+        const ratio = score / maxScore;
+        let stars = 1;
+        if (ratio >= 0.70) stars = 3;
+        else if (ratio >= 0.30) stars = 2;
+        const diff = (typeof STORY_DIFFICULTIES !== 'undefined'
+                   && typeof storyCurrentDifficulty !== 'undefined')
+            ? STORY_DIFFICULTIES[storyCurrentDifficulty]
+            : null;
+        if (diff && diff.starsBonus > 0) stars = Math.min(3, stars + diff.starsBonus);
+        return stars;
+    };
+    console.log('✅ [NACOES FIX] calcularEstrelas restaurado (0.70/0.30)');
+})();
+// ═══════════════════════════════════════════════════════════
+// FIX DEFINITIVO — calculateFinalScore ignora _storyMode
+// quando há score acumulado válido
+// ═══════════════════════════════════════════════════════════
+(function fixFinalScoreIgnoraStoryMode() {
+    if (window._fixFinalScoreIgnoraStoryMode) return;
+    window._fixFinalScoreIgnoraStoryMode = true;
+
+    const _orig = window.calculateFinalScore;
+
+    window.calculateFinalScore = function() {
+        // ⭐ Se o acumulado tem dados, retorna SEMPRE o valor real
+        // (não importa se _storyMode já foi desligado por finishStoryPhase)
+        const acc = window._storyScoreAcumulado;
+        if (acc && acc.inimigosMortos > 0) {
+            const total = Math.floor((acc.totalBase || 0) + (acc.totalBonus || 0));
+            console.log(`[FIX] calculateFinalScore = ${total} (acc: ${acc.inimigosMortos} inimigos)`);
+            return total;
+        }
+        return _orig ? _orig.apply(this, arguments) : 0;
+    };
+
+    console.log('✅ [FIX] calculateFinalScore independente de _storyMode');
+})();

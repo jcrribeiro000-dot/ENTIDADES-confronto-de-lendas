@@ -16754,8 +16754,8 @@ console.log('💡 Zeradas:', STORY_PROGRESS.clearedDifficulties || []);
     if (typeof STORY_STARS_CONFIG !== 'undefined') {
         // Não mexe nos thresholds em uso (calcularEstrelas usa hardcode)
         // Mas expõe pra debug
-        STORY_STARS_CONFIG.THRESHOLD_3_STARS = 0.80;
-        STORY_STARS_CONFIG.THRESHOLD_2_STARS = 0.55;
+        STORY_STARS_CONFIG.THRESHOLD_3_STARS = 0.70;
+        STORY_STARS_CONFIG.THRESHOLD_2_STARS = 0.30;
         STORY_STARS_CONFIG.THRESHOLD_1_STAR  = 0.30;
     }
 
@@ -16763,8 +16763,8 @@ console.log('💡 Zeradas:', STORY_PROGRESS.clearedDifficulties || []);
     window.calcularEstrelas = function(score, maxScore) {
         if (!maxScore || maxScore <= 0) return 1;
         const ratio = score / maxScore;
-        if (ratio >= 0.80) return 3;
-        if (ratio >= 0.55) return 2;
+        if (ratio >= 0.70) return 3;
+        if (ratio >= 0.20) return 2;
         return 1;
     };
 
