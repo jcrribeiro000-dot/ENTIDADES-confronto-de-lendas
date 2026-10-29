@@ -6818,3 +6818,309 @@
     console.log('💡 Sync manual: window._syncNacoesV29()');
     console.log('═══════════════════════════════════════════════════');
 })();
+// =================================================================
+// nacoes.js — V2.10 — Drops das Nações VISÍVEIS no card de vitória
+// -----------------------------------------------------------------
+// • Captura o que dropou no handleStoryBossDefeat
+// • Injeta seção "🌎 DROPS DAS NAÇÕES" no victory-panel
+// • Mantém toast + log (redundância)
+// • NÃO toca no sistema do Sete Selados
+// =================================================================
+(function fixDropsVisiveisV210() {
+    if (window._fixDropsVisiveisV210) return;
+    window._fixDropsVisiveisV210 = true;
+
+    // ─────────────────────────────────────────────────────────────
+    // 1. CAPTURA: registra o que foi dropado
+    // ─────────────────────────────────────────────────────────────
+    const _origDefeat = window.handleStoryBossDefeat;
+    if (typeof _origDefeat === 'function' && !_origDefeat._v210) {
+        window.handleStoryBossDefeat = async function() {
+            if (!window._nacaoBatalha?.ativa) {
+                return _origDefeat.apply(this, arguments);
+            }
+
+            // Inicializa container (só uma vez por batalha)
+            if (!window._nacaoDropsAtuais) {
+                window._nacaoDropsAtuais = {
+                    armas: [], amuletos: [], fragmentos: [], essencias: 0,
+                };
+            }
+
+            const antes = {
+                armas: (STORY_PROGRESS.nacaoArmas || []).length,
+                amuletos: (STORY_PROGRESS.nacaoAmuletos || []).length,
+                fragmentos: (STORY_PROGRESS.nacaoFragmentos || []).length,
+                essencias: STORY_PROGRESS.inventory['essencia_ancestral'] || 0,
+            };
+
+            const r = await _origDefeat.apply(this, arguments);
+
+            // Captura o delta
+            const dArma = (STORY_PROGRESS.nacaoArmas || []).slice(antes.armas);
+            const dAmu  = (STORY_PROGRESS.nacaoAmuletos || []).slice(antes.amuletos);
+            const dFrag = (STORY_PROGRESS.nacaoFragmentos || []).slice(antes.fragmentos);
+            const dEss  = (STORY_PROGRESS.inventory['essencia_ancestral'] || 0) - antes.essencias;
+
+            window._nacaoDropsAtuais.armas.push(...dArma);
+            window._nacaoDropsAtuais.amuletos.push(...dAmu);
+            window._nacaoDropsAtuais.fragmentos.push(...dFrag);
+            window._nacaoDropsAtuais.essencias += dEss;
+
+            if (dArma.length || dAmu.length || dFrag.length) {
+                console.log('[V2.10] Drops capturados:', { dArma, dAmu, dFrag, dEss });
+            }
+
+            return r;
+        };
+        window.handleStoryBossDefeat._v210 = true;
+        console.log('[V2.10] handleStoryBossDefeat: captura de drops ativada');
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 2. INJEÇÃO: adiciona drops no card de vitória
+    // ─────────────────────────────────────────────────────────────
+    const _origMostrar = window._mostrarTelaFinalEvento;
+    if (typeof _origMostrar === 'function' && !_origMostrar._v210) {
+        window._mostrarTelaFinalEvento = function(vitoria, drops, dropsResult) {
+            const r = _origMostrar.apply(this, arguments);
+
+            if (!vitoria) return r;
+            const d = window._nacaoDropsAtuais;
+            if (!d) return r;
+
+            // Só faz sentido se tem algo (mesmo que seja só essência)
+            const temAlgo = d.essencias > 0
+                         || d.armas.length > 0
+                         || d.amuletos.length > 0
+                         || d.fragmentos.length > 0;
+            if (!temAlgo) {
+                window._nacaoDropsAtuais = null;
+                return r;
+            }
+
+            // Injeta depois que o overlay estiver no DOM
+            setTimeout(() => {
+                const overlay = document.getElementById('gameOverlay');
+                if (!overlay) return;
+                const body = overlay.querySelector('.victory-body');
+                if (!body) return;
+
+                const chips = [];
+
+                // Essências (sempre)
+                if (d.essencias > 0) {
+                    chips.push(`
+                        <div class="v210-chip">
+                            <div class="v210-chip-emoji">🌎</div>
+                            <div class="v210-chip-name">Essências Ancestrais</div>
+                            <div class="v210-chip-qty">+${d.essencias}</div>
+                        </div>`);
+                }
+
+                // Armas
+                d.armas.forEach(id => {
+                    const a = (window.NACAO_ARMAS || {})[id];
+                    if (!a) return;
+                    const icon = (typeof window.getWeaponIcon === 'function')
+                        ? window.getWeaponIcon(id, 'normal')
+                        : (a.emoji || '⚔️');
+                    chips.push(`
+                        <div class="v210-chip v210-arma">
+                            <div class="v210-chip-emoji">${icon}</div>
+                            <div class="v210-chip-name">${a.nome}</div>
+                            <div class="v210-chip-qty">+1</div>
+                        </div>`);
+                });
+
+                // Amuletos
+                d.amuletos.forEach(id => {
+                    const a = (window.NACAO_AMULETOS || {})[id];
+                    if (!a) return;
+                    const icon = (typeof window.getAmuletIcon === 'function')
+                        ? window.getAmuletIcon(id, 'normal')
+                        : (a.emoji || '🧿');
+                    chips.push(`
+                        <div class="v210-chip v210-amuleto">
+                            <div class="v210-chip-emoji">${icon}</div>
+                            <div class="v210-chip-name">${a.nome}</div>
+                            <div class="v210-chip-qty">+1</div>
+                        </div>`);
+                });
+
+                // Fragmentos
+                d.fragmentos.forEach(id => {
+                    const f = (window.NACAO_FRAGMENTOS || {})[id];
+                    if (!f) return;
+                    chips.push(`
+                        <div class="v210-chip v210-fragmento">
+                            <div class="v210-chip-emoji">${f.emoji || '🌎'}</div>
+                            <div class="v210-chip-name">${f.nome}</div>
+                            <div class="v210-chip-qty">+1</div>
+                        </div>`);
+                });
+
+                // Remove versão anterior (se houver)
+                body.querySelectorAll('.v210-drops-section').forEach(el => el.remove());
+
+                const section = document.createElement('div');
+                section.className = 'v210-drops-section';
+                section.innerHTML = `
+                    <div class="v210-drops-title">🌎 DROPS DAS NAÇÕES</div>
+                    <div class="v210-drops-grid">${chips.join('')}</div>
+                `;
+
+                // Insere antes dos botões de ação
+                const actions = body.querySelector('.victory-actions');
+                if (actions) body.insertBefore(section, actions);
+                else body.appendChild(section);
+
+                // Reseta
+                window._nacaoDropsAtuais = null;
+            }, 80);
+
+            return r;
+        };
+        window._mostrarTelaFinalEvento._v210 = true;
+        console.log('[V2.10] _mostrarTelaFinalEvento: injeção de drops ativada');
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 3. RESET ao iniciar nova batalha
+    // ─────────────────────────────────────────────────────────────
+    const _origIniciar = window.eventoIniciarBatalha;
+    if (typeof _origIniciar === 'function' && !_origIniciar._v210) {
+        window.eventoIniciarBatalha = async function() {
+            window._nacaoDropsAtuais = null;
+            return _origIniciar.apply(this, arguments);
+        };
+        window.eventoIniciarBatalha._v210 = true;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 4. CSS
+    // ─────────────────────────────────────────────────────────────
+    if (!document.getElementById('v210DropsCSS')) {
+        const st = document.createElement('style');
+        st.id = 'v210DropsCSS';
+        st.textContent = `
+            .v210-drops-section {
+                width: 100%;
+                margin: 12px 0;
+                padding: 14px 16px;
+                background:
+                    linear-gradient(180deg, rgba(74,140,181,0.15), transparent 60%),
+                    rgba(10,6,2,0.4);
+                border: 2px solid rgba(74,140,181,0.5);
+                border-radius: 8px;
+                box-shadow: 0 0 20px rgba(74,140,181,0.25);
+            }
+            .v210-drops-title {
+                font-family: 'Cinzel', serif;
+                color: #6ab0d8;
+                font-size: 0.85rem;
+                letter-spacing: 2px;
+                text-align: center;
+                margin-bottom: 12px;
+                text-shadow: 0 0 8px rgba(74,140,181,0.6);
+            }
+            .v210-drops-grid {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 10px;
+                justify-content: center;
+            }
+            .v210-chip {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                min-width: 90px;
+                padding: 10px 12px;
+                background: rgba(10,6,2,0.6);
+                border: 1px solid rgba(74,140,181,0.4);
+                border-radius: 6px;
+                transition: all .2s;
+            }
+            .v210-chip:hover {
+                transform: translateY(-2px);
+                border-color: #6ab0d8;
+                box-shadow: 0 4px 12px rgba(74,140,181,0.3);
+            }
+            .v210-chip-emoji {
+                width: 40px;
+                height: 40px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 2rem;
+                line-height: 1;
+                margin-bottom: 6px;
+                filter: drop-shadow(0 0 6px rgba(74,140,181,0.5));
+            }
+            .v210-chip-emoji img {
+                width: 100%;
+                height: 100%;
+                object-fit: contain;
+            }
+            .v210-chip-name {
+                font-family: 'EB Garamond', serif;
+                color: #d9c89a;
+                font-size: 0.8rem;
+                text-align: center;
+                line-height: 1.2;
+                margin-bottom: 4px;
+            }
+            .v210-chip-qty {
+                font-family: 'Cinzel', serif;
+                color: #e8b923;
+                font-weight: 700;
+                font-size: 0.9rem;
+            }
+            .v210-arma { border-color: rgba(232,185,35,0.4); }
+            .v210-amuleto { border-color: rgba(142,68,173,0.4); }
+            .v210-fragmento { border-color: rgba(74,140,181,0.6); }
+        `;
+        document.head.appendChild(st);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 5. DEBUG
+    // ─────────────────────────────────────────────────────────────
+    window._debugDropsNacao = function() {
+        console.group('=== V2.10 — Drops das Nações ===');
+        console.log('V2.10 ativo?', true);
+        console.log('');
+        console.log('Drops capturados (última batalha):', window._nacaoDropsAtuais);
+        console.log('');
+        console.log('Histórico total:');
+        console.log('  nacaoArmas:', STORY_PROGRESS.nacaoArmas);
+        console.log('  nacaoAmuletos:', STORY_PROGRESS.nacaoAmuletos);
+        console.log('  nacaoFragmentos:', STORY_PROGRESS.nacaoFragmentos);
+        console.groupEnd();
+    };
+
+    window._forcarDropNacaoVisivel = function(baseId) {
+        // Simula um drop e mostra o card (pra testar visual)
+        if (!window._nacaoDropsAtuais) {
+            window._nacaoDropsAtuais = { armas: [], amuletos: [], fragmentos: [], essencias: 0 };
+        }
+        if (baseId.startsWith('arma_nacao_')) window._nacaoDropsAtuais.armas.push(baseId);
+        else if (baseId.startsWith('amuleto_nacao_')) window._nacaoDropsAtuais.amuletos.push(baseId);
+        else if (baseId.startsWith('fragmento_nacao_')) window._nacaoDropsAtuais.fragmentos.push(baseId);
+        window._nacaoDropsAtuais.essencias = (window._nacaoDropsAtuais.essencias || 0) + 12;
+        console.log('Drops simulados. Vá pra tela de vitória pra ver.');
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V2.10] Drops das Nações visíveis no card de vitória');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('ANTES: drops só no toast (4s) + log — fáceis de perder');
+    console.log('AGORA: seção "🌎 DROPS DAS NAÇÕES" no card de vitória');
+    console.log('  • Mostra essências, armas, amuletos e fragmentos');
+    console.log('  • Cada item com ícone + nome + quantidade');
+    console.log('  • NÃO toca no sistema do Sete Selados');
+    console.log('');
+    console.log('💡 Debug: window._debugDropsNacao()');
+    console.log('═══════════════════════════════════════════════════');
+})();
