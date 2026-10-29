@@ -5635,32 +5635,32 @@
     const NACAO_ARMAS_SPRITES = {
         // TAÍNOS
         'arma_nacao_tainos_tacape': 'https://i.imgur.com/jErejeH.png',
-        'arma_nacao_tainos_flecha': '',
-        'arma_nacao_tainos_cajado': '',
+        'arma_nacao_tainos_flecha': 'https://i.imgur.com/fyTE2si.png',
+        'arma_nacao_tainos_cajado': 'https://i.imgur.com/9rqMiYf.png',
         // ASTECAS
         'arma_nacao_astecas_tacape': 'https://i.imgur.com/puIbGum.png',
-        'arma_nacao_astecas_flecha': '',
-        'arma_nacao_astecas_cajado': '',
+        'arma_nacao_astecas_flecha': 'https://i.imgur.com/OjgXWc9.png',
+        'arma_nacao_astecas_cajado': 'https://i.imgur.com/gQVADc9.png',
         // MAIAS
         'arma_nacao_maias_tacape': 'https://i.imgur.com/TrczXWd.png',
-        'arma_nacao_maias_flecha': '',
-        'arma_nacao_maias_cajado': '',
+        'arma_nacao_maias_flecha': 'https://i.imgur.com/3Bt2XT6.png',
+        'arma_nacao_maias_cajado': 'https://i.imgur.com/Y4g01dH.png',
         // INCAS
         'arma_nacao_incas_tacape': 'https://i.imgur.com/WdogafC.png',
-        'arma_nacao_incas_flecha': '',
-        'arma_nacao_incas_cajado': '',
+        'arma_nacao_incas_flecha': 'https://i.imgur.com/3vYTTye.png',
+        'arma_nacao_incas_cajado': 'https://i.imgur.com/6yDdSKQ.png',
         // MAPUCHES
         'arma_nacao_mapuches_tacape': 'https://i.imgur.com/IhASPgP.png',
-        'arma_nacao_mapuches_flecha': '',
-        'arma_nacao_mapuches_cajado': '',
+        'arma_nacao_mapuches_flecha': 'https://i.imgur.com/4P0uVY7.png',
+        'arma_nacao_mapuches_cajado': 'https://i.imgur.com/qO3zx01.png',
         // CHIBCHAS
         'arma_nacao_chibchas_tacape': 'https://i.imgur.com/OhKNR9r.png',
-        'arma_nacao_chibchas_flecha': '',
-        'arma_nacao_chibchas_cajado': '',
+        'arma_nacao_chibchas_flecha': 'https://i.imgur.com/xVjn59A.png',
+        'arma_nacao_chibchas_cajado': 'https://i.imgur.com/r0imITh.png',
         // NAVAJOS
         'arma_nacao_navajos_tacape': 'https://i.imgur.com/UAth7wr.png',
-        'arma_nacao_navajos_flecha': '',
-        'arma_nacao_navajos_cajado': '',
+        'arma_nacao_navajos_flecha': 'https://i.imgur.com/qPURHtr.png',
+        'arma_nacao_navajos_cajado': 'https://i.imgur.com/CyoKDTg.png',
     };
 
     // ─────────────────────────────────────────────────────────────
