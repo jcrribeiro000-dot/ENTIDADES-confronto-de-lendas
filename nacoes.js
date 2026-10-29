@@ -6123,3 +6123,698 @@
     console.log('💡 Limpar: window._limparFundoNacao()');
     console.log('═══════════════════════════════════════════════════');
 })();
+// =================================================================
+// nacoes.js — V2.8 — Fix: armas/amuletos das Nações no inventário
+// -----------------------------------------------------------------
+// CAUSA: drops iam para nacaoArmas/nacaoAmuletos, mas o sistema de
+// equipamento lê de craftedWeapons/craftedAmulets.
+//
+// FIX:
+//   • Sync automático nacao* → crafted* (com UID #timestamp)
+//   • Hook em saveStoryProgress (roda sempre)
+//   • Hook em handleDismantleWeapon/Amulet (evita readição)
+//   • Migração inicial + retroativa
+//   • Amuletos de nação usam essências pra upar (1000/10000) —
+//     mesma escala dos equipamentos do Sete Selados
+// =================================================================
+(function fixNacoesInventarioV28() {
+    if (window._fixNacoesInventarioV28) return;
+    window._fixNacoesInventarioV28 = true;
+
+    // ─────────────────────────────────────────────────────────────
+    // 1. SYNC HELPER — nacaoArmas/nacaoAmuletos → craftedWeapons/Amulets
+    // ─────────────────────────────────────────────────────────────
+    function _syncNacoesParaInventario() {
+        if (typeof STORY_PROGRESS === 'undefined') return false;
+        if (!Array.isArray(STORY_PROGRESS.craftedWeapons)) STORY_PROGRESS.craftedWeapons = [];
+        if (!Array.isArray(STORY_PROGRESS.craftedAmulets)) STORY_PROGRESS.craftedAmulets = [];
+
+        const gerarUid = (base) => `${base}#${Date.now()}${Math.floor(Math.random()*1000000)}`;
+        let mudou = false;
+
+        // ─── STEP 1: recupera equipamentos órfãos (já equipados mas fora do inventário) ───
+        const eq = STORY_PROGRESS.heroEquipment || {};
+        for (const hc in eq) {
+            const e = eq[hc];
+            if (!e) continue;
+            if (e.arma && String(e.arma).startsWith('arma_nacao_')
+                && !STORY_PROGRESS.craftedWeapons.includes(e.arma)) {
+                STORY_PROGRESS.craftedWeapons.push(e.arma);
+                mudou = true;
+            }
+            if (e.amuleto && String(e.amuleto).startsWith('amuleto_nacao_')
+                && !STORY_PROGRESS.craftedAmulets.includes(e.amuleto)) {
+                STORY_PROGRESS.craftedAmulets.push(e.amuleto);
+                mudou = true;
+            }
+        }
+
+        // ─── STEP 2: sync armas (compara contagem por baseId) ───
+        const naCount = {};
+        (STORY_PROGRESS.nacaoArmas || []).forEach(b => {
+            if (typeof b === 'string') naCount[b] = (naCount[b] || 0) + 1;
+        });
+        const cwCount = {};
+        (STORY_PROGRESS.craftedWeapons || []).forEach(u => {
+            const b = String(u).split('#')[0];
+            cwCount[b] = (cwCount[b] || 0) + 1;
+        });
+        Object.keys(naCount).forEach(baseId => {
+            const have = cwCount[baseId] || 0;
+            const want = naCount[baseId];
+            for (let i = have; i < want; i++) {
+                STORY_PROGRESS.craftedWeapons.push(gerarUid(baseId));
+                mudou = true;
+            }
+            if (want > have) {
+                console.log(`[V2.8] +${want - have}x arma: ${baseId}`);
+            }
+        });
+
+        // ─── STEP 3: sync amuletos ───
+        const namCount = {};
+        (STORY_PROGRESS.nacaoAmuletos || []).forEach(b => {
+            if (typeof b === 'string') namCount[b] = (namCount[b] || 0) + 1;
+        });
+        const caCount = {};
+        (STORY_PROGRESS.craftedAmulets || []).forEach(u => {
+            const b = String(u).split('#')[0];
+            caCount[b] = (caCount[b] || 0) + 1;
+        });
+        Object.keys(namCount).forEach(baseId => {
+            const have = caCount[baseId] || 0;
+            const want = namCount[baseId];
+            for (let i = have; i < want; i++) {
+                STORY_PROGRESS.craftedAmulets.push(gerarUid(baseId));
+                mudou = true;
+            }
+            if (want > have) {
+                console.log(`[V2.8] +${want - have}x amuleto: ${baseId}`);
+            }
+        });
+
+        return mudou;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 2. Hook em saveStoryProgress (garante sync em TODO save)
+    // ─────────────────────────────────────────────────────────────
+    const _origSave = window.saveStoryProgress;
+    if (typeof _origSave === 'function' && !_origSave._v28) {
+        window.saveStoryProgress = function() {
+            try { _syncNacoesParaInventario(); }
+            catch (e) { console.warn('[V2.8] sync falhou:', e); }
+            return _origSave.apply(this, arguments);
+        };
+        window.saveStoryProgress._v28 = true;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 3. Hook em handleDismantleWeapon (remove base de nacaoArmas)
+    //    Evita que o sync readicione arma desmanchada
+    // ─────────────────────────────────────────────────────────────
+    const _origDismW = window.handleDismantleWeapon;
+    if (typeof _origDismW === 'function' && !_origDismW._v28) {
+        window.handleDismantleWeapon = function(uid) {
+            const baseId = (typeof window.getBaseId === 'function')
+                ? window.getBaseId(uid) : (uid ? String(uid).split('#')[0] : null);
+            const r = _origDismW.apply(this, arguments);
+            if (baseId && baseId.startsWith('arma_nacao_')) {
+                const arr = STORY_PROGRESS.nacaoArmas || [];
+                const idx = arr.indexOf(baseId);
+                if (idx !== -1) arr.splice(idx, 1);
+                if (typeof saveStoryProgress === 'function') saveStoryProgress();
+            }
+            return r;
+        };
+        window.handleDismantleWeapon._v28 = true;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 4. Hook em handleDismantleAmulet (remove base de nacaoAmuletos)
+    // ─────────────────────────────────────────────────────────────
+    const _origDismA = window.handleDismantleAmulet;
+    if (typeof _origDismA === 'function' && !_origDismA._v28) {
+        window.handleDismantleAmulet = function(uid) {
+            const baseId = (typeof window.getBaseId === 'function')
+                ? window.getBaseId(uid) : (uid ? String(uid).split('#')[0] : null);
+            const r = _origDismA.apply(this, arguments);
+            if (baseId && baseId.startsWith('amuleto_nacao_')) {
+                const arr = STORY_PROGRESS.nacaoAmuletos || [];
+                const idx = arr.indexOf(baseId);
+                if (idx !== -1) arr.splice(idx, 1);
+                if (typeof saveStoryProgress === 'function') saveStoryProgress();
+            }
+            return r;
+        };
+        window.handleDismantleAmulet._v28 = true;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 5. Migração inicial (drops que já aconteceram)
+    // ─────────────────────────────────────────────────────────────
+    setTimeout(() => {
+        if (_syncNacoesParaInventario()) {
+            console.log('[V2.8] Migração inicial aplicada');
+            if (typeof window.saveStoryProgress === 'function') window.saveStoryProgress();
+        }
+    }, 500);
+    setTimeout(() => {
+        if (_syncNacoesParaInventario()) {
+            if (typeof window.saveStoryProgress === 'function') window.saveStoryProgress();
+        }
+    }, 2500);
+
+    // ─────────────────────────────────────────────────────────────
+    // 6. Fix: amuletos de nação usam ESSÊNCIAS pra upar
+    //    (mesma escala dos equipamentos do Sete Selados: 1000/10000)
+    //    O getUpgradeCost original cai em tipo 'material' com receita
+    //    vazia → custo 0. Aqui forçamos o tipo 'essencia'.
+    // ─────────────────────────────────────────────────────────────
+    const _origGetUpg = window.getUpgradeCost;
+    if (typeof _origGetUpg === 'function' && !_origGetUpg._v28) {
+        window.getUpgradeCost = function(uid) {
+            const cost = _origGetUpg.apply(this, arguments);
+            if (!cost) return cost;
+            const baseId = (typeof window.getBaseId === 'function')
+                ? window.getBaseId(uid) : (uid ? String(uid).split('#')[0] : null);
+            if (!baseId) return cost;
+
+            // Amuletos de nação → tratados como evento (essências)
+            if (baseId.startsWith('amuleto_nacao_')) {
+                const CUSTO_EVENTO = { 1: { qtd: 1000 }, 2: { qtd: 10000 } };
+                const qtd = CUSTO_EVENTO[cost.tierAlvo]?.qtd || 1000;
+                return {
+                    tipo: 'essencia',
+                    qtd,
+                    ouro: 0,
+                    tierAlvo: cost.tierAlvo,
+                    item: cost.item,
+                };
+            }
+            return cost;
+        };
+        window.getUpgradeCost._v28 = true;
+        console.log('[V2.8] Upgrade de amuleto de nação: essências (1000/10000)');
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 7. isAmuletAvailable — bloqueia craft de amuletos de nação
+    //    (só dropam; evitar que apareçam "para forjar" por engano)
+    // ─────────────────────────────────────────────────────────────
+    const _origIsAvail = window.isAmuletAvailable;
+    if (typeof _origIsAvail === 'function' && !_origIsAvail._v28) {
+        window.isAmuletAvailable = function(amuletId) {
+            const baseId = (typeof window.getBaseId === 'function')
+                ? window.getBaseId(amuletId) : String(amuletId).split('#')[0];
+            if (baseId && baseId.startsWith('amuleto_nacao_')) return false;
+            return _origIsAvail.apply(this, arguments);
+        };
+        window.isAmuletAvailable._v28 = true;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 8. Debug
+    // ─────────────────────────────────────────────────────────────
+    window._debugNacoesInv = function() {
+        console.group('=== V2.8 — Inventário Nações ===');
+        const cw = (STORY_PROGRESS.craftedWeapons || [])
+            .filter(u => String(u).startsWith('arma_nacao_'));
+        const ca = (STORY_PROGRESS.craftedAmulets || [])
+            .filter(u => String(u).startsWith('amuleto_nacao_'));
+
+        console.log('Armas de nação em craftedWeapons:', cw.length);
+        cw.forEach(u => {
+            const w = window.getWeaponById(u);
+            console.log(`  ${u} → ${w?.nome} (tier ${w?.tier || 0})`);
+        });
+        console.log('Amuletos de nação em craftedAmulets:', ca.length);
+        ca.forEach(u => {
+            const a = window.getAmuletById(u);
+            console.log(`  ${u} → ${a?.nome} (tier ${a?.tier || 0})`);
+        });
+        console.log('');
+        console.log('nacaoArmas:', STORY_PROGRESS.nacaoArmas);
+        console.log('nacaoAmuletos:', STORY_PROGRESS.nacaoAmuletos);
+        console.log('Essências Sombrias:', STORY_PROGRESS.inventory?.essencia_sombria || 0);
+        console.groupEnd();
+    };
+
+    window._forcarSyncNacoes = function() {
+        if (_syncNacoesParaInventario()) {
+            if (typeof saveStoryProgress === 'function') saveStoryProgress();
+            console.log('✅ Sync manual aplicado');
+        } else {
+            console.log('Nada pra migrar');
+        }
+    };
+
+    window._droparNacaoDebug = function(baseId) {
+        if (baseId.startsWith('arma_nacao_')) {
+            if (!Array.isArray(STORY_PROGRESS.nacaoArmas)) STORY_PROGRESS.nacaoArmas = [];
+            STORY_PROGRESS.nacaoArmas.push(baseId);
+        } else if (baseId.startsWith('amuleto_nacao_')) {
+            if (!Array.isArray(STORY_PROGRESS.nacaoAmuletos)) STORY_PROGRESS.nacaoAmuletos = [];
+            STORY_PROGRESS.nacaoAmuletos.push(baseId);
+        } else {
+            console.warn('baseId inválido (precisa começar com arma_nacao_ ou amuleto_nacao_)');
+            return;
+        }
+        if (typeof saveStoryProgress === 'function') saveStoryProgress();
+        console.log(`Dropado: ${baseId}`);
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V2.8] Fix: armas/amuletos das Nações no inventário');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('🐛 CAUSA: drops iam para nacaoArmas/nacaoAmuletos,');
+    console.log('   mas o sistema lê de craftedWeapons/craftedAmulets');
+    console.log('🔧 FIX:');
+    console.log('   • Sync automático nacao* → crafted* (UID #timestamp)');
+    console.log('   • Hook em saveStoryProgress (roda sempre)');
+    console.log('   • Hook em handleDismantle* (evita readição)');
+    console.log('   • Migração retroativa dos drops antigos');
+    console.log('   • Amuletos de nação usam essências pra upar');
+    console.log('     (1000 / 10000 — mesma escala do Sete Selados)');
+    console.log('');
+    console.log('💡 Debug: window._debugNacoesInv()');
+    console.log('💡 Sync manual: window._forcarSyncNacoes()');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// nacoes.js — V2.9 — Fix: essência correta + sync blindado
+// -----------------------------------------------------------------
+// • getUpgradeCost retorna moedaId:'essencia_ancestral' para nações
+// • Modal de upgrade mostra "Essências Ancestrais" (não "Sombrias")
+// • Confirmar desconta da essência correta
+// • Sync em: renderTesouraria, openEquipScreen (entrada+saída),
+//   renderOcaScreenFiltered, handleCraftWeapon, shop
+// • Tier Simples/Aprimorado/Ancestral (1000/10000) preservado
+// =================================================================
+(function fixNacoesEssenciaV29() {
+    if (window._fixNacoesEssenciaV29) return;
+    window._fixNacoesEssenciaV29 = true;
+
+    const COR = 'essencia_ancestral';
+    const SOMBRIA = 'essencia_sombria';
+    const CUSTO_EVENTO = { 1: 1000, 2: 10000 };
+
+    // ─────────────────────────────────────────────────────────────
+    // HELPERS
+    // ─────────────────────────────────────────────────────────────
+    const _gerarUid = (base) => `${base}#${Date.now()}${Math.floor(Math.random()*1000000)}`;
+
+    function _isNacaoEquip(baseId) {
+        return baseId && (baseId.startsWith('arma_nacao_') || baseId.startsWith('amuleto_nacao_'));
+    }
+
+    function _syncLocal() {
+        if (typeof STORY_PROGRESS === 'undefined') return false;
+        if (!Array.isArray(STORY_PROGRESS.craftedWeapons)) STORY_PROGRESS.craftedWeapons = [];
+        if (!Array.isArray(STORY_PROGRESS.craftedAmulets)) STORY_PROGRESS.craftedAmulets = [];
+        let mudou = false;
+
+        // 1) Recupera equipados órfãos
+        const eq = STORY_PROGRESS.heroEquipment || {};
+        for (const hc in eq) {
+            const e = eq[hc];
+            if (!e) continue;
+            if (e.arma && String(e.arma).startsWith('arma_nacao_')
+                && !STORY_PROGRESS.craftedWeapons.includes(e.arma)) {
+                STORY_PROGRESS.craftedWeapons.push(e.arma);
+                mudou = true;
+            }
+            if (e.amuleto && String(e.amuleto).startsWith('amuleto_nacao_')
+                && !STORY_PROGRESS.craftedAmulets.includes(e.amuleto)) {
+                STORY_PROGRESS.craftedAmulets.push(e.amuleto);
+                mudou = true;
+            }
+        }
+
+        // 2) nacaoArmas → craftedWeapons (contagem por baseId)
+        const naCount = {};
+        (STORY_PROGRESS.nacaoArmas || []).forEach(b => {
+            if (typeof b === 'string') naCount[b] = (naCount[b] || 0) + 1;
+        });
+        const cwCount = {};
+        (STORY_PROGRESS.craftedWeapons || []).forEach(u => {
+            const b = String(u).split('#')[0];
+            cwCount[b] = (cwCount[b] || 0) + 1;
+        });
+        Object.keys(naCount).forEach(baseId => {
+            const have = cwCount[baseId] || 0;
+            const want = naCount[baseId];
+            for (let i = have; i < want; i++) {
+                STORY_PROGRESS.craftedWeapons.push(_gerarUid(baseId));
+                mudou = true;
+                console.log(`[V2.9] +${baseId} → craftedWeapons`);
+            }
+        });
+
+        // 3) nacaoAmuletos → craftedAmulets
+        const namCount = {};
+        (STORY_PROGRESS.nacaoAmuletos || []).forEach(b => {
+            if (typeof b === 'string') namCount[b] = (namCount[b] || 0) + 1;
+        });
+        const caCount = {};
+        (STORY_PROGRESS.craftedAmulets || []).forEach(u => {
+            const b = String(u).split('#')[0];
+            caCount[b] = (caCount[b] || 0) + 1;
+        });
+        Object.keys(namCount).forEach(baseId => {
+            const have = caCount[baseId] || 0;
+            const want = namCount[baseId];
+            for (let i = have; i < want; i++) {
+                STORY_PROGRESS.craftedAmulets.push(_gerarUid(baseId));
+                mudou = true;
+                console.log(`[V2.9] +${baseId} → craftedAmulets`);
+            }
+        });
+
+        return mudou;
+    }
+    window._syncNacoesV29 = function() {
+        if (_syncLocal()) {
+            if (typeof saveStoryProgress === 'function') saveStoryProgress();
+            return true;
+        }
+        return false;
+    };
+
+    // ─────────────────────────────────────────────────────────────
+    // 1. getUpgradeCost — adiciona moedaId para nações
+    // ─────────────────────────────────────────────────────────────
+    const _origCost = window.getUpgradeCost;
+    if (typeof _origCost === 'function' && !_origCost._v29) {
+        window.getUpgradeCost = function(uid) {
+            const baseId = (typeof window.getBaseId === 'function')
+                ? window.getBaseId(uid) : String(uid || '').split('#')[0];
+            const cost = _origCost.apply(this, arguments);
+            if (!cost) return cost;
+
+            if (_isNacaoEquip(baseId)) {
+                return {
+                    tipo: 'essencia',
+                    qtd: CUSTO_EVENTO[cost.tierAlvo] || 1000,
+                    ouro: 0,
+                    tierAlvo: cost.tierAlvo,
+                    item: cost.item,
+                    moedaId: COR,
+                };
+            }
+
+            // Não-nação com tipo essencia → assume Sombria
+            if (cost.tipo === 'essencia' && !cost.moedaId) {
+                cost.moedaId = SOMBRIA;
+            }
+            return cost;
+        };
+        window.getUpgradeCost._v29 = true;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 2. Reimplementa modal de upgrade (mostra a essência correta)
+    // ─────────────────────────────────────────────────────────────
+    window._abrirUpgradeModalV85 = function(uid) {
+        const cost = window.getUpgradeCost(uid);
+        if (!cost) {
+            if (typeof showToast === 'function') showToast('❌','Upgrade indisponível.','❌');
+            return;
+        }
+
+        const item = cost.item;
+        const tierInfo = (typeof window.getTierInfo === 'function') ? window.getTierInfo(item.tier) : { tier: item.tier, nome: 'Tier '+item.tier, aura: 'simples', cor: '#ccc' };
+        const proxInfo = (typeof window.getTierInfo === 'function') ? window.getTierInfo(cost.tierAlvo) : { tier: cost.tierAlvo, nome: 'Tier '+cost.tierAlvo, aura: 'simples', cor: '#ccc' };
+
+        document.getElementById('upgradeModalOverlay')?.remove();
+
+        let reqHTML = '';
+        let podePagar = false;
+
+        if (cost.tipo === 'material') {
+            reqHTML = Object.entries(cost.receita || {}).map(([matId, qtd]) => {
+                const m = STORY_MATERIALS[matId];
+                if (!m) return '';
+                const has = STORY_PROGRESS.inventory[matId] || 0;
+                const ok = has >= qtd;
+                return `<div class="up-req-row ${ok?'ok':'no'}"><span>${m.emoji} ${m.name}</span><span><b style="color:${ok?'#8ac070':'#d05050'};">${has}</b> / ${qtd}</span></div>`;
+            }).join('');
+            const ouroOk = (STORY_PROGRESS.gold || 0) >= cost.ouro;
+            reqHTML += `<div class="up-req-row ${ouroOk?'ok':'no'}"><span>💰 Ouro</span><span><b style="color:${ouroOk?'#8ac070':'#d05050'};">${STORY_PROGRESS.gold||0}</b> / ${cost.ouro}</span></div>`;
+            podePagar = Object.entries(cost.receita || {}).every(([k,v]) => (STORY_PROGRESS.inventory[k]||0) >= v) && ouroOk;
+        } else {
+            const moeda = cost.moedaId || SOMBRIA;
+            const isAncestral = (moeda === COR);
+            const nome = isAncestral ? 'Essências Ancestrais' : 'Essências Sombrias';
+            const icone = isAncestral ? '🌎' : '🌑';
+            const ess = STORY_PROGRESS.inventory[moeda] || 0;
+            const ok = ess >= cost.qtd;
+            reqHTML = `<div class="up-req-row ${ok?'ok':'no'}"><span>${icone} ${nome}</span><span><b style="color:${ok?'#8ac070':'#d05050'};">${ess}</b> / ${cost.qtd}</span></div>`;
+            podePagar = ok;
+        }
+
+        const iconHTML = (typeof window.getWeaponIcon === 'function' && typeof window.getWeaponById === 'function' && window.getWeaponById(uid))
+            ? window.getWeaponIcon(uid, 'large')
+            : (typeof window.getAmuletIcon === 'function' ? window.getAmuletIcon(uid, 'large') : '❓');
+
+        const ov = document.createElement('div');
+        ov.id = 'upgradeModalOverlay';
+        ov.className = 'upgrade-modal-overlay';
+        ov.onclick = (e) => { if (e.target === ov) ov.remove(); };
+        ov.innerHTML = `
+            <div class="upgrade-modal-panel">
+                <div class="upgrade-modal-header">
+                    <div class="upgrade-modal-title">⬆️ APERFEIÇOAR</div>
+                    <button class="upgrade-modal-close" onclick="document.getElementById('upgradeModalOverlay').remove()">✕</button>
+                </div>
+                <div class="upgrade-modal-body">
+                    <div class="upgrade-modal-item">
+                        <div class="upgrade-modal-icon tier-aura-${tierInfo.aura}">${iconHTML}</div>
+                        <div class="upgrade-modal-name">${item.nome}</div>
+                        <div class="upgrade-modal-tiers">
+                            <span class="tier-badge tier-badge-${tierInfo.aura}">${tierInfo.nome}</span>
+                            <span style="color:#8a7a52;">→</span>
+                            <span class="tier-badge tier-badge-${proxInfo.aura}">${proxInfo.nome}</span>
+                        </div>
+                    </div>
+                    <div class="upgrade-modal-section-title">📋 REQUISITOS</div>
+                    <div class="upgrade-modal-req">${reqHTML}</div>
+                    <div class="upgrade-modal-warning">✓ Upgrade é 100% garantido.</div>
+                </div>
+                <div class="upgrade-modal-actions">
+                    <button class="exp-btn exp-btn-secondary" onclick="document.getElementById('upgradeModalOverlay').remove()">Cancelar</button>
+                    <button class="exp-btn exp-btn-primary" ${podePagar?'':'disabled'} onclick="window._confirmarUpgradeV85('${uid}')">
+                        ⬆️ CONFIRMAR
+                    </button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(ov);
+    };
+
+    // ─────────────────────────────────────────────────────────────
+    // 3. Reimplementa confirmar (desconta da essência correta)
+    // ─────────────────────────────────────────────────────────────
+    window._confirmarUpgradeV85 = function(uid) {
+        document.getElementById('upgradeModalOverlay')?.remove();
+
+        const cost = window.getUpgradeCost(uid);
+        if (!cost) return;
+
+        // Está equipado?
+        const eqMap = STORY_PROGRESS.heroEquipment || {};
+        for (const hc in eqMap) {
+            if (eqMap[hc].arma === uid || eqMap[hc].amuleto === uid) {
+                if (typeof showToast === 'function') showToast('❌','Desequipe o item antes de upar.','❌');
+                return;
+            }
+        }
+
+        const item = cost.item;
+        const proximoTier = cost.tierAlvo;
+
+        if (cost.tipo === 'material') {
+            for (const [matId, qtd] of Object.entries(cost.receita || {})) {
+                const has = STORY_PROGRESS.inventory[matId] || 0;
+                if (has < qtd) {
+                    const m = STORY_MATERIALS[matId];
+                    if (typeof showToast === 'function') showToast('❌',`Falta ${m?.name||matId}: ${qtd-has}.`,'❌');
+                    return;
+                }
+            }
+            if ((STORY_PROGRESS.gold || 0) < cost.ouro) {
+                if (typeof showToast === 'function') showToast('❌',`Ouro insuficiente (precisa ${cost.ouro}).`,'❌');
+                return;
+            }
+            for (const [matId, qtd] of Object.entries(cost.receita || {})) {
+                STORY_PROGRESS.inventory[matId] -= qtd;
+                if (STORY_PROGRESS.inventory[matId] <= 0) delete STORY_PROGRESS.inventory[matId];
+            }
+            STORY_PROGRESS.gold -= cost.ouro;
+        } else {
+            const moeda = cost.moedaId || SOMBRIA;
+            const nomeMoeda = moeda === COR ? 'Essência Ancestral' : 'Essência Sombria';
+            const qtd = STORY_PROGRESS.inventory[moeda] || 0;
+            if (qtd < cost.qtd) {
+                if (typeof showToast === 'function') showToast('❌',`Faltam ${cost.qtd - qtd} ${nomeMoeda}.`,'❌');
+                return;
+            }
+            STORY_PROGRESS.inventory[moeda] -= cost.qtd;
+            if (STORY_PROGRESS.inventory[moeda] <= 0) delete STORY_PROGRESS.inventory[moeda];
+            console.log(`[V2.9] Descontado ${cost.qtd} ${nomeMoeda}`);
+        }
+
+        // Aplica tier no UID
+        function setTier(u, t) {
+            const s = String(u);
+            const at = s.lastIndexOf('@');
+            const base = at === -1 ? s : s.slice(0, at);
+            return t === 0 ? base : `${base}@${t}`;
+        }
+        const novoUid = setTier(uid, proximoTier);
+        const wIdx = STORY_PROGRESS.craftedWeapons.indexOf(uid);
+        if (wIdx !== -1) STORY_PROGRESS.craftedWeapons[wIdx] = novoUid;
+        const aIdx = STORY_PROGRESS.craftedAmulets.indexOf(uid);
+        if (aIdx !== -1) STORY_PROGRESS.craftedAmulets[aIdx] = novoUid;
+
+        if (typeof saveStoryProgress === 'function') saveStoryProgress();
+        if (typeof showToast === 'function')
+            showToast('⬆️', `${item.nome} → ${(typeof window.TIER_NOME !== 'undefined' ? window.TIER_NOME[proximoTier] : proximoTier)}`, '⬆️');
+        if (typeof window.mostrarAnimacaoTierV85 === 'function')
+            window.mostrarAnimacaoTierV85(item.baseId, proximoTier, false);
+
+        setTimeout(() => {
+            if (typeof window.renderTesourariaScreen === 'function') window.renderTesourariaScreen();
+        }, 2000);
+    };
+
+    // ─────────────────────────────────────────────────────────────
+    // 4. Sync forçado em TODOS os pontos críticos
+    // ─────────────────────────────────────────────────────────────
+    const _hooked = new Set();
+
+    function _hookFn(fnName) {
+        if (_hooked.has(fnName)) return;
+        const orig = window[fnName];
+        if (typeof orig !== 'function') return;
+        _hooked.add(fnName);
+        window[fnName] = function() {
+            _syncLocal();
+            return orig.apply(this, arguments);
+        };
+    }
+
+    setTimeout(() => {
+        _hookFn('renderTesourariaScreen');
+        _hookFn('renderTesourariaInventario');
+        _hookFn('renderOcaScreenFiltered');
+        _hookFn('renderLojaNacoes');
+    }, 200);
+
+    // openEquipScreen: sync na entrada E na saída (V12.9 pode empurrar raw)
+    const _origOES = window.openEquipScreen;
+    if (typeof _origOES === 'function' && !_origOES._v29) {
+        window.openEquipScreen = function() {
+            _syncLocal();
+            const r = _origOES.apply(this, arguments);
+            _syncLocal();
+            return r;
+        };
+        window.openEquipScreen._v29 = true;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 5. Shop força sync imediato após compra
+    // ─────────────────────────────────────────────────────────────
+    window._nacaoComprarArma = function(id) {
+        const ARMAS = window.NACAO_ARMAS || {};
+        const CONFIG = window._nacaoConfig || { moedaId: COR };
+        const a = ARMAS[id];
+        if (!a) return;
+
+        const moeda = CONFIG.moedaId || COR;
+        const preco = 80;
+        const saldo = STORY_PROGRESS.inventory[moeda] || 0;
+        if (saldo < preco) {
+            if (typeof showToast === 'function') showToast('❌', 'Essências insuficientes.', '❌');
+            return;
+        }
+        STORY_PROGRESS.inventory[moeda] -= preco;
+        if (STORY_PROGRESS.inventory[moeda] <= 0) delete STORY_PROGRESS.inventory[moeda];
+
+        if (!Array.isArray(STORY_PROGRESS.nacaoArmas)) STORY_PROGRESS.nacaoArmas = [];
+        STORY_PROGRESS.nacaoArmas.push(id);
+        _syncLocal(); // ⭐ força sync imediato
+        if (typeof saveStoryProgress === 'function') saveStoryProgress();
+        if (typeof showToast === 'function') showToast('🌎', `Arma: ${a.nome}`, '🌎');
+        if (typeof window.renderLojaNacoes === 'function') window.renderLojaNacoes();
+    };
+
+    // ─────────────────────────────────────────────────────────────
+    // 6. Migração inicial + watchdog leve
+    // ─────────────────────────────────────────────────────────────
+    setTimeout(_syncLocal, 300);
+    setTimeout(_syncLocal, 1500);
+    setTimeout(_syncLocal, 3500);
+
+    setInterval(() => {
+        if (window._nacaoBatalha?.ativa || window._storyMode || window._eventoAtivo) return;
+        const temPendentes = (STORY_PROGRESS.nacaoArmas?.length || 0) > 0
+                          || (STORY_PROGRESS.nacaoAmuletos?.length || 0) > 0;
+        if (temPendentes) _syncLocal();
+    }, 3000);
+
+    // ─────────────────────────────────────────────────────────────
+    // 7. Debug
+    // ─────────────────────────────────────────────────────────────
+    window._debugNacoesV29 = function() {
+        console.group('=== V2.9 Diagnóstico ===');
+        console.log('V2.9 ativo?', true);
+        console.log('');
+        console.log('Essências Ancestrais:', STORY_PROGRESS.inventory[COR] || 0);
+        console.log('Essências Sombrias:  ', STORY_PROGRESS.inventory[SOMBRIA] || 0);
+        console.log('');
+
+        const na = STORY_PROGRESS.nacaoArmas || [];
+        const nam = STORY_PROGRESS.nacaoAmuletos || [];
+        console.log('nacaoArmas (bruto):   ', na);
+        console.log('nacaoAmuletos (bruto):', nam);
+
+        const cw = (STORY_PROGRESS.craftedWeapons || []).filter(u => String(u).startsWith('arma_nacao_'));
+        const ca = (STORY_PROGRESS.craftedAmulets || []).filter(u => String(u).startsWith('amuleto_nacao_'));
+        console.log('');
+        console.log('craftedWeapons (nações):', cw);
+        console.log('craftedAmulets (nações):', ca);
+        console.log('');
+
+        if (cw.length > 0) {
+            const test = cw[0];
+            const cost = window.getUpgradeCost(test);
+            console.log(`Upgrade de ${test}:`);
+            console.log('  tipo:', cost?.tipo);
+            console.log('  moedaId:', cost?.moedaId);
+            console.log('  qtd:', cost?.qtd);
+            console.log('  tierAlvo:', cost?.tierAlvo);
+        }
+        console.groupEnd();
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V2.9] Fix definitivo das Nações');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('🐛 BUG 1 — Upgrade pedia essência errada:');
+    console.log('   → getUpgradeCost agora retorna moedaId=essencia_ancestral');
+    console.log('   → Modal mostra "🌎 Essências Ancestrais"');
+    console.log('   → Confirmar desconta da ancestral');
+    console.log('🐛 BUG 2 — Item não aparecia:');
+    console.log('   → Sync forçado em renderTesouraria, openEquip, OCA');
+    console.log('   → Shop sincroniza imediatamente após compra');
+    console.log('   → Watchdog de 3s pega compras pendentes');
+    console.log('📊 Tier Simples/Aprimorado/Ancestral: preservado (1000/10000)');
+    console.log('');
+    console.log('💡 Debug: window._debugNacoesV29()');
+    console.log('💡 Sync manual: window._syncNacoesV29()');
+    console.log('═══════════════════════════════════════════════════');
+})();
