@@ -26,6 +26,7 @@ const PRECACHE_URLS = [
     './fx.js',
     './coop.js',
     './pvp.js',
+    './aldeia.js',
     './icon-192.png',
     './icon-512.png',
     // Fontes do Google (opcional — se quiser offline total)
