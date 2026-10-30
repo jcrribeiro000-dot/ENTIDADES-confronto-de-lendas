@@ -1166,3 +1166,383 @@
     console.log('💡 Debug: window._debugBestiarioV3()');
     console.log('═══════════════════════════════════════════════════');
 })();
+// =================================================================
+// nacoes.js — V3.1 — Pesadelo das Nações no bestiário
+// -----------------------------------------------------------------
+// • Injeta nacao_pesadelo em NACAO_DEUSES, NACOES e STORY_ENEMIES
+// • Aparece como boss final do bloco 🌎 Sete Nações
+// • Auto-discovery: todos os 7 deuses finais derrotados
+// • Injeta bloco "fila de 7 deuses" no card pós-render
+// =================================================================
+(function bestiarioV31() {
+    if (window._bestiarioV31) return;
+    window._bestiarioV31 = true;
+
+    const eb = (typeof EVENTO_BOSSES !== 'undefined') ? EVENTO_BOSSES['nacao_pesadelo'] : null;
+    if (!eb) {
+        console.warn('[V3.1] EVENTO_BOSSES.nacao_pesadelo ausente — patch inativo.');
+        return;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 1. NACAO_DEUSES['nacao_pesadelo'] — faz isNacaoDeus() = true
+    // ─────────────────────────────────────────────────────────────
+    if (typeof NACAO_DEUSES !== 'undefined' && !NACAO_DEUSES['nacao_pesadelo']) {
+        NACAO_DEUSES['nacao_pesadelo'] = {
+            id: 'nacao_pesadelo',
+            nacao: 'pesadelo',
+            nome: eb.nome,
+            titulo: eb.titulo,
+            elemento: eb.elemento,
+            hp: null,
+            atk: null,
+            descricao: eb.descricao,
+            lore: eb.lore,
+            skills: [],
+            isNacaoPesadelo: true,
+        };
+        console.log('[V3.1] NACAO_DEUSES.nacao_pesadelo registrado');
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 2. NACOES.pesadelo (virtual) — só pra resolver nacaoNome
+    //    diaSemana: -1 garante que NUNCA casa com _getNacaoDoDia
+    // ─────────────────────────────────────────────────────────────
+    if (typeof NACOES !== 'undefined' && !NACOES['pesadelo']) {
+        NACOES['pesadelo'] = {
+            id: 'pesadelo',
+            nome: 'Pesadelo Mensal',
+            titulo: eb.titulo,
+            diaSemana: -1,
+            elemento: 'VARIAVEL',
+            corFundo: '#1a0a2a',
+            descricao: eb.descricao,
+            lore: eb.lore,
+            deuses: eb.animais || [],
+            _isVirtualBestiary: true,
+        };
+        console.log('[V3.1] NACOES.pesadelo registrado (virtual)');
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 3. STORY_ENEMIES['nacao_pesadelo'] — faz getTipo() = 'final'
+    // ─────────────────────────────────────────────────────────────
+    if (typeof STORY_ENEMIES !== 'undefined' && !STORY_ENEMIES['nacao_pesadelo']) {
+        STORY_ENEMIES['nacao_pesadelo'] = {
+            id: 'nacao_pesadelo',
+            name: eb.nome,
+            hp: null,
+            atk: null,
+            isBoss: true,
+            isFinalBoss: true,
+            elemento: eb.elemento,
+            descricao: eb.descricao,
+            lore: eb.lore,
+            skill1: null,
+            skill2: null,
+            isNacaoPesadelo: true,
+            deusesFila: eb.animais || [],
+        };
+        console.log('[V3.1] STORY_ENEMIES.nacao_pesadelo registrado');
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 4. Emoji do pesadelo (fallback do card)
+    // ─────────────────────────────────────────────────────────────
+    if (window.NACAO_EMOJIS && !window.NACAO_EMOJIS['nacao_pesadelo']) {
+        window.NACAO_EMOJIS['nacao_pesadelo'] = '🌑';
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 5. Hook renderBestiaryScreen
+    //    ANTES:  auto-discovery (marca pesadelo como descoberto)
+    //    DEPOIS: injeta bloco "fila de 7 deuses" no card
+    // ─────────────────────────────────────────────────────────────
+    const _origRender = window.renderBestiaryScreen;
+    if (typeof _origRender === 'function' && !_origRender._v31) {
+
+        window.renderBestiaryScreen = function() {
+            // ─── Auto-discovery ───
+            try {
+                if (!Array.isArray(STORY_PROGRESS.bossesDefeated)) {
+                    STORY_PROGRESS.bossesDefeated = [];
+                }
+                const bd  = STORY_PROGRESS.bossesDefeated;
+                const ed  = STORY_PROGRESS.enemiesDefeatedIds || [];
+                const fila = eb.animais || [];
+
+                const allFinalDefeated = fila.length > 0 &&
+                    fila.every(g => bd.indexOf(g) !== -1 || ed.indexOf(g) !== -1);
+
+                if (allFinalDefeated && bd.indexOf('nacao_pesadelo') === -1) {
+                    bd.push('nacao_pesadelo');
+                    if (typeof saveStoryProgress === 'function') saveStoryProgress();
+                    console.log('[V3.1] 🌑 Pesadelo auto-descoberto (7 deuses finais derrotados)');
+                }
+            } catch (e) {
+                console.warn('[V3.1] auto-discovery falhou:', e);
+            }
+
+            // ─── Render normal do V3.0 ───
+            const result = _origRender.apply(this, arguments);
+
+            // ─── Pós-render: injeta fila + conserta drops ───
+            setTimeout(() => {
+                try {
+                    const card = document.querySelector('.bestiary-card[data-enemy-id="nacao_pesadelo"]');
+                    if (!card) return;
+                    if (card.classList.contains('locked')) return;
+
+                    // Fila de 7 deuses
+                    if (!card.querySelector('.v31-fila-pesadelo')) {
+                        const nacaoEmojis = window.NACAO_EMOJIS || {};
+                        const fila = eb.animais || [];
+                        const filaHTML = fila.map(g => {
+                            const deus = (typeof NACAO_DEUSES !== 'undefined' && NACAO_DEUSES[g]) || {};
+                            const titulo = deus.nome || g;
+                            const emoji = nacaoEmojis[g] || '?';
+                            return `<span style="font-size:1.6rem;" title="${titulo}">${emoji}</span>`;
+                        }).join('<span style="color:#8a7a52;font-size:1.1rem;">→</span>');
+
+                        const bloco = document.createElement('div');
+                        bloco.className = 'v31-fila-pesadelo';
+                        bloco.style.cssText = 'margin-top:10px;padding:10px;background:rgba(142,68,173,0.12);border:1px solid rgba(142,68,173,0.4);border-radius:6px;text-align:center;';
+                        bloco.innerHTML = `
+                            <div style="font-family:'Cinzel',serif;color:#c39bd3;font-size:0.8rem;letter-spacing:2px;margin-bottom:8px;">⚔️ FILA DE 7 DEUSES FINAIS</div>
+                            <div style="display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:6px;">${filaHTML}</div>
+                            <div style="font-family:'EB Garamond',serif;color:#b8a577;font-size:0.8rem;font-style:italic;margin-top:8px;">Cada deus precisa cair para o próximo aparecer.</div>
+                        `;
+                        const firstSection = card.querySelector('.bestiary-card-section');
+                        if (firstSection) card.insertBefore(bloco, firstSection);
+                        else card.appendChild(bloco);
+                    }
+
+                    // Corrige drops (V3.0 mostra "Fase 3" — errado pro pesadelo)
+                    card.querySelectorAll('.bestiary-card-section').forEach(sec => {
+                        const titleEl = sec.querySelector('.bestiary-card-section-title');
+                        if (titleEl && titleEl.textContent.indexOf('Drops') !== -1) {
+                            const dropsEl = sec.querySelector('.bestiary-drops');
+                            if (dropsEl && !dropsEl.querySelector('[data-v31-fixed]')) {
+                                dropsEl.innerHTML = `
+                                    <span class="bestiary-drop" data-v31-fixed="1">🌎 Essência Ancestral</span>
+                                    <span class="bestiary-drop bestiary-drop-raro" data-v31-fixed="1">⚔️ Arma aleatória (35%)</span>
+                                    <span class="bestiary-drop bestiary-drop-raro" data-v31-fixed="1">🧿 Núcleo do Pesadelo</span>
+                                `;
+                            }
+                        }
+                    });
+                } catch (e) {
+                    console.warn('[V3.1] pós-render falhou:', e);
+                }
+            }, 90);
+
+            return result;
+        };
+        window.renderBestiaryScreen._v31 = true;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 6. Debug / testes manuais
+    // ─────────────────────────────────────────────────────────────
+    window._forcarDescobertaPesadelo = function() {
+        if (!Array.isArray(STORY_PROGRESS.bossesDefeated)) STORY_PROGRESS.bossesDefeated = [];
+        if (STORY_PROGRESS.bossesDefeated.indexOf('nacao_pesadelo') === -1) {
+            STORY_PROGRESS.bossesDefeated.push('nacao_pesadelo');
+            if (typeof saveStoryProgress === 'function') saveStoryProgress();
+            console.log('✅ Pesadelo marcado como descoberto');
+        } else {
+            console.log('Já estava descoberto');
+        }
+        if (document.querySelector('#storyScreen.active .story-title')?.textContent.indexOf('BESTIÁRIO') !== -1) {
+            window.renderBestiaryScreen();
+        }
+    };
+
+    window._resetDescobertaPesadelo = function() {
+        if (!Array.isArray(STORY_PROGRESS.bossesDefeated)) return;
+        const idx = STORY_PROGRESS.bossesDefeated.indexOf('nacao_pesadelo');
+        if (idx !== -1) {
+            STORY_PROGRESS.bossesDefeated.splice(idx, 1);
+            if (typeof saveStoryProgress === 'function') saveStoryProgress();
+            console.log('🔄 Pesadelo ocultado');
+        }
+        if (document.querySelector('#storyScreen.active .story-title')?.textContent.indexOf('BESTIÁRIO') !== -1) {
+            window.renderBestiaryScreen();
+        }
+    };
+
+    window._debugBestiarioV31 = function() {
+        console.group('=== Bestiário V3.1 — Pesadelo ===');
+        console.log('NACAO_DEUSES.nacao_pesadelo:', !!NACAO_DEUSES['nacao_pesadelo']);
+        console.log('STORY_ENEMIES.nacao_pesadelo:', !!STORY_ENEMIES['nacao_pesadelo']);
+        console.log('NACOES.pesadelo:', !!NACOES['pesadelo']);
+        console.log('Emoji:', window.NACAO_EMOJIS && window.NACAO_EMOJIS['nacao_pesadelo']);
+        console.log('');
+        console.log('Fila:', eb.animais);
+        const bd = STORY_PROGRESS.bossesDefeated || [];
+        const ed = STORY_PROGRESS.enemiesDefeatedIds || [];
+        console.log('Status de cada deus final:');
+        (eb.animais || []).forEach(g => {
+            const ok = bd.indexOf(g) !== -1 || ed.indexOf(g) !== -1;
+            console.log(`  ${g}: ${ok ? '✓' : '✗'}`);
+        });
+        console.log('');
+        console.log('Pesadelo descoberto:', bd.indexOf('nacao_pesadelo') !== -1);
+        console.groupEnd();
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V3.1] Pesadelo das Nações no bestiário');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Aparece como boss final do bloco 🌎 Sete Nações');
+    console.log('• Auto-discovery: 7 deuses finais derrotados');
+    console.log('• Fila de 7 deuses exibida no card');
+    console.log('');
+    console.log('💡 Debug:     window._debugBestiarioV31()');
+    console.log('💡 Force:     window._forcarDescobertaPesadelo()');
+    console.log('💡 Ocultar:   window._resetDescobertaPesadelo()');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// nacoes.js — V3.2 — Sync de descobertas (fase concluída = deus visto)
+// -----------------------------------------------------------------
+// • Ao abrir o bestiário, percorre nacaoProgressoPorDificuldade
+//   e adiciona em enemiesDefeatedIds todos os deuses das fases
+//   já concluídas (resolve Wekufe, Supay, Chibchacum, Hashchélíí...)
+// • Roda também ao carregar o save (timeout + saveStoryProgress hook)
+// =================================================================
+(function bestiarioV32() {
+    if (window._bestiarioV32) return;
+    window._bestiarioV32 = true;
+
+    // ─────────────────────────────────────────────────────────────
+    // 1. SYNC PROATIVO
+    // ─────────────────────────────────────────────────────────────
+    function sincronizarDescobertas() {
+        if (typeof STORY_PROGRESS === 'undefined') return 0;
+        if (!Array.isArray(STORY_PROGRESS.enemiesDefeatedIds)) STORY_PROGRESS.enemiesDefeatedIds = [];
+        if (!Array.isArray(STORY_PROGRESS.bossesDefeated))      STORY_PROGRESS.bossesDefeated = [];
+
+        const prog = STORY_PROGRESS.nacaoProgressoPorDificuldade || {};
+        const add  = new Set();
+
+        Object.keys(prog).forEach(diff => {
+            const bucket = prog[diff] || {};
+            Object.keys(bucket).forEach(nacaoId => {
+                const p = bucket[nacaoId];
+                if (!p || !Array.isArray(p.fasesConcluidas)) return;
+                const nacao = (typeof NACOES !== 'undefined') ? NACOES[nacaoId] : null;
+                if (!nacao || !Array.isArray(nacao.deuses)) return;
+
+                p.fasesConcluidas.forEach(fase => {
+                    const idx = parseInt(fase) - 1;
+                    if (idx >= 0 && idx < nacao.deuses.length) {
+                        // Todos os deuses até o índice dessa fase foram derrotados
+                        for (let i = 0; i <= idx; i++) {
+                            if (nacao.deuses[i]) add.add(nacao.deuses[i]);
+                        }
+                    }
+                });
+            });
+        });
+
+        let novas = 0;
+        add.forEach(id => {
+            if (STORY_PROGRESS.enemiesDefeatedIds.indexOf(id) === -1) {
+                STORY_PROGRESS.enemiesDefeatedIds.push(id);
+                novas++;
+            }
+        });
+
+        if (novas > 0 && typeof saveStoryProgress === 'function') {
+            saveStoryProgress();
+            console.log('[V3.2] ' + novas + ' deuses de nação sincronizados em enemiesDefeatedIds');
+        }
+        return novas;
+    }
+    window._syncBestiarioV32 = sincronizarDescobertas;
+
+    // ─────────────────────────────────────────────────────────────
+    // 2. Wrapper do renderBestiaryScreen (sync ANTES do render)
+    // ─────────────────────────────────────────────────────────────
+    const _origRender = window.renderBestiaryScreen;
+    if (typeof _origRender === 'function' && !_origRender._v32) {
+        window.renderBestiaryScreen = function() {
+            sincronizarDescobertas();
+            return _origRender.apply(this, arguments);
+        };
+        window.renderBestiaryScreen._v32 = true;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 3. Sync ao carregar o save
+    // ─────────────────────────────────────────────────────────────
+    setTimeout(sincronizarDescobertas, 800);
+    setTimeout(sincronizarDescobertas, 2500);
+
+    const _origLoad = window.loadStoryProgressByName;
+    if (typeof _origLoad === 'function' && !_origLoad._v32) {
+        window.loadStoryProgressByName = function() {
+            const r = _origLoad.apply(this, arguments);
+            if (r) setTimeout(sincronizarDescobertas, 200);
+            return r;
+        };
+        window.loadStoryProgressByName._v32 = true;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 4. DEBUG
+    // ─────────────────────────────────────────────────────────────
+    window._debugBestiarioV32 = function() {
+        console.group('=== Bestiário V3.2 — Sync ===');
+        const ed = STORY_PROGRESS.enemiesDefeatedIds || [];
+        const bd = STORY_PROGRESS.bossesDefeated || [];
+
+        const prog = STORY_PROGRESS.nacaoProgressoPorDificuldade || {};
+        console.log('Fases concluídas por nação:');
+        Object.keys(prog).forEach(diff => {
+            Object.keys(prog[diff] || {}).forEach(nid => {
+                const p = prog[diff][nid];
+                const nacao = (typeof NACOES !== 'undefined') ? NACOES[nid] : null;
+                if (!nacao || !nacao.deuses) return;
+                const fases = p.fasesConcluidas || [];
+                if (fases.length === 0) return;
+                console.log('  [' + diff + '] ' + nid + ': fases=[' + fases.join(',') + ']');
+                nacao.deuses.forEach((did, i) => {
+                    const fase = String(i + 1);
+                    const concluida = fases.indexOf(fase) !== -1;
+                    const descoberto = ed.indexOf(did) !== -1 || bd.indexOf(did) !== -1;
+                    if (concluida && !descoberto) {
+                        console.warn('    ⚠️ ' + did + ' (fase ' + fase + ') — fase concluída mas NÃO em enemiesDefeatedIds');
+                    } else if (concluida && descoberto) {
+                        console.log('    ✓ ' + did + ' (fase ' + fase + ')');
+                    }
+                });
+            });
+        });
+        console.groupEnd();
+    };
+
+    window._syncBestiarioManual = function() {
+        const n = sincronizarDescobertas();
+        console.log('✅ ' + n + ' sincronizações aplicadas');
+        if (document.querySelector('#storyScreen.active .story-title')?.textContent.indexOf('BESTIÁRIO') !== -1) {
+            window.renderBestiaryScreen();
+        }
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V3.2] Sincronização de descobertas');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Fases concluídas → enemiesDefeatedIds automaticamente');
+    console.log('• Resolve 3º deus de cada nação:');
+    console.log('  Mapuches→Wekufe · Incas→Supay · Chibchas→Chibchacum');
+    console.log('  Navajos→Hashchélíí · Taínos→Juracán · Astecas→Huitzilopochtli');
+    console.log('  Maias→Ixchel');
+    console.log('');
+    console.log('💡 Debug:     window._debugBestiarioV32()');
+    console.log('💡 Sync manual: window._syncBestiarioManual()');
+    console.log('═══════════════════════════════════════════════════');
+})();
