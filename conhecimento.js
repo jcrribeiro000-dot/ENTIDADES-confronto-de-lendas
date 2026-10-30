@@ -1546,3 +1546,168 @@
     console.log('💡 Sync manual: window._syncBestiarioManual()');
     console.log('═══════════════════════════════════════════════════');
 })();
+// =================================================================
+// nacoes.js — V3.3 — Registro garantido de deuses derrotados
+// -----------------------------------------------------------------
+// • Ao vencer fase de nação → deus vai em enemiesDefeatedIds
+//   (não depende mais de fasesConcluidas, que reseta toda segunda)
+// • Intercepta eventoFinalizarPartida + finishStoryPhase
+// • Helper manual para recuperar derrotas antigas
+// =================================================================
+(function bestiarioV33() {
+    if (window._bestiarioV33) return;
+    window._bestiarioV33 = true;
+
+    function registrarDeus(nacaoId, faseId) {
+        if (!nacaoId || !faseId || nacaoId === 'pesadelo') return;
+        const nacao = (typeof NACOES !== 'undefined') ? NACOES[nacaoId] : null;
+        if (!nacao || !Array.isArray(nacao.deuses)) return;
+
+        const idx = parseInt(faseId) - 1;
+        if (idx < 0 || idx >= nacao.deuses.length) return;
+
+        const deusId = nacao.deuses[idx];
+        if (!deusId) return;
+
+        if (!Array.isArray(STORY_PROGRESS.enemiesDefeatedIds)) {
+            STORY_PROGRESS.enemiesDefeatedIds = [];
+        }
+        if (STORY_PROGRESS.enemiesDefeatedIds.indexOf(deusId) === -1) {
+            STORY_PROGRESS.enemiesDefeatedIds.push(deusId);
+            if (typeof saveStoryProgress === 'function') saveStoryProgress();
+            console.log('[V3.3] ✅ ' + deusId + ' registrado (fase ' + faseId + ' de ' + nacaoId + ')');
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 1. Hook eventoFinalizarPartida (fase 3 / boss)
+    // ─────────────────────────────────────────────────────────────
+    const _origFinalizar = window.eventoFinalizarPartida;
+    if (typeof _origFinalizar === 'function' && !_origFinalizar._v33) {
+        window.eventoFinalizarPartida = async function(vitoria) {
+            const b = window._nacaoBatalha || {};
+            const emNacao = b.ativa === true || window._nacaoAtivo === true;
+            if (vitoria && emNacao && b.nacaoId && b.faseId) {
+                try { registrarDeus(b.nacaoId, b.faseId); }
+                catch (e) { console.warn('[V3.3] finalizar erro:', e); }
+            }
+            return _origFinalizar.apply(this, arguments);
+        };
+        window.eventoFinalizarPartida._v33 = true;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 2. Hook finishStoryPhase (fases 1 e 2)
+    //    (roda ANTES do V2.11 resetar _nacaoBatalha)
+    // ─────────────────────────────────────────────────────────────
+    const _origFinish = window.finishStoryPhase;
+    if (typeof _origFinish === 'function' && !_origFinish._v33) {
+        window.finishStoryPhase = function(victory) {
+            const b = window._nacaoBatalha || {};
+            const emNacao = b.ativa === true || window._nacaoAtivo === true;
+            if (victory && emNacao && b.nacaoId && b.faseId) {
+                try { registrarDeus(b.nacaoId, b.faseId); }
+                catch (e) { console.warn('[V3.3] finish erro:', e); }
+            }
+            return _origFinish.apply(this, arguments);
+        };
+        window.finishStoryPhase._v33 = true;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 3. Helper manual para o retroativo
+    // ─────────────────────────────────────────────────────────────
+    window._marcarDeusComoDerrotado = function(deusId) {
+        if (!deusId) {
+            console.log('Uso: _marcarDeusComoDerrotado("nacao_wekufe")');
+            console.log('IDs disponíveis:');
+            Object.keys(NACAO_DEUSES || {}).forEach(id => {
+                const d = NACAO_DEUSES[id];
+                console.log('  ' + id + '  (' + d.nome + ' — ' + d.nacao + ')');
+            });
+            return;
+        }
+        if (!Array.isArray(STORY_PROGRESS.enemiesDefeatedIds)) {
+            STORY_PROGRESS.enemiesDefeatedIds = [];
+        }
+        if (STORY_PROGRESS.enemiesDefeatedIds.indexOf(deusId) === -1) {
+            STORY_PROGRESS.enemiesDefeatedIds.push(deusId);
+            if (typeof saveStoryProgress === 'function') saveStoryProgress();
+            console.log('✅ ' + deusId + ' marcado como derrotado');
+        } else {
+            console.log(deusId + ' já estava marcado');
+        }
+        if (document.querySelector('#storyScreen.active .story-title')?.textContent.indexOf('BESTIÁRIO') !== -1) {
+            window.renderBestiaryScreen();
+        }
+    };
+
+    window._marcarTodosTerceirosDeuses = function() {
+        let n = 0;
+        Object.keys(NACOES || {}).forEach(nid => {
+            const nac = NACOES[nid];
+            if (nac._isVirtualBestiary) return;
+            if (!nac.deuses || nac.deuses.length < 3) return;
+            const deusFinal = nac.deuses[2];
+            if (!Array.isArray(STORY_PROGRESS.enemiesDefeatedIds)) {
+                STORY_PROGRESS.enemiesDefeatedIds = [];
+            }
+            if (STORY_PROGRESS.enemiesDefeatedIds.indexOf(deusFinal) === -1) {
+                STORY_PROGRESS.enemiesDefeatedIds.push(deusFinal);
+                console.log('  ✅ ' + deusFinal + ' (' + nac.nome + ')');
+                n++;
+            }
+        });
+        if (n > 0 && typeof saveStoryProgress === 'function') saveStoryProgress();
+        console.log(n + ' deuses finais registrados');
+        if (document.querySelector('#storyScreen.active .story-title')?.textContent.indexOf('BESTIÁRIO') !== -1) {
+            window.renderBestiaryScreen();
+        }
+    };
+
+    // ─────────────────────────────────────────────────────────────
+    // 4. Debug
+    // ─────────────────────────────────────────────────────────────
+    window._debugBestiarioV33 = function() {
+        console.group('=== Bestiário V3.3 ===');
+        const ed = STORY_PROGRESS.enemiesDefeatedIds || [];
+        const bd = STORY_PROGRESS.bossesDefeated || [];
+
+        console.log('Deuses de nação — status:');
+        let faltando = 0;
+        Object.keys(NACAO_DEUSES || {}).forEach(id => {
+            if (id === 'nacao_pesadelo') return;
+            const d = NACAO_DEUSES[id];
+            const ok = ed.indexOf(id) !== -1 || bd.indexOf(id) !== -1;
+            if (!ok) faltando++;
+            console.log('  ' + (ok ? '✓' : '✗') + ' ' + id + '  (' + d.nome + ' — ' + d.nacao + ')');
+        });
+        console.log('');
+        console.log(faltando === 0 ? '✅ Todos os 21 deuses registrados' : '⚠️ ' + faltando + ' faltando');
+
+        const prog = STORY_PROGRESS.nacaoProgressoPorDificuldade || {};
+        console.log('');
+        console.log('Fases concluídas (por diff — pode ter resetado na semana):');
+        Object.keys(prog).forEach(diff => {
+            Object.keys(prog[diff] || {}).forEach(nid => {
+                const p = prog[diff][nid];
+                if (p.fasesConcluidas && p.fasesConcluidas.length > 0) {
+                    console.log('  [' + diff + '] ' + nid + ': fases=[' + p.fasesConcluidas.join(',') + '] semana=' + p.semana);
+                }
+            });
+        });
+        console.groupEnd();
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [V3.3] Registro garantido de deuses derrotados');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Agora toda vitória de fase grava enemiesDefeatedIds');
+    console.log('• Não depende mais de fasesConcluidas (que reseta na segunda)');
+    console.log('');
+    console.log('💡 Debug:    window._debugBestiarioV33()');
+    console.log('💡 Marcar 1: window._marcarDeusComoDerrotado("nacao_wekufe")');
+    console.log('💡 Marcar 7: window._marcarTodosTerceirosDeuses()');
+    console.log('═══════════════════════════════════════════════════');
+})();
