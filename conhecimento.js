@@ -514,3 +514,655 @@
     console.log('  window._resetConhecimento()             → resetar');
     console.log('═══════════════════════════════════════════════════');
 })();
+// =================================================================
+// nacoes.js — V3.0 — BESTIÁRIO UNIFICADO
+// -----------------------------------------------------------------
+// • Deduplica STORY_ENEMIES + EVENTO_BOSSES (Sete Selados)
+// • Containers de nação (nacao_tainos, nacao_pesadelo...) ignorados
+// • 21 deuses das Nações em categoria própria
+// • Filtros: origem · tipo · ato · conhecimento (0/1/2/3) · busca
+// =================================================================
+(function bestiarioV3() {
+    if (window._bestiarioV3) return;
+    window._bestiarioV3 = true;
+
+    // ─────────────────────────────────────────────────────────────
+    // ESTADO DOS FILTROS
+    // ─────────────────────────────────────────────────────────────
+    function getFilters() {
+        if (!window._bestiaryFilters) {
+            window._bestiaryFilters = {
+                origem: 'todos',
+                tipo: 'todos',
+                ato: 'todos',
+                conhecimento: 'todos',
+                busca: '',
+            };
+        }
+        return window._bestiaryFilters;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // CLASSIFICAÇÃO
+    // ─────────────────────────────────────────────────────────────
+    function isNacaoDeus(id) {
+        return !!id && id.startsWith('nacao_') &&
+            typeof NACAO_DEUSES !== 'undefined' && !!NACAO_DEUSES[id];
+    }
+
+    function isNacaoContainer(id) {
+        return !!id && id.startsWith('nacao_') &&
+            !(typeof NACAO_DEUSES !== 'undefined' && NACAO_DEUSES[id]);
+    }
+
+    function getOrigem(id) {
+        if (isNacaoContainer(id)) return 'container';
+        if (isNacaoDeus(id)) return 'nacoes';
+        if (typeof EVENTO_BOSSES !== 'undefined' &&
+            EVENTO_BOSSES[id] && !id.startsWith('nacao_')) return 'selados';
+        if (id === 'pesadelo') return 'selados';
+        return 'historia';
+    }
+
+    function getTipo(id) {
+        if (typeof getEnemyType === 'function') {
+            try { return getEnemyType(id); } catch (e) {}
+        }
+        const e = (typeof STORY_ENEMIES !== 'undefined') ? STORY_ENEMIES[id] : null;
+        if (!e) return 'boss';
+        if (e.isFinalBoss) return 'final';
+        if (e.isBoss)      return 'boss';
+        if (e.isMiniBoss)  return 'miniboss';
+        if (e.isSpectral)  return 'espectral';
+        return 'animal';
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // DESCOBERTA / CONHECIMENTO
+    // ─────────────────────────────────────────────────────────────
+    function isDiscovered(id, origem) {
+        if ((STORY_PROGRESS.enemiesDefeatedIds || []).includes(id)) return true;
+        if ((STORY_PROGRESS.bossesDefeated    || []).includes(id)) return true;
+        if (origem === 'selados' && typeof getEventoProgresso === 'function') {
+            try {
+                const prog = getEventoProgresso(id);
+                if (prog && prog.fasesConcluidas && prog.fasesConcluidas.includes('boss')) return true;
+            } catch (e) {}
+        }
+        return false;
+    }
+
+    function getConhecimento(id) {
+        return (STORY_PROGRESS.knowledge && STORY_PROGRESS.knowledge[id]) || 0;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // LISTA UNIFICADA (deduplicada)
+    // ─────────────────────────────────────────────────────────────
+    function getAllEnemies() {
+        const list = [];
+        const seen = new Set();
+
+        if (typeof STORY_ENEMIES !== 'undefined') {
+            Object.keys(STORY_ENEMIES).forEach(id => {
+                if (seen.has(id)) return;
+                const origem = getOrigem(id);
+                if (origem === 'container') return;
+                seen.add(id);
+                list.push(makeEntry(id, origem));
+            });
+        }
+
+        if (typeof EVENTO_BOSSES !== 'undefined') {
+            Object.values(EVENTO_BOSSES).forEach(b => {
+                if (!b || !b.id) return;
+                if (b.id.startsWith('nacao_')) return;
+                if (seen.has(b.id)) return;
+                seen.add(b.id);
+                list.push(makeEntry(b.id, 'selados', b));
+            });
+        }
+
+        if (typeof EVENTO_PESADELO !== 'undefined' &&
+            EVENTO_PESADELO.id && !seen.has(EVENTO_PESADELO.id)) {
+            seen.add(EVENTO_PESADELO.id);
+            list.push(makeEntry(EVENTO_PESADELO.id, 'selados',
+                Object.assign({}, EVENTO_PESADELO, { diaLabel: 'Mensal' })));
+        }
+
+        return list;
+    }
+
+    function makeEntry(id, origem, eventBossOverride) {
+        const e  = (typeof STORY_ENEMIES !== 'undefined')  ? STORY_ENEMIES[id]  : null;
+        const eb = eventBossOverride ||
+                   ((typeof EVENTO_BOSSES !== 'undefined') ? EVENTO_BOSSES[id] : null);
+
+        const nome = (e && (e.name || e.nome)) || (eb && eb.nome) || id;
+        const hp   = (e && e.hp  != null) ? e.hp  : (eb && eb.hp);
+        const atk  = (e && e.atk != null) ? e.atk : (eb && eb.atk);
+        const tipo = getTipo(id);
+
+        let ato = null, diaLabel = null, descricao = null, nacaoNome = null;
+
+        if (origem === 'historia' && typeof getEnemyAtoFromId === 'function') {
+            ato = getEnemyAtoFromId(id);
+        }
+        if (origem === 'selados' && eb) {
+            diaLabel  = eb.diaLabel;
+            descricao = eb.descricao;
+        }
+        if (origem === 'nacoes' &&
+            typeof NACAO_DEUSES !== 'undefined' && NACAO_DEUSES[id]) {
+            const d = NACAO_DEUSES[id];
+            if (d.nacao && typeof NACOES !== 'undefined' && NACOES[d.nacao]) {
+                nacaoNome = NACOES[d.nacao].nome;
+            }
+        }
+
+        return {
+            id, origem, nome, hp, atk, tipo,
+            ato, diaLabel, descricao, nacaoNome,
+            raw: e || eb || {},
+            eventBoss: eb,
+        };
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // ORDEM DE APARIÇÃO (história)
+    // ─────────────────────────────────────────────────────────────
+    function buildOrdem() {
+        const ord = {};
+        let c = 0;
+        if (typeof STORY_CHAPTERS !== 'undefined') {
+            Object.keys(STORY_CHAPTERS)
+                .sort((a, b) => parseInt(a) - parseInt(b))
+                .forEach(cid => {
+                    const ch = STORY_CHAPTERS[cid];
+                    (ch.phases || []).forEach(ph => {
+                        (ph.enemies || []).forEach(eid => {
+                            if (ord[eid] === undefined) ord[eid] = c++;
+                        });
+                    });
+                });
+        }
+        return ord;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // FILTROS
+    // ─────────────────────────────────────────────────────────────
+    function normalize(s) {
+        return String(s || '').toLowerCase()
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    }
+
+    function aplicarFiltros(lista, ordem) {
+        const f = getFilters();
+        let out = lista.slice();
+
+        if (f.origem !== 'todos') out = out.filter(x => x.origem === f.origem);
+        if (f.tipo   !== 'todos') out = out.filter(x => x.tipo   === f.tipo);
+        if (f.ato    !== 'todos') out = out.filter(x =>
+            x.origem === 'historia' && x.ato === parseInt(f.ato));
+        if (f.conhecimento !== 'todos') {
+            const k = parseInt(f.conhecimento);
+            out = out.filter(x => getConhecimento(x.id) === k);
+        }
+        if (f.busca && f.busca.trim()) {
+            const term = normalize(f.busca.trim());
+            out = out.filter(x => normalize(x.nome).includes(term));
+        }
+
+        const peso = { historia: 0, selados: 1, nacoes: 2 };
+        out.sort((a, b) => {
+            const pa = peso[a.origem] != null ? peso[a.origem] : 99;
+            const pb = peso[b.origem] != null ? peso[b.origem] : 99;
+            if (pa !== pb) return pa - pb;
+
+            if (a.origem === 'nacoes' && b.origem === 'nacoes') {
+                const na = (a.raw && a.raw.nacao) || '';
+                const nb = (b.raw && b.raw.nacao) || '';
+                if (na !== nb) return na.localeCompare(nb);
+                const listA = (NACOES && NACOES[na] && NACOES[na].deuses) || [];
+                const listB = (NACOES && NACOES[nb] && NACOES[nb].deuses) || [];
+                const idxA = listA.indexOf(a.id);
+                const idxB = listB.indexOf(b.id);
+                return idxA - idxB;
+            }
+            if (a.origem === 'selados' && b.origem === 'selados') {
+                const ka = Object.keys(EVENTO_BOSSES || {}).indexOf(a.id);
+                const kb = Object.keys(EVENTO_BOSSES || {}).indexOf(b.id);
+                return ka - kb;
+            }
+            const oa = ordem[a.id] != null ? ordem[a.id] : 9999;
+            const ob = ordem[b.id] != null ? ordem[b.id] : 9999;
+            if (oa !== ob) return oa - ob;
+            return a.nome.localeCompare(b.nome);
+        });
+
+        return out;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // SPRITE / EMOJI
+    // ─────────────────────────────────────────────────────────────
+    function getSprite(id) {
+        let url = (typeof SPRITES_STORY !== 'undefined') ? SPRITES_STORY[id] : '';
+        if (!url || url.trim() === '') {
+            if (typeof STORY_TO_BASE_BOSS !== 'undefined') {
+                const bk = STORY_TO_BASE_BOSS[id];
+                if (bk && typeof SPRITES !== 'undefined' && SPRITES[bk]) url = SPRITES[bk];
+            }
+        }
+        return url || '';
+    }
+
+    function getEmoji(id) {
+        if (typeof EMOJI_STORY !== 'undefined' && EMOJI_STORY[id]) return EMOJI_STORY[id];
+        if (window.NACAO_EMOJIS && window.NACAO_EMOJIS[id])         return window.NACAO_EMOJIS[id];
+        return '?';
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // SKILLS
+    // ─────────────────────────────────────────────────────────────
+    function getSkillsData(enemy) {
+        const e  = enemy.raw || {};
+        const eb = enemy.eventBoss;
+
+        if (eb && Array.isArray(eb.skills) && eb.skills.length > 0) {
+            return eb.skills.map(sk => ({
+                nome: sk.nome || sk.name || '?',
+                gridHTML: (typeof desenharMiniGridBestiario === 'function' && sk.handler)
+                    ? desenharMiniGridBestiario(sk.handler) : '',
+            }));
+        }
+
+        const arr = [];
+        if (e.skill1) arr.push({
+            nome: e.skill1.name || e.skill1.nome || 'Skill 1',
+            gridHTML: (typeof getEnemySkillGrid === 'function')
+                ? getEnemySkillGrid(enemy.id, 'skill1') : '',
+        });
+        if (e.skill2) arr.push({
+            nome: e.skill2.name || e.skill2.nome || 'Skill 2',
+            gridHTML: (typeof getEnemySkillGrid === 'function')
+                ? getEnemySkillGrid(enemy.id, 'skill2') : '',
+        });
+        return arr;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // META
+    // ─────────────────────────────────────────────────────────────
+    function getMeta(enemy) {
+        const tipoLabel = {
+            animal:    'Animal',
+            miniboss:  'Mini-Boss',
+            boss:      'Boss',
+            espectral: 'Espectro',
+            final:     'BOSS FINAL',
+        }[enemy.tipo] || '?';
+
+        if (enemy.origem === 'historia')
+            return 'Ato ' + (enemy.ato != null ? enemy.ato : '?') + ' · ' + tipoLabel;
+        if (enemy.origem === 'selados')
+            return '🌑 Sete Selados · ' + (enemy.diaLabel || 'Evento');
+        if (enemy.origem === 'nacoes')
+            return '🌎 ' + (enemy.nacaoNome || 'Nações');
+        return tipoLabel;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // CARD
+    // ─────────────────────────────────────────────────────────────
+    function renderCard(enemy) {
+        const disc   = isDiscovered(enemy.id, enemy.origem);
+        const e      = enemy.raw || {};
+        const sprite = getSprite(enemy.id);
+        const emoji  = getEmoji(enemy.id);
+        const hasSprite = sprite && sprite.trim() !== '';
+
+        let imgHTML;
+        if (!disc) {
+            imgHTML = '<div class="bestiary-sprite bestiary-silhouette" style="display:flex;align-items:center;justify-content:center;font-size:3rem;">' + emoji + '</div>';
+        } else if (hasSprite) {
+            imgHTML = '<img src="' + sprite + '" class="bestiary-sprite" alt="' + enemy.nome + '">';
+        } else if (enemy.origem === 'selados' && typeof eventoIcon === 'function') {
+            try {
+                imgHTML = '<div style="transform:scale(1.4);display:flex;align-items:center;justify-content:center;">' + eventoIcon(enemy.id, 'large') + '</div>';
+            } catch (e2) {
+                imgHTML = '<div class="bestiary-sprite" style="display:flex;align-items:center;justify-content:center;font-size:3rem;">' + emoji + '</div>';
+            }
+        } else {
+            imgHTML = '<div class="bestiary-sprite" style="display:flex;align-items:center;justify-content:center;font-size:3rem;">' + emoji + '</div>';
+        }
+
+        const meta = getMeta(enemy);
+
+        if (!disc) {
+            return [
+                '<div class="bestiary-card locked" data-enemy-id="' + enemy.id + '"',
+                '     onclick="showToast(\'🔒 Selado\', \'Derrote este inimigo para desbloquear.\', \'🔒\')">',
+                '  <div class="bestiary-card-header">',
+                '    ' + imgHTML,
+                '    <div class="bestiary-card-info">',
+                '      <div class="bestiary-card-name">?????</div>',
+                '      <div class="bestiary-card-meta">' + meta + '</div>',
+                '    </div>',
+                '  </div>',
+                '  <div class="bestiary-card-locked">',
+                '    <div class="bestiary-lock-icon">🔒</div>',
+                '    <div class="bestiary-lock-text">Selado</div>',
+                '  </div>',
+                '</div>'
+            ].join('\n');
+        }
+
+        const lore = (typeof STORY_ENEMY_LORE !== 'undefined' && STORY_ENEMY_LORE[enemy.id])
+                   || enemy.descricao || e.descricao || '';
+
+        const skills = getSkillsData(enemy);
+        let skillsHTML = '';
+        if (skills.length > 0) {
+            skillsHTML = '<div class="bestiary-skills">' + skills.map(sk => (
+                '<div class="bestiary-skill">' +
+                    '<div class="bestiary-skill-header">' +
+                        '<span class="bestiary-skill-name">' + sk.nome + '</span>' +
+                    '</div>' +
+                    '<div class="bestiary-skill-grid">' + sk.gridHTML + '</div>' +
+                '</div>'
+            )).join('') + '</div>';
+        }
+
+        let dropsHTML = '<span style="color:#8a7a52;font-style:italic;">Nenhum drop conhecido.</span>';
+        if (enemy.origem === 'selados') {
+            dropsHTML = '<span class="bestiary-drop">🗡️ Armas (5%-20%)</span>' +
+                        '<span class="bestiary-drop bestiary-drop-raro">🧿 Fragmento (5%-20%)</span>';
+        } else if (enemy.origem === 'nacoes') {
+            dropsHTML = '<span class="bestiary-drop">🌎 Essência Ancestral</span>' +
+                        '<span class="bestiary-drop bestiary-drop-raro">⚔️ Arma / 🧿 Amuleto (Fase 3)</span>';
+        } else if (typeof STORY_DROP_TABLE !== 'undefined' && STORY_DROP_TABLE[enemy.id]) {
+            const dt = STORY_DROP_TABLE[enemy.id];
+            const list = [];
+            if (dt.comum) {
+                const m = (typeof STORY_MATERIALS !== 'undefined') ? STORY_MATERIALS[dt.comum.id] : null;
+                if (m) list.push('<span class="bestiary-drop"><span>' + (m.emoji || '') + '</span> ' + m.name + ' <b>(' + dt.comum.chance + '%)</b></span>');
+            }
+            if (dt.raro) {
+                const m = (typeof STORY_MATERIALS !== 'undefined') ? STORY_MATERIALS[dt.raro.id] : null;
+                if (m) list.push('<span class="bestiary-drop bestiary-drop-raro"><span>' + (m.emoji || '') + '</span> ' + m.name + ' <b>(' + dt.raro.chance + '%)</b></span>');
+            }
+            if (list.length) dropsHTML = list.join('');
+        }
+
+        let fasesHTML = '<span style="color:#8a7a52;font-style:italic;">—</span>';
+        if (enemy.origem === 'historia' && typeof STORY_CHAPTERS !== 'undefined') {
+            const fases = [];
+            Object.values(STORY_CHAPTERS).forEach(ch => {
+                (ch.phases || []).forEach(ph => {
+                    if (ph.enemies && ph.enemies.indexOf(enemy.id) !== -1) fases.push(ph.id);
+                });
+            });
+            if (fases.length) fasesHTML = fases.map(f => '<span class="bestiary-fase">' + f + '</span>').join('');
+        } else if (enemy.origem === 'selados') {
+            fasesHTML = '<span class="bestiary-fase" style="color:#c39bd3;border-color:rgba(142,68,173,.5);background:rgba(142,68,173,.1);">' + (enemy.diaLabel || 'Evento') + '</span>';
+        } else if (enemy.origem === 'nacoes' && enemy.nacaoNome) {
+            fasesHTML = '<span class="bestiary-fase" style="color:#4a8cb5;border-color:rgba(74,140,181,.5);background:rgba(74,140,181,.1);">' + enemy.nacaoNome + '</span>';
+        }
+
+        const cls = [
+            enemy.tipo === 'final'    ? 'bestiary-final'    : '',
+            enemy.tipo === 'boss'     ? 'bestiary-boss'     : '',
+            enemy.tipo === 'miniboss' ? 'bestiary-miniboss' : '',
+        ].filter(Boolean).join(' ');
+
+        return [
+            '<div class="bestiary-card unlocked ' + cls + '" data-enemy-id="' + enemy.id + '">',
+            '  <div class="bestiary-card-header">',
+            '    ' + imgHTML,
+            '    <div class="bestiary-card-info">',
+            '      <div class="bestiary-card-name">' + enemy.nome + '</div>',
+            '      <div class="bestiary-card-meta">' + meta + '</div>',
+            '      <div class="bestiary-card-stats">',
+            '        <span><b>HP</b> ' + (enemy.hp != null ? enemy.hp : '?') + '</span>',
+            '        <span><b>ATK</b> ' + (enemy.atk != null ? enemy.atk : '?') + '</span>',
+            '      </div>',
+            '    </div>',
+            '  </div>',
+            lore ? ('  <div class="bestiary-card-lore">' + lore + '</div>') : '',
+            '  ' + skillsHTML,
+            '  <div class="bestiary-card-section">',
+            '    <div class="bestiary-card-section-title">💎 Drops</div>',
+            '    <div class="bestiary-drops">' + dropsHTML + '</div>',
+            '  </div>',
+            '  <div class="bestiary-card-section">',
+            '    <div class="bestiary-card-section-title">📖 Aparece em</div>',
+            '    <div class="bestiary-fases">' + fasesHTML + '</div>',
+            '  </div>',
+            '</div>'
+        ].join('\n');
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // RENDER PRINCIPAL
+    // ─────────────────────────────────────────────────────────────
+    window.renderBestiaryScreen = function() {
+        const screen = document.getElementById('storyScreen');
+        if (!screen) return;
+
+        document.querySelectorAll('.bestiary-evento-header').forEach(el => el.remove());
+
+        const f        = getFilters();
+        const all      = getAllEnemies();
+        const ordem    = buildOrdem();
+        const filtered = aplicarFiltros(all, ordem);
+
+        const stats = {
+            historia:    all.filter(x => x.origem === 'historia').length,
+            selados:     all.filter(x => x.origem === 'selados').length,
+            nacoes:      all.filter(x => x.origem === 'nacoes').length,
+            descobertos: all.filter(x => isDiscovered(x.id, x.origem)).length,
+            total:       all.length,
+        };
+
+        let cardsHTML;
+        if (filtered.length === 0) {
+            cardsHTML = '<div style="text-align:center;padding:40px;color:#8a7a52;grid-column:1/-1;">Nenhum inimigo corresponde aos filtros.</div>';
+        } else {
+            cardsHTML = filtered.map(renderCard).join('');
+        }
+
+        const atosOptions = [];
+        for (let i = 1; i <= 13; i++) {
+            atosOptions.push('<option value="' + i + '" ' + (String(f.ato) === String(i) ? 'selected' : '') + '>Ato ' + i + '</option>');
+        }
+
+        const buscaEscapada = String(f.busca || '').replace(/"/g, '&quot;');
+
+        screen.innerHTML = [
+            '<div class="story-container">',
+            '  <div class="story-header">',
+            '    <h1 class="story-title">📖 BESTIÁRIO</h1>',
+            '    <p class="story-subtitle">' + stats.descobertos + ' / ' + stats.total + ' inimigos descobertos · ' + filtered.length + ' exibidos</p>',
+            '  </div>',
+            '  <div class="bestiary-filters">',
+            '    <input type="text" class="bestiary-filter bestiary-search"',
+            '           placeholder="🔍 Pesquisar por nome..."',
+            '           value="' + buscaEscapada + '"',
+            '           oninput="window._setBestiaryFilter(\'busca\', this.value)">',
+            '    <select class="bestiary-filter" onchange="window._setBestiaryFilter(\'origem\', this.value)">',
+            '      <option value="todos"    ' + (f.origem === 'todos'    ? 'selected' : '') + '>📚 Todas as origens</option>',
+            '      <option value="historia" ' + (f.origem === 'historia' ? 'selected' : '') + '>📖 História (' + stats.historia + ')</option>',
+            '      <option value="selados"  ' + (f.origem === 'selados'  ? 'selected' : '') + '>🌑 Sete Selados (' + stats.selados + ')</option>',
+            '      <option value="nacoes"   ' + (f.origem === 'nacoes'   ? 'selected' : '') + '>🌎 Sete Nações (' + stats.nacoes + ')</option>',
+            '    </select>',
+            '    <select class="bestiary-filter" onchange="window._setBestiaryFilter(\'ato\', this.value)">',
+            '      <option value="todos" ' + (f.ato === 'todos' ? 'selected' : '') + '>Todos os Atos</option>',
+            '      ' + atosOptions.join(''),
+            '    </select>',
+            '    <select class="bestiary-filter" onchange="window._setBestiaryFilter(\'tipo\', this.value)">',
+            '      <option value="todos"    ' + (f.tipo === 'todos'    ? 'selected' : '') + '>Todos os Tipos</option>',
+            '      <option value="animal"   ' + (f.tipo === 'animal'   ? 'selected' : '') + '>Animais</option>',
+            '      <option value="miniboss" ' + (f.tipo === 'miniboss' ? 'selected' : '') + '>Mini-Bosses</option>',
+            '      <option value="boss"     ' + (f.tipo === 'boss'     ? 'selected' : '') + '>Bosses</option>',
+            '      <option value="espectral" ' + (f.tipo === 'espectral' ? 'selected' : '') + '>Espectros</option>',
+            '      <option value="final"    ' + (f.tipo === 'final'    ? 'selected' : '') + '>Boss Final</option>',
+            '    </select>',
+            '    <select class="bestiary-filter" onchange="window._setBestiaryFilter(\'conhecimento\', this.value)">',
+            '      <option value="todos" ' + (f.conhecimento === 'todos' ? 'selected' : '') + '>🧠 Todos os conhecimentos</option>',
+            '      <option value="0" ' + (String(f.conhecimento) === '0' ? 'selected' : '') + '>📕 Desconhecido (0)</option>',
+            '      <option value="1" ' + (String(f.conhecimento) === '1' ? 'selected' : '') + '>📖 Nível 1</option>',
+            '      <option value="2" ' + (String(f.conhecimento) === '2' ? 'selected' : '') + '>📗 Nível 2</option>',
+            '      <option value="3" ' + (String(f.conhecimento) === '3' ? 'selected' : '') + '>🧠 Dominado (3)</option>',
+            '    </select>',
+            '  </div>',
+            '  <div class="bestiary-grid">' + cardsHTML + '</div>',
+            '  <div class="story-footer">',
+            '    <button class="story-back-btn" onclick="renderAldeiaScreen()">← VOLTAR À ALDEIA</button>',
+            '  </div>',
+            '</div>'
+        ].join('\n');
+
+        // Gating visual por conhecimento
+        setTimeout(() => {
+            document.querySelectorAll('.bestiary-card.unlocked').forEach(card => {
+                const id = card.getAttribute('data-enemy-id');
+                if (!id) return;
+                const lvl = getConhecimento(id);
+
+                if (lvl < 2) {
+                    card.querySelectorAll('.bestiary-skills').forEach(el => { el.style.display = 'none'; });
+                }
+                if (lvl < 3) {
+                    card.querySelectorAll('.bestiary-card-section').forEach(sec => {
+                        const t = sec.textContent || '';
+                        if (t.indexOf('DROPS') !== -1 || t.indexOf('💎') !== -1) sec.style.display = 'none';
+                    });
+                }
+
+                let badge = card.querySelector('.conhecimento-nivel-badge');
+                if (!badge) {
+                    badge = document.createElement('div');
+                    badge.className = 'conhecimento-nivel-badge';
+                    card.insertBefore(badge, card.firstChild);
+                }
+                if (lvl >= 3) {
+                    badge.textContent = '🧠 DOMINADO';
+                    badge.classList.add('dominado');
+                    badge.style.display = '';
+                } else if (lvl >= 1) {
+                    badge.textContent = '📖 Nível ' + lvl;
+                    badge.classList.remove('dominado');
+                    badge.style.display = '';
+                } else {
+                    badge.style.display = 'none';
+                }
+            });
+        }, 80);
+    };
+
+    // ─────────────────────────────────────────────────────────────
+    // SETTER DE FILTRO
+    // ─────────────────────────────────────────────────────────────
+    window._setBestiaryFilter = function(key, value) {
+        const f = getFilters();
+        f[key] = value;
+        window.renderBestiaryScreen();
+        if (key === 'busca') {
+            setTimeout(() => {
+                const input = document.querySelector('.bestiary-search');
+                if (input) {
+                    input.focus();
+                    try { input.setSelectionRange(input.value.length, input.value.length); } catch (e) {}
+                }
+            }, 0);
+        }
+    };
+
+    // ─────────────────────────────────────────────────────────────
+    // CSS DO INPUT DE BUSCA
+    // ─────────────────────────────────────────────────────────────
+    if (!document.getElementById('bestiaryV3CSS')) {
+        const st = document.createElement('style');
+        st.id = 'bestiaryV3CSS';
+        st.textContent = [
+            '.bestiary-search {',
+            '  min-width: 200px;',
+            '  flex: 1 1 200px;',
+            '  max-width: 320px;',
+            '}',
+            '.bestiary-search::placeholder {',
+            '  color: #8a7a52;',
+            '  font-style: italic;',
+            '}'
+        ].join('\n');
+        document.head.appendChild(st);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // APLICA JÁ SE TELA ABERTA
+    // ─────────────────────────────────────────────────────────────
+    (function autoRefresh() {
+        const screen = document.getElementById('storyScreen');
+        if (!screen || !screen.classList.contains('active')) return;
+        const titleEl = screen.querySelector('.story-title');
+        if (titleEl && titleEl.textContent.indexOf('BESTIÁRIO') !== -1) {
+            setTimeout(() => window.renderBestiaryScreen(), 150);
+        }
+    })();
+
+    // ─────────────────────────────────────────────────────────────
+    // DEBUG
+    // ─────────────────────────────────────────────────────────────
+    window._debugBestiarioV3 = function() {
+        console.group('=== Bestiário V3 ===');
+        console.log('Filtros ativos:', getFilters());
+
+        const buckets = { historia: [], selados: [], nacoes: [], container: [] };
+        const SE = (typeof STORY_ENEMIES !== 'undefined') ? STORY_ENEMIES : {};
+
+        Object.keys(SE).forEach(id => {
+            const o = getOrigem(id);
+            if (buckets[o]) buckets[o].push(id);
+        });
+
+        console.log('História:', buckets.historia.length);
+        console.log('Nações (deuses):', buckets.nacoes.length);
+        console.log('Sete Selados:', buckets.selados.length);
+        console.log('Containers ignorados:', buckets.container.length);
+        console.log('');
+
+        console.log('Deuses das Nações:');
+        buckets.nacoes.forEach(id => {
+            const d = NACAO_DEUSES[id];
+            console.log('  ' + id + ' → ' + d.nome + ' (' + d.nacao + ')');
+        });
+        console.log('');
+
+        console.log('Sete Selados:');
+        buckets.selados.forEach(id => {
+            const b = EVENTO_BOSSES[id];
+            console.log('  ' + id + ' → ' + (b ? b.nome : '?') + ' (' + (b ? b.diaLabel : '?') + ')');
+        });
+        if (buckets.container.length > 0) {
+            console.log('');
+            console.log('Containers ignorados (correto):');
+            buckets.container.forEach(id => console.log('  ' + id + ' — não renderizado'));
+        }
+        console.groupEnd();
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [Bestiário V3] Filtros completos');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('• Cards fantasmas (containers nacao_*) removidos');
+    console.log('• Sete Selados deduplicados (STORY_ENEMIES + EVENTO_BOSSES)');
+    console.log('• 21 deuses das Nações em categoria própria');
+    console.log('• Filtros: origem · tipo · ato · conhecimento · busca');
+    console.log('');
+    console.log('💡 Debug: window._debugBestiarioV3()');
+    console.log('═══════════════════════════════════════════════════');
+})();
