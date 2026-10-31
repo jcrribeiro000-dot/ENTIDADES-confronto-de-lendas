@@ -1439,6 +1439,7 @@
             const nacaoId = b.nacaoId;
             const faseId = b.faseId;
             const diff = b.dificuldade || _getDif();
+            const lootNotifications = [];
 
             // ⭐ Essências sempre (base × fase × diff)
             const essBase = { '1': 3, '2': 6, '3': 12 }[faseId] || 3;
@@ -1461,7 +1462,13 @@
                         if (!Array.isArray(STORY_PROGRESS.nacaoArmas)) STORY_PROGRESS.nacaoArmas = [];
                         STORY_PROGRESS.nacaoArmas.push(arma.id);
                         _log(`⚔️ Arma dropada: ${arma.nome}!`);
-                        if (typeof showToast === 'function') showToast('⚔️', `Arma: ${arma.nome}`, '⚔️');
+                        lootNotifications.push({
+                            name: arma.nome,
+                            quantity: '+1',
+                            iconHTML: typeof window.getWeaponIcon === 'function'
+                                ? window.getWeaponIcon(arma.id, 'large')
+                                : window.getRewardIconHTML(arma.id, '⚔️', 'large'),
+                        });
                     }
                 } else if (b.isPesadeloNacao) {
                     // Pesadelo: chance de arma de QUALQUER nação
@@ -1471,6 +1478,13 @@
                         if (!Array.isArray(STORY_PROGRESS.nacaoArmas)) STORY_PROGRESS.nacaoArmas = [];
                         STORY_PROGRESS.nacaoArmas.push(arma.id);
                         _log(`⚔️ Arma (Pesadelo): ${arma.nome}!`);
+                        lootNotifications.push({
+                            name: arma.nome,
+                            quantity: '+1',
+                            iconHTML: typeof window.getWeaponIcon === 'function'
+                                ? window.getWeaponIcon(arma.id, 'large')
+                                : window.getRewardIconHTML(arma.id, '⚔️', 'large'),
+                        });
                     }
                 }
 
@@ -1481,7 +1495,13 @@
                     if (!STORY_PROGRESS.nacaoFragmentos.includes(frag)) {
                         STORY_PROGRESS.nacaoFragmentos.push(frag);
                         _log(`🌎 FRAGMENTO ANCESTRAL dropado!`);
-                        if (typeof showToast === 'function') showToast('🌎', `Fragmento: ${nacaoId}`, '🌎');
+                        const fragInfo = (window.NACAO_FRAGMENTOS || {})[frag];
+                        const fragEmoji = (window.NACAO_EMOJIS || {})[frag] || '🌎';
+                        lootNotifications.push({
+                            name: fragInfo ? fragInfo.nome : `Fragmento: ${nacaoId}`,
+                            quantity: '+1',
+                            iconHTML: window.getRewardIconHTML(frag, fragEmoji, 'large'),
+                        });
                         // Desbloqueio do Abya
                         if (STORY_PROGRESS.nacaoFragmentos.length >= 7 && !STORY_PROGRESS.abyaDesbloqueado) {
                             STORY_PROGRESS.abyaDesbloqueado = true;
@@ -1489,7 +1509,10 @@
                                 STORY_PROGRESS.unlockedHeroesStory.push('Abya');
                             }
                             _log(`🌟 ABYA DESPERTOU!`);
-                            if (typeof showToast === 'function') showToast('🌟', 'ABYA DESPERTOU!', '🌟');
+                            lootNotifications.push({
+                                name: 'ABYA DESPERTOU!',
+                                iconHTML: window.getRewardIconHTML('heroi_Abya', '🌟', 'large'),
+                            });
                         }
                     }
                 }
@@ -1501,9 +1524,19 @@
                     if (!STORY_PROGRESS.nacaoAmuletos.includes(amuId)) {
                         STORY_PROGRESS.nacaoAmuletos.push(amuId);
                         _log(`🧿 AMULETO dropado: ${AMULETOS[amuId]?.nome || amuId}!`);
-                        if (typeof showToast === 'function') showToast('🧿', `Amuleto: ${AMULETOS[amuId]?.nome || amuId}`, '🧿');
+                        lootNotifications.push({
+                            name: AMULETOS[amuId]?.nome || amuId,
+                            quantity: '+1',
+                            iconHTML: typeof window.getAmuletIcon === 'function'
+                                ? window.getAmuletIcon(amuId, 'large')
+                                : window.getRewardIconHTML(amuId, '🧿', 'large'),
+                        });
                     }
                 }
+            }
+
+            if (lootNotifications.length && typeof window.showLootNotification === 'function') {
+                window.showLootNotification('RECOMPENSA RARA DAS NAÇÕES', lootNotifications);
             }
 
             if (typeof saveStoryProgress === 'function') saveStoryProgress();
@@ -6910,9 +6943,10 @@
 
                 // Essências (sempre)
                 if (d.essencias > 0) {
+                    const icon = window.getRewardIconHTML('essencia_ancestral', '🌎');
                     chips.push(`
                         <div class="v210-chip">
-                            <div class="v210-chip-emoji">🌎</div>
+                            <div class="v210-chip-emoji">${icon}</div>
                             <div class="v210-chip-name">Essências Ancestrais</div>
                             <div class="v210-chip-qty">+${d.essencias}</div>
                         </div>`);
@@ -6952,9 +6986,10 @@
                 d.fragmentos.forEach(id => {
                     const f = (window.NACAO_FRAGMENTOS || {})[id];
                     if (!f) return;
+                    const icon = window.getRewardIconHTML(id, f.emoji || '🌎');
                     chips.push(`
                         <div class="v210-chip v210-fragmento">
-                            <div class="v210-chip-emoji">${f.emoji || '🌎'}</div>
+                            <div class="v210-chip-emoji">${icon}</div>
                             <div class="v210-chip-name">${f.nome}</div>
                             <div class="v210-chip-qty">+1</div>
                         </div>`);

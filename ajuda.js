@@ -918,6 +918,57 @@
     // ═══════════════════════════════════════════════════════════
     // RENDER DO TÓPICO
     // ═══════════════════════════════════════════════════════════
+    function _aplicarSpritesEmoji(root) {
+        const catalog = window.A_EMOJIS;
+        const renderer = window.getAssetEmojiHTML;
+        if (!root || !catalog || typeof renderer !== 'function') return;
+
+        const configured = Object.keys(catalog)
+            .filter(emoji => catalog[emoji] && String(catalog[emoji]).trim())
+            .sort((a, b) => b.length - a.length);
+        if (!configured.length) return;
+
+        const walker = document.createTreeWalker(root, 4);
+        const textNodes = [];
+        while (walker.nextNode()) textNodes.push(walker.currentNode);
+
+        textNodes.forEach(node => {
+            const text = node.nodeValue || '';
+            let position = 0;
+            let changed = false;
+            const fragment = document.createDocumentFragment();
+
+            while (position < text.length) {
+                let nextIndex = -1;
+                let nextEmoji = '';
+                configured.forEach(emoji => {
+                    const index = text.indexOf(emoji, position);
+                    if (index !== -1 && (nextIndex === -1 || index < nextIndex)) {
+                        nextIndex = index;
+                        nextEmoji = emoji;
+                    }
+                });
+
+                if (nextIndex === -1) {
+                    fragment.appendChild(document.createTextNode(text.slice(position)));
+                    break;
+                }
+
+                if (nextIndex > position) {
+                    fragment.appendChild(document.createTextNode(text.slice(position, nextIndex)));
+                }
+
+                const image = document.createElement('span');
+                image.innerHTML = renderer(nextEmoji, 'ajuda-asset-emoji');
+                while (image.firstChild) fragment.appendChild(image.firstChild);
+                position = nextIndex + nextEmoji.length;
+                changed = true;
+            }
+
+            if (changed && node.parentNode) node.parentNode.replaceChild(fragment, node);
+        });
+    }
+
     function _renderTopico(topico, catId, idx) {
         const id = `ajuda-topico-${catId}-${idx}`;
         return `
@@ -1026,6 +1077,7 @@
                 </div>
             </div>
         `;
+        _aplicarSpritesEmoji(screen);
         screen.classList.add('active');
         screen.style.display = 'flex';
     }
@@ -1088,6 +1140,7 @@
             if (cat) conteudoHTML = cat.topics.map((t, i) => _renderTopico(t, _categoriaAtiva, i)).join('');
         }
         container.innerHTML = conteudoHTML;
+        _aplicarSpritesEmoji(container);
     };
 
     // ═══════════════════════════════════════════════════════════

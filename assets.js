@@ -1,7 +1,7 @@
 // =================================================================
 // assets.js — Catálogo central de Sprites e Sons (V2)
 // -----------------------------------------------------------------
-// Carregar no FINAL do index.html (último <script>).
+// Carregar depois dos scripts que declaram as tabelas de assets.
 //
 // REGRAS:
 //   ✓  = URL presente (edite para trocar)
@@ -697,6 +697,340 @@ const A_BGM = {
 
 
 // ================================================================
+// A_EMOJIS — Emojis usados nos arquivos carregados pelo jogo
+// ----------------------------------------------------------------
+// Cada emoji começa sem sprite. Preencha o valor para preparar a
+// substituição nos pontos que chamarem getAssetEmojiHTML(emoji).
+// O catálogo não altera textos nem emojis automaticamente.
+// Lista baseada nos arquivos carregados pelo index.html; atualize ao
+// adicionar novos emojis ao jogo.
+// ================================================================
+const A_EMOJIS = {};
+[
+    // Navegação, tempo e estado
+    '↔|↗|◀|▶|▶️|⏰|⏱|⏳|⏸️|🔄|🔆|🔇|🔊|🔍|🔔|🚪|🚶|🚀|💾',
+    // Alertas, controles e símbolos
+    '♻️|⚖️|⚗️|⚙️|⚠️|⚪|⚫|⛔|✅|✔|❌|❓|➕|⬆️|⬜|🆕|🆘|🚧|🚨|🚫|❤️|⭐',
+    // Elementos, clima e natureza
+    '☀️|☁️|☄️|⛈️|❄️|🌀|🌊|🌋|🌌|🌍|🌎|🌐|🌑|🌕|🌙|🌟|🌪️|🌫️|🌱|🌲|🌳|🌵|🌸|🌾|🌿|🍄|🍯|🕯️|🕳️|🕷️|🕸️|🗺️|🗿|🪨|🪶',
+    // Animais e criaturas
+    '🐂|🐃|🐄|🐆|🐈|🐉|🐊|🐍|🐎|🐏|🐐|🐑|🐕|🐗|🐚|🐛|🐜|🐟|🐠|🐢|🐦|🐬|🐲|🐴|🐸|🐺|🐻|🐾|🐿️|🦅|🦇|🦉|🦊|🦋|🦌|🦏|🦔|🦛|🦜|🦝|🦥|🦦|🦭|🦴|🦷|👹|👺|👻|👾|😈|🙈|🥚',
+    // Heróis, pessoas e relações
+    '👁️|👅|👑|👣|👤|👥|🦸|🧙|🧙‍♀️|🧜‍♀️|🤝|💬',
+    // Combate, magia e recompensas
+    '⚔️|⚡|✨|💀|💊|💎|💔|💖|💚|💡|💧|💨|💫|💰|💸|🔥|🔮|🔴|🔵|🔷|🖤|🗡️|🛡️|🥇|🥈|🥉|🪄|🪓|🪙|🪬|🧿',
+    // Interface, mapas, itens e comunicação
+    '⛩️|⛰️|⛺|🎁|🎉|🎒|🎓|🎖️|🎨|🎬|🎭|🎮|🎯|🎲|🎵|🏅|🏆|🏔️|🏘️|🏚️|🏛️|🏜️|🏞️|🏠|🏪|🏷️|🏹|🏺|📅|📆|📊|📋|📌|📒|📓|📔|📕|📖|📗|📘|📙|📚|📜|📝|📢|📦|📱|📸|📿|🔑|🔒|🔤|🔧|🔨|🖼️|🗂️|🗑️|🧠|🧣|🧪|🧭|🧲|🩹|🪞|🛒|🟠|🟡|🟢|🟣|🟤|🟦|🟨|🟩|🟪|🟫',
+].forEach(group => {
+    group.split('|').forEach(emoji => {
+        A_EMOJIS[emoji] = '';
+    });
+});
+
+// ================================================================
+// 🌎 A_NACAO_* — Assets próprios de Nações (nacoes.js)
+// ================================================================
+const A_NACAO_SPRITES = {
+    nacao_yucahu: 'https://i.imgur.com/X2UY7TU.gif',
+    nacao_atabey: 'https://i.imgur.com/I5G3k9X.gif',
+    nacao_juracan: 'https://i.imgur.com/KLFzINl.gif',
+    nacao_quetzalcoatl: 'https://i.imgur.com/AcQkgO1.gif',
+    nacao_tezcatlipoca: 'https://i.imgur.com/BPObfz2.gif',
+    nacao_huitzilopochtli: 'https://i.imgur.com/C3kd9mB.gif',
+    nacao_kukulkan: 'https://i.imgur.com/V3XmBYU.gif',
+    nacao_chaac: 'https://i.imgur.com/uT6TKbb.gif',
+    nacao_ixchel: 'https://i.imgur.com/I5G3k9X.gif',
+    nacao_illapa: 'https://i.imgur.com/9ICAqQE.gif',
+    nacao_mamaquilla: 'https://i.imgur.com/u2JCJgU.gif',
+    nacao_supay: 'https://i.imgur.com/kg1U6nB.gif',
+    nacao_antu: 'https://i.imgur.com/9qt8HIv.gif',
+    nacao_pillan: 'https://i.imgur.com/LRRy8eM.gif',
+    nacao_wekufe: 'https://i.imgur.com/I1cQwNe.gif',
+    nacao_bochica: 'https://i.imgur.com/Y0pwmcj.gif',
+    nacao_bachue: 'https://i.imgur.com/YlGSDD8.gif',
+    nacao_chibchacum: 'https://i.imgur.com/ZrD5m4C.gif',
+    nacao_maii: 'https://i.imgur.com/Ot6f7hV.gif',
+    nacao_spiderwoman: 'https://i.imgur.com/arKbQji.gif',
+    nacao_hashchelti: 'https://i.imgur.com/H5kJgxj.gif',
+    heroi_Abya: 'https://i.imgur.com/3gom0Dy.gif',
+    essencia_ancestral: 'https://i.imgur.com/Rigf9eE.png',
+};
+
+const A_NACAO_EMOJIS = {
+    nacao_yucahu: '🌱', nacao_atabey: '💧', nacao_juracan: '🌪️',
+    nacao_quetzalcoatl: '🐍', nacao_tezcatlipoca: '🪞', nacao_huitzilopochtli: '☀️',
+    nacao_kukulkan: '🐉', nacao_chaac: '⚡', nacao_ixchel: '🌙',
+    nacao_illapa: '⛈️', nacao_mamaquilla: '🌕', nacao_supay: '💀',
+    nacao_antu: '🔆', nacao_pillan: '🌋', nacao_wekufe: '👻',
+    nacao_bochica: '🪄', nacao_bachue: '🌊', nacao_chibchacum: '🏔️',
+    nacao_maii: '🐺', nacao_spiderwoman: '🕷️', nacao_hashchelti: '⭐',
+    heroi_Abya: '🌎', essencia_ancestral: '🌎',
+    fragmento_nacao_tainos: '🌊', fragmento_nacao_astecas: '🔥',
+    fragmento_nacao_maias: '🏺', fragmento_nacao_incas: '☀️',
+    fragmento_nacao_mapuches: '🌋', fragmento_nacao_chibchas: '🏔️',
+    fragmento_nacao_navajos: '🌵',
+    amuleto_nacao_tainos: '🐚', amuleto_nacao_astecas: '🪞',
+    amuleto_nacao_maias: '🟢', amuleto_nacao_incas: '🥇',
+    amuleto_nacao_mapuches: '🔥', amuleto_nacao_chibchas: '🎭',
+    amuleto_nacao_navajos: '🪶',
+};
+
+const A_NACAO_WEAPONS = {
+    arma_nacao_tainos_tacape: 'https://i.imgur.com/jErejeH.png',
+    arma_nacao_tainos_flecha: 'https://i.imgur.com/fyTE2si.png',
+    arma_nacao_tainos_cajado: 'https://i.imgur.com/9rqMiYf.png',
+    arma_nacao_astecas_tacape: 'https://i.imgur.com/puIbGum.png',
+    arma_nacao_astecas_flecha: 'https://i.imgur.com/OjgXWc9.png',
+    arma_nacao_astecas_cajado: 'https://i.imgur.com/gQVADc9.png',
+    arma_nacao_maias_tacape: 'https://i.imgur.com/TrczXWd.png',
+    arma_nacao_maias_flecha: 'https://i.imgur.com/3Bt2XT6.png',
+    arma_nacao_maias_cajado: 'https://i.imgur.com/Y4g01dH.png',
+    arma_nacao_incas_tacape: 'https://i.imgur.com/WdogafC.png',
+    arma_nacao_incas_flecha: 'https://i.imgur.com/3vYTTye.png',
+    arma_nacao_incas_cajado: 'https://i.imgur.com/6yDdSKQ.png',
+    arma_nacao_mapuches_tacape: 'https://i.imgur.com/IhASPgP.png',
+    arma_nacao_mapuches_flecha: 'https://i.imgur.com/4P0uVY7.png',
+    arma_nacao_mapuches_cajado: 'https://i.imgur.com/qO3zx01.png',
+    arma_nacao_chibchas_tacape: 'https://i.imgur.com/OhKNR9r.png',
+    arma_nacao_chibchas_flecha: 'https://i.imgur.com/xVjn59A.png',
+    arma_nacao_chibchas_cajado: 'https://i.imgur.com/r0imITh.png',
+    arma_nacao_navajos_tacape: 'https://i.imgur.com/UAth7wr.png',
+    arma_nacao_navajos_flecha: 'https://i.imgur.com/qPURHtr.png',
+    arma_nacao_navajos_cajado: 'https://i.imgur.com/CyoKDTg.png',
+};
+
+const A_NACAO_AMULETS = {
+    amuleto_nacao_tainos: 'https://i.imgur.com/AeYbqVo.png',
+    amuleto_nacao_astecas: 'https://i.imgur.com/2jW3wj3.png',
+    amuleto_nacao_maias: 'https://i.imgur.com/BdlqNlg.png',
+    amuleto_nacao_incas: 'https://i.imgur.com/nZOkx6G.png',
+    amuleto_nacao_mapuches: 'https://i.imgur.com/hue6wua.png',
+    amuleto_nacao_chibchas: 'https://i.imgur.com/isHRv2k.png',
+    amuleto_nacao_navajos: 'https://i.imgur.com/Yea7J8a.png',
+};
+
+const A_NACAO_FRAGMENTS = {
+    fragmento_nacao_tainos: 'https://i.imgur.com/K9fBYSO.png',
+    fragmento_nacao_astecas: 'https://i.imgur.com/CzyoCDQ.png',
+    fragmento_nacao_maias: 'https://i.imgur.com/iTFUNac.png',
+    fragmento_nacao_incas: 'https://i.imgur.com/v1R5JOA.png',
+    fragmento_nacao_mapuches: 'https://i.imgur.com/CVlMP9R.png',
+    fragmento_nacao_chibchas: 'https://i.imgur.com/AiXAuyL.png',
+    fragmento_nacao_navajos: 'https://i.imgur.com/N70E8gG.png',
+};
+
+// These icons already accept either an emoji or an image URL.
+const A_CONQUISTA_ICONS = {
+    trophy: '🏆',
+    icone_bloqueada: '🔒',
+    icone_desbloqueada: '✅',
+    cat_jornada: '🗺️',
+    cat_herois: '🦸',
+    cat_colecao: '⚔️',
+    cat_combate: '🔥',
+    cat_selados: '🎉',
+    cat_nacoes: '🌎',
+    cat_social: '🤝',
+    cat_secretas: '😈',
+    recompensa_ouro: '💰',
+    recompensa_xp: '⭐',
+    recompensa_ancestral: '🌟',
+    recompensa_sombria: '💎',
+    titulo_purificador: '🗿',
+    titulo_estrelado: '👑',
+    titulo_filho_sete: '🧙',
+    titulo_filho_vento: '🌪️',
+    titulo_domador: '💀',
+    titulo_lenda_coliseu: '🔥',
+    titulo_sete_das_sete: '🎉',
+};
+
+const A_ACHIEVEMENT_SOUNDS = {
+    comum: 'win',
+    raro: 'win',
+    lendario: 'win',
+};
+
+// ================================================================
+// 🏘️ A_ALDEIA_* — Ícones e fundos das telas da Aldeia
+// ================================================================
+const A_ALDEIA_SPRITES = {
+    evento: 'https://i.imgur.com/xHkPS6Y.png', coop: 'https://i.imgur.com/4mQ21Ne.png', pvp: 'https://i.imgur.com/ez6BPlh.png', tesouraria: 'https://i.imgur.com/F5cRhqX.png', ritual: 'https://i.imgur.com/CE4tweu.png',
+    bestiario: 'https://i.imgur.com/6RhjpOb.png', atos: 'https://i.imgur.com/1XbKc43.png', loja: 'https://i.imgur.com/PMv9L5h.png', oca: 'https://i.imgur.com/0fanUU2.png',
+};
+
+const A_ALDEIA_EMOJIS = {
+    evento: '🎉', coop: '🎮', pvp: '⚔️', tesouraria: '🏛️',
+    ritual: '⛩️', bestiario: '📖', atos: '🗺️', loja: '🧙', oca: '🏠',
+};
+
+const A_ALDEIA_BACKGROUND = 'https://i.imgur.com/zE5VIwh.png';
+
+const A_INTERFACE_BACKGROUNDS = {
+    oca:        { wide: 'https://i.imgur.com/HB9c4ao.jpeg', mobile: 'https://i.imgur.com/LaoJuyF.jpeg' },
+    atos:       { wide: 'https://i.imgur.com/R2AyONo.jpeg', mobile: 'https://i.imgur.com/Nvz8pVj.jpeg' },
+    tesouraria: { wide: 'https://i.imgur.com/Z8D5wpO.jpeg', mobile: 'https://i.imgur.com/dTXPHi4.jpeg' },
+    loja:       { wide: 'https://i.imgur.com/EZjkZGq.jpeg', mobile: 'https://i.imgur.com/lbR77Ta.jpeg' },
+    evento:     { wide: 'https://i.imgur.com/lpUg7TX.jpeg', mobile: 'https://i.imgur.com/cCB8qX5.jpeg' },
+    pvp:        { wide: 'https://i.imgur.com/4NjlozW.jpeg', mobile: 'https://i.imgur.com/MLbXoQj.jpeg' },
+    coop:       { wide: 'https://i.imgur.com/uSImbPP.jpeg', mobile: 'https://i.imgur.com/4Lo60gV.jpeg' },
+    ritual:     { wide: 'https://i.imgur.com/PbCqOwg.jpeg', mobile: 'https://i.imgur.com/rbiOooI.jpeg' },
+    bestiario:  { wide: 'https://i.imgur.com/cjAclBV.jpeg', mobile: 'https://i.imgur.com/7qrW4Bh.jpeg' },
+};
+
+window.A_EMOJIS = A_EMOJIS;
+window.A_NACAO_SPRITES = A_NACAO_SPRITES;
+window.A_NACAO_EMOJIS = A_NACAO_EMOJIS;
+window.A_NACAO_WEAPONS = A_NACAO_WEAPONS;
+window.A_NACAO_AMULETS = A_NACAO_AMULETS;
+window.A_NACAO_FRAGMENTS = A_NACAO_FRAGMENTS;
+window.A_CONQUISTA_ICONS = A_CONQUISTA_ICONS;
+window.A_ACHIEVEMENT_SOUNDS = A_ACHIEVEMENT_SOUNDS;
+window.A_ALDEIA_SPRITES = A_ALDEIA_SPRITES;
+window.A_ALDEIA_EMOJIS = A_ALDEIA_EMOJIS;
+window.A_ALDEIA_BACKGROUND = A_ALDEIA_BACKGROUND;
+window.A_INTERFACE_BACKGROUNDS = A_INTERFACE_BACKGROUNDS;
+window.getAssetEmojiHTML = function(emoji, className) {
+    const sprite = Object.prototype.hasOwnProperty.call(A_EMOJIS, emoji)
+        ? A_EMOJIS[emoji]
+        : '';
+    if (!sprite || !String(sprite).trim()) return emoji;
+
+    const escapeAttribute = value => String(value).replace(/[&<>"']/g, char => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+    })[char]);
+    const classValue = className ? ` class="${escapeAttribute(className)}"` : '';
+    return `<img${classValue} src="${escapeAttribute(sprite)}" alt="${escapeAttribute(emoji)}" style="width:1em;height:1em;object-fit:contain;vertical-align:-0.15em;">`;
+};
+
+window.getRewardIconHTML = function(id, fallback, size) {
+    const sources = [
+        window.EVENTO_SPRITES,
+        window.NACAO_SPRITES,
+        window.STORY_AMULET_SPRITES,
+        window.STORY_MATERIAL_SPRITES,
+        window.SPRITES_STORY,
+    ];
+    let url = '';
+    for (const source of sources) {
+        if (source && source[id]) {
+            url = source[id];
+            break;
+        }
+    }
+
+    if (!url || !String(url).trim()) return fallback || '🎁';
+    const dimension = size === 'large' ? '56px' : '40px';
+    const safeUrl = String(url).replace(/[&<>"']/g, char => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+    })[char]);
+    const safeFallback = String(fallback || '🎁').replace(/['\\]/g, '\\$&');
+    return `<img src="${safeUrl}" alt="${fallback || id}" style="width:${dimension};height:${dimension};object-fit:contain" onerror="this.outerHTML='${safeFallback}'">`;
+};
+
+window.showLootNotification = function(title, items) {
+    if (!Array.isArray(items) || items.length === 0) return;
+
+    let notice = document.getElementById('lootNotification');
+    if (!notice) {
+        notice = document.createElement('section');
+        notice.id = 'lootNotification';
+        notice.setAttribute('role', 'status');
+        notice.setAttribute('aria-live', 'polite');
+        notice.innerHTML = `
+            <button type="button" class="loot-notification-close" aria-label="Fechar aviso">×</button>
+            <div class="loot-notification-title"></div>
+            <div class="loot-notification-items"></div>
+        `;
+        document.body.appendChild(notice);
+
+        const style = document.createElement('style');
+        style.id = 'lootNotificationStyles';
+        style.textContent = `
+            #lootNotification {
+                position: fixed; top: max(12px, env(safe-area-inset-top)); left: 50%;
+                transform: translateX(-50%); z-index: 30000; width: min(460px, calc(100vw - 24px));
+                max-height: min(45vh, 360px); overflow-y: auto; box-sizing: border-box;
+                padding: 16px 42px 16px 16px; color: #fff5dc; text-align: center;
+                background: linear-gradient(145deg, rgba(42,31,16,.98), rgba(10,6,2,.98));
+                border: 2px solid #e8b923; border-radius: 12px;
+                box-shadow: 0 8px 32px rgba(0,0,0,.75), 0 0 22px rgba(232,185,35,.4);
+                animation: lootNoticeIn .25s ease-out;
+            }
+            #lootNotification[hidden] { display: none; }
+            .loot-notification-title {
+                margin-bottom: 10px; color: #f5d875; font: 700 1rem 'Cinzel', serif;
+                letter-spacing: 1px; text-shadow: 0 0 8px rgba(232,185,35,.6);
+            }
+            .loot-notification-items { display: grid; gap: 8px; }
+            .loot-notification-item {
+                display: flex; align-items: center; gap: 12px; min-height: 48px;
+                padding: 8px 10px; text-align: left;
+                background: rgba(255,255,255,.07); border: 1px solid rgba(232,185,35,.35);
+                border-radius: 8px;
+            }
+            .loot-notification-icon {
+                display: grid; place-items: center; flex: 0 0 48px; height: 48px;
+                font-size: 2rem; line-height: 1;
+            }
+            .loot-notification-icon img { max-width: 100%; max-height: 100%; object-fit: contain; }
+            .loot-notification-name { flex: 1; font: 600 1rem 'EB Garamond', serif; }
+            .loot-notification-qty { color: #f5d875; font: 700 1rem 'Cinzel', serif; white-space: nowrap; }
+            .loot-notification-close {
+                position: absolute; top: 5px; right: 8px; width: 32px; height: 32px;
+                border: 0; background: transparent; color: #fff5dc; font-size: 1.7rem;
+                cursor: pointer;
+            }
+            @keyframes lootNoticeIn {
+                from { opacity: 0; transform: translate(-50%, -12px); }
+                to { opacity: 1; transform: translate(-50%, 0); }
+            }
+        `;
+        document.head.appendChild(style);
+        notice.querySelector('.loot-notification-close').addEventListener('click', () => {
+            notice.hidden = true;
+        });
+    }
+
+    notice.querySelector('.loot-notification-title').textContent = title || 'RECOMPENSAS OBTIDAS';
+    const list = notice.querySelector('.loot-notification-items');
+    list.replaceChildren();
+    items.forEach(item => {
+        const row = document.createElement('div');
+        row.className = 'loot-notification-item';
+        const icon = document.createElement('span');
+        icon.className = 'loot-notification-icon';
+        icon.innerHTML = item.iconHTML || '🎁';
+        const name = document.createElement('span');
+        name.className = 'loot-notification-name';
+        name.textContent = item.name || 'Recompensa';
+        row.append(icon, name);
+        if (item.quantity) {
+            const quantity = document.createElement('span');
+            quantity.className = 'loot-notification-qty';
+            quantity.textContent = item.quantity;
+            row.appendChild(quantity);
+        }
+        list.appendChild(row);
+    });
+
+    notice.hidden = false;
+    clearTimeout(window._lootNotificationTimer);
+    window._lootNotificationTimer = setTimeout(() => {
+        notice.hidden = true;
+    }, 15000);
+};
+
+
+// ================================================================
 // 🔧 APLICADOR
 // ================================================================
 (function aplicarAssets() {
@@ -721,6 +1055,13 @@ const A_BGM = {
             }
         }
     };
+    const aplicarConfiguracao = (src, dst) => {
+        if (!src || !dst) return;
+        Object.keys(src).forEach(key => {
+            dst[key] = src[key];
+            count++;
+        });
+    };
 
     // ---- Sprites ----
     aplicarObj(A_SPRITES, typeof SPRITES !== 'undefined' ? SPRITES : null);
@@ -731,9 +1072,26 @@ const A_BGM = {
     aplicarObj(A_WEAPONS, typeof STORY_WEAPON_SPRITES !== 'undefined' ? STORY_WEAPON_SPRITES : null);
     aplicarObj(A_AMULETS, typeof STORY_AMULET_SPRITES !== 'undefined' ? STORY_AMULET_SPRITES : null);
     aplicarObj(A_MATERIALS, typeof STORY_MATERIAL_SPRITES !== 'undefined' ? STORY_MATERIAL_SPRITES : null);
-    aplicarObj(A_EVENTO, typeof EVENTO_SPRITES !== 'undefined' ? EVENTO_SPRITES : null);
+    aplicarObj(A_EVENTO, window.EVENTO_SPRITES);
     aplicarObj(A_BRAVELY, typeof STORY_BRAVELY_GIFS !== 'undefined' ? STORY_BRAVELY_GIFS : null);
     aplicarObj(A_HERO_PA_IMAGES, typeof STORY_HERO_PA_IMAGES !== 'undefined' ? STORY_HERO_PA_IMAGES : null);
+
+    // ---- Nações ----
+    aplicarConfiguracao(A_NACAO_SPRITES, window.NACAO_SPRITES);
+    aplicarConfiguracao(A_NACAO_SPRITES, typeof SPRITES_STORY !== 'undefined' ? SPRITES_STORY : null);
+    aplicarConfiguracao(A_NACAO_EMOJIS, window.NACAO_EMOJIS);
+    aplicarConfiguracao(A_NACAO_WEAPONS, window.EVENTO_SPRITES);
+    aplicarConfiguracao(A_NACAO_AMULETS, typeof STORY_AMULET_SPRITES !== 'undefined' ? STORY_AMULET_SPRITES : null);
+    aplicarConfiguracao(A_NACAO_FRAGMENTS, typeof STORY_MATERIAL_SPRITES !== 'undefined' ? STORY_MATERIAL_SPRITES : null);
+    aplicarConfiguracao(A_NACAO_FRAGMENTS, typeof SPRITES_STORY !== 'undefined' ? SPRITES_STORY : null);
+
+    // ---- Conquistas ----
+    aplicarConfiguracao(A_CONQUISTA_ICONS, window.SPRITES_CONQUISTAS);
+    aplicarConfiguracao(A_ACHIEVEMENT_SOUNDS, window.ACHIEVEMENT_SOUNDS);
+
+    // ---- Aldeia e fundos das telas ----
+    if (window.ALDEIA_CONFIG) window.ALDEIA_CONFIG.bgImage = A_ALDEIA_BACKGROUND;
+    aplicarConfiguracao(A_INTERFACE_BACKGROUNDS, window.INTERFACE_BACKGROUNDS);
 
     // ---- SFX via CUSTOM_SFX ----
     window.CUSTOM_SFX = window.CUSTOM_SFX || {};
@@ -793,6 +1151,17 @@ window._debugAssets = function() {
         'A_HERO_PA_IMAGES': A_HERO_PA_IMAGES,
         'A_SFX': A_SFX,
         'A_BGM': A_BGM,
+        'A_EMOJIS': A_EMOJIS,
+        'A_NACAO_SPRITES': A_NACAO_SPRITES,
+        'A_NACAO_EMOJIS': A_NACAO_EMOJIS,
+        'A_NACAO_WEAPONS': A_NACAO_WEAPONS,
+        'A_NACAO_AMULETS': A_NACAO_AMULETS,
+        'A_NACAO_FRAGMENTS': A_NACAO_FRAGMENTS,
+        'A_CONQUISTA_ICONS': A_CONQUISTA_ICONS,
+        'A_ACHIEVEMENT_SOUNDS': A_ACHIEVEMENT_SOUNDS,
+        'A_ALDEIA_SPRITES': A_ALDEIA_SPRITES,
+        'A_ALDEIA_EMOJIS': A_ALDEIA_EMOJIS,
+        'A_INTERFACE_BACKGROUNDS': A_INTERFACE_BACKGROUNDS,
     };
     let totalGeral = 0, totalVazios = 0;
     for (const [nome, obj] of Object.entries(tabelas)) {
@@ -812,8 +1181,9 @@ console.log('');
 console.log('═══════════════════════════════════════════════════');
 console.log('📦 assets.js V2 carregado');
 console.log('═══════════════════════════════════════════════════');
-console.log('• Todos os URLs atuais já estão preenchidos');
+console.log('• Catálogo carregado; links vazios usam fallback');
 console.log('• Edite qualquer linha para trocar o asset');
 console.log('• Slots ⬜ usam emoji/fallback do código');
+console.log(`• A_EMOJIS: ${Object.keys(A_EMOJIS).length} emojis catalogados`);
 console.log('• Debug: window._debugAssets()');
 console.log('═══════════════════════════════════════════════════');

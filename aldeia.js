@@ -1,7 +1,7 @@
 // =================================================================
 // aldeia.js — Visual Aldeia (Hub clicável estilo jogo profissional)
 // -----------------------------------------------------------------
-// Carregar no FINAL do index.html (último <script>).
+// Carregar depois de historia.js; assets.js é carregado depois deste arquivo.
 //
 // NÃO QUEBRA NADA:
 //   • Só sobrescreve window.renderAldeiaScreen
@@ -328,13 +328,21 @@
     // 🖼️ RESOLVE ÍCONE (sprite se existir, senão emoji)
     // =============================================================
     function resolverIcone(loc) {
+        const customSprite = window.A_ALDEIA_SPRITES?.[loc.id];
+        if (customSprite && String(customSprite).trim() !== '') {
+            return `<img src="${customSprite}" alt="${loc.label}">`;
+        }
         if (loc.imgKey && typeof SPRITES_STORY !== 'undefined' && SPRITES_STORY[loc.imgKey]) {
             const url = SPRITES_STORY[loc.imgKey];
             if (url && url.trim() !== '') {
                 return `<img src="${url}" alt="${loc.label}" onerror="this.parentNode.innerHTML='${loc.icon}'">`;
             }
         }
-        return `<span>${loc.icon}</span>`;
+        const emoji = window.A_ALDEIA_EMOJIS?.[loc.id] || loc.icon;
+        const rendered = typeof window.getAssetEmojiHTML === 'function'
+            ? window.getAssetEmojiHTML(emoji, 'aldeia-location-emoji')
+            : emoji;
+        return `<span>${rendered}</span>`;
     }
 
     // =============================================================

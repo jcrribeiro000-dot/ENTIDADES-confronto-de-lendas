@@ -759,9 +759,12 @@
     }
 
     function getEmoji(id) {
-        if (typeof EMOJI_STORY !== 'undefined' && EMOJI_STORY[id]) return EMOJI_STORY[id];
-        if (window.NACAO_EMOJIS && window.NACAO_EMOJIS[id])         return window.NACAO_EMOJIS[id];
-        return '?';
+        const emoji = (typeof EMOJI_STORY !== 'undefined' && EMOJI_STORY[id])
+            || (window.NACAO_EMOJIS && window.NACAO_EMOJIS[id])
+            || '?';
+        return typeof window.getAssetEmojiHTML === 'function'
+            ? window.getAssetEmojiHTML(emoji, 'bestiary-emoji')
+            : emoji;
     }
 
     // ─────────────────────────────────────────────────────────────
