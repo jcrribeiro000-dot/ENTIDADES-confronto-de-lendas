@@ -7700,47 +7700,6 @@ if (heroAgora.class === 'Anhanga-Mirim' && heroAgora.hp < heroAgora.maxHp) {
     }
 
     // ═══════════════════════════════════════════════════════════
-    // PREVIEW BAR — ajusta o dano mostrado
-    // ═══════════════════════════════════════════════════════════
-    setInterval(() => {
-        if (!window._elementalBonusEnabled) return;
-        if (!window._storyMode && !window._eventoAtivo) return;
-        if (window._pvpMode || window._coopMode) return;
-
-        const bar = document.getElementById('storyPreviewBarV3');
-        if (!bar) return;
-        const chipDano = bar.querySelector('.preview-chip.dano');
-        if (!chipDano) return;
-
-        const ctx = _getContexto();
-        if (!ctx) return;
-        const b = _calcBonus(ctx.heroi, ctx.arma, ctx.tile, ctx.alvo);
-
-        // Remove chip antigo
-        const antigo = bar.querySelector('.preview-chip.elemental');
-        if (antigo) antigo.remove();
-
-        if (b.total === 0) return;
-
-        // Ajusta dano mostrado
-        const match = chipDano.textContent.match(/~?(\d+)/);
-        if (match) {
-            const danoBase = parseInt(match[1]);
-            const danoTotal = Math.max(1, danoBase + b.total);
-            chipDano.textContent = `⚔️ ~${danoTotal} dano`;
-        }
-
-        // Chip informativo
-        const info = document.createElement('span');
-        info.className = 'preview-chip elemental';
-        info.textContent = `${b.total > 0 ? '+' : ''}${b.total} elem`;
-        info.style.color = b.total > 0 ? '#8ac070' : '#d05050';
-        info.style.borderColor = b.total > 0 ? '#6ba35c' : '#a83232';
-        info.title = `Arma ${b.arma > 0 ? '+' : ''}${b.arma} · Tile ${b.tile > 0 ? '+' : ''}${b.tile} · Fraqueza ${b.inimigo > 0 ? '+' : ''}${b.inimigo}`;
-        chipDano.after(info);
-    }, 410);
-
-    // ═══════════════════════════════════════════════════════════
     // DEBUG / TOGGLE
     // ═══════════════════════════════════════════════════════════
     window._debugDanoElemental = function() {

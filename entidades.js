@@ -3189,6 +3189,10 @@ async function executeAction() {
 
     const titleAtkBonus = active.titleBonus?.ATK || 0;
     let totalAtk = info.atk + active.bonusAtk + (usedPath.length > 0 && grid[usedPath[0]] === active.element ? 1 : 0) + skillAtkBonus + titleAtkBonus;
+    const tileBonus = usedPath.length > 0 && grid[usedPath[0]] === active.element ? 1 : 0;
+    const updateTotalAtk = () => {
+        totalAtk = info.atk + active.bonusAtk + tileBonus + skillAtkBonus + titleAtkBonus;
+    };
     
     if(active.class === "Tupa") {
         const dealGueDmg = () => { 
@@ -3210,6 +3214,7 @@ async function executeAction() {
             active.x = idx%8; 
             active.y = Math.floor(idx/8); 
             checkAmulet(active, active.x, active.y); 
+            updateTotalAtk();
             updateVisuals(); 
             updateHeroCard();
             
@@ -3223,6 +3228,7 @@ async function executeAction() {
             active.x = idx%8; 
             active.y = Math.floor(idx/8); 
             checkAmulet(active, active.x, active.y); 
+            updateTotalAtk();
             updateVisuals(); 
             updateHeroCard();
             
@@ -4726,8 +4732,13 @@ function showDmgEffect(x, y, a){
     f.className = 'dmg-float'; 
     f.innerText = `-${a}`; 
     f.style.left = (x * s + 20) + 'px'; 
-    f.style.top = (y * s) + 'px'; 
     const board = tutorialMode ? document.getElementById('tutorialBoard') : document.getElementById('board');
+    const tileKey = `${x},${y}`;
+    const stackIndex = [...board.querySelectorAll('.dmg-float')]
+        .filter(effect => effect.dataset.tileKey === tileKey).length;
+    f.dataset.tileKey = tileKey;
+    f.style.top = (y * s - stackIndex * 32) + 'px';
+    f.style.lineHeight = '1';
     board.appendChild(f); 
     setTimeout(() => f.remove(), 1200); 
 }

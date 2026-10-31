@@ -5283,6 +5283,31 @@ function installStoryOverrides(){
     window.applyDmg = function(t, amt){
         if (!window._storyMode || !_origApplyDmg) return _origApplyDmg.apply(this, arguments);
         if (t.dead) return;
+
+        if (t === boss
+            && window._elementalBonusEnabled
+            && !window._pvpMode
+            && !window._coopMode
+            && typeof window._getContextoV71 === 'function'
+            && typeof window._calcBonusV71 === 'function') {
+            const contexto = window._getContextoV71();
+            if (contexto) {
+                const bonus = window._calcBonusV71(
+                    contexto.heroi,
+                    contexto.arma,
+                    contexto.tile,
+                    contexto.alvo
+                );
+                if (bonus.total !== 0) {
+                    const danoOriginal = amt;
+                    amt = Math.max(1, amt + bonus.total);
+                    if (typeof addLog === 'function') {
+                        addLog(`⚗️ Elemental: ${danoOriginal} ${bonus.total > 0 ? '+' : ''}${bonus.total} = ${amt}`);
+                    }
+                }
+            }
+        }
+
         t.hp -= amt;
         showDmgEffect(t.x, t.y, amt);
         if (t.hp <= 0) {
@@ -6655,7 +6680,10 @@ console.log('✅ historia.js — Parte 5/6 carregada.');
 
         const titleAtkBonus = active.titleBonus?.ATK || 0;
         const tileBonus = (usedPath.length > 0 && grid[usedPath[0]] === active.element) ? 1 : 0;
-        const totalAtk = info.atk + (active.bonusAtk || 0) + tileBonus + skillAtkBonus + titleAtkBonus;
+        let totalAtk = info.atk + (active.bonusAtk || 0) + tileBonus + skillAtkBonus + titleAtkBonus;
+        const atualizarTotalAtk = () => {
+            totalAtk = info.atk + (active.bonusAtk || 0) + tileBonus + skillAtkBonus + titleAtkBonus;
+        };
 
         // ============================================
         // GUERREIRO — ataca SÓ ADJACENTE a cada passo
@@ -6677,6 +6705,7 @@ console.log('✅ historia.js — Parte 5/6 carregada.');
                 active.x = idx % 8;
                 active.y = Math.floor(idx / 8);
                 if (typeof checkAmulet === 'function') checkAmulet(active, active.x, active.y);
+                atualizarTotalAtk();
                 if (typeof updateVisuals === 'function') updateVisuals();
                 if (typeof updateHeroCard === 'function') updateHeroCard();
                 if (typeof isOccupied === 'function' && isOccupied(active.x, active.y, active.id)) break;
@@ -6692,6 +6721,7 @@ console.log('✅ historia.js — Parte 5/6 carregada.');
                 active.x = idx % 8;
                 active.y = Math.floor(idx / 8);
                 if (typeof checkAmulet === 'function') checkAmulet(active, active.x, active.y);
+                atualizarTotalAtk();
                 if (typeof updateVisuals === 'function') updateVisuals();
                 if (typeof updateHeroCard === 'function') updateHeroCard();
                 if (typeof isOccupied === 'function' && isOccupied(active.x, active.y, active.id)) break;

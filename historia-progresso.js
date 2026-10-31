@@ -238,7 +238,10 @@ function handleRitualAscend(heroClass) {
     window.initStoryBattle = async function() {
         await _origInitBattle.apply(this, arguments);
         if (Array.isArray(players)) {
-            players.forEach(p => applyHeroLevelBonus(p));
+            players.forEach(p => {
+                applyHeroLevelBonus(p);
+                applyHeroEquipment(p);
+            });
             if (typeof updateHeroCard === 'function') updateHeroCard();
             if (typeof updateVisuals === 'function') updateVisuals();
         }
