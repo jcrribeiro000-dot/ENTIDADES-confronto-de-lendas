@@ -4322,7 +4322,7 @@
             });
         }
         else if (paKey === 'base_area_alvo') {
-            if (target && !target.dead) {
+            if (target) {
                 const c = { x: target.x, y: target.y };
                 for (let dy = -1; dy <= 1; dy++) {
                     for (let dx = -1; dx <= 1; dx++) {
@@ -4336,7 +4336,9 @@
                     }
                 }
                 await sleep(400);
-                if (typeof applyDmg === 'function') applyDmg(target, totalAtk);
+                if (!target.dead && typeof applyDmg === 'function') {
+                    applyDmg(target, totalAtk);
+                }
             }
         }
 

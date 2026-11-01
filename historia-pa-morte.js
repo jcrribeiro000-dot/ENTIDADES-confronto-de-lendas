@@ -48,13 +48,8 @@
                 target.dead &&
                 state.defeatedPosition
             ) {
-                const paTarget = Object.assign({}, target, state.defeatedPosition, {
-                    dead: false,
-                    hp: 1,
-                    maxHp: 1,
-                    _storyPaDefeatTarget: true,
-                });
-                return original.call(this, active, paTarget, totalAtk);
+                target.x = state.defeatedPosition.x;
+                target.y = state.defeatedPosition.y;
             }
             return original.apply(this, arguments);
         };
