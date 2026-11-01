@@ -4589,7 +4589,7 @@ function applyDifficultyToCurrentEnemy() {
     if (!storyEnemiesRemaining || storyEnemiesRemaining.length === 0) return;
 
     const diff = STORY_DIFFICULTIES[storyCurrentDifficulty];
-    if (!diff || storyCurrentDifficulty === 'normal') return;
+    if (!diff) return;
 
     // Multiplica o HP atual (que foi setado pelo initStoryBattle)
     if (boss && boss.maxHp) {
@@ -4603,12 +4603,11 @@ function applyDifficultyToCurrentEnemy() {
     // O ATK vem do input atk_BOSS_cfg, multiplicado pelo diff
     const atkInput = document.getElementById('atk_BOSS_cfg');
     if (atkInput) {
-        const origAtk = parseInt(atkInput.value) || 4;
         // Guarda o original pra não multiplicar de novo
         if (!atkInput.dataset.originalAtk) {
-            atkInput.dataset.originalAtk = origAtk;
+            atkInput.dataset.originalAtk = String(parseInt(atkInput.value, 10) || 4);
         }
-        const baseAtk = parseInt(atkInput.dataset.originalAtk);
+        const baseAtk = parseInt(atkInput.dataset.originalAtk, 10) || 4;
         atkInput.value = Math.ceil(baseAtk * diff.atkMult);
     }
 }
