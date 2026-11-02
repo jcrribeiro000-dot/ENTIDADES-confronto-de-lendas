@@ -1,4 +1,4 @@
-const CACHE = 'entidades-v109';
+const CACHE = 'entidades-v123';
 const ASSETS = [
   './',
   './index.html',
@@ -10,10 +10,13 @@ const ASSETS = [
   './historia-sistemas.js',
   './historia-combate.js',
   './historia-expedicoes.js',
+  './conhecimento.js',
   './visual-stats-10x.js',
   './coop.js',
+  './raid.js',
   './pvp.js',
-  './historia-pa-morte.js'
+  './historia-pa-morte.js',
+  './raid-solo.js'
 ];
 
 self.addEventListener('install', (e) => {

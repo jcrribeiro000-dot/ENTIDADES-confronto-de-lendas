@@ -104,6 +104,183 @@
     console.log('═══════════════════════════════════════════════════');
 })();
 // =================================================================
+// historia-combate.js — Armas equipadas nas animações de ataque
+// =================================================================
+(function storyEquippedWeaponAttacksV79() {
+    if (window._storyEquippedWeaponAttacksV79) return;
+    window._storyEquippedWeaponAttacksV79 = true;
+
+    window._createStoryWeaponVisual = function(active, expectedRole) {
+        if ((!window._storyMode && !window._eventoAtivo) ||
+            window._pvpMode || window._coopMode || !active?.class) return null;
+
+        const hero = typeof STORY_HERO_CLASSES !== 'undefined'
+            ? STORY_HERO_CLASSES[active.class] : null;
+        if (hero?.role !== expectedRole ||
+            typeof window.getHeroEquipment !== 'function' ||
+            typeof window.getWeaponIcon !== 'function') return null;
+
+        const equipment = window.getHeroEquipment(active.class);
+        if (!equipment?.arma) return null;
+
+        const holder = document.createElement('span');
+        holder.innerHTML = window.getWeaponIcon(equipment.arma, 'large');
+        const visual = holder.firstElementChild;
+        if (visual) {
+            visual.removeAttribute('class');
+            visual.setAttribute('aria-hidden', 'true');
+            return visual;
+        }
+
+        const emoji = holder.textContent.trim();
+        if (!emoji) return null;
+        const fallback = document.createElement('span');
+        fallback.textContent = emoji;
+        fallback.setAttribute('aria-hidden', 'true');
+        return fallback;
+    };
+
+    if (!document.getElementById('storyEquippedWeaponAttacksV79CSS')) {
+        const style = document.createElement('style');
+        style.id = 'storyEquippedWeaponAttacksV79CSS';
+        style.textContent = `
+            .flechaV79-sprite {
+                filter: drop-shadow(0 0 4px var(--flecha-brilho, #fff))
+                        drop-shadow(0 0 8px var(--flecha-cor, #7cf));
+            }
+            .flechaV79-energia {
+                position: absolute;
+                inset: 20% 5%;
+                border-radius: 50%;
+                pointer-events: none;
+                background: linear-gradient(90deg, transparent, var(--flecha-brilho), transparent);
+                box-shadow: 0 0 9px var(--flecha-cor);
+                opacity: .8;
+            }
+            .story-weapon-melee,
+            .story-weapon-cast {
+                position: absolute;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                pointer-events: none;
+                z-index: 95;
+                filter: drop-shadow(0 0 7px rgba(255, 220, 130, .9));
+            }
+            .story-weapon-melee img,
+            .story-weapon-cast img {
+                width: 100%;
+                height: 100%;
+                object-fit: contain;
+            }
+            .story-weapon-melee span,
+            .story-weapon-cast span {
+                font-size: 34px;
+                line-height: 1;
+            }
+            .story-weapon-melee {
+                width: 46px;
+                height: 46px;
+                transition: left .16s ease-out, top .16s ease-out,
+                            transform .16s ease-out, opacity .12s ease-in;
+            }
+            .story-weapon-cast {
+                width: 46px;
+                height: 46px;
+                animation: storyWeaponCastV79 .18s ease-out both;
+            }
+            .story-weapon-cast-aura {
+                position: absolute;
+                inset: 0;
+                border: 2px solid rgba(147, 222, 255, .9);
+                border-radius: 50%;
+                box-shadow: 0 0 16px #55caff, inset 0 0 12px #55caff;
+                animation: storyWeaponAuraV79 .24s ease-out both;
+            }
+            @keyframes storyWeaponCastV79 {
+                from { opacity: 0; transform: translateY(8px) rotate(-35deg) scale(.55); }
+                to { opacity: 1; transform: translateY(-4px) rotate(12deg) scale(1.05); }
+            }
+            @keyframes storyWeaponAuraV79 {
+                from { opacity: 0; transform: scale(.35); }
+                40% { opacity: .9; }
+                to { opacity: 0; transform: scale(1.45); }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    const originalSwordEffect = window.spawnSwordEffect;
+    if (typeof originalSwordEffect === 'function') {
+        window.spawnSwordEffect = function(x, y) {
+            const result = originalSwordEffect.apply(this, arguments);
+            const active = typeof players !== 'undefined'
+                ? players[currentPlayerIdx] : null;
+            const weapon = window._createStoryWeaponVisual(active, 'Guerreiro');
+            const board = document.getElementById('board');
+            if (!weapon || !board || typeof window.getStep !== 'function') return result;
+
+            const step = window.getStep();
+            const fromX = (active.x + .5) * step + 8;
+            const fromY = (active.y + .5) * step + 8;
+            const toX = (x + .5) * step + 8;
+            const toY = (y + .5) * step + 8;
+            const angle = Math.atan2(toY - fromY, toX - fromX) * 180 / Math.PI;
+            const slash = document.createElement('div');
+            slash.className = 'story-weapon-melee';
+            slash.style.left = `${fromX}px`;
+            slash.style.top = `${fromY}px`;
+            slash.style.transform = `translate(-50%, -50%) rotate(${angle - 70}deg) scale(.65)`;
+            slash.appendChild(weapon);
+            board.appendChild(slash);
+
+            requestAnimationFrame(() => {
+                slash.style.left = `${toX}px`;
+                slash.style.top = `${toY}px`;
+                slash.style.transform = `translate(-50%, -50%) rotate(${angle + 55}deg) scale(1.1)`;
+            });
+            setTimeout(() => {
+                slash.style.transform = `translate(-50%, -50%) rotate(${angle + 135}deg) scale(.55)`;
+                slash.style.opacity = '0';
+            }, 130);
+            setTimeout(() => slash.remove(), 310);
+            return result;
+        };
+        window.spawnSwordEffect._storyEquippedWeaponV79 = true;
+    }
+
+    const originalProjectile = window.spawnProjectile;
+    if (typeof originalProjectile === 'function') {
+        window.spawnProjectile = async function(from, to, type) {
+            const weapon = type === 'Magic'
+                ? window._createStoryWeaponVisual(from, 'Mago')
+                : null;
+            const board = document.getElementById('board');
+            if (!weapon || !board || typeof window.getStep !== 'function') {
+                return originalProjectile.apply(this, arguments);
+            }
+
+            const step = window.getStep();
+            const cast = document.createElement('div');
+            cast.className = 'story-weapon-cast';
+            cast.style.left = `${(from.x + .5) * step + 8}px`;
+            cast.style.top = `${(from.y + .5) * step + 8}px`;
+            cast.appendChild(weapon);
+
+            const aura = document.createElement('span');
+            aura.className = 'story-weapon-cast-aura';
+            cast.appendChild(aura);
+            board.appendChild(cast);
+            setTimeout(() => cast.remove(), 360);
+            await new Promise(resolve => setTimeout(resolve, 150));
+
+            return originalProjectile.apply(this, arguments);
+        };
+        window.spawnProjectile._storyEquippedWeaponV79 = true;
+    }
+
+    console.log('✅ [V79] Animações dos ataques usam as armas equipadas.');
+})();
 // historia.js — V10.55 (FX CINEMATOGRÁFICO DA PURIFICAÇÃO)
 // -----------------------------------------------------------------
 // Quando os tiles corrompidos são limpos (morte do boss, troca de
@@ -8423,9 +8600,10 @@ if (heroAgora.class === 'Anhanga-Mirim' && heroAgora.hp < heroAgora.maxHp) {
     // ═══════════════════════════════════════════════════════════
     // CRIAÇÃO DE ELEMENTOS
     // ═══════════════════════════════════════════════════════════
-    function _criarFlecha(cor, angulo, step) {
+    function _criarFlecha(cor, angulo, step, active) {
         const w = Math.max(28, Math.min(48, step * 0.7));
-        const h = w * 0.29;
+        const weapon = window._createStoryWeaponVisual?.(active, 'Arqueiro');
+        const h = weapon ? w * 0.55 : w * 0.29;
         const el = document.createElement('div');
         el.style.cssText = `
             position: absolute;
@@ -8437,7 +8615,22 @@ if (heroAgora.class === 'Anhanga-Mirim' && heroAgora.hp < heroAgora.maxHp) {
             transform: rotate(${angulo}deg);
             will-change: left, top, transform;
         `;
-        el.innerHTML = _svgFlecha(cor);
+        if (weapon) {
+            weapon.classList.add('flechaV79-sprite');
+            weapon.style.width = '100%';
+            weapon.style.height = '100%';
+            weapon.style.objectFit = 'contain';
+            weapon.style.display = 'block';
+            el.appendChild(weapon);
+
+            const energia = document.createElement('span');
+            energia.className = 'flechaV79-energia';
+            energia.style.setProperty('--flecha-brilho', cor.brilho);
+            energia.style.setProperty('--flecha-cor', cor.principal);
+            el.appendChild(energia);
+        } else {
+            el.innerHTML = _svgFlecha(cor);
+        }
         return el;
     }
 
@@ -8601,7 +8794,7 @@ if (heroAgora.class === 'Anhanga-Mirim' && heroAgora.hp < heroAgora.maxHp) {
         const angInicial = Math.atan2(midY - startY, midX - startX) * (180 / Math.PI);
 
         // ─── Cria flecha ───
-        const flecha = _criarFlecha(cor, angInicial, step);
+        const flecha = _criarFlecha(cor, angInicial, step, active);
         flecha.style.left = startX + 'px';
         flecha.style.top = startY + 'px';
         flecha.style.marginLeft = `-${parseFloat(flecha.style.width || 40) / 2}px`;
@@ -8942,6 +9135,8 @@ if (heroAgora.class === 'Anhanga-Mirim' && heroAgora.hp < heroAgora.maxHp) {
 
         return tiles;
     }
+
+    window.getStoryPATiles = getPATiles;
 
     // ═══════════════════════════════════════════════════════════
     // FX LEVE — 1 pulso por tile (sem linha/coluna inteira)

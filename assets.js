@@ -575,6 +575,59 @@ const A_EVENTO = {
 
 
 // ================================================================
+// ⚔️ A_RAID_ASSETS — Chefes, habilidades e equipamentos das Raids
+// ----------------------------------------------------------------
+// Sprites vazios usam os emojis configurados aqui como fallback.
+// Sons aceitam uma chave existente em A_SFX ou uma URL/caminho.
+// ================================================================
+const A_RAID_ASSETS = {
+    bosses: {
+        cobra_norato:      { sprite: 'https://i.imgur.com/3payBIK.gif', emoji: '🐍' },
+        cabeca_cuia:       { sprite: 'https://i.imgur.com/btYl0rM.gif', emoji: '🏺' },
+        besta_fera:        { sprite: 'https://i.imgur.com/9g8PrXW.gif', emoji: '🐗' },
+        pombero:           { sprite: 'https://i.imgur.com/2uZJgtD.gif', emoji: '🌿' },
+        minhocao_pantanal: { sprite: 'https://i.imgur.com/1XqeIii.gif', emoji: '🐉' },
+        minuano:           { sprite: 'https://i.imgur.com/NxWduZB.gif', emoji: '🌬️' },
+        guajara:           { sprite: 'https://i.imgur.com/1UY6U3A.gif', emoji: '🦀' },
+    },
+    skills: {
+        norato_correnteza: { sprite: '', emoji: '🌊', sound: 'iara1' },
+        norato_redemoinho: { sprite: '', emoji: '🌀', sound: 'iara2' },
+        cuia_fenda:        { sprite: '', emoji: '🔥', sound: 'urro' },
+        cuia_turbilhao:    { sprite: '', emoji: '🌪️', sound: 'splash' },
+        besta_varredura:   { sprite: '', emoji: '🌵', sound: 'urro' },
+        besta_investida:   { sprite: '', emoji: '💥', sound: 'bote' },
+        pombero_assobio:   { sprite: '', emoji: '🍃', sound: 'asas' },
+        pombero_raizes:    { sprite: '', emoji: '🌱', sound: 'garras' },
+        minhocao_cheia:    { sprite: '', emoji: '🌊', sound: 'splash' },
+        minhocao_fundo:    { sprite: '', emoji: '🪨', sound: 'bote' },
+        minuano_frente:    { sprite: '', emoji: '❄️', sound: 'asas' },
+        minuano_geada:     { sprite: '', emoji: '🌨️', sound: 'minoa2' },
+        guajara_mare:      { sprite: '', emoji: '🌊', sound: 'splash' },
+        guajara_voragem:   { sprite: '', emoji: '🌀', sound: 'iara2' },
+    },
+    weapons: {
+        raid_cobra_norato_tacape: 'https://i.imgur.com/hzZfkA7.png', raid_cobra_norato_flecha: 'https://i.imgur.com/G0EFliK.png', raid_cobra_norato_cajado: 'https://i.imgur.com/XrAqHbY.png',
+        raid_cabeca_cuia_tacape: 'https://i.imgur.com/frMT8BW.png', raid_cabeca_cuia_flecha: 'https://i.imgur.com/0Fo4LQA.png', raid_cabeca_cuia_cajado: 'https://i.imgur.com/wmr6YeR.png',
+        raid_besta_fera_tacape: 'https://i.imgur.com/MtCp0sK.png', raid_besta_fera_flecha: 'https://i.imgur.com/GDzZO1f.png', raid_besta_fera_cajado: 'https://i.imgur.com/XngcSjx.png',
+        raid_pombero_tacape: 'https://i.imgur.com/Q6gqShy.png', raid_pombero_flecha: 'https://i.imgur.com/0Lch2xX.png', raid_pombero_cajado: 'https://i.imgur.com/dkqn197.png',
+        raid_minhocao_pantanal_tacape: 'https://i.imgur.com/PA8Brlb.png', raid_minhocao_pantanal_flecha: 'https://i.imgur.com/7FtWwqe.png', raid_minhocao_pantanal_cajado: 'https://i.imgur.com/lzfRf3d.png',
+        raid_minuano_tacape: 'https://i.imgur.com/dhuOCzv.png', raid_minuano_flecha: 'https://i.imgur.com/DgYf48H.png', raid_minuano_cajado: 'https://i.imgur.com/F6kSc9f.png',
+        raid_guajara_tacape: 'https://i.imgur.com/plDmA0K.png', raid_guajara_flecha: 'https://i.imgur.com/S0Wb5BJ.png', raid_guajara_cajado: 'https://i.imgur.com/gNQ2ah6.png',
+    },
+    amulets: {
+        raid_cobra_norato_amuleto: 'https://i.imgur.com/OgT1407.png',
+        raid_cabeca_cuia_amuleto: 'https://i.imgur.com/fcCvR2s.png',
+        raid_besta_fera_amuleto: 'https://i.imgur.com/MSAIZVn.png',
+        raid_pombero_amuleto: 'https://i.imgur.com/URmk2i8.png',
+        raid_minhocao_pantanal_amuleto: 'https://i.imgur.com/gIcTGes.png',
+        raid_minuano_amuleto: 'https://i.imgur.com/MsnHrqO.png',
+        raid_guajara_amuleto: 'https://i.imgur.com/u8COBgP.png',
+    },
+};
+window.A_RAID_ASSETS = A_RAID_ASSETS;
+
+// ================================================================
 // 🎬 A_BRAVELY — GIFs dos PAs dos heróis novos
 // -----------------------------------------------------------------
 // Vazios → usam fallback por arquétipo (BRAVELY_TUPA/SUME/CAIPORA)
@@ -1076,6 +1129,24 @@ window.showLootNotification = function(title, items) {
     aplicarObj(A_BRAVELY, typeof STORY_BRAVELY_GIFS !== 'undefined' ? STORY_BRAVELY_GIFS : null);
     aplicarObj(A_HERO_PA_IMAGES, typeof STORY_HERO_PA_IMAGES !== 'undefined' ? STORY_HERO_PA_IMAGES : null);
 
+    if (window.RAID_ASSETS) {
+        ['bosses', 'skills', 'weapons', 'amulets'].forEach(section => {
+            const target = window.RAID_ASSETS[section] || (window.RAID_ASSETS[section] = {});
+            Object.keys(A_RAID_ASSETS[section]).forEach(key => {
+                const value = A_RAID_ASSETS[section][key];
+                target[key] = value && typeof value === 'object'
+                    ? Object.assign(target[key] || {}, value)
+                    : value;
+            });
+        });
+        if (typeof STORY_WEAPON_SPRITES !== 'undefined') {
+            Object.assign(STORY_WEAPON_SPRITES, A_RAID_ASSETS.weapons);
+        }
+        if (typeof STORY_AMULET_SPRITES !== 'undefined') {
+            Object.assign(STORY_AMULET_SPRITES, A_RAID_ASSETS.amulets);
+        }
+    }
+
     // ---- Nações ----
     aplicarConfiguracao(A_NACAO_SPRITES, window.NACAO_SPRITES);
     aplicarConfiguracao(A_NACAO_SPRITES, typeof SPRITES_STORY !== 'undefined' ? SPRITES_STORY : null);
@@ -1147,6 +1218,7 @@ window._debugAssets = function() {
         'A_AMULETS': A_AMULETS,
         'A_MATERIALS': A_MATERIALS,
         'A_EVENTO': A_EVENTO,
+        'A_RAID_ASSETS': A_RAID_ASSETS,
         'A_BRAVELY': A_BRAVELY,
         'A_HERO_PA_IMAGES': A_HERO_PA_IMAGES,
         'A_SFX': A_SFX,

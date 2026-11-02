@@ -22,10 +22,13 @@
     }
 
     function scaleLabeledNumbers(text) {
-        const pattern = /(\b(?:HP|ATK)(?:\s+(?:em\s+formas|no\s+poder\s+ancestral))?\s*(?:[:=]\s*)?)([+-]?\d+(?:[.,]\d+)?)|([+-]?\d+(?:[.,]\d+)?)(\s*)(\b(?:HP|ATK)\b)|(\b(?:dano|cura)\b(?:\s+(?:de|em|por))?\s*[:=]?\s*)([+-]?\d+(?:[.,]\d+)?)|([+-]?\d+(?:[.,]\d+)?)(\s*(?:de\s+)?)(\b(?:dano|cura)\b)/gi;
+        const pattern = /(\b(?:HP|ATK)(?:\s+(?:em\s+formas|no\s+poder\s+ancestral))?\s*(?:[:=]\s*)?)([+-]?\d+(?:[.,]\d+)?)(?:\s*(\/)\s*([+-]?\d+(?:[.,]\d+)?))?|([+-]?\d+(?:[.,]\d+)?)(\s*)(\b(?:HP|ATK)\b)|(\b(?:dano|cura)\b(?:\s+(?:de|em|por))?\s*[:=]?\s*)([+-]?\d+(?:[.,]\d+)?)|([+-]?\d+(?:[.,]\d+)?)(\s*(?:de\s+)?)(\b(?:dano|cura)\b)/gi;
 
-        return text.replace(pattern, (match, prefixStat, statValue, numberBeforeStat, statSpace, statLabel, prefixEffect, effectValue, numberBeforeEffect, effectSpace, effectLabel) => {
-            if (prefixStat) return prefixStat + scaleNumber(statValue);
+        return text.replace(pattern, (match, prefixStat, statValue, ratioSeparator, ratioValue, numberBeforeStat, statSpace, statLabel, prefixEffect, effectValue, numberBeforeEffect, effectSpace, effectLabel) => {
+            if (prefixStat) {
+                return prefixStat + scaleNumber(statValue)
+                    + (ratioValue ? `${ratioSeparator}${scaleNumber(ratioValue)}` : '');
+            }
             if (numberBeforeStat) return scaleNumber(numberBeforeStat) + statSpace + statLabel;
             if (prefixEffect) return prefixEffect + scaleNumber(effectValue);
             return scaleNumber(numberBeforeEffect) + effectSpace + effectLabel;

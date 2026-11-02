@@ -85,6 +85,18 @@
         return { nivel: atual, mudou: false };
     }
 
+    window.registrarConhecimentoRaid = function(enemyId) {
+        const upgrade = tryUpgradeInfo(enemyId);
+        if (upgrade.mudou && typeof addLog === 'function') {
+            const raid = (window.RAID_SOLO_CONFIG || []).find(item => item.id === enemyId);
+            const nome = raid?.name || enemyId;
+            addLog(upgrade.nivel === 3
+                ? `🧠 ${nome}: conhecimento DOMINADO!`
+                : `📖 ${nome}: conhecimento nível ${upgrade.nivel}!`);
+        }
+        return upgrade;
+    };
+
     // ─────────────────────────────────────────────────────────────
     // HOOK: handleStoryBossDefeat
     //   • Captura estado ANTES (info 3? essências?)
@@ -556,6 +568,7 @@
     }
 
     function getOrigem(id) {
+        if ((window.RAID_SOLO_CONFIG || []).some(raid => raid.id === id)) return 'raids';
         if (isNacaoContainer(id)) return 'container';
         if (isNacaoDeus(id)) return 'nacoes';
         if (typeof EVENTO_BOSSES !== 'undefined' &&
@@ -565,6 +578,7 @@
     }
 
     function getTipo(id) {
+        if ((window.RAID_SOLO_CONFIG || []).some(raid => raid.id === id)) return 'boss';
         if (typeof getEnemyType === 'function') {
             try { return getEnemyType(id); } catch (e) {}
         }
@@ -581,6 +595,7 @@
     // DESCOBERTA / CONHECIMENTO
     // ─────────────────────────────────────────────────────────────
     function isDiscovered(id, origem) {
+        if (origem === 'raids' && getConhecimento(id) > 0) return true;
         if ((STORY_PROGRESS.enemiesDefeatedIds || []).includes(id)) return true;
         if ((STORY_PROGRESS.bossesDefeated    || []).includes(id)) return true;
         if (origem === 'selados' && typeof getEventoProgresso === 'function') {
@@ -629,6 +644,33 @@
             list.push(makeEntry(EVENTO_PESADELO.id, 'selados',
                 Object.assign({}, EVENTO_PESADELO, { diaLabel: 'Mensal' })));
         }
+
+        (window.RAID_SOLO_CONFIG || []).forEach(raid => {
+            if (!raid || !raid.id || seen.has(raid.id)) return;
+            seen.add(raid.id);
+            list.push({
+                id: raid.id,
+                origem: 'raids',
+                nome: raid.name,
+                hp: raid.hp,
+                atk: raid.atk,
+                tipo: 'boss',
+                descricao: raid.lore,
+                raw: {
+                    name: raid.name,
+                    hp: raid.hp,
+                    atk: raid.atk,
+                    isBoss: true,
+                },
+                eventBoss: {
+                    skills: (raid.skills || []).map(([id, nome, descricao]) => ({
+                        id,
+                        nome,
+                        descricao,
+                    })),
+                },
+            });
+        });
 
         return list;
     }
@@ -714,7 +756,7 @@
             out = out.filter(x => normalize(x.nome).includes(term));
         }
 
-        const peso = { historia: 0, selados: 1, nacoes: 2 };
+        const peso = { historia: 0, selados: 1, nacoes: 2, raids: 3 };
         out.sort((a, b) => {
             const pa = peso[a.origem] != null ? peso[a.origem] : 99;
             const pb = peso[b.origem] != null ? peso[b.origem] : 99;
@@ -735,6 +777,11 @@
                 const kb = Object.keys(EVENTO_BOSSES || {}).indexOf(b.id);
                 return ka - kb;
             }
+            if (a.origem === 'raids' && b.origem === 'raids') {
+                const raids = window.RAID_SOLO_CONFIG || [];
+                return raids.findIndex(raid => raid.id === a.id)
+                    - raids.findIndex(raid => raid.id === b.id);
+            }
             const oa = ordem[a.id] != null ? ordem[a.id] : 9999;
             const ob = ordem[b.id] != null ? ordem[b.id] : 9999;
             if (oa !== ob) return oa - ob;
@@ -748,6 +795,8 @@
     // SPRITE / EMOJI
     // ─────────────────────────────────────────────────────────────
     function getSprite(id) {
+        const raidSprite = window.RAID_SPRITES && window.RAID_SPRITES[id];
+        if (raidSprite && String(raidSprite).trim() !== '') return raidSprite;
         let url = (typeof SPRITES_STORY !== 'undefined') ? SPRITES_STORY[id] : '';
         if (!url || url.trim() === '') {
             if (typeof STORY_TO_BASE_BOSS !== 'undefined') {
@@ -759,7 +808,8 @@
     }
 
     function getEmoji(id) {
-        const emoji = (typeof EMOJI_STORY !== 'undefined' && EMOJI_STORY[id])
+        const emoji = (window.RAID_EMOJIS && window.RAID_EMOJIS[id])
+            || (typeof EMOJI_STORY !== 'undefined' && EMOJI_STORY[id])
             || (window.NACAO_EMOJIS && window.NACAO_EMOJIS[id])
             || '?';
         return typeof window.getAssetEmojiHTML === 'function'
@@ -777,6 +827,7 @@
         if (eb && Array.isArray(eb.skills) && eb.skills.length > 0) {
             return eb.skills.map(sk => ({
                 nome: sk.nome || sk.name || '?',
+                descricao: sk.descricao || '',
                 gridHTML: (typeof desenharMiniGridBestiario === 'function' && sk.handler)
                     ? desenharMiniGridBestiario(sk.handler) : '',
             }));
@@ -814,6 +865,8 @@
             return '🌑 Sete Selados · ' + (enemy.diaLabel || 'Evento');
         if (enemy.origem === 'nacoes')
             return '🌎 ' + (enemy.nacaoNome || 'Nações');
+        if (enemy.origem === 'raids')
+            return '⚔️ Raid Regional · Boss';
         return tipoLabel;
     }
 
@@ -874,6 +927,7 @@
                     '<div class="bestiary-skill-header">' +
                         '<span class="bestiary-skill-name">' + sk.nome + '</span>' +
                     '</div>' +
+                    (sk.descricao ? '<div class="bestiary-skill-description" style="margin:4px 0;color:#b8a577;font:italic .9rem \'EB Garamond\',serif;">' + sk.descricao + '</div>' : '') +
                     '<div class="bestiary-skill-grid">' + sk.gridHTML + '</div>' +
                 '</div>'
             )).join('') + '</div>';
@@ -883,6 +937,10 @@
         if (enemy.origem === 'selados') {
             dropsHTML = '<span class="bestiary-drop">🗡️ Armas (5%-20%)</span>' +
                         '<span class="bestiary-drop bestiary-drop-raro">🧿 Fragmento (5%-20%)</span>';
+        } else if (enemy.origem === 'raids') {
+            dropsHTML = '<span class="bestiary-drop">🗡️ 3 armas temáticas</span>' +
+                        '<span class="bestiary-drop bestiary-drop-raro">🔮 Amuleto temático</span>' +
+                        '<span class="bestiary-drop">Chance por vitória: 8% Normal · 12% Difícil · 18% Pesadelo; a peça é sorteada entre os equipamentos ainda não obtidos.</span>';
         } else if (enemy.origem === 'nacoes') {
             dropsHTML = '<span class="bestiary-drop">🌎 Essência Ancestral</span>' +
                         '<span class="bestiary-drop bestiary-drop-raro">⚔️ Arma / 🧿 Amuleto (Fase 3)</span>';
@@ -913,6 +971,8 @@
             fasesHTML = '<span class="bestiary-fase" style="color:#c39bd3;border-color:rgba(142,68,173,.5);background:rgba(142,68,173,.1);">' + (enemy.diaLabel || 'Evento') + '</span>';
         } else if (enemy.origem === 'nacoes' && enemy.nacaoNome) {
             fasesHTML = '<span class="bestiary-fase" style="color:#4a8cb5;border-color:rgba(74,140,181,.5);background:rgba(74,140,181,.1);">' + enemy.nacaoNome + '</span>';
+        } else if (enemy.origem === 'raids') {
+            fasesHTML = '<span class="bestiary-fase">Provações Regionais</span>';
         }
 
         const cls = [
@@ -966,6 +1026,7 @@
             historia:    all.filter(x => x.origem === 'historia').length,
             selados:     all.filter(x => x.origem === 'selados').length,
             nacoes:      all.filter(x => x.origem === 'nacoes').length,
+            raids:       all.filter(x => x.origem === 'raids').length,
             descobertos: all.filter(x => isDiscovered(x.id, x.origem)).length,
             total:       all.length,
         };
@@ -1000,6 +1061,7 @@
             '      <option value="historia" ' + (f.origem === 'historia' ? 'selected' : '') + '>📖 História (' + stats.historia + ')</option>',
             '      <option value="selados"  ' + (f.origem === 'selados'  ? 'selected' : '') + '>🌑 Sete Selados (' + stats.selados + ')</option>',
             '      <option value="nacoes"   ' + (f.origem === 'nacoes'   ? 'selected' : '') + '>🌎 Sete Nações (' + stats.nacoes + ')</option>',
+            '      <option value="raids"    ' + (f.origem === 'raids'    ? 'selected' : '') + '>⚔️ Raids Regionais (' + stats.raids + ')</option>',
             '    </select>',
             '    <select class="bestiary-filter" onchange="window._setBestiaryFilter(\'ato\', this.value)">',
             '      <option value="todos" ' + (f.ato === 'todos' ? 'selected' : '') + '>Todos os Atos</option>',
