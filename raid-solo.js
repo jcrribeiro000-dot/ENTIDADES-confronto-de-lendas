@@ -415,6 +415,7 @@
         const difficulty = document.getElementById('regionalRaidDifficulty')?.value;
         if (!difficulty || !selectedHero()) return;
         window._regionalRaidContext = true;
+        window._regionalRaidRound = 0;
         window.raidIniciarSoloViaCoop(raidId, {
             difficulty,
         });
@@ -454,6 +455,14 @@
 
     function registerRaidGear() {
         if (typeof STORY_WEAPONS === 'undefined' || typeof STORY_AMULETS === 'undefined') return;
+        if (typeof STORY_MATERIALS !== 'undefined') {
+            STORY_MATERIALS.essencia_sombria = STORY_MATERIALS.essencia_sombria || {
+                id: 'essencia_sombria', name: 'Essência Sombria (Sete Selados)', emoji: '🌑',
+            };
+            STORY_MATERIALS.essencia_ancestral = STORY_MATERIALS.essencia_ancestral || {
+                id: 'essencia_ancestral', name: 'Essência Ancestral (Sete Nações)', emoji: '🌎',
+            };
+        }
         const weaponTypes = {
             tacape: { name: 'Tacape', emoji: '🪓' },
             flecha: { name: 'Flecha', emoji: '🏹' },
@@ -501,6 +510,105 @@
         }
     }
 
+    function installRaidUpgradeCosts() {
+        const original = window.getUpgradeCost;
+        if (typeof original !== 'function' || original._regionalRaidCosts) return;
+
+        const wrapped = function(uid) {
+            const baseId = typeof window.getBaseId === 'function'
+                ? window.getBaseId(uid)
+                : String(uid || '').split('#')[0];
+            const weapon = typeof window.getWeaponById === 'function'
+                ? window.getWeaponById(uid) : null;
+            const amulet = !weapon && typeof window.getAmuletById === 'function'
+                ? window.getAmuletById(uid) : null;
+            const item = weapon || amulet;
+
+            if (!item?.raidOnly || !String(baseId || '').startsWith('raid_')) {
+                return original.apply(this, arguments);
+            }
+
+            const tierAlvo = item.tier + 1;
+            if (tierAlvo > (window.TIER_MAX || 2)) return null;
+            const qtd = tierAlvo === 1 ? 500 : 5000;
+            return {
+                tipo: 'material',
+                receita: {
+                    essencia_sombria: qtd,
+                    essencia_ancestral: qtd,
+                },
+                ouro: 0,
+                tierAlvo,
+                item,
+            };
+        };
+        wrapped._regionalRaidCosts = true;
+        window.getUpgradeCost = wrapped;
+    }
+
+    function installAmuletTurnHealing() {
+        const original = window.switchConfig;
+        if (typeof original !== 'function' || original._regionalAmuletHealing) return;
+
+        const wrapped = function(idx) {
+            const result = original.apply(this, arguments);
+            if (!window._storyMode && !window._eventoAtivo && !window._raidMode) return result;
+            if (window._pvpMode || window._coopMode) return result;
+
+            const player = typeof players !== 'undefined' ? players[idx] : null;
+            if (!player || player.dead) return result;
+
+            const equipment = typeof window.getHeroEquipment === 'function'
+                ? window.getHeroEquipment(player.class) : null;
+            const amulet = equipment?.amuleto && typeof window.getAmuletById === 'function'
+                ? window.getAmuletById(equipment.amuleto) : player.equippedAmulet;
+            const heal = amulet?.efeito?.healPerTurn || 0;
+            if (heal <= 0) return result;
+
+            const turn = window._raidMode
+                ? `raid:${window._regionalRaidRound || 0}`
+                : `battle:${typeof RANKING !== 'undefined' ? RANKING.turns : 0}`;
+            const turnKey = `${turn}:${idx}`;
+            if (player._lastAmuletHealTurn === turnKey) return result;
+            player._lastAmuletHealTurn = turnKey;
+
+            if (player.hp >= player.maxHp) return result;
+            const restored = Math.min(heal, player.maxHp - player.hp);
+            player.hp += restored;
+            if (typeof showHealEffect === 'function') {
+                showHealEffect(player.x, player.y, restored);
+            }
+            if (typeof updateHeroCard === 'function') updateHeroCard();
+            if (typeof addLog === 'function') {
+                addLog(`💚 ${player.name} recuperou ${restored} HP (${amulet.nome}).`);
+            }
+            return result;
+        };
+        wrapped._regionalAmuletHealing = true;
+        window.switchConfig = wrapped;
+    }
+
+    function installRaidRoundTracking() {
+        const original = window.raidAposTurnoSolo;
+        if (typeof original !== 'function' || original._regionalRaidRoundTracking) return;
+
+        const wrapped = async function() {
+            const inCoop = (typeof coopRole !== 'undefined' && !!coopRole)
+                || (typeof raidRole !== 'undefined' && !!raidRole);
+            if (window._raidMode && !inCoop && Array.isArray(players)) {
+                const hasNextHero = players.some((player, index) =>
+                    index > currentPlayerIdx && !player.dead
+                );
+                if (!hasNextHero) {
+                    window._regionalRaidRound = (window._regionalRaidRound || 0) + 1;
+                }
+            }
+            return original.apply(this, arguments);
+        };
+        wrapped._regionalRaidRoundTracking = true;
+        window.raidAposTurnoSolo = wrapped;
+    }
+
     function grantRaidEquipment(config) {
         const difficultyId = STORY_PROGRESS.raidAttempts?.[config.id]?.difficulty || 'normal';
         const difficulty = DIFFICULTIES[difficultyId];
@@ -545,6 +653,9 @@
     installConfigsAndAssets();
     installRegionalStyles();
     registerRaidGear();
+    installRaidUpgradeCosts();
+    installAmuletTurnHealing();
+    installRaidRoundTracking();
     wrapEventScreen();
     console.info('[Raid Regional] Sete encontros adaptados ao motor Raid V5.');
 })();

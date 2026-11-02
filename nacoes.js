@@ -6594,7 +6594,9 @@
                 return `<div class="up-req-row ${ok?'ok':'no'}"><span>${m.emoji} ${m.name}</span><span><b style="color:${ok?'#8ac070':'#d05050'};">${has}</b> / ${qtd}</span></div>`;
             }).join('');
             const ouroOk = (STORY_PROGRESS.gold || 0) >= cost.ouro;
-            reqHTML += `<div class="up-req-row ${ouroOk?'ok':'no'}"><span>💰 Ouro</span><span><b style="color:${ouroOk?'#8ac070':'#d05050'};">${STORY_PROGRESS.gold||0}</b> / ${cost.ouro}</span></div>`;
+            if (cost.ouro > 0) {
+                reqHTML += `<div class="up-req-row ${ouroOk?'ok':'no'}"><span>💰 Ouro</span><span><b style="color:${ouroOk?'#8ac070':'#d05050'};">${STORY_PROGRESS.gold||0}</b> / ${cost.ouro}</span></div>`;
+            }
             podePagar = Object.entries(cost.receita || {}).every(([k,v]) => (STORY_PROGRESS.inventory[k]||0) >= v) && ouroOk;
         } else {
             const moeda = cost.moedaId || SOMBRIA;
