@@ -1843,6 +1843,18 @@ function updateAllSpriteDirections() {
                 }
             }
         }
+
+        if (bossImg) {
+            const activeStoryEnemyId = window._storyMode &&
+                typeof storyEnemiesRemaining !== 'undefined'
+                ? storyEnemiesRemaining[0]
+                : null;
+            const activeStoryEnemy = activeStoryEnemyId &&
+                typeof STORY_ENEMIES !== 'undefined'
+                ? STORY_ENEMIES[activeStoryEnemyId]
+                : null;
+            bossImg.classList.toggle('spectral-boss', !!(activeStoryEnemy && activeStoryEnemy.isSpectral));
+        }
     }
 }
 // =================================================================
@@ -3143,6 +3155,13 @@ async function initGame() {
         mechanicsPanel.classList.remove('hidden');
         mechanicsPanel.classList.remove('open-mobile');
     }
+
+    // ⭐ Muiraquitã automático: se nasceu sob um herói, coleta na hora
+    players.forEach(p => {
+        if (!p || p.dead) return;
+        const idx = p.y * 8 + p.x;
+        if (amulets[idx]) checkAmulet(p, p.x, p.y);
+    });
 }
 
 // ================= EXECUTE ACTION =================

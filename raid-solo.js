@@ -288,6 +288,89 @@
                 cursor: not-allowed;
                 opacity: .7;
             }
+            .event-hub-container {
+                box-sizing: border-box;
+                width: min(1050px, calc(100% - 24px));
+                margin: 24px auto;
+                padding: 28px;
+                background: linear-gradient(180deg, rgba(42,31,16,.97), rgba(20,14,8,.98));
+                border: 2px solid #6a5024;
+                border-radius: 12px;
+                box-shadow: 0 12px 40px rgba(0,0,0,.7), 0 0 24px rgba(201,162,39,.12);
+            }
+            .event-hub-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+                gap: 18px;
+                margin: 24px 0;
+            }
+            .event-hub-card {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 12px;
+                min-height: 250px;
+                padding: 22px 18px;
+                text-align: center;
+                color: #e8dcc4;
+                background: linear-gradient(180deg, rgba(232,185,35,.1), transparent 45%), #1a1208;
+                border: 1px solid #6a5024;
+                border-radius: 9px;
+            }
+            .event-hub-icon { font-size: 3rem; }
+            .event-hub-card h2 {
+                margin: 0;
+                color: #f0c75e;
+                font: 700 1rem 'Cinzel Decorative', serif;
+            }
+            .event-hub-card p { margin: 0; color: #c8b787; line-height: 1.5; }
+            .event-hub-card button {
+                margin-top: auto;
+                padding: 10px 18px;
+                color: #fff5dc;
+                background: linear-gradient(135deg, #8a6a2e, #4a3418);
+                border: 1px solid #e8b923;
+                border-radius: 5px;
+                cursor: pointer;
+                font: 700 .8rem 'Cinzel', serif;
+                letter-spacing: 1px;
+            }
+            .event-hub-card button:hover { filter: brightness(1.15); }
+            .raid-preparation-overlay {
+                position: fixed;
+                inset: 0;
+                z-index: 10000;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 18px;
+                overflow-y: auto;
+                background: rgba(0,0,0,.82);
+                backdrop-filter: blur(4px);
+            }
+            .raid-preparation-overlay .raid-preparation-panel {
+                width: min(760px, 100%);
+                max-height: calc(100vh - 36px);
+                margin: auto;
+                padding: 18px 22px 24px;
+                overflow-y: auto;
+                background: linear-gradient(180deg, #2a1f10, #100b06);
+                border: 2px solid #c9a227;
+                border-radius: 12px;
+                box-shadow: 0 0 45px rgba(0,0,0,.85), 0 0 25px rgba(201,162,39,.2);
+            }
+            .raid-preparation-close {
+                display: block;
+                margin: 0 0 8px auto;
+                padding: 7px 12px;
+                color: #e8dcc4;
+                background: #2a1f10;
+                border: 1px solid #8a6a2e;
+                border-radius: 4px;
+                cursor: pointer;
+                font: 700 .8rem 'Cinzel', serif;
+            }
+            #storyScreen.event-hub-destination .nacao-tabs-nav { display: none !important; }
             .raid-portal {
                 box-sizing: border-box;
                 width: min(900px, calc(100% - 24px));
@@ -330,6 +413,9 @@
                 .raid-selecao-container { width: calc(100% - 12px); margin: 6px auto; padding: 14px; }
                 .raid-preparation-panel { padding: 0 12px 16px; }
                 .raid-portal { width: calc(100% - 12px); padding: 14px 10px; }
+                .event-hub-container { width: calc(100% - 12px); margin: 6px auto; padding: 18px 12px; }
+                .raid-preparation-overlay { padding: 8px; }
+                .raid-preparation-overlay .raid-preparation-panel { max-height: calc(100vh - 16px); padding: 12px; }
             }
         `;
         document.head.appendChild(style);
@@ -366,7 +452,9 @@
                 ? STORY_HERO_CLASSES[heroClass].displayName || heroClass
                 : '';
             preparation = `
-                <section class="raid-modal-panel raid-preparation-panel">
+                <div class="raid-preparation-overlay" onclick="window.raidSoloClosePreparation()">
+                <section class="raid-modal-panel raid-preparation-panel" role="dialog" aria-modal="true" aria-label="Preparação da Raid" onclick="event.stopPropagation()">
+                    <button class="raid-preparation-close" onclick="window.raidSoloClosePreparation()">✕ FECHAR</button>
                     <h2 class="story-title">${safe(selected.name)} — Preparação</h2>
                     <p>${safe(selected.lore)}</p><p><i>${safe(selected.adaptation)}</i></p>
                     <div class="raid-modal-stats">
@@ -379,8 +467,10 @@
                         </div>
                         <p id="regionalRaidPrice"></p>
                         <button class="raid-modal-btn confirmar" ${attemptUsed ? 'disabled' : ''} onclick="window.raidSoloStart('${selected.id}')">⚔️ INICIAR ENCONTRO</button>
+                        <button class="raid-modal-btn confirmar" ${attemptUsed ? 'disabled' : ''} onclick="window.raidSoloStartCoop('${selected.id}')">🎮 CRIAR SALA COOP</button>
                     ` : '<p>Selecione um herói desbloqueado na Oca antes de iniciar uma Raid.</p>'}
-                </section>`;
+                </section>
+                </div>`;
         }
 
         screen.innerHTML = `
@@ -390,10 +480,10 @@
                     <p class="story-subtitle">O combate usa o tabuleiro e as ações já existentes. Habilidades marcam o perigo com um turno de antecedência para você poder escapar.</p>
                     <p>Uma tentativa semanal por Raid, compartilhada entre dificuldades. Ouro: <b>${gold.toLocaleString('pt-BR')}</b></p>
                 </div>
-                ${preparation}
                 <div class="raid-grid-selecao">${cards}</div>
-                <div class="story-footer"><button class="story-back-btn" onclick="window.renderEventoSemanalScreen()">← VOLTAR A EVENTOS</button></div>
-            </div>`;
+                <div class="story-footer"><button class="story-back-btn" onclick="window.renderEventosHubScreen()">← VOLTAR A EVENTOS</button></div>
+            </div>
+            ${preparation}`;
         screen.classList.add('active');
         screen.style.display = 'flex';
 
@@ -418,6 +508,24 @@
         window._regionalRaidRound = 0;
         window.raidIniciarSoloViaCoop(raidId, {
             difficulty,
+        });
+    }
+
+    function startRaidCoop(raidId) {
+        const difficulty = document.getElementById('regionalRaidDifficulty')?.value;
+        const raid = RAID_DATA.find(item => item.id === raidId);
+        if (!difficulty || !selectedHero() || !raid) return;
+        if (typeof window.coopCriarSala !== 'function') {
+            alert('O modo cooperativo ainda não está disponível.');
+            return;
+        }
+        window._regionalRaidContext = true;
+        window._regionalRaidRound = 0;
+        window.coopCriarSala(0, `Regional: ${raid.name}`, {
+            type: 'raid-regional',
+            raidId,
+            difficulty,
+            title: `${raid.name} — ${raid.title}`,
         });
     }
 
@@ -446,11 +554,108 @@
         if (typeof original !== 'function' || original._regionalRaidsWrapped) return;
         const wrapped = function() {
             const result = original.apply(this, arguments);
-            injectPortal();
             return result;
         };
         wrapped._regionalRaidsWrapped = true;
         window.renderEventoSemanalScreen = wrapped;
+    }
+
+    function renderEventsHub() {
+        const screen = document.getElementById('storyScreen');
+        if (!screen) return;
+        window._eventHubRoute = 'hub';
+        screen.classList.remove('event-hub-destination');
+
+        // ⭐ Personalização via assets.js (A_EVENTOS_HUB)
+        const hubCfg = window.A_EVENTOS_HUB || {};
+        const hs = hubCfg.sprites || {}, he = hubCfg.emojis || {};
+        const hubIcon = (key) => {
+            const url = hs[key];
+            if (url && String(url).trim() !== '') {
+                return `<img src="${url}" alt="${key}" style="width:64px;height:64px;object-fit:contain;filter:drop-shadow(0 2px 6px rgba(0,0,0,.6));" onerror="this.outerHTML='<span style=\"font-size:3rem\">${he[key] || '?'}</span>'">`;
+            }
+            return `<span style="font-size:3rem;">${he[key] || '?'}</span>`;
+        };
+
+        // Fundo da tela (wide/mobile como nas outras sub-telas)
+        const bgCfg = hubCfg.background || {};
+        const isMob = window.matchMedia('(max-width: 700px)').matches || window.matchMedia('(orientation: portrait)').matches;
+        let bgUrl = isMob ? (bgCfg.mobile || bgCfg.wide) : (bgCfg.wide || bgCfg.mobile);
+        screen.style.backgroundImage = '';
+        screen.style.backgroundSize = '';
+        screen.style.backgroundPosition = '';
+        screen.style.backgroundRepeat = '';
+        screen.style.backgroundColor = '';
+        if (bgUrl && String(bgUrl).trim() !== '') {
+            screen.style.backgroundImage = `linear-gradient(rgba(10,6,2,0.60), rgba(10,6,2,0.60)), url('${bgUrl}')`;
+            screen.style.backgroundSize = 'cover, cover';
+            screen.style.backgroundPosition = 'center, center';
+            screen.style.backgroundRepeat = 'no-repeat, no-repeat';
+            screen.style.backgroundColor = '#1a1208';
+        }
+
+        screen.innerHTML = `
+            <div class="story-container event-hub-container">
+                <div class="story-header">
+                    <h1 class="story-title">🎉 EVENTOS</h1>
+                    <p class="story-subtitle">Escolha um desafio para continuar sua jornada.</p>
+                </div>
+                <div class="event-hub-grid">
+                    <article class="event-hub-card">
+                        <div class="event-hub-icon">${hubIcon('nacoes')}</div>
+                        <h2>SETE NAÇÕES</h2>
+                        <p>Enfrente os panteões, avance pelas fases e reúna os fragmentos ancestrais.</p>
+                        <button onclick="window.renderEventosHubDestination('nacoes')">ABRIR EVENTO</button>
+                    </article>
+                    <article class="event-hub-card">
+                        <div class="event-hub-icon">${hubIcon('selados')}</div>
+                        <h2>SETE SELADOS</h2>
+                        <p>Enfrente o evento semanal, seus chefes e as provações do Pesadelo.</p>
+                        <button onclick="window.renderEventosHubDestination('selados')">ABRIR EVENTO</button>
+                    </article>
+                    <article class="event-hub-card">
+                        <div class="event-hub-icon">${hubIcon('raids')}</div>
+                        <h2>RAIDS</h2>
+                        <p>Prepare seu herói para enfrentar os guardiões regionais, sozinho ou em coop.</p>
+                        <button onclick="window.raidSoloOpenMenu()">PREPARAR RAID</button>
+                    </article>
+                </div>
+                <div class="story-footer"><button class="story-back-btn" onclick="renderAldeiaScreen()">← VOLTAR À ALDEIA</button></div>
+            </div>`;
+        screen.classList.add('active');
+        screen.style.display = 'flex';
+    }
+
+    function renderHubDestination(destination) {
+        const screen = document.getElementById('storyScreen');
+        if (!screen) return;
+        window._eventHubRoute = destination;
+        screen.classList.add('event-hub-destination');
+        if (destination === 'nacoes') {
+            if (typeof window.renderSeteNacoesScreen !== 'function') {
+                throw new Error('A tela das Sete Nações não está disponível.');
+            }
+            window.renderSeteNacoesScreen();
+            screen.classList.add('event-hub-destination');
+            return;
+        }
+        if (destination === 'selados') {
+            if (typeof window.renderSeteSeladosScreen !== 'function') {
+                throw new Error('A tela dos Sete Selados não está disponível.');
+            }
+            window.renderSeteSeladosScreen();
+            screen.classList.add('event-hub-destination');
+            const backButton = screen.querySelector('.story-footer .story-back-btn');
+            if (backButton) {
+                backButton.textContent = '← VOLTAR A EVENTOS';
+                backButton.setAttribute('onclick', 'window.renderEventosHubScreen()');
+            }
+        }
+    }
+
+    function closeRaidPreparation() {
+        const overlay = document.querySelector('#storyScreen .raid-preparation-overlay');
+        if (overlay) overlay.remove();
     }
 
     function registerRaidGear() {
@@ -560,9 +765,10 @@
 
             const equipment = typeof window.getHeroEquipment === 'function'
                 ? window.getHeroEquipment(player.class) : null;
-            const amulet = equipment?.amuleto && typeof window.getAmuletById === 'function'
-                ? window.getAmuletById(equipment.amuleto) : player.equippedAmulet;
-            const heal = amulet?.efeito?.healPerTurn || 0;
+            const amulet = player.equippedAmulet
+                || (equipment?.amuleto && typeof window.getAmuletById === 'function'
+                    ? window.getAmuletById(equipment.amuleto) : null);
+            const heal = Number(amulet?.efeito?.healPerTurn) || 0;
             if (heal <= 0) return result;
 
             const turn = window._raidMode
@@ -580,7 +786,7 @@
             }
             if (typeof updateHeroCard === 'function') updateHeroCard();
             if (typeof addLog === 'function') {
-                addLog(`💚 ${player.name} recuperou ${restored} HP (${amulet.nome}).`);
+                addLog(`💚 ${player.name} recuperou ${restored} HP (${amulet?.nome || 'Amuleto'}).`);
             }
             return result;
         };
@@ -645,7 +851,9 @@
 
     window.raidSoloOpenMenu = () => renderMenu();
     window.raidSoloSelect = id => renderMenu(id);
+    window.raidSoloClosePreparation = closeRaidPreparation;
     window.raidSoloStart = startRaid;
+    window.raidSoloStartCoop = startRaidCoop;
     window.onRegionalRaidVictory = grantRaidEquipment;
     window.RAID_SOLO_CONFIG = RAID_DATA;
     window.RAID_SOLO_DIFFICULTIES = DIFFICULTIES;
@@ -657,5 +865,9 @@
     installAmuletTurnHealing();
     installRaidRoundTracking();
     wrapEventScreen();
+    window.renderSeteSeladosScreen = window.renderEventoSemanalScreen;
+    window.renderEventosHubScreen = renderEventsHub;
+    window.renderEventosHubDestination = renderHubDestination;
+    window.renderEventoSemanalScreen = renderEventsHub;
     console.info('[Raid Regional] Sete encontros adaptados ao motor Raid V5.');
 })();

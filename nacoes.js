@@ -1707,7 +1707,7 @@
 
                 <div class="story-footer">
                     <button class="story-back-btn" onclick="window.renderLojaNacoes()">🛒 LOJA DAS NAÇÕES</button>
-                    <button class="story-back-btn" onclick="window._semanaTab='selados'; window.renderEventoSemanalScreen();">← SETE SELADOS</button>
+                    <button class="story-back-btn" onclick="window.renderEventosHubScreen()">← EVENTOS</button>
                     <button class="story-back-btn" onclick="renderAldeiaScreen()">← ALDEIA</button>
                 </div>
             </div>
@@ -2061,6 +2061,7 @@
         const screen = document.getElementById('storyScreen');
         if (!screen) return;
         if (!screen.classList.contains('active')) return;
+        if (window._eventHubRoute) return;
 
         const titleEl = screen.querySelector('.story-title');
         if (!titleEl) return;
@@ -3062,15 +3063,30 @@
                 window._nacaoAtivo = true; // força (redundância)
 
                 const handler = window.NACAO_SKILL_HANDLERS?.[skill.handler];
-                const atkFinal = (typeof enemy.atk === 'number' && !isNaN(enemy.atk) && enemy.atk > 0)
-                    ? enemy.atk : 4;
+                const enemyId = typeof storyEnemiesRemaining !== 'undefined'
+                    ? storyEnemiesRemaining[0]
+                    : null;
+                const currentEnemy = enemyId && typeof STORY_ENEMIES !== 'undefined'
+                    ? STORY_ENEMIES[enemyId]
+                    : null;
+                const atkBase = Number(currentEnemy?.atk);
+                const atkFallback = Number(enemy?.atk);
+                const atkFinal = Number.isFinite(atkBase) && atkBase > 0
+                    ? atkBase
+                    : Number.isFinite(atkFallback) && atkFallback > 0 ? atkFallback : 4;
 
                 console.log(`%c[V2.6 SKILL] ${enemy.nome} → ${skill.nome} (atk=${atkFinal})`,
                     'color:#e74c3c;font-weight:bold;');
 
                 if (typeof handler === 'function') {
                     try {
-                        return await handler({ ...enemy, atk: atkFinal }, skill);
+                        return await handler({
+                            ...currentEnemy,
+                            ...enemy,
+                            id: currentEnemy?.id || enemy?.id,
+                            nome: currentEnemy?.name || currentEnemy?.nome || enemy?.nome || 'Chefe',
+                            atk: atkFinal,
+                        }, skill);
                     } catch (e) {
                         console.error(`[V2.6] Handler ${skill.handler} falhou:`, e);
                     }
@@ -4079,6 +4095,32 @@
             } catch (e) {
                 console.warn('[V2.10] _origFinalizar falhou (ok):', e);
             }
+
+            window._eventoAtivo = false;
+            window._eventoFinalizando = false;
+            window._eventoTurnoJogador = true;
+            window._eventoBossRunning = false;
+            window._eventoProcessandoAcao = false;
+            window._eventoAnimais = [];
+            if (window._eventoBatalha && typeof window._eventoBatalha === 'object') {
+                window._eventoBatalha.ativa = false;
+                window._eventoBatalha.aoAoDividido = false;
+                window._eventoBatalha.aoAoEco = null;
+                window._eventoBatalha.pesadeloTurnos = 0;
+                window._eventoBatalha.publicandoResultado = false;
+                delete window._eventoBatalha.bossId;
+                delete window._eventoBatalha.faseId;
+                delete window._eventoBatalha.dificuldade;
+                delete window._eventoBatalha.isPesadelo;
+            }
+            const board = document.getElementById('board');
+            if (board) {
+                board.querySelectorAll('.token.evento-animal, .token.evento-eco-aoao').forEach(token => token.remove());
+            }
+            ['eventoBadge', 'eventoBanner'].forEach(id => {
+                const element = document.getElementById(id);
+                if (element) element.remove();
+            });
 
             // ─── Fecha tela de jogo ───
             const gs = document.getElementById('gameScreen');

@@ -36,6 +36,7 @@ let coopRoomId = null;
 let coopRoomData = null;
 let coopFaseId = null;
 let coopAtoId = null;
+let coopContent = null;
 let coopPublishingLock = false;
 let coopListenerUnsub = null;
 let coopBossRunning = false;
@@ -46,6 +47,7 @@ let coopProcessandoMorteBoss = false;
 let coopPartidaConcluida = false;
 let coopEventosTurno = [];
 let coopReplayRodando = false;
+let coopSalasAbertasCache = [];
 
 // Buffer de eventos do boss
 let coopBufferEventosBoss = [];
@@ -71,6 +73,164 @@ function coopMeuIdx() {
 
 function coopMeuUid() {
     return coopUser?.uid || null;
+}
+
+function coopValidarConteudo(content, heroClass, isHost) {
+    if (!content) return { valido: true };
+    const hero = STORY_HERO_CLASSES[heroClass];
+    if (!hero) return { valido: false, motivo: 'Herói inválido no save.' };
+    const unlocked = STORY_PROGRESS.unlockedHeroesStory || STORY_PROGRESS.selectedHeroes || ['Tupa'];
+    if (hero.starsNeeded !== 0 && !unlocked.includes(heroClass)) {
+        return { valido: false, motivo: 'Este herói ainda não foi desbloqueado neste save.' };
+    }
+
+    if (content.type === 'nacoes') {
+        const nacao = window.NACOES?.[content.nacaoId];
+        if (!nacao) return { valido: false, motivo: 'Nação não encontrada.' };
+        if (!['normal', 'dificil', 'pesadelo'].includes(content.difficulty)
+            || !['1', '2', '3'].includes(String(content.phaseId))) {
+            return { valido: false, motivo: 'Dificuldade ou fase da nação inválida.' };
+        }
+        if (nacao.diaSemana !== new Date().getDay()) {
+            return { valido: false, motivo: 'Esta nação não está disponível hoje.' };
+        }
+        const dayConfig = window._nacaoDayConfig?.[nacao.diaSemana];
+        const rarity = typeof window.getHeroRarity === 'function'
+            ? window.getHeroRarity(heroClass)
+            : (hero.rarity || 1);
+        if (dayConfig?.maxStars != null && rarity > dayConfig.maxStars) {
+            return {
+                valido: false,
+                motivo: `${hero.displayName || heroClass} tem ${rarity}★; esta prova aceita até ${dayConfig.maxStars}★.`,
+            };
+        }
+
+        if (isHost) {
+            const difficulty = content.difficulty || STORY_PROGRESS.difficulty || 'normal';
+            const progress = STORY_PROGRESS.nacaoProgressoPorDificuldade?.[difficulty]?.[content.nacaoId];
+            const week = typeof window.getWeekId === 'function' ? window.getWeekId() : null;
+            const completed = progress?.semana === week ? progress.fasesConcluidas || [] : [];
+            const phaseIndex = Number(content.phaseId) - 1;
+            if (!Number.isInteger(phaseIndex) || phaseIndex < 0 || phaseIndex > 2
+                || (phaseIndex > 0 && !completed.includes(String(phaseIndex)))) {
+                return { valido: false, motivo: 'A fase ainda não foi desbloqueada pelo anfitrião.' };
+            }
+        }
+        return { valido: true };
+    }
+
+    if (content.type === 'selados') {
+        const boss = window.EVENTO_BOSSES?.[content.bossId];
+        if (!boss && content.bossId !== 'pesadelo') {
+            return { valido: false, motivo: 'Chefe dos Sete Selados não encontrado.' };
+        }
+        if (!['normal', 'dificil', 'pesadelo'].includes(content.difficulty)
+            || !['1', '2', '3', '4', 'boss'].includes(String(content.phaseId))) {
+            return { valido: false, motivo: 'Dificuldade ou fase dos Sete Selados inválida.' };
+        }
+        if (boss && boss.diaSemana !== new Date().getDay()) {
+            return { valido: false, motivo: 'Este evento dos Sete Selados não está ativo hoje.' };
+        }
+        if (isHost) {
+            const progress = typeof window.getEventoProgresso === 'function'
+                ? window.getEventoProgresso(content.bossId) : null;
+            const phases = ['1', '2', '3', '4', 'boss'];
+            const phaseIndex = phases.indexOf(String(content.phaseId));
+            if (!progress || phaseIndex < 0
+                || (phaseIndex > 0 && !progress.fasesConcluidas.includes(phases[phaseIndex - 1]))) {
+                return { valido: false, motivo: 'A fase ainda não foi desbloqueada pelo anfitrião.' };
+            }
+            if (content.phaseId === 'boss'
+                && (typeof window.getChavesAtuais !== 'function' || window.getChavesAtuais() < 1)) {
+                return { valido: false, motivo: 'O anfitrião não tem chave para iniciar o chefe.' };
+            }
+        }
+        return { valido: true };
+    }
+
+    if (content.type === 'raid-regional') {
+        const cfg = window.raidGetConfig?.(content.raidId);
+        if (!cfg) {
+            return { valido: false, motivo: 'Raid regional não encontrada.' };
+        }
+        if (!['normal', 'dificil', 'pesadelo'].includes(content.difficulty)) {
+            return { valido: false, motivo: 'Dificuldade da Raid regional inválida.' };
+        }
+        const today = new Date();
+        const monday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+        const week = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`;
+        if (STORY_PROGRESS.raidAttempts?.[content.raidId]?.week === week) {
+            return { valido: false, motivo: 'Esta Raid já teve sua tentativa semanal consumida.' };
+        }
+        const costMultiplier = { normal: 1, dificil: 1.5, pesadelo: 2 }[content.difficulty] || 1;
+        const cost = Math.round(cfg.custoEntrada * costMultiplier);
+        if (isHost && (STORY_PROGRESS.gold || 0) < cost) {
+            return { valido: false, motivo: `O anfitrião precisa de ${cost} ouro para abrir esta Raid.` };
+        }
+        return { valido: true };
+    }
+
+    return { valido: false, motivo: 'Tipo de sala cooperativa desconhecido.' };
+}
+
+async function coopIniciarConteudo(content, options = {}) {
+    if (content?.type === 'raid-regional') {
+        if (typeof window.raidIniciarSoloViaCoop !== 'function') {
+            throw new Error('O inicializador da Raid regional não está disponível.');
+        }
+        window._regionalRaidContext = true;
+        window._regionalRaidRound = 0;
+        await window.raidIniciarSoloViaCoop(content.raidId, {
+            difficulty: content.difficulty,
+            coop: true,
+            resume: options.resume === true,
+        });
+        return;
+    }
+
+    if (!content) {
+        if (typeof startStoryPhase === 'function') {
+            startStoryPhase(parseInt(coopAtoId, 10) || 0, coopFaseId);
+        }
+        return;
+    }
+
+    if (content.type === 'nacoes') {
+        if (typeof window.setStoryDifficulty === 'function') {
+            window.setStoryDifficulty(content.difficulty || 'normal');
+        }
+        window._nacaoBatalha = {
+            ativa: true,
+            nacaoId: content.nacaoId,
+            faseId: String(content.phaseId),
+            dificuldade: content.difficulty || 'normal',
+            isNacao: true,
+            isFinal: String(content.phaseId) === '3',
+        };
+        window._nacaoAtivo = true;
+        window._eventoAtivo = true;
+        window._eventoMode = true;
+        window._eventoAtual = {
+            bossId: `nacao_${content.nacaoId}`,
+            faseId: String(content.phaseId),
+        };
+        await window.eventoIniciarBatalha(`nacao_${content.nacaoId}`, String(content.phaseId));
+        return;
+    }
+
+    if (content.type === 'selados') {
+        if (typeof window.setDificuldadeEvento === 'function') {
+            window.setDificuldadeEvento(content.difficulty || 'normal');
+        }
+        window._eventoMode = true;
+        window._eventoAtual = {
+            bossId: content.bossId,
+            faseId: String(content.phaseId),
+            isPesadelo: content.bossId === 'pesadelo',
+        };
+        await window.eventoIniciarBatalha(content.bossId, String(content.phaseId));
+    }
 }
 
 function coopSanitize(str) {
@@ -171,6 +331,147 @@ async function coopInit() {
 // =================================================================
 let painelUnsubs = [];
 
+function coopTipoDaSala(room) {
+    const type = room.coopContent?.type;
+    if (type === 'nacoes' || type === 'selados') return type;
+    if (type === 'raid-regional' || /^raid\s*:/i.test(String(room.fase || ''))) return 'raid';
+    return 'atos';
+}
+
+function coopContextoDaSala(room) {
+    const type = coopTipoDaSala(room);
+    if (type === 'atos') return String(room.ato ?? '');
+    if (type === 'raid') {
+        return String(room.coopContent?.raidId || String(room.fase || '').replace(/^raid\s*:\s*/i, ''));
+    }
+    return String(type === 'selados' ? room.coopContent?.bossId || '' : room.coopContent?.nacaoId || '');
+}
+
+function coopFaseDaSala(room) {
+    if (room.coopContent?.phaseId != null) return String(room.coopContent.phaseId);
+    return coopTipoDaSala(room) === 'raid' ? 'unica' : String(room.fase ?? '');
+}
+
+function coopDificuldadeDaSala(room) {
+    return String(room.coopContent?.difficulty || room.dificuldade || 'sem-dificuldade');
+}
+
+function coopNomeTipoSala(type) {
+    return ({
+        atos: 'Atos',
+        raid: 'Raids regionais',
+        selados: 'Sete Selados',
+        nacoes: 'Sete Nações',
+    })[type] || 'Atos';
+}
+
+function coopNomeContextoSala(room) {
+    const type = coopTipoDaSala(room);
+    const id = coopContextoDaSala(room);
+    if (type === 'atos') return `Ato ${id || '?'}`;
+    if (type === 'raid') {
+        const raid = window.raidGetConfig?.(id);
+        return raid?.name || raid?.nome || room.coopContent?.title || `Raid ${id || '?'}`;
+    }
+    if (type === 'selados') return window.EVENTO_BOSSES?.[id]?.nome || id || 'Chefe';
+    return window.NACOES?.[id]?.nome || id || 'Nação';
+}
+
+function coopNomeFaseSala(room) {
+    const type = coopTipoDaSala(room);
+    const phase = coopFaseDaSala(room);
+    if (type === 'raid') return 'Combate';
+    if (phase === 'boss') return 'Chefe';
+    if (/^fase\b/i.test(phase)) return phase;
+    return `Fase ${phase || '?'}`;
+}
+
+function coopNomeDificuldadeSala(room) {
+    const difficulty = coopDificuldadeDaSala(room);
+    return ({
+        normal: 'Normal',
+        dificil: 'Difícil',
+        pesadelo: 'Pesadelo',
+        'sem-dificuldade': 'Sem dificuldade',
+    })[difficulty] || difficulty;
+}
+
+function coopDefinirOpcoesFiltro(select, values, placeholder, selectedValue) {
+    if (!select) return '';
+    const options = [{ value: '', label: placeholder }, ...values];
+    select.replaceChildren();
+    options.forEach(item => {
+        const option = document.createElement('option');
+        option.value = item.value;
+        option.textContent = item.label;
+        select.appendChild(option);
+    });
+    const selectedExists = options.some(item => item.value === selectedValue);
+    select.value = selectedExists ? selectedValue : '';
+    return select.value;
+}
+
+function coopRenderSalasAbertas(salas) {
+    const list = document.getElementById('coopListaAbertas');
+    const count = document.getElementById('coopCountAbertas');
+    if (!list || !count) return;
+
+    const tipoFiltro = document.getElementById('coopFiltroTipo')?.value || '';
+    const contextoFiltro = document.getElementById('coopFiltroContexto');
+    const faseFiltro = document.getElementById('coopFiltroFase');
+    const dificuldadeFiltro = document.getElementById('coopFiltroDificuldade')?.value || '';
+
+    const salasPorTipo = salas.filter(room => !tipoFiltro || coopTipoDaSala(room) === tipoFiltro);
+    const contextos = new Map();
+    salasPorTipo.forEach(room => {
+        const key = `${coopTipoDaSala(room)}|${coopContextoDaSala(room)}`;
+        if (!contextos.has(key)) contextos.set(key, coopNomeContextoSala(room));
+    });
+    const contextoSelecionado = coopDefinirOpcoesFiltro(
+        contextoFiltro,
+        [...contextos].sort((a, b) => a[1].localeCompare(b[1], 'pt-BR'))
+            .map(([value, label]) => ({ value, label })),
+        'Todos os atos / eventos',
+        contextoFiltro?.value || ''
+    );
+
+    const salasPorContexto = salasPorTipo.filter(room =>
+        !contextoSelecionado || `${coopTipoDaSala(room)}|${coopContextoDaSala(room)}` === contextoSelecionado
+    );
+    const fases = new Map();
+    salasPorContexto.forEach(room => {
+        const key = `${coopTipoDaSala(room)}|${coopFaseDaSala(room)}`;
+        if (!fases.has(key)) fases.set(key, coopNomeFaseSala(room));
+    });
+    const faseSelecionada = coopDefinirOpcoesFiltro(
+        faseFiltro,
+        [...fases].sort((a, b) => a[1].localeCompare(b[1], 'pt-BR'))
+            .map(([value, label]) => ({ value, label })),
+        'Todas as fases',
+        faseFiltro?.value || ''
+    );
+
+    const filtradas = salas.filter(room => {
+        if (tipoFiltro && coopTipoDaSala(room) !== tipoFiltro) return false;
+        if (contextoSelecionado
+            && `${coopTipoDaSala(room)}|${coopContextoDaSala(room)}` !== contextoSelecionado) return false;
+        if (faseSelecionada && `${coopTipoDaSala(room)}|${coopFaseDaSala(room)}` !== faseSelecionada) return false;
+        if (dificuldadeFiltro && coopDificuldadeDaSala(room) !== dificuldadeFiltro) return false;
+        return true;
+    });
+
+    count.textContent = filtradas.length === salas.length
+        ? String(salas.length)
+        : `${filtradas.length}/${salas.length}`;
+    if (filtradas.length === 0) {
+        list.innerHTML = salas.length === 0
+            ? '<div class="coop-empty">Nenhuma sala aberta. Crie uma!</div>'
+            : '<div class="coop-empty">Nenhuma sala corresponde aos filtros.</div>';
+        return;
+    }
+    list.innerHTML = filtradas.map(room => coopRenderCard(room, 'aberta')).join('');
+}
+
 function coopAbrirPainel() {
     if (!coopUser) {
         coopInit().then(ok => { if (ok) coopAbrirPainel(); });
@@ -207,6 +508,28 @@ function coopAbrirPainel() {
                 <div class="coop-painel-section-title">
                     🌐 SALAS ABERTAS <span class="coop-count" id="coopCountAbertas">0</span>
                 </div>
+                <div class="coop-filtros" aria-label="Filtros de salas abertas">
+                    <select id="coopFiltroTipo" aria-label="Tipo de conteúdo">
+                        <option value="">Todos os tipos</option>
+                        <option value="atos">Atos</option>
+                        <option value="raid">Raids regionais</option>
+                        <option value="selados">Sete Selados</option>
+                        <option value="nacoes">Sete Nações</option>
+                    </select>
+                    <select id="coopFiltroContexto" aria-label="Ato, raid ou evento">
+                        <option value="">Todos os atos / eventos</option>
+                    </select>
+                    <select id="coopFiltroFase" aria-label="Fase">
+                        <option value="">Todas as fases</option>
+                    </select>
+                    <select id="coopFiltroDificuldade" aria-label="Dificuldade">
+                        <option value="">Todas as dificuldades</option>
+                        <option value="normal">Normal</option>
+                        <option value="dificil">Difícil</option>
+                        <option value="pesadelo">Pesadelo</option>
+                        <option value="sem-dificuldade">Sem dificuldade registrada</option>
+                    </select>
+                </div>
                 <div class="coop-lista" id="coopListaAbertas">
                     <div class="coop-empty">Carregando...</div>
                 </div>
@@ -215,6 +538,10 @@ function coopAbrirPainel() {
     `;
     document.body.appendChild(painel);
 
+    ['coopFiltroTipo', 'coopFiltroContexto', 'coopFiltroFase', 'coopFiltroDificuldade']
+        .forEach(id => document.getElementById(id)?.addEventListener('change', () => {
+            coopRenderSalasAbertas(coopSalasAbertasCache);
+        }));
     coopAssinarMinhas();
     coopAssinarAbertas();
 }
@@ -274,11 +601,7 @@ function coopAssinarMinhas() {
 function coopAssinarAbertas() {
     const unsub = fbDb.collection(COOP_ROOMS)
         .onSnapshot(snap => {
-            const list = document.getElementById('coopListaAbertas');
-            const count = document.getElementById('coopCountAbertas');
-            if (!list) return;
-
-            const abertas = snap.docs
+            coopSalasAbertasCache = snap.docs
                 .map(d => ({ id: d.id, ...d.data() }))
                 .filter(r => {
                     if (r.criador?.uid === coopUser.uid) return false;
@@ -290,15 +613,7 @@ function coopAssinarAbertas() {
                     const tb = b.criadaEm?.toMillis?.() || 0;
                     return tb - ta;
                 });
-
-            count.textContent = abertas.length;
-
-            if (abertas.length === 0) {
-                list.innerHTML = '<div class="coop-empty">Nenhuma sala aberta. Crie uma!</div>';
-                return;
-            }
-
-            list.innerHTML = abertas.map(r => coopRenderCard(r, 'aberta')).join('');
+            coopRenderSalasAbertas(coopSalasAbertasCache);
         }, e => console.warn('[coop] Listener abertas:', e));
 
     painelUnsubs.push(unsub);
@@ -343,9 +658,10 @@ function coopRenderCard(room, tipo) {
     return `
         <div class="coop-card">
             <div class="coop-card-header">
-                <span class="coop-card-fase">📖 Fase ${fase}</span>
+                <span class="coop-card-fase">${coopNomeTipoSala(coopTipoDaSala(room))} · ${coopNomeContextoSala(room)} · ${coopNomeFaseSala(room)}</span>
                 ${badge}
             </div>
+            <div class="coop-card-meta">${coopNomeDificuldadeSala(room)}</div>
             <div class="coop-card-players">
                 <span class="coop-jogador ${isCriador ? 'me' : ''}">👤 ${criador} <b>(${heroiC})</b></span>
                 <span class="coop-vs">vs</span>
@@ -361,22 +677,65 @@ function coopRenderCard(room, tipo) {
 // =================================================================
 // 6. CRIAR SALA
 // =================================================================
-async function coopCriarSala(atoId, faseId) {
+async function coopCriarSala(atoId, faseId, content = null) {
     if (!coopUser) {
         const ok = await coopInit();
         if (!ok) return;
     }
 
-    if (!confirm(`🎮 CRIAR SALA COOP\n\nFase: ${faseId} (Ato ${atoId})\n\nVocê vai jogar seu turno. Depois a sala fica aberta pra um amigo entrar.\n\nContinuar?`)) {
+    const heroClass = (STORY_PROGRESS.selectedHeroes || ['Tupa'])[0];
+    const check = coopValidarConteudo(content, heroClass, true);
+    if (!check.valido) {
+        alert(check.motivo);
         return;
     }
 
+    const custoNacao = content?.type === 'nacoes'
+        ? (window._nacaoConfig?.custoEntrada?.[content.difficulty] || 500)
+        : 0;
+    const usaChave = content?.type === 'selados' && String(content.phaseId) === 'boss';
+    let prompt = content?.confirmMessage || (
+        content
+            ? `🎮 CRIAR SALA COOP\n\n${content.title || faseId}\nHerói: ${STORY_HERO_CLASSES[heroClass]?.displayName || heroClass}\n` +
+              `${custoNacao ? `Custo pago pelo anfitrião: ${custoNacao} ouro.\n` : ''}` +
+              `${usaChave ? 'O anfitrião gastará 1 chave.\n' : ''}` +
+              '\nVocê inicia a batalha; quem entrar na sala não paga a entrada.\n\nContinuar?'
+            : `🎮 CRIAR SALA COOP\n\nFase: ${faseId} (Ato ${atoId})\n\nVocê vai jogar seu turno. Depois a sala fica aberta pra um amigo entrar.\n\nContinuar?`
+    );
+    if (content?.type === 'raid-regional') {
+        const difficultyScale = { normal: 1, dificil: 1.5, pesadelo: 2 };
+        const cfg = window.raidGetConfig(content.raidId);
+        const price = cfg ? Math.round(cfg.custoEntrada * (difficultyScale[content.difficulty] || 1)) : 0;
+        prompt = `🎮 CRIAR SALA COOP\n\n${content.title}\nHerói: ${STORY_HERO_CLASSES[heroClass]?.displayName || heroClass}\n` +
+            `Dificuldade: ${content.difficulty}\nEntrada paga pelo anfitrião: ${price} ouro.\n` +
+            'A tentativa semanal será consumida ao iniciar. Quem entrar não paga a entrada.\n\nContinuar?';
+    }
+    if (!confirm(prompt)) {
+        return;
+    }
+
+    if (content?.type === 'nacoes') {
+        if ((STORY_PROGRESS.gold || 0) < custoNacao) {
+            alert(`O anfitrião precisa de ${custoNacao} de ouro para abrir esta fase.`);
+            return;
+        }
+        STORY_PROGRESS.gold -= custoNacao;
+        if (typeof saveStoryProgress === 'function') saveStoryProgress();
+    } else if (usaChave) {
+        if (typeof window.gastarChave !== 'function' || !window.gastarChave(1)) {
+            alert('Não foi possível gastar a chave do anfitrião.');
+            return;
+        }
+    }
+
     window._coopMode = true;
+    coopContent = content;
+    window._coopContent = content;
     coopRole = 'criador';
     window._coopRole = 'criador';
     coopRoomId = null;
     coopFaseId = faseId;
-    coopAtoId = parseInt(atoId);
+    coopAtoId = parseInt(atoId, 10) || 0;
     coopP1Atualizado = false;
     coopFinalizando = false;
     coopProcessandoMorteBoss = false;
@@ -406,9 +765,7 @@ async function coopCriarSala(atoId, faseId) {
         setTimeout(() => coopInjetarUI(), 500);
     };
 
-    if (typeof startStoryPhase === 'function') {
-        startStoryPhase(parseInt(atoId), faseId);
-    }
+    await coopIniciarConteudo(content);
 }
 
 // =================================================================
@@ -451,6 +808,12 @@ async function coopEntrarSala(roomId) {
         return;
     }
 
+    const contentCheck = coopValidarConteudo(room.coopContent, meuHeroClass, false);
+    if (!contentCheck.valido) {
+        alert(contentCheck.motivo);
+        return;
+    }
+
     if (!confirm(`🎮 ENTRAR NA SALA COOP\n\nCriador: ${room.criador.nome} (${room.criador.heroi})\nFase: ${room.fase}\nSeu herói: ${meuHeroData.displayName}\n\nEntrar?`)) {
         return;
     }
@@ -474,6 +837,8 @@ async function coopEntrarSala(roomId) {
     }
 
     window._coopMode = true;
+    coopContent = room.coopContent || null;
+    window._coopContent = coopContent;
     coopRole = 'oponente';
     window._coopRole = 'oponente';
     coopRoomId = roomId;
@@ -515,9 +880,7 @@ async function coopEntrarSala(roomId) {
         setTimeout(() => coopInjetarUI(), 500);
     };
 
-    if (typeof startStoryPhase === 'function') {
-        startStoryPhase(parseInt(room.ato), room.fase);
-    }
+    await coopIniciarConteudo(coopContent);
 }
 
 // =================================================================
@@ -634,6 +997,13 @@ function coopRebuildPlayers() {
     }
 
     coopRenderTudo();
+
+    if (rd.coopContent?.type === 'raid-regional'
+        && rd.estadoJogo?.raid
+        && typeof window.raidAplicarEstadoCoop === 'function') {
+        window.raidAplicarEstadoCoop(rd.estadoJogo.raid);
+    }
+
     coopAtualizarUI();
 }
 
@@ -797,6 +1167,21 @@ async function coopExecutarAcaoManual(active) {
                      ? STORY_HERO_CLASSES[active.class]
                      : { role: 'Guerreiro' };
     const usedPath = [...path];
+    const isAdjacentToTarget = (x, y) => {
+        if (window._raidMode) {
+            const sizeH = target.sizeH || target.size || 1;
+            const sizeV = target.sizeV || target.size || 1;
+            for (let dx = 0; dx < sizeH; dx++) {
+                for (let dy = 0; dy < sizeV; dy++) {
+                    if (Math.abs(x - (target.x + dx)) + Math.abs(y - (target.y + dy)) <= 1) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+        return Math.abs(x - target.x) + Math.abs(y - target.y) <= 1;
+    };
     const threshold = parseInt(document.getElementById('bravely_tiles')?.value) || 9;
     const isBravely = usedPath.length >= threshold;
 
@@ -867,7 +1252,7 @@ async function coopExecutarAcaoManual(active) {
     if (heroData.role === 'Guerreiro') {
         const dealDmg = () => {
             if (target.dead) return;
-            if ((Math.abs(active.x - target.x) + Math.abs(active.y - target.y)) <= 1) {
+            if (isAdjacentToTarget(active.x, active.y)) {
                 if (typeof playSfx === 'function') playSfx('atkg');
                 coopApplyDmg(target, totalAtk);
                 if (typeof spawnSwordEffect === 'function') spawnSwordEffect(target.x, target.y);
@@ -1184,6 +1569,10 @@ function coopCapturarEstado() {
     return {
         grid: [...grid],
         amulets: [...amulets],
+        corruptedTiles: Array.isArray(window._corruptedTiles) ? [...window._corruptedTiles] : [],
+        raid: window._raidMode && typeof window.raidCapturarEstadoCoop === 'function'
+            ? window.raidCapturarEstadoCoop()
+            : null,
         players: players.map(p => ({
             id: p.id, x: p.x, y: p.y, hp: p.hp, maxHp: p.maxHp,
             class: p.class, element: p.element, name: p.name,
@@ -1192,6 +1581,7 @@ function coopCapturarEstado() {
         boss: {
             x: boss.x, y: boss.y, hp: boss.hp, maxHp: boss.maxHp,
             type: boss.type, dead: boss.dead,
+            _corruptedTriggered: boss._corruptedTriggered === true,
         },
     };
 }
@@ -1206,6 +1596,11 @@ async function coopCriarSalaNoFirestore(estado) {
         status: 'turno_maria',
         fase: coopFaseId,
         ato: coopAtoId,
+        coopContent,
+        dificuldade: coopContent?.difficulty
+            || (typeof storyCurrentDifficulty !== 'undefined' ? storyCurrentDifficulty : null)
+            || STORY_PROGRESS.difficulty
+            || 'normal',
         criador: {
             uid: coopUser.uid,
             nome: window._coopCriadorNome,
@@ -1217,6 +1612,8 @@ async function coopCriarSalaNoFirestore(estado) {
         estadoJogo: {
             grid: estado.grid,
             amulets: estado.amulets,
+            corruptedTiles: estado.corruptedTiles,
+            ...(estado.raid ? { raid: estado.raid } : {}),
             players: estado.players,
             boss: estado.boss,
             turnoDe: 'oponente',
@@ -1256,6 +1653,7 @@ async function coopAtualizarSalaNoFirestore(estado) {
     const update = {
         'estadoJogo.grid': estado.grid,
         'estadoJogo.amulets': estado.amulets,
+        'estadoJogo.corruptedTiles': estado.corruptedTiles,
         'estadoJogo.players': estado.players,
         'estadoJogo.boss': estado.boss,
         'estadoJogo.ultimaAcao': {
@@ -1266,6 +1664,7 @@ async function coopAtualizarSalaNoFirestore(estado) {
         'estadoJogo.eventosTurno': eventos,
         atualizadaEm: firebase.firestore.FieldValue.serverTimestamp(),
     };
+    if (estado.raid) update['estadoJogo.raid'] = estado.raid;
 
     // ============ STATUS FINAL ============
     if (todosMortos) {
@@ -1345,15 +1744,24 @@ async function coopRodarBossP2() {
     coopCapturandoEventosBoss = true;
     coopForcarBoss = true;
     window._coopV82BatchHasApplySkill = false; // Limpa flag de batch
+    const isEventoCoop = ['selados', 'nacoes'].includes(coopContent?.type);
+    if (isEventoCoop) window._eventoTurnoJogador = false;
 
     try {
-        if (typeof storyEnemyAI === 'function') {
+        if (window._raidMode && window.raidAtual) {
+            if (typeof window.raidTurnoBoss !== 'function') {
+                throw new Error('A IA da Raid não está disponível durante o turno cooperativo.');
+            }
+            await window.raidTurnoBoss();
+        } else if (typeof storyEnemyAI === 'function') {
             await storyEnemyAI();
         } else if (typeof bossAI === 'function') {
             await bossAI();
         }
     } catch (e) {
         console.error('[coop] Erro na IA:', e);
+    } finally {
+        if (isEventoCoop) window._eventoTurnoJogador = true;
     }
 
     coopForcarBoss = false;
@@ -1449,6 +1857,7 @@ async function coopRodarBossP2() {
     const update = {
         'estadoJogo.grid': estado.grid,
         'estadoJogo.amulets': estado.amulets,
+        'estadoJogo.corruptedTiles': estado.corruptedTiles,
         'estadoJogo.players': estado.players,
         'estadoJogo.boss': estado.boss,
         'estadoJogo.ultimaAcao': {
@@ -1531,6 +1940,23 @@ function coopAplicarEstadoDoRoom(room) {
                     storyEnemiesRemaining[0] = idFromBoss;
                 }
             }
+
+        }
+
+        if (Array.isArray(room.estadoJogo.corruptedTiles)) {
+            window._corruptedTiles = [...new Set(room.estadoJogo.corruptedTiles
+                .filter(idx => Number.isInteger(idx) && idx >= 0 && idx < 64))];
+            const tiles = document.querySelectorAll('#grid .tile');
+            tiles.forEach(tile => {
+                tile.classList.remove('tile-corrupted');
+                tile.querySelector('.corruption-fx')?.remove();
+            });
+            window._corruptedTiles.forEach(idx => {
+                const tile = tiles[idx];
+                if (!tile) return;
+                tile.classList.add('tile-corrupted');
+                tile.innerHTML = '<div class="corruption-fx"></div>';
+            });
         }
     }
 
@@ -1553,6 +1979,12 @@ function coopAplicarEstadoDoRoom(room) {
     }
 
     coopRenderTudo();
+
+    if (room.coopContent?.type === 'raid-regional'
+        && room.estadoJogo.raid
+        && typeof window.raidAplicarEstadoCoop === 'function') {
+        window.raidAplicarEstadoCoop(room.estadoJogo.raid);
+    }
 }
 
 // =================================================================
@@ -1664,18 +2096,54 @@ async function coopReproduzirEventoIndividual(evento) {
             const handlerKey = evento.skill;
             let reproduzido = false;
 
-            // 1. Tenta pelo STORY_ANIMAL_SKILLS (handlers reais)
-            if (typeof STORY_ANIMAL_SKILLS !== 'undefined' &&
+        // ATK real capturado (handlers de nação usam enemy.atk)
+        const atkReplay = Number(evento.enemyAtk) > 0 ? Number(evento.enemyAtk)
+                : (typeof STORY_ENEMIES !== 'undefined' && STORY_ENEMIES[evento.enemyId]?.atk) || 4;
+        const enemyMock = {
+                id: evento.enemyId,
+                nome: evento.enemyNome
+                    || (typeof STORY_ENEMIES !== 'undefined' && STORY_ENEMIES[evento.enemyId]?.name)
+                    || 'Boss',
+                name: evento.enemyNome
+                    || (typeof STORY_ENEMIES !== 'undefined' && STORY_ENEMIES[evento.enemyId]?.name)
+                    || 'Boss',
+                atk: atkReplay,
+        };
+
+        // 1. Handlers de nação (coop Sete Nações)
+        if (!reproduzido && handlerKey && String(handlerKey).startsWith('nacao_')
+                && typeof window.NACAO_SKILL_HANDLERS !== 'undefined'
+                && typeof window.NACAO_SKILL_HANDLERS[handlerKey] === 'function') {
+                try {
+                    const skillMock = { nome: skillName, name: skillName, handler: handlerKey };
+                    console.log('[coop] Reproduzindo skill de NAÇÃO:', skillName);
+                    await window.NACAO_SKILL_HANDLERS[handlerKey](enemyMock, skillMock);
+                    reproduzido = true;
+                } catch (e) {
+                    console.warn('[coop] Falha ao reproduzir skill de nação:', skillName, e);
+                }
+        }
+
+        // 1b. Handlers de evento (Sete Selados)
+        if (!reproduzido && handlerKey && String(handlerKey).startsWith('evento_')
+                && typeof window.EVENTO_SKILLS !== 'undefined'
+                && typeof window.EVENTO_SKILLS[handlerKey] === 'function') {
+                try {
+                    const skillMock = { nome: skillName, name: skillName, handler: handlerKey,
+                        danoBase: atkReplay, dano: atkReplay };
+                    console.log('[coop] Reproduzindo skill de EVENTO:', skillName);
+                    await window.EVENTO_SKILLS[handlerKey](enemyMock, skillMock);
+                    reproduzido = true;
+                } catch (e) {
+                    console.warn('[coop] Falha ao reproduzir skill de evento:', skillName, e);
+                }
+        }
+
+        // 2. Tenta pelo STORY_ANIMAL_SKILLS (handlers reais)
+        if (!reproduzido && typeof STORY_ANIMAL_SKILLS !== 'undefined' &&
                 STORY_ANIMAL_SKILLS[handlerKey]) {
                 try {
                     const handler = STORY_ANIMAL_SKILLS[handlerKey];
-                    const enemyMock = {
-                        id: evento.enemyId,
-                        name: (typeof STORY_ENEMIES !== 'undefined' && STORY_ENEMIES[evento.enemyId])
-                              ? STORY_ENEMIES[evento.enemyId].name
-                              : 'Boss',
-                        atk: 4,
-                    };
                     const skillMock = { name: skillName, handler: handlerKey };
                     console.log('[coop] Reproduzindo skill:', skillName);
                     await handler(enemyMock, skillMock);
@@ -1683,9 +2151,9 @@ async function coopReproduzirEventoIndividual(evento) {
                 } catch (e) {
                     console.warn('[coop] Falha ao reproduzir skill:', skillName, e);
                 }
-            }
+        }
 
-            // 2. Fallback: chama função global
+        // 3. Fallback: chama função global
             if (!reproduzido && typeof window[handlerKey] === 'function') {
                 try {
                     window[handlerKey].apply(window, evento.argsRaw || []);
@@ -2035,6 +2503,7 @@ function coopEhMeuTurno() {
 // 19. SAIR / VOLTAR / CANCELAR
 // =================================================================
 async function coopSairParaAldeia() {
+    const leavingContent = coopContent;
     if (typeof stopAllAudio === 'function') {
         try { stopAllAudio(); } catch(e) {}
     }
@@ -2048,7 +2517,29 @@ async function coopSairParaAldeia() {
         } catch (e) {}
     }
 
+    if (['selados', 'nacoes'].includes(leavingContent?.type)
+        && typeof window.eventoFinalizarPartida === 'function') {
+        await window.eventoFinalizarPartida(false, true);
+        window._eventoMode = false;
+        window._eventoAtual = null;
+        if (window._eventoBatalha) window._eventoBatalha.ativa = false;
+        if (leavingContent.type === 'nacoes') {
+            window._nacaoAtivo = false;
+            window._nacaoBatalha = { ativa: false };
+        }
+    } else if (leavingContent?.type === 'raid-regional'
+        && typeof window.raidLimparEstado === 'function') {
+        window.raidLimparEstado();
+        window._regionalRaidContext = false;
+        ['raidBadge', 'raidBanner', 'raidResumo'].forEach(id => {
+            document.getElementById(id)?.remove();
+        });
+        document.querySelectorAll('.raid-sair-btn, .raid-salas-btn').forEach(element => element.remove());
+    }
+
     window._coopMode = false;
+    window._coopContent = null;
+    coopContent = null;
     coopRole = null;
     window._coopRole = null;
     coopRoomId = null;
@@ -2130,6 +2621,8 @@ async function coopContinuarSala(roomId) {
     }
 
     window._coopMode = true;
+    coopContent = room.coopContent || null;
+    window._coopContent = coopContent;
     coopRole = isCriador ? 'criador' : 'oponente';
     window._coopRole = coopRole;
     coopRoomId = roomId;
@@ -2168,9 +2661,7 @@ async function coopContinuarSala(roomId) {
         setTimeout(() => coopInjetarUI(), 500);
     };
 
-    if (typeof startStoryPhase === 'function') {
-        startStoryPhase(parseInt(room.ato), room.fase);
-    }
+    await coopIniciarConteudo(coopContent, { resume: true });
 }
 
 async function coopCancelarSala(roomId) {
@@ -2219,8 +2710,40 @@ async function coopFinalizar(vitoria) {
         coopListenerUnsub = null;
     }
 
+    const conteudoConcluido = coopContent;
+
+    // ⭐ FIX sala fantasma: garante que a sala seja marcada como concluída
+    // (em coop de eventos, o motor cuida da tela mas a sala ficava aberta)
+    if (coopRoomId && typeof fbDb !== 'undefined') {
+        try {
+            await fbDb.collection(COOP_ROOMS).doc(coopRoomId).update({
+                status: 'concluida',
+                vencedor: vitoria ? 'jogadores' : 'boss',
+                atualizadaEm: firebase.firestore.FieldValue.serverTimestamp(),
+            });
+            coopLog('Sala marcada como concluída.');
+        } catch (e) {
+            console.warn('[coop] Falha ao marcar sala concluída:', e);
+        }
+    }
+
+    const finalizarPeloMotorEvento = ['selados', 'nacoes'].includes(conteudoConcluido?.type)
+        && typeof window.eventoFinalizarPartida === 'function';
+    const finalizarPeloMotorRaid = conteudoConcluido?.type === 'raid-regional'
+        && typeof window.raidMostrarTelaFinal === 'function';
+    if (finalizarPeloMotorEvento && typeof window.eventoFinalizarPartida === 'function') {
+        await window.eventoFinalizarPartida(vitoria, false);
+        window._eventoMode = false;
+        window._eventoAtual = null;
+        if (window._eventoBatalha) window._eventoBatalha.ativa = false;
+        if (conteudoConcluido.type === 'nacoes') {
+            window._nacaoAtivo = false;
+            window._nacaoBatalha = { ativa: false };
+        }
+    }
+
     let msg = '';
-    if (vitoria && coopFaseId) {
+    if (!finalizarPeloMotorEvento && !finalizarPeloMotorRaid && vitoria && coopFaseId) {
         const ch = STORY_CHAPTERS[parseInt(coopAtoId)];
         const ph = ch?.phases.find(p => p.id === coopFaseId);
         if (ph?.reward) {
@@ -2239,11 +2762,15 @@ async function coopFinalizar(vitoria) {
         }
     }
 
-    alert(vitoria
-        ? `🏆 VITÓRIA COOP!${msg}\n\nVoltando à Aldeia.`
-        : `💀 DERROTA COOP...\n\nVoltando à Aldeia.`);
+    if (!finalizarPeloMotorEvento && !finalizarPeloMotorRaid) {
+        alert(vitoria
+            ? `🏆 VITÓRIA COOP!${msg}\n\nVoltando à Aldeia.`
+            : `💀 DERROTA COOP...\n\nVoltando à Aldeia.`);
+    }
 
     window._coopMode = false;
+    window._coopContent = null;
+    coopContent = null;
     coopRole = null;
     coopRoomId = null;
     coopRoomData = null;
@@ -2265,7 +2792,10 @@ async function coopFinalizar(vitoria) {
     const btn = document.querySelector('.coop-sair-btn');
     if (btn) btn.remove();
 
-    if (typeof showStoryScreen === 'function') {
+    if (finalizarPeloMotorRaid) {
+        const cfg = window.raidGetConfig(conteudoConcluido.raidId);
+        window.raidMostrarTelaFinal(vitoria, cfg, []);
+    } else if (!finalizarPeloMotorEvento && typeof showStoryScreen === 'function') {
         showStoryScreen();
         setTimeout(() => {
             if (typeof renderAldeiaScreen === 'function') renderAldeiaScreen();
@@ -2330,12 +2860,19 @@ async function coopFinalizar(vitoria) {
         const _origApply = window.applyStorySkill;
 
         window.applyStorySkill = async function(enemy, skill) {
-            if (coopCapturandoEventosBoss && window._coopMode && skill) {
+            // ⭐ FIX: captura duplicada removida. O hook V8.8 (mais abaixo)
+            // já captura com snapshot completo — capturar aqui também gerava
+            // DOIS eventos boss_skill por skill, e o primeiro (sem snapshot)
+            // era reproduzido no estado errado (direção do rolinho errada,
+            // FX em tiles errados etc.). Só captura se o V8.8 não existir.
+            if (coopCapturandoEventosBoss && window._coopMode && skill && !window._coopV88ApplyHook) {
                 coopBufferEventosBoss.push({
                     tipo: 'boss_skill',
                     skill: skill.handler || skill.name,
                     skillName: skill.name || '',
                     enemyId: enemy ? enemy.id : null,
+                    enemyNome: enemy ? (enemy.name || enemy.nome) : '',
+                    enemyAtk: enemy ? (Number(enemy.atk) || 4) : 4,
                     uid: coopMeuUid(),
                     role: coopRole,
                     em: Date.now(),
@@ -2616,7 +3153,7 @@ async function coopFinalizar(vitoria) {
             background: linear-gradient(180deg, #2a1f10, #1a1208);
             border: 3px solid #8e44ad;
             border-radius: 10px;
-            max-width: 600px; width: 100%;
+            max-width: 860px; width: 100%;
             margin: auto;
             box-shadow: 0 20px 60px rgba(0,0,0,0.9), 0 0 60px rgba(142,68,173,0.3);
         }
@@ -2663,6 +3200,22 @@ async function coopFinalizar(vitoria) {
             padding: 2px 10px; border-radius: 12px;
             font-size: 0.75rem; font-weight: 700;
         }
+        .coop-filtros {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 8px;
+            margin: 0 0 12px;
+        }
+        .coop-filtros select {
+            min-width: 0;
+            padding: 8px 10px;
+            color: #e6d6ad;
+            background: #1a1208;
+            border: 1px solid rgba(142,68,173,0.55);
+            border-radius: 5px;
+            font: 600 0.8rem 'EB Garamond', serif;
+        }
+        .coop-filtros select:focus { outline: 2px solid #8e44ad; outline-offset: 1px; }
         .coop-lista { display: flex; flex-direction: column; gap: 10px; }
         .coop-empty {
             text-align: center; padding: 20px;
@@ -2683,8 +3236,13 @@ async function coopFinalizar(vitoria) {
         }
         .coop-card-fase {
             font-family: 'Cinzel', serif;
-            color: #e8b923; font-size: 0.9rem;
+            color: #e8b923; font-size: 0.82rem;
             letter-spacing: 1px; font-weight: 700;
+        }
+        .coop-card-meta {
+            margin: -4px 0 8px;
+            color: #b8a577;
+            font: italic 0.82rem 'EB Garamond', serif;
         }
         .coop-badge {
             display: inline-flex; align-items: center; gap: 4px;
@@ -2899,6 +3457,7 @@ async function coopFinalizar(vitoria) {
 
         @media (max-width: 600px) {
             .coop-painel-header h2 { font-size: 1.1rem; }
+            .coop-filtros { grid-template-columns: repeat(2, minmax(0, 1fr)); }
             .coop-card-players { flex-direction: column; align-items: stretch; }
             .coop-vs { transform: rotate(90deg); text-align: center; }
             .coop-banner { flex-direction: column; gap: 6px; padding: 10px; }
@@ -3564,6 +4123,8 @@ console.log('✅ coop.js V8.5 (boss não renasce + skills sem duplicata + IA rod
                     skill: skill.handler || skill.name,
                     skillName: skill.name || '',
                     enemyId: enemy ? enemy.id : null,
+                    enemyNome: enemy ? (enemy.name || enemy.nome) : '',
+                    enemyAtk: enemy ? (Number(enemy.atk) || 4) : 4,
                     // ⭐ Snapshot completo do estado no momento da skill
                     snapshot: {
                         boss: bossSnapshot,
@@ -3675,21 +4236,64 @@ console.log('✅ coop.js V8.5 (boss não renasce + skills sem duplicata + IA rod
             if (typeof STORY_ANIMAL_SKILLS !== 'undefined' &&
                 STORY_ANIMAL_SKILLS[handlerKey]) {
                 const handler = STORY_ANIMAL_SKILLS[handlerKey];
+                const atkReplay = Number(evento.enemyAtk) > 0 ? Number(evento.enemyAtk)
+                    : (typeof STORY_ENEMIES !== 'undefined' && STORY_ENEMIES[evento.enemyId]?.atk) || 4;
                 const enemyMock = {
                     id: evento.enemyId,
-                    name: (typeof STORY_ENEMIES !== 'undefined' && STORY_ENEMIES[evento.enemyId])
-                          ? STORY_ENEMIES[evento.enemyId].name
-                          : 'Boss',
-                    atk: 4,
+                    nome: evento.enemyNome
+                        || (typeof STORY_ENEMIES !== 'undefined' && STORY_ENEMIES[evento.enemyId]?.name)
+                        || 'Boss',
+                    name: evento.enemyNome
+                        || (typeof STORY_ENEMIES !== 'undefined' && STORY_ENEMIES[evento.enemyId]?.name)
+                        || 'Boss',
+                    atk: atkReplay,
                 };
                 const skillMock = { name: skillName, handler: handlerKey };
-
                 console.log('[V8.8] Reproduzindo skill com snapshot:', skillName);
                 await handler(enemyMock, skillMock);
                 reproduzido = true;
             }
         } catch (e) {
             console.warn('[V8.8] Falha ao reproduzir skill:', skillName, e);
+        }
+
+        // Handlers de nação/evento não estão em STORY_ANIMAL_SKILLS
+        if (!reproduzido && handlerKey && String(handlerKey).startsWith('nacao_')
+            && typeof window.NACAO_SKILL_HANDLERS !== 'undefined'
+            && typeof window.NACAO_SKILL_HANDLERS[handlerKey] === 'function') {
+            try {
+                const atkReplay = Number(evento.enemyAtk) > 0 ? Number(evento.enemyAtk) : 4;
+                const enemyMock = {
+                    id: evento.enemyId,
+                    nome: evento.enemyNome || 'Boss', name: evento.enemyNome || 'Boss',
+                    atk: atkReplay,
+                };
+                const skillMock = { nome: skillName, name: skillName, handler: handlerKey };
+                console.log('[V8.8] Reproduzindo skill de NAÇÃO com snapshot:', skillName);
+                await window.NACAO_SKILL_HANDLERS[handlerKey](enemyMock, skillMock);
+                reproduzido = true;
+            } catch (e) {
+                console.warn('[V8.8] Falha ao reproduzir skill de nação:', skillName, e);
+            }
+        }
+        if (!reproduzido && handlerKey && String(handlerKey).startsWith('evento_')
+            && typeof window.EVENTO_SKILLS !== 'undefined'
+            && typeof window.EVENTO_SKILLS[handlerKey] === 'function') {
+            try {
+                const atkReplay = Number(evento.enemyAtk) > 0 ? Number(evento.enemyAtk) : 4;
+                const enemyMock = {
+                    id: evento.enemyId,
+                    nome: evento.enemyNome || 'Boss', name: evento.enemyNome || 'Boss',
+                    atk: atkReplay,
+                };
+                const skillMock = { nome: skillName, name: skillName, handler: handlerKey,
+                    danoBase: atkReplay, dano: atkReplay };
+                console.log('[V8.8] Reproduzindo skill de EVENTO com snapshot:', skillName);
+                await window.EVENTO_SKILLS[handlerKey](enemyMock, skillMock);
+                reproduzido = true;
+            } catch (e) {
+                console.warn('[V8.8] Falha ao reproduzir skill de evento:', skillName, e);
+            }
         }
 
         // Fallback
@@ -4137,6 +4741,48 @@ console.log('✅ coop.js V8.5 (boss não renasce + skills sem duplicata + IA rod
 STORY_PROGRESS.inventory['nucleo_abismo'] = (STORY_PROGRESS.inventory['nucleo_abismo'] || 0) + 1;
 saveStoryProgress();
 console.log('🌑 Núcleo do Abismo:', STORY_PROGRESS.inventory['nucleo_abismo']);
+// =================================================================
+// ⭐ COOP FIX — capturar skills de evento/nação (eventoAplicarSkill)
+// -----------------------------------------------------------------
+// No coop do Sete Nações / Sete Selados, o boss roda skills via
+// eventoAplicarSkill → handler direto (NUNCA passa por applyStorySkill),
+// então o hook do applyStorySkill não captura nada e o outro jogador
+// vê só o dano (sem FX, sem som). Este hook captura esses eventos também.
+// =================================================================
+(function coopHookEventoAplicarSkill() {
+    function instalar() {
+        if (typeof window.eventoAplicarSkill !== 'function') return false;
+        if (window._coopEventoAplicarHook) return true;
+        window._coopEventoAplicarHook = true;
+
+        const _orig = window.eventoAplicarSkill;
+        window.eventoAplicarSkill = async function(enemy, skill) {
+            if (coopCapturandoEventosBoss && window._coopMode && skill) {
+                coopBufferEventosBoss.push({
+                    tipo: 'boss_skill',
+                    skill: skill.handler || skill.name || '',
+                    skillName: skill.nome || skill.name || '',
+                    enemyId: (enemy && enemy.id) || null,
+                    enemyNome: (enemy && (enemy.nome || enemy.name)) || '',
+                    enemyAtk: (enemy && Number(enemy.atk)) || 4,
+                    uid: coopMeuUid(),
+                    role: coopRole,
+                    em: Date.now(),
+                });
+                coopLog('[FIX-EVT] Skill de evento capturada:', skill.nome || skill.handler);
+            }
+            return _orig.apply(this, arguments);
+        };
+        console.log('✅ [FIX-EVT] eventoAplicarSkill hookado (captura skills de nação/evento no coop).');
+        return true;
+    }
+
+    if (!instalar()) {
+        const check = setInterval(() => {
+            if (instalar()) clearInterval(check);
+        }, 200);
+    }
+})();
 // =================================================================
 // ⚔️ COOP V10.6 — O VERDADEIRO CONSERTO (P2 MATANDO BOSS)
 // -----------------------------------------------------------------
@@ -4629,9 +5275,8 @@ console.log('🌑 Núcleo do Abismo:', STORY_PROGRESS.inventory['nucleo_abismo']
                 if (coopRoomData && coopRoomData.status === 'concluida') {
                     console.log('[V10.13] P2 detectou conclusão. Encerrando tela...');
                     coopPartidaConcluida = true;
-                    coopFinalizando = true;
                     if (typeof coopFinalizar === 'function') {
-                        coopFinalizar(false);
+                        coopFinalizar(coopRoomData.vencedor === 'jogadores');
                     }
                 }
             }, 1000);
@@ -4646,6 +5291,9 @@ console.log('🌑 Núcleo do Abismo:', STORY_PROGRESS.inventory['nucleo_abismo']
     const _origFinalizar = window.coopFinalizar;
     if (typeof _origFinalizar === 'function') {
         window.coopFinalizar = async function(vitoria) {
+            if (coopContent) {
+                return _origFinalizar.apply(this, arguments);
+            }
             // Se for derrota, mostra a tela bonita do jogo
             if (!vitoria) {
                 if (typeof stopAllAudio === 'function') stopAllAudio();
@@ -5198,4 +5846,115 @@ console.log('🌑 Núcleo do Abismo:', STORY_PROGRESS.inventory['nucleo_abismo']
     }
 
     console.log('✅ [V10.33] O HP do P2 agora é 100% independente e calculado localmente.');
+})();
+
+(function integrarConteudosNoCoop() {
+    if (window._integrarConteudosNoCoop) return;
+    window._integrarConteudosNoCoop = true;
+
+    const style = document.createElement('style');
+    style.textContent = `
+        .coop-content-button {
+            display: block;
+            width: 100%;
+            margin-top: 8px;
+            padding: 8px 10px;
+            color: #fff5dc;
+            background: linear-gradient(135deg, #3b562e, #1d321b);
+            border: 1px solid #8ac070;
+            border-radius: 5px;
+            cursor: pointer;
+            font: 700 .78rem 'Cinzel', serif;
+            letter-spacing: .5px;
+        }
+        .coop-content-button:hover:not(:disabled) { filter: brightness(1.2); }
+        .coop-content-button:disabled { opacity: .45; cursor: not-allowed; }
+    `;
+    document.head.appendChild(style);
+
+    function dificuldadeAtual(tipo) {
+        if (tipo === 'selados') return STORY_PROGRESS.eventoDificuldade || 'normal';
+        return typeof storyCurrentDifficulty !== 'undefined'
+            ? storyCurrentDifficulty
+            : STORY_PROGRESS.difficulty || 'normal';
+    }
+
+    function abrirConteudo(tipo, id, phaseId) {
+        const difficulty = dificuldadeAtual(tipo);
+        let content;
+        if (tipo === 'selados') {
+            const boss = window.EVENTO_BOSSES?.[id];
+            content = {
+                type: 'selados',
+                bossId: id,
+                phaseId: String(phaseId),
+                difficulty,
+                title: `${boss?.nome || id} — Fase ${phaseId}`,
+            };
+        } else {
+            const nacao = window.NACOES?.[id];
+            content = {
+                type: 'nacoes',
+                nacaoId: id,
+                phaseId: String(phaseId),
+                difficulty,
+                title: `${nacao?.nome || id} — Fase ${phaseId}`,
+            };
+        }
+        window.coopCriarSala(0, content.title, content);
+    }
+
+    window.coopAbrirConteudo = abrirConteudo;
+
+    function identificarBossEvento(screen) {
+        const title = screen.querySelector('.story-title')?.textContent || '';
+        for (const [id, boss] of Object.entries(window.EVENTO_BOSSES || {})) {
+            if (boss.nome && title.includes(boss.nome)) return id;
+        }
+        return window.getBossDoDia?.()?.id || null;
+    }
+
+    function inserirBotoes() {
+        const screen = document.getElementById('storyScreen');
+        if (!screen?.classList.contains('active')) return;
+
+        const bossId = identificarBossEvento(screen);
+        if (bossId) {
+            screen.querySelectorAll('.evento-fase-card').forEach(card => {
+                if (card.querySelector('.coop-content-button')) return;
+                const label = card.querySelector('.evento-fase-num')?.textContent || '';
+                const phase = /BOSS/i.test(label) ? 'boss' : label.match(/FASE\s+(\d+)/i)?.[1];
+                if (!phase) return;
+                const button = document.createElement('button');
+                button.className = 'coop-content-button';
+                button.textContent = '🎮 CRIAR SALA COOP';
+                button.disabled = card.classList.contains('bloqueada');
+                button.onclick = event => {
+                    event.stopPropagation();
+                    abrirConteudo('selados', bossId, phase);
+                };
+                card.appendChild(button);
+            });
+        }
+
+        const nacaoId = window._nacaoAtual;
+        if (!nacaoId || !window.NACOES?.[nacaoId]) return;
+        screen.querySelectorAll('.nacao-fase-card').forEach(card => {
+            if (card.querySelector('.coop-content-button')) return;
+            const label = card.querySelector('.nacao-fase-num')?.textContent || '';
+            const phase = label.match(/FASE\s+(\d+)/i)?.[1];
+            if (!phase) return;
+            const button = document.createElement('button');
+            button.className = 'coop-content-button';
+            button.textContent = '🎮 CRIAR SALA COOP';
+            button.disabled = card.classList.contains('bloqueada');
+            button.onclick = event => {
+                event.stopPropagation();
+                abrirConteudo('nacoes', nacaoId, phase);
+            };
+            card.appendChild(button);
+        });
+    }
+
+    setInterval(inserirBotoes, 800);
 })();

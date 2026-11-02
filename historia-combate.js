@@ -8750,10 +8750,9 @@ if (heroAgora.class === 'Anhanga-Mirim' && heroAgora.hp < heroAgora.maxHp) {
             if (typeof _orig === 'function') return _orig.apply(this, arguments);
             return Promise.resolve();
         }
-        // PvP/Coop → original (sincronização própria)
+        // PvP/Coop → animação nova também (é só visual, não afeta sincronização)
         if (window._pvpMode || window._coopMode) {
-            if (typeof _orig === 'function') return _orig.apply(this, arguments);
-            return Promise.resolve();
+            // segue abaixo com a animação nova
         }
         // Sem dados → original
         if (!active || !target ||

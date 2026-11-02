@@ -735,6 +735,59 @@ function raidClearSkillWarning(tiles) {
     });
 }
 
+function raidCapturarEstadoCoop() {
+    const clone = value => value == null ? value : JSON.parse(JSON.stringify(value));
+    return {
+        bosses: clone(raidGetBosses()),
+        animals: clone(window.raidAnimais || []),
+        roots: clone(window.raidRaizes || []),
+        aoAoDividido: window.raidAoAoDividido === true,
+        pesadeloTurnos: window.raidPesadeloTurnos || 0,
+        pendingSkill: clone(window._raidPendingSkill),
+    };
+}
+
+function raidAplicarEstadoCoop(state) {
+    if (!state) return;
+
+    raidClearSkillWarning(window._raidPendingSkill?.tiles || []);
+    const primaryBoss = window.raidBossRefGlobal
+        || (typeof boss !== 'undefined' ? boss : null);
+    if (Array.isArray(state.bosses)) {
+        window.raidBosses = state.bosses.map((snapshot, index) => {
+            if (index === 0 && !snapshot.isFissaoMetade && primaryBoss) {
+                Object.assign(primaryBoss, snapshot);
+                return primaryBoss;
+            }
+            return { ...snapshot };
+        });
+    }
+    window.raidAnimais = Array.isArray(state.animals) ? state.animals.map(animal => ({ ...animal })) : [];
+    window.raidRaizes = Array.isArray(state.roots) ? state.roots.map(root => ({ ...root })) : [];
+    window.raidAoAoDividido = state.aoAoDividido === true;
+    window.raidPesadeloTurnos = Number(state.pesadeloTurnos) || 0;
+    window._raidPendingSkill = state.pendingSkill
+        ? JSON.parse(JSON.stringify(state.pendingSkill))
+        : null;
+
+    if (window._raidPendingSkill?.tiles) {
+        const tileElements = document.querySelectorAll('#grid .tile');
+        window._raidPendingSkill.tiles.forEach(tile => {
+            const element = tileElements[tile.y * 8 + tile.x];
+            if (!element) return;
+            element.classList.add('raid-danger-telegraph');
+            element.setAttribute(
+                'aria-label',
+                `Área ameaçada por ${window._raidPendingSkill.skill?.nome || 'habilidade do chefe'}`
+            );
+        });
+    }
+
+    raidRenderBosses();
+    raidRenderAnimais();
+    raidRenderRaizes();
+}
+
 function raidApplySkillImpact(tiles, options) {
     const gridElement = document.getElementById('grid');
     if (gridElement) {
@@ -1703,40 +1756,7 @@ async function raidIniciarBatalha(raidId) {
 })();
 
 // -----------------------------------------------------------------
-// Hook 3: interceptar coopRodarBossP2 pra raids
-// -----------------------------------------------------------------
-(function hookCoopRodarBossP2() {
-    let tentativas = 0;
-    const intervalo = setInterval(() => {
-        tentativas++;
-        if (tentativas > 100) { clearInterval(intervalo); return; }
-        if (typeof window.coopRodarBossP2 !== 'function') return;
-        clearInterval(intervalo);
-
-        const _orig = window.coopRodarBossP2;
-
-        window.coopRodarBossP2 = async function() {
-            // Se está em raid, roda a IA da raid em vez da IA do coop
-            if (window._raidMode && window.raidAtual) {
-                console.log('[raid] P2 rodando IA de raid...');
-                coopBossRunning = true;
-                try {
-                    await raidTurnoBoss();
-                } catch (e) {
-                    console.error('[raid] Erro na IA:', e);
-                }
-                coopBossRunning = false;
-                return;
-            }
-            return _orig.apply(this, arguments);
-        };
-
-        console.log('[raid] coopRodarBossP2 hookado.');
-    }, 100);
-})();
-
-// -----------------------------------------------------------------
-// Hook 4: interceptar coopProcessarMorteBoss pra drops de raid
+// Hook 3: interceptar coopProcessarMorteBoss pra drops de raid
 // -----------------------------------------------------------------
 (function hookCoopProcessarMorteBoss() {
     let tentativas = 0;
@@ -1777,6 +1797,15 @@ async function raidProcessarMorteBossCoop() {
 
         // Drop: apenas o criador recebe (ele pagou a entrada)
         if (cfg && coopRole === 'criador') {
+            if (window._regionalRaidContext) {
+                raidCreditarRecompensa(cfg.recompensaXP || 0, cfg.recompensaOuro || 0);
+                if (typeof window.onRegionalRaidVictory === 'function') {
+                    window._regionalRaidWonEquipment = window.onRegionalRaidVictory(cfg);
+                }
+                if (typeof window.registrarConhecimentoRaid === 'function') {
+                    window._regionalRaidKnowledgeResult = window.registrarConhecimentoRaid(cfg.id);
+                }
+            }
             if (cfg.fragmentoComum) {
                 const qtd = 1 + Math.floor(Math.random() * 3);
                 drops.push({ id: cfg.fragmentoComum, qty: qtd });
@@ -1937,6 +1966,9 @@ function raidAbrirModalEntrada(raidId, tipo) {
 async function raidIniciarSoloViaCoop(raidId, options = {}) {
     const cfg = raidGetConfig(raidId);
     if (!cfg) return;
+    const multiplayer = options.coop === true;
+    const isResume = options.resume === true;
+    const isCoopHost = !multiplayer || coopRole === 'criador';
     window._regionalRaidKnowledgeResult = null;
     window._regionalRaidWonEquipment = null;
 
@@ -1963,39 +1995,41 @@ async function raidIniciarSoloViaCoop(raidId, options = {}) {
     const monday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
     const weekKey = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`;
-    if (attempt?.week === weekKey) {
+    if (attempt?.week === weekKey && !isResume) {
         alert('Esta Raid já teve sua tentativa semanal consumida, independentemente da dificuldade.');
         return;
     }
 
     const entryCost = Math.round(cfg.custoEntrada * difficultyScale.cost);
-    if (!raidTemOuroSuficiente(entryCost)) {
+    if (isCoopHost && !isResume && !raidTemOuroSuficiente(entryCost)) {
         alert('Ouro insuficiente.');
         return;
     }
 
     const heroName = STORY_HERO_CLASSES[heroClass].displayName || heroClass;
-    if (!confirm(
+    if (!multiplayer && !confirm(
         `⚔️ ENTRAR NO RAID\n\n${cfg.nome} — ${cfg.titulo}\n` +
         `Dificuldade: ${difficulty === 'dificil' ? 'Difícil' : difficulty === 'pesadelo' ? 'Pesadelo' : 'Normal'}\n` +
         `Herói: ${heroName}\nCusto: ${entryCost} ouro\n\n` +
         `A entrada e a tentativa semanal são consumidas ao começar. Continuar?`
     )) return;
 
-    if (!raidCobrarEntrada(entryCost)) {
+    if (isCoopHost && !isResume && !raidCobrarEntrada(entryCost)) {
         alert('Erro ao cobrar.');
         return;
     }
 
-    if (!STORY_PROGRESS.raidAttempts || typeof STORY_PROGRESS.raidAttempts !== 'object') {
-        STORY_PROGRESS.raidAttempts = {};
+    if (!isResume) {
+        if (!STORY_PROGRESS.raidAttempts || typeof STORY_PROGRESS.raidAttempts !== 'object') {
+            STORY_PROGRESS.raidAttempts = {};
+        }
+        STORY_PROGRESS.raidAttempts[raidId] = {
+            week: weekKey,
+            difficulty,
+            heroes: [heroClass],
+            startedAt: Date.now(),
+        };
     }
-    STORY_PROGRESS.raidAttempts[raidId] = {
-        week: weekKey,
-        difficulty,
-        heroes: [heroClass],
-        startedAt: Date.now(),
-    };
 
     const originalConfig = {
         hp: cfg.hp,
@@ -2027,11 +2061,13 @@ async function raidIniciarSoloViaCoop(raidId, options = {}) {
     raidPrepararModoRaid(raidId);
     raidRole = null;
     raidRoomId = null;
-    if (typeof coopRole !== 'undefined') coopRole = null;
-    if (typeof coopRoomId !== 'undefined') coopRoomId = null;
+    if (!multiplayer) {
+        if (typeof coopRole !== 'undefined') coopRole = null;
+        if (typeof coopRoomId !== 'undefined') coopRoomId = null;
+    }
     if (typeof playerCount !== 'undefined') {
         window._raidRegionalRuntimeSnapshot = { playerCount };
-        playerCount = 1;
+        playerCount = multiplayer ? 2 : 1;
     }
 
     // Configura playerConfigs
@@ -2040,6 +2076,14 @@ async function raidIniciarSoloViaCoop(raidId, options = {}) {
         playerConfigs[0].active = true;
         playerConfigs[0].class = heroClass;
         playerConfigs[0].name = heroName;
+        if (multiplayer) {
+            const partnerClass = coopRole === 'criador'
+                ? (window._coopOponenteHeroClass || 'Tupa')
+                : (window._coopCriadorHeroClass || 'Tupa');
+            playerConfigs[1].active = true;
+            playerConfigs[1].class = partnerClass;
+            playerConfigs[1].name = STORY_HERO_CLASSES[partnerClass]?.displayName || partnerClass;
+        }
     }
 
     // Inicia a batalha (usa startStoryPhase com uma fase falsa)
@@ -2617,6 +2661,7 @@ function raidMostrarTelaFinal(vitoria, cfg, drops) {
 
     if (typeof playSfx === 'function') playSfx(vitoria ? 'win' : 'gameover');
 }
+window.raidMostrarTelaFinal = raidMostrarTelaFinal;
 
 // =================================================================
 // 4. UI DO RAID (durante a batalha)
@@ -2634,7 +2679,7 @@ function raidInjetarUI() {
 
     // Botão sair
     const acoes = document.querySelector('.game-header-actions');
-    if (acoes && !acoes.querySelector('.raid-sair-btn')) {
+    if (acoes && !coopRole && !raidRole && !acoes.querySelector('.raid-sair-btn')) {
         const btn = document.createElement('button');
         btn.className = 'raid-sair-btn';
         btn.innerHTML = '🚪 SAIR';
@@ -3067,6 +3112,8 @@ window.raidEmoji = raidEmoji;
 window.raidGetConfig = raidGetConfig;
 window.raidApplySkill = raidApplySkill;
 window.raidTurnoBoss = raidTurnoBoss;
+window.raidCapturarEstadoCoop = raidCapturarEstadoCoop;
+window.raidAplicarEstadoCoop = raidAplicarEstadoCoop;
 window.raidLimparEstado = raidLimparEstado;
 window.raidIniciarSoloViaCoop = raidIniciarSoloViaCoop;
 window.RAID_SPRITES = RAID_SPRITES;

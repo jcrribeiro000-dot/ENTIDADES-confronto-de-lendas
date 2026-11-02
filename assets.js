@@ -874,23 +874,23 @@ const A_NACAO_FRAGMENTS = {
 
 // These icons already accept either an emoji or an image URL.
 const A_CONQUISTA_ICONS = {
-    trophy: '🏆',
+    trophy: 'https://i.imgur.com/2OX9sYX.png',
     icone_bloqueada: '🔒',
     icone_desbloqueada: '✅',
-    cat_jornada: '🗺️',
+    cat_jornada: 'https://i.imgur.com/BrloIjF.png',
     cat_herois: '🦸',
-    cat_colecao: '⚔️',
+    cat_colecao: 'https://i.imgur.com/vrurP0D.png',
     cat_combate: '🔥',
     cat_selados: '🎉',
     cat_nacoes: '🌎',
     cat_social: '🤝',
-    cat_secretas: '😈',
-    recompensa_ouro: '💰',
-    recompensa_xp: '⭐',
+    cat_secretas: 'https://i.imgur.com/2IMTxPN.png',
+    recompensa_ouro: 'https://i.imgur.com/eot4lpq.png',
+    recompensa_xp: 'https://i.imgur.com/gDpWAVD.png',
     recompensa_ancestral: '🌟',
     recompensa_sombria: '💎',
     titulo_purificador: '🗿',
-    titulo_estrelado: '👑',
+    titulo_estrelado: 'https://i.imgur.com/2sAWf9l.png',
     titulo_filho_sete: '🧙',
     titulo_filho_vento: '🌪️',
     titulo_domador: '💀',
@@ -930,6 +930,35 @@ const A_INTERFACE_BACKGROUNDS = {
     ritual:     { wide: 'https://i.imgur.com/PbCqOwg.jpeg', mobile: 'https://i.imgur.com/rbiOooI.jpeg' },
     bestiario:  { wide: 'https://i.imgur.com/cjAclBV.jpeg', mobile: 'https://i.imgur.com/7qrW4Bh.jpeg' },
 };
+
+// ================================================================
+// 🎉 A_EVENTOS_HUB — Personalização da tela principal de EVENTOS
+// -----------------------------------------------------------------
+// Tela "🎉 EVENTOS" (hub com Sete Nações / Sete Selados / Raids).
+//   • sprite por card  (vazio '' → usa o emoji abaixo)
+//   • emoji por card   (fallback quando não tem sprite)
+//   • fundo da tela    (wide = desktop, mobile = vertical)
+// Basta substituir as URLs. Vazio = fallback.
+// ================================================================
+const A_EVENTOS_HUB = {
+    // ---- Ícone/emoji de cada card ----
+    sprites: {
+        nacoes:  'https://i.imgur.com/OfTg5Zu.png',   // ← sprite do card SETE NAÇÕES (ex: 'https://i.imgur.com/xxxx.png')
+        selados: 'https://i.imgur.com/TqmooRN.png',   // ← sprite do card SETE SELADOS
+        raids:   'https://i.imgur.com/qW4nfB8.png',   // ← sprite do card RAIDS
+    },
+    emojis: {
+        nacoes:  '🌎',
+        selados: '🌑',
+        raids:   '⚔️',
+    },
+    // ---- Fundo da tela (igual às outras sub-telas) ----
+    background: {
+        wide:   'https://i.imgur.com/lpUg7TX.jpeg',   // ← fundo desktop
+        mobile: 'https://i.imgur.com/cCB8qX5.jpeg',   // ← fundo mobile
+    },
+};
+window.A_EVENTOS_HUB = A_EVENTOS_HUB;
 
 window.A_EMOJIS = A_EMOJIS;
 window.A_NACAO_SPRITES = A_NACAO_SPRITES;

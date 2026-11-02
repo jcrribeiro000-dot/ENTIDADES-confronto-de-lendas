@@ -2241,11 +2241,41 @@
         'evento_pesadelo_skill': evento_pesadelo_skill,
     };
 
-    // ==============================================================
+    window.EVENTO_SKILLS = EVENTO_SKILLS; // exposto p/ replay coop de skills de evento
+
+    // ==============================================================            
     // 4. APLICAR SKILL DO BOSS DO EVENTO
     // ==============================================================
     async function eventoAplicarSkill(enemy, skill) {
         if (!skill || !skill.handler) return;
+
+        if (window._nacaoBatalha?.ativa || window._nacaoAtivo) {
+            const handler = window.NACAO_SKILL_HANDLERS?.[skill.handler];
+            const currentEnemyId = typeof storyEnemiesRemaining !== 'undefined'
+                ? storyEnemiesRemaining[0]
+                : null;
+            const currentEnemy = typeof STORY_ENEMIES !== 'undefined'
+                ? STORY_ENEMIES[currentEnemyId]
+                : null;
+            const atk = Number(currentEnemy?.atk);
+            if (typeof handler !== 'function') {
+                console.error('[evento] Skill de Nação sem handler:', skill.handler);
+                return;
+            }
+            if (!Number.isFinite(atk) || atk <= 0) {
+                console.error('[evento] ATK inválido para skill de Nação:', currentEnemyId, currentEnemy?.atk);
+                return;
+            }
+            await handler({
+                ...currentEnemy,
+                ...enemy,
+                id: currentEnemy?.id || enemy?.id,
+                nome: currentEnemy?.name || currentEnemy?.nome || enemy?.nome || 'Chefe',
+                atk,
+            }, skill);
+            return;
+        }
+
         const fn = EVENTO_SKILLS[skill.handler];
         if (!fn) {
             console.warn('[evento] Handler não encontrado:', skill.handler);
@@ -2303,7 +2333,24 @@
                 ? (typeof EVENTO_PESADELO !== 'undefined' ? EVENTO_PESADELO : null)
                 : (typeof EVENTO_BOSSES !== 'undefined' ? EVENTO_BOSSES[_eventoBatalha.bossId] : null);
 
-            if (cfg) {
+            // ⭐ FIX: se o inimigo ATUAL da fila é um animal (fase antes do boss),
+            // usa as skills PRÓPRIAS dele via applyStorySkill — nunca as skills do boss.
+            const enemyIdAtual = (typeof storyEnemiesRemaining !== 'undefined' && storyEnemiesRemaining.length > 0)
+                ? storyEnemiesRemaining[0] : null;
+            const enemyAtual = enemyIdAtual ? STORY_ENEMIES[enemyIdAtual] : null;
+            const ehFaseBoss = !_eventoBatalha.isPesadelo
+                && enemyIdAtual
+                && (enemyIdAtual === _eventoBatalha.bossId
+                    || _eventoBatalha.faseId === 'boss'
+                    || (enemyAtual && enemyAtual.isEvento)
+                    || String(enemyIdAtual).startsWith('nacao_'));
+
+            if (!ehFaseBoss && enemyAtual && (enemyAtual.skill1 || enemyAtual.skill2)) {
+                const skillAnimal = Math.random() < 0.5 ? enemyAtual.skill1 : enemyAtual.skill2;
+                if (skillAnimal && typeof applyStorySkill === 'function') {
+                    await applyStorySkill(enemyAtual, skillAnimal);
+                }
+            } else if (cfg) {
                 let skill;
                 if (_eventoBatalha.isPesadelo) {
                     skill = { nome: 'Pesadelo', handler: 'evento_pesadelo_skill' };

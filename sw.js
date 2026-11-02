@@ -1,4 +1,4 @@
-const CACHE = 'entidades-v125';
+const CACHE = 'entidades-v132';
 const ASSETS = [
   './',
   './index.html',
@@ -10,6 +10,7 @@ const ASSETS = [
   './historia-sistemas.js',
   './historia-combate.js',
   './historia-expedicoes.js',
+  './nacoes.js',
   './conhecimento.js',
   './visual-stats-10x.js',
   './coop.js',
