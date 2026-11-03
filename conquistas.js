@@ -275,13 +275,13 @@
           nome: 'Domador do Abismo', desc: 'Derrote Anhangá com 5 heróis diferentes.',
           condicao: () => (STORY_PROGRESS?.achievementStats?.anhangáKilledBy || []).length >= 5,
           progresso: () => ({ atual: (STORY_PROGRESS?.achievementStats?.anhangáKilledBy || []).length, meta: 5 }),
-          recompensa: { ouro: 1000, xp: 500, materiais: [{ id: 'fragmento_abismo', qty: 3 }, { id: 'essencia_anhanga', qty: 2 }] } },
+          recompensa: { ouro: 1000, xp: 500, materiais: [{ id: 'fragmento_abismo', qty: 30 }, { id: 'essencia_anhanga', qty: 20 }] } },
 
         { id: 'lenda_abismo', categoria: 'jornada', raridade: 'lendario',
           nome: 'Lenda do Abismo', desc: 'Derrote Anhangá com 10 heróis diferentes.',
           condicao: () => (STORY_PROGRESS?.achievementStats?.anhangáKilledBy || []).length >= 10,
           progresso: () => ({ atual: (STORY_PROGRESS?.achievementStats?.anhangáKilledBy || []).length, meta: 10 }),
-          recompensa: { ouro: 2500, xp: 1200, materiais: [{ id: 'fragmento_abismo', qty: 5 }, { id: 'essencia_anhanga', qty: 3 }] } },
+          recompensa: { ouro: 2500, xp: 1200, materiais: [{ id: 'fragmento_abismo', qty: 500 }, { id: 'essencia_anhanga', qty: 300 }] } },
 
         // ═══════════════════════════════════════════════════════
         // 🦸 HERÓIS (10)
@@ -2042,5 +2042,361 @@
     console.log('🖼️ Substituir emojis:');
     console.log('   window.SPRITES_CONQUISTAS["trophy"] = "URL"');
     console.log('   (todas as keys estão no topo do arquivo)');
+    console.log('═══════════════════════════════════════════════════');
+})();
+// =================================================================
+// fix-anhanga.js — V1.0
+// -----------------------------------------------------------------
+// Corrige a conquista "Lenda do Abismo" (derrotar Anhangá com 10
+// heróis diferentes) que só estava contando no Normal.
+//
+// Estratégia em 4 camadas (cada uma é fallback da anterior):
+//   1. applyDmg        → captura o killer no golpe fatal
+//   2. showPurificacao → captura o killer antes da cinemática
+//   3. finishStoryPhase→ detecta quando bossesDefeated ganha 'anhanga'
+//   4. handleStoryBossDefeat → hook original, mais tolerante a IDs
+//
+// Não sobrescreve hooks existentes (usa flag própria).
+// Instala-se periodicamente (a cada 2s) pra resistir a patches tardios.
+// =================================================================
+(function fixAnhangaV1() {
+    if (window._fixAnhangaV1) return;
+    window._fixAnhangaV1 = true;
+
+    // ═══════════════════════════════════════════════════════════
+    // HELPERS
+    // ═══════════════════════════════════════════════════════════
+    function _garantirEstrutura() {
+        if (typeof STORY_PROGRESS === 'undefined') return;
+        if (!STORY_PROGRESS.achievementStats) STORY_PROGRESS.achievementStats = {};
+        if (!Array.isArray(STORY_PROGRESS.achievementStats.anhangáKilledBy)) {
+            STORY_PROGRESS.achievementStats.anhangáKilledBy = [];
+        }
+    }
+
+    // Aceita variações: 'anhanga', 'ANHANGA', 'anhanga_dificil',
+    // 'anhanga_pesadelo', 'anhanga_2', etc.
+    function _isAnhangaId(id) {
+        if (!id && id !== 0) return false;
+        const s = String(id).toLowerCase().trim();
+        if (!s) return false;
+        return s === 'anhanga' || s.startsWith('anhanga') || s.includes('anhanga');
+    }
+
+    // ─── Captura do herói (nome da classe) ───
+    function _getActiveClass() {
+        // 1. Melhor fonte: killer capturado no golpe fatal
+        if (window._anhangaKillerPending) return window._anhangaKillerPending;
+        // 2. Herói ativo do turno
+        try {
+            const active = (typeof players !== 'undefined' && Array.isArray(players))
+                ? players[currentPlayerIdx] : null;
+            if (active?.class) return active.class;
+        } catch (e) {}
+        // 3. Último herói que executou ação
+        if (window._ultimoAtacanteClasse) return window._ultimoAtacanteClasse;
+        // 4. Qualquer herói vivo
+        try {
+            if (typeof players !== 'undefined' && Array.isArray(players)) {
+                const vivo = players.find(p => p && !p.dead && p.class);
+                if (vivo?.class) return vivo.class;
+            }
+        } catch (e) {}
+        // 5. Líder (fallback final)
+        try {
+            if (STORY_PROGRESS?.leader) return STORY_PROGRESS.leader;
+        } catch (e) {}
+        return null;
+    }
+
+    // ─── Registra o kill (só UMA vez por classe) ───
+    function _registrarKillAnhanga(origem) {
+        if (typeof STORY_PROGRESS === 'undefined') return false;
+        _garantirEstrutura();
+
+        const cls = _getActiveClass();
+        if (!cls) {
+            console.warn(`[fix-anhanga] (${origem}) não foi possível determinar a classe`);
+            return false;
+        }
+
+        if (STORY_PROGRESS.achievementStats.anhangáKilledBy.includes(cls)) {
+            console.log(`[fix-anhanga] (${origem}) ${cls} já está registrado — pulando`);
+            // Limpa o pendente mesmo assim
+            window._anhangaKillerPending = null;
+            return false;
+        }
+
+        STORY_PROGRESS.achievementStats.anhangáKilledBy.push(cls);
+        const total = STORY_PROGRESS.achievementStats.anhangáKilledBy.length;
+        console.log(`[fix-anhanga] ✅ (${origem}) ${cls} registrado — total: ${total}/10`);
+
+        // Limpa o pendente
+        window._anhangaKillerPending = null;
+
+        // Salva + verifica conquistas
+        try { if (typeof saveStoryProgress === 'function') saveStoryProgress(); } catch (e) {}
+        try { if (typeof window.checkAchievements === 'function') window.checkAchievements(); } catch (e) {}
+
+        return true;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // CAMADA 1: applyDmg — captura o killer no golpe fatal
+    // ═══════════════════════════════════════════════════════════
+    function _hookApplyDmg() {
+        const cur = window.applyDmg;
+        if (typeof cur !== 'function' || cur._fixAnhangaHooked) return;
+        const inner = cur;
+        window.applyDmg = function(target, amount) {
+            try {
+                if (target && !target.dead && target.hp > 0 && amount >= target.hp) {
+                    // É um golpe fatal — mas é o Anhangá?
+                    const isAnhanga =
+                        (typeof boss !== 'undefined' && target === boss && _isAnhangaId(boss?.type)) ||
+                        _isAnhangaId(target?.type) ||
+                        _isAnhangaId(target?.id) ||
+                        _isAnhangaId(target?.enemyId);
+
+                    if (isAnhanga) {
+                        const cls = _getActiveClass();
+                        if (cls) {
+                            window._anhangaKillerPending = cls;
+                            console.log(`[fix-anhanga] 🎯 Killer capturado via applyDmg: ${cls}`);
+                        }
+                    }
+                }
+            } catch (e) {}
+            return inner.apply(this, arguments);
+        };
+        window.applyDmg._fixAnhangaHooked = true;
+        console.log('[fix-anhanga] ✅ Hook 1: applyDmg');
+    }
+    _hookApplyDmg();
+
+    // ═══════════════════════════════════════════════════════════
+    // CAMADA 2: showPurificacao — captura antes da cinemática
+    // ═══════════════════════════════════════════════════════════
+    function _hookPurificacao() {
+        const cur = window.showPurificacao;
+        if (typeof cur !== 'function' || cur._fixAnhangaHooked) return;
+        const inner = cur;
+        window.showPurificacao = function(bossType) {
+            try {
+                if (_isAnhangaId(bossType)) {
+                    const cls = _getActiveClass();
+                    if (cls) {
+                        window._anhangaKillerPending = cls;
+                        console.log(`[fix-anhanga] 🎯 Killer capturado via showPurificacao: ${cls}`);
+                    }
+                }
+            } catch (e) {}
+            return inner.apply(this, arguments);
+        };
+        window.showPurificacao._fixAnhangaHooked = true;
+        console.log('[fix-anhanga] ✅ Hook 2: showPurificacao');
+    }
+    _hookPurificacao();
+
+    // ═══════════════════════════════════════════════════════════
+    // CAMADA 3: finishStoryPhase — detecta transição de bossesDefeated
+    // -------------------------------------------------------------
+    // Esse é o MAIS CONFIÁVEL porque é o mesmo caminho usado pela
+    // conquista "Fechar o Abismo" (que funciona em todas as dificuldades).
+    // Detectamos: antes da função → NÃO tem 'anhanga'; depois → tem.
+    // ═══════════════════════════════════════════════════════════
+    function _hookFinishPhase() {
+        const cur = window.finishStoryPhase;
+        if (typeof cur !== 'function' || cur._fixAnhangaHooked) return;
+        const inner = cur;
+        window.finishStoryPhase = function(victory) {
+            let antesAnhanga = false;
+            try {
+                antesAnhanga = (STORY_PROGRESS?.bossesDefeated || []).includes('anhanga');
+            } catch (e) {}
+
+            const r = inner.apply(this, arguments);
+
+            try {
+                if (victory) {
+                    const depoisAnhanga = (STORY_PROGRESS?.bossesDefeated || []).includes('anhanga');
+                    if (!antesAnhanga && depoisAnhanga) {
+                        console.log('[fix-anhanga] 🎯 Detectado: Anhangá adicionado a bossesDefeated');
+                        _registrarKillAnhanga('finishStoryPhase');
+                    }
+                }
+            } catch (e) {
+                console.warn('[fix-anhanga] erro no hook finishStoryPhase:', e);
+            }
+
+            return r;
+        };
+        window.finishStoryPhase._fixAnhangaHooked = true;
+        console.log('[fix-anhanga] ✅ Hook 3: finishStoryPhase');
+    }
+    _hookFinishPhase();
+
+    // ═══════════════════════════════════════════════════════════
+    // CAMADA 4: handleStoryBossDefeat (versão melhorada)
+    // ═══════════════════════════════════════════════════════════
+    function _hookHandleStoryBossDefeat() {
+        const cur = window.handleStoryBossDefeat;
+        if (typeof cur !== 'function' || cur._fixAnhangaHooked) return;
+        const inner = cur;
+        window.handleStoryBossDefeat = function() {
+            try {
+                // Tenta pegar o ID do enemy por VÁRIAS fontes
+                let ehAnhanga = false;
+
+                // Fonte A: storyEnemiesRemaining (pode estar vazio)
+                try {
+                    if (Array.isArray(storyEnemiesRemaining) && storyEnemiesRemaining.length > 0) {
+                        if (storyEnemiesRemaining.some(id => _isAnhangaId(id))) ehAnhanga = true;
+                    }
+                } catch (e) {}
+
+                // Fonte B: boss.type (entidades.js)
+                try {
+                    if (!ehAnhanga && typeof boss !== 'undefined' && _isAnhangaId(boss?.type)) {
+                        ehAnhanga = true;
+                    }
+                } catch (e) {}
+
+                // Fonte C: pendente (já capturado por applyDmg/showPurificacao)
+                if (window._anhangaKillerPending) ehAnhanga = true;
+
+                // Fonte D: bossesDefeated JÁ contém 'anhanga'?
+                // (se sim, é porque estamos em algum momento pós-kill)
+                try {
+                    if (!ehAnhanga && (STORY_PROGRESS?.bossesDefeated || []).includes('anhanga')) {
+                        // Confirma que o boss atual é Anhangá OU que a fase é do Anhangá
+                        const bossType = (typeof boss !== 'undefined') ? boss?.type : null;
+                        if (_isAnhangaId(bossType)) ehAnhanga = true;
+                    }
+                } catch (e) {}
+
+                if (ehAnhanga) {
+                    console.log('[fix-anhanga] 🎯 handleStoryBossDefeat detectou Anhangá');
+                    _registrarKillAnhanga('handleStoryBossDefeat');
+                }
+            } catch (e) {
+                console.warn('[fix-anhanga] erro no hook handleStoryBossDefeat:', e);
+            }
+
+            return inner.apply(this, arguments);
+        };
+        window.handleStoryBossDefeat._fixAnhangaHooked = true;
+        console.log('[fix-anhanga] ✅ Hook 4: handleStoryBossDefeat');
+    }
+    _hookHandleStoryBossDefeat();
+
+    // ═══════════════════════════════════════════════════════════
+    // CAMADA 5 (bônus): executeAction — rastreia o último atacante
+    // Isso é fallback caso currentPlayerIdx fique inválido
+    // ═══════════════════════════════════════════════════════════
+    function _hookExecuteAction() {
+        const cur = window.executeAction;
+        if (typeof cur !== 'function' || cur._fixAnhangaHooked) return;
+        const inner = cur;
+        window.executeAction = async function() {
+            try {
+                const active = (typeof players !== 'undefined' && Array.isArray(players))
+                    ? players[currentPlayerIdx] : null;
+                if (active?.class) window._ultimoAtacanteClasse = active.class;
+            } catch (e) {}
+            return inner.apply(this, arguments);
+        };
+        window.executeAction._fixAnhangaHooked = true;
+        console.log('[fix-anhanga] ✅ Hook 5: executeAction (rastreia atacante)');
+    }
+    _hookExecuteAction();
+
+    // ═══════════════════════════════════════════════════════════
+    // REINSTALADOR (caso patches tardios sobrescrevam)
+    // ═══════════════════════════════════════════════════════════
+    setInterval(() => {
+        _hookApplyDmg();
+        _hookPurificacao();
+        _hookFinishPhase();
+        _hookHandleStoryBossDefeat();
+        _hookExecuteAction();
+    }, 2000);
+
+    // ═══════════════════════════════════════════════════════════
+    // API PÚBLICA — debug e teste
+    // ═══════════════════════════════════════════════════════════
+    window._debugAnhangaConquista = function() {
+        _garantirEstrutura();
+        const lista = STORY_PROGRESS?.achievementStats?.anhangáKilledBy || [];
+        console.group('═══ [fix-anhanga] Status ═══');
+        console.log('Heróis registrados:', lista);
+        console.log(`Total: ${lista.length}/10`);
+        console.log('');
+        console.log('Hooks instalados:');
+        console.log('  applyDmg:',               window.applyDmg?._fixAnhangaHooked);
+        console.log('  showPurificacao:',        window.showPurificacao?._fixAnhangaHooked);
+        console.log('  finishStoryPhase:',       window.finishStoryPhase?._fixAnhangaHooked);
+        console.log('  handleStoryBossDefeat:',  window.handleStoryBossDefeat?._fixAnhangaHooked);
+        console.log('  executeAction:',          window.executeAction?._fixAnhangaHooked);
+        console.log('');
+        console.log('Estado ao vivo:');
+        console.log('  _anhangaKillerPending:', window._anhangaKillerPending || '(vazio)');
+        console.log('  _ultimoAtacanteClasse:', window._ultimoAtacanteClasse || '(vazio)');
+        try {
+            console.log('  currentPlayerIdx:', currentPlayerIdx);
+            const p = (typeof players !== 'undefined' && Array.isArray(players)) ? players[currentPlayerIdx] : null;
+            console.log('  players[currentPlayerIdx].class:', p?.class || '(n/a)');
+        } catch (e) {}
+        try {
+            console.log('  storyEnemiesRemaining:', Array.isArray(storyEnemiesRemaining) ? storyEnemiesRemaining : '(n/a)');
+        } catch (e) {}
+        try {
+            console.log('  boss:', typeof boss !== 'undefined' ? { type: boss?.type, dead: boss?.dead, hp: boss?.hp } : '(n/a)');
+        } catch (e) {}
+        console.groupEnd();
+    };
+
+    window._forcarRegistroAnhanga = function(classe) {
+        _garantirEstrutura();
+        const cls = classe || _getActiveClass();
+        if (!cls) {
+            console.warn('[fix-anhanga] Nenhuma classe ativa detectada');
+            return false;
+        }
+        if (STORY_PROGRESS.achievementStats.anhangáKilledBy.includes(cls)) {
+            console.log(`[fix-anhanga] ${cls} já está registrado`);
+            return false;
+        }
+        STORY_PROGRESS.achievementStats.anhangáKilledBy.push(cls);
+        console.log(`[fix-anhanga] 🧪 ${cls} registrado manualmente`);
+        try { if (typeof saveStoryProgress === 'function') saveStoryProgress(); } catch (e) {}
+        try { if (typeof window.checkAchievements === 'function') window.checkAchievements(); } catch (e) {}
+        return true;
+    };
+
+    window._limparRegistrosAnhanga = function() {
+        _garantirEstrutura();
+        STORY_PROGRESS.achievementStats.anhangáKilledBy = [];
+        window._anhangaKillerPending = null;
+        window._ultimoAtacanteClasse = null;
+        try { if (typeof saveStoryProgress === 'function') saveStoryProgress(); } catch (e) {}
+        console.log('[fix-anhanga] Registros limpos');
+    };
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('✅ [fix-anhanga V1.0] Conquista "Lenda do Abismo"');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('5 camadas de captura:');
+    console.log('  1. applyDmg        → captura no golpe fatal');
+    console.log('  2. showPurificacao → captura antes da cinemática');
+    console.log('  3. finishStoryPhase→ detecta bossesDefeated mudou');
+    console.log('  4. handleStoryBossDefeat → versão tolerante a IDs');
+    console.log('  5. executeAction   → rastreia último atacante');
+    console.log('');
+    console.log('💡 Comandos:');
+    console.log('   window._debugAnhangaConquista()       → status');
+    console.log('   window._forcarRegistroAnhanga()       → testar registro manual');
+    console.log('   window._limparRegistrosAnhanga()      → zerar (teste)');
     console.log('═══════════════════════════════════════════════════');
 })();
