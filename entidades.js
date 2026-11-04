@@ -924,7 +924,7 @@ function restartGame() {
     initGame();
 }
 
-function backToTitle() {
+async function backToTitle() {
     // 🛡️ Sempre limpa o overlay ao voltar pro título
     window._endGameShowing = false;
     const overlay = document.getElementById('gameOverlay');
@@ -935,7 +935,7 @@ function backToTitle() {
     }
     
     if (currentScreen === 'game') {
-        if (confirm('Deseja voltar ao menu? O progresso atual será perdido.')) {
+        if (await uiConfirm('Deseja voltar ao menu? O progresso atual será perdido.')) {
             gameActive = false;
             hideScreen('gameScreen');
             const gs = document.getElementById('gameScreen');

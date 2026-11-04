@@ -2028,11 +2028,11 @@ const STORY_AMULETS = {
         efeito:{ elementOverride:'FOGO', hpBonus:2 } },
 
     'amuleto_5':  { id:'amuleto_5',  nome:'Ferradura da Mula',          ato:5,  custoOuro:250,  emoji:'🧿',
-        receita:{ ferradura_mula:1, chifre_bode:3, chifre_touro:2 },
+        receita:{ ferradura_mula:10, chifre_bode:30, chifre_touro:20 },
         efeito:{ atkBonus:1, hpBonus:2 } },
 
     'amuleto_6':  { id:'amuleto_6',  nome:'Osso do Corpo Seco',         ato:6,  custoOuro:250,  emoji:'🧿',
-        receita:{ osso_corpo_seco:1, pena_urubu:3, pelo_lobo_guara:2 },
+        receita:{ osso_corpo_seco:10, pena_urubu:30, pelo_lobo_guara:20 },
         efeito:{ hpBonus:3, healPerTurn:1 } },
 
     'amuleto_7':  { id:'amuleto_7',  nome:'Presa do Lobisomem',         ato:7,  custoOuro:400,  emoji:'🧿',
@@ -2040,7 +2040,7 @@ const STORY_AMULETS = {
         efeito:{ atkBonus:1, hpBonus:2 } },
 
     'amuleto_8':  { id:'amuleto_8',  nome:'Caldeirão da Cuca',          ato:8,  custoOuro:400,  emoji:'🧿',
-        receita:{ caldeirao_cuca:1, asa_morcego:3, pena_coruja:2 },
+        receita:{ caldeirao_cuca:10, asa_morcego:30, pena_coruja:20 },
         efeito:{ healPerTurn:2 } },
 
     'amuleto_9':  { id:'amuleto_9',  nome:'Flor do Boto',               ato:9,  custoOuro:400,  emoji:'🧿',
@@ -2563,20 +2563,28 @@ function handleCraftAmulet(id) {
     renderTesourariaScreen();
 }
 
-function handleDismantleWeapon(id) {
+async function handleDismantleWeapon(id) {
     const w = getWeaponById(id);
     if (!w) return;
-    if (!confirm(`Desmanchar "${w.nome}"?\n\nVocê receberá 50% dos materiais de volta.`)) return;
+    const __perg1 = `Desmanchar "${w.nome}"?\n\nVocê receberá 50% dos materiais de volta.`;
+                const __ok1 = (typeof uiConfirm === 'function')
+                    ? await uiConfirm(__perg1, { titulo: 'Confirmar', ok: 'Confirmar', cancelar: 'Cancelar' })
+                    : confirm(__perg1);
+                if (!__ok1) return;
     const r = dismantleWeapon(id);
     if (!r.ok) { showToast('❌ Não foi possível', r.error, '❌'); return; }
     showToast('🔥 Desmanchada', `50% dos materiais devolvidos.`, '🔥');
     renderTesourariaScreen();
 }
 
-function handleDismantleAmulet(id) {
+async function handleDismantleAmulet(id) {
     const a = getAmuletById(id);
     if (!a) return;
-    if (!confirm(`Desmanchar "${a.nome}"?\n\nVocê receberá 50% dos materiais de volta.`)) return;
+    const __perg2 = `Desmanchar "${a.nome}"?\n\nVocê receberá 50% dos materiais de volta.`;
+                const __ok2 = (typeof uiConfirm === 'function')
+                    ? await uiConfirm(__perg2, { titulo: 'Confirmar', ok: 'Confirmar', cancelar: 'Cancelar' })
+                    : confirm(__perg2);
+                if (!__ok2) return;
     const r = dismantleAmulet(id);
     if (!r.ok) { showToast('❌ Não foi possível', r.error, '❌'); return; }
     showToast('🔥 Desmanchado', `50% dos materiais devolvidos.`, '🔥');

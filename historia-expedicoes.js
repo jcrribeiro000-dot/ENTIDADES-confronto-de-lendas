@@ -543,8 +543,11 @@
             });
         }
 
-        // Marca coletada e remove após 5s
+        // P2: sai do array na hora da coleta. Antes ficava marcada como
+        // "coletada" e só saía no botão VOLTAR À OCA — fechar de outro
+        // jeito deixava a entrada no save para sempre.
         exp.coletada = true;
+        STORY_PROGRESS.expeditions = (STORY_PROGRESS.expeditions || []).filter(e => e.id !== expId);
         if (typeof saveStoryProgress === 'function') saveStoryProgress();
 
         const old = document.getElementById('expResultOverlay');
@@ -967,8 +970,19 @@
         }
     }
 
+    // P2: remove do save entradas que já foram pagas (bug antigo do botão).
+    function limparColetadasPresas() {
+        const exps = STORY_PROGRESS?.expeditions;
+        if (!Array.isArray(exps) || exps.length === 0) return;
+        const restantes = exps.filter(e => !(e.coletada === true && e.concluida === true));
+        if (restantes.length === exps.length) return;
+        STORY_PROGRESS.expeditions = restantes;
+        if (typeof saveStoryProgress === 'function') saveStoryProgress();
+    }
+    window._limparExpedicoesColetadas = limparColetadasPresas;
+
     window._resolverExpedicoesTipadasAgora = concluirExpedicoesTipadas;
-    setInterval(concluirExpedicoesTipadas, 10000);
+    setInterval(() => { limparColetadasPresas(); concluirExpedicoesTipadas(); }, 10000);
 })();
 // =================================================================
 // historia.js — V79.1 — Fixes das Expedições
@@ -2621,7 +2635,9 @@
     if (typeof _origBrav === 'function' && !_origBrav._v82) {
         window.triggerBravelyChain = async function(active, target, totalAtk) {
             if (isLeader('Caboclo d Água') && !window._pvpMode && !window._coopMode) {
-                totalAtk = (totalAtk || 0) + 2;
+                // FIX: o +2 era aplicado na variável local e descartado, porque
+                // `arguments` (inalterado) ia para a função original.
+                return _origBrav.call(this, active, target, (totalAtk || 0) + 2);
             }
             return _origBrav.apply(this, arguments);
         };
@@ -4505,10 +4521,10 @@
         return 1 + MULT_UPGRADE[1] + MULT_UPGRADE[2];
     }
 
-    window.handleDismantleWeapon = function(uid) {
+    window.handleDismantleWeapon = async function(uid) {
         const w = window.getWeaponById(uid);
         if (!w) return;
-        if (!confirm(`Desmanchar "${w.nome} ${getTierInfo(w.tier).nome}"?\n\nReceberá 50% dos materiais de TODO o investimento.`)) return;
+        if (!(await uiConfirm(`Desmanchar "${w.nome} ${getTierInfo(w.tier).nome}"?\n\nReceberá 50% dos materiais de TODO o investimento.`))) return;
 
         const mult = calcMultTotal(w.tier);
         const refund = {};
@@ -4528,10 +4544,10 @@
         renderTesourariaScreen();
     };
 
-    window.handleDismantleAmulet = function(uid) {
+    window.handleDismantleAmulet = async function(uid) {
         const a = window.getAmuletById(uid);
         if (!a) return;
-        if (!confirm(`Desmanchar "${a.nome} ${getTierInfo(a.tier).nome}"?\n\nReceberá 50% dos materiais.`)) return;
+        if (!(await uiConfirm(`Desmanchar "${a.nome} ${getTierInfo(a.tier).nome}"?\n\nReceberá 50% dos materiais.`))) return;
 
         const mult = calcMultTotal(a.tier);
         const refund = {};
@@ -4868,6 +4884,37 @@
         return maxStars == null || raridadeHeroi(heroClass) <= maxStars;
     }
 
+    // Restrição da fase de evento (mesma regra de eventoIniciarFase/manual).
+    function restricaoEvento(heroClass, bossId) {
+        const cfg = (typeof EVENTO_BOSSES !== 'undefined' && bossId) ? EVENTO_BOSSES[bossId] : null;
+        if (!cfg || !cfg.restricao) return { valido: true, label: '' };
+
+        const label = cfg.restricao.label || '';
+        const heroiData = STORY_HERO_CLASSES[heroClass];
+        if (!heroiData) return { valido: false, label, motivo: 'Herói inválido.' };
+
+        if (cfg.restricao.tipo === 'elemento') {
+            const elemento = (typeof window.getElementoRealDoHeroi === 'function')
+                ? window.getElementoRealDoHeroi(heroClass)
+                : (heroiData.element || 'FOGO');
+            if (elemento !== cfg.restricao.valor) {
+                return {
+                    valido: false, label,
+                    motivo: `Esta fase exige heróis de ${cfg.restricao.valor}. ${heroiData.displayName} é de ${elemento}.`,
+                };
+            }
+        } else if (cfg.restricao.tipo === 'classe') {
+            if (heroiData.role !== cfg.restricao.valor) {
+                return {
+                    valido: false, label,
+                    motivo: `Esta fase exige ${cfg.restricao.valor}s. ${heroiData.displayName} é ${heroiData.role}.`,
+                };
+            }
+        }
+
+        return { valido: true, label };
+    }
+
     function calcChanceNacao(heroClass, nacao, faseId, diff) {
         const ids = (nacao.deuses || []).slice(0, Number(faseId));
         const deuses = ids.map(id => window.NACAO_DEUSES?.[id]).filter(Boolean);
@@ -4970,11 +5017,17 @@
         const modoHTML = `
             <div class="exp-chapter-list">
                 <button class="exp-chapter-btn ${!isEvento && !isNacao ? 'active' : ''}" onclick="window._expV86SelTipo('normal')">📖 História</button>
-                <button class="exp-chapter-btn ${isEvento ? 'active' : ''}" onclick="window._expV86SelTipo('evento')" ${temFasesEvento ? '' : 'disabled style="opacity:.4;cursor:not-allowed;"'}>
-                    ⛺ Evento do Dia
+                <button class="exp-chapter-btn ${isEvento ? 'active' : ''}"
+                        onclick="window.${temFasesEvento ? '_expV86SelTipo' : '_expV86ModoBloqueado'}('evento')"
+                        title="${temFasesEvento ? '' : 'Complete uma fase do evento de hoje'}"
+                        style="${temFasesEvento ? '' : 'opacity:.4;cursor:not-allowed;'}">
+                    ⛺ Evento do Dia${temFasesEvento ? '' : ' 🔒'}
                 </button>
-                <button class="exp-chapter-btn ${isNacao ? 'active' : ''}" onclick="window._expV86SelTipo('nacao')" ${temFasesNacao ? '' : 'disabled style="opacity:.4;cursor:not-allowed;"'}>
-                    🌎 Sete Nações
+                <button class="exp-chapter-btn ${isNacao ? 'active' : ''}"
+                        onclick="window.${temFasesNacao ? '_expV86SelTipo' : '_expV86ModoBloqueado'}('nacao')"
+                        title="${temFasesNacao ? '' : 'Conclua uma fase da nação de hoje nesta dificuldade'}"
+                        style="${temFasesNacao ? '' : 'opacity:.4;cursor:not-allowed;'}">
+                    🌎 Sete Nações${temFasesNacao ? '' : ' 🔒'}
                 </button>
             </div>`;
 
@@ -5005,10 +5058,13 @@
                         `<button class="exp-phase-btn ${f === faseId ? 'active' : ''}" onclick="window._expV86SelPhase('${f}')">Fase ${f}</button>`
                     ).join('');
 
+                    const avisoRestricao = (typeof EVENTO_BOSSES !== 'undefined'
+                        && EVENTO_BOSSES[bossDia.id]?.restricao?.label) || '';
                     secoesHTML = `
                         <div class="exp-section">
                             <div class="exp-section-title">FASE — ${bossDia.nome}</div>
                             <div class="exp-phase-list">${botoes}</div>
+                            ${avisoRestricao ? `<div style="color:#e8b923;text-align:center;margin-top:8px;">${avisoRestricao}</div>` : ''}
                         </div>`;
 
                     faseObj = { id: faseId, nome: `Fase ${faseId}` };
@@ -5129,7 +5185,10 @@
             const unlockedList = STORY_PROGRESS.unlockedHeroesStory || ['Tupa','Sume','Caipora'];
             const disponiveis = Object.values(STORY_HERO_CLASSES).filter(h => {
                 const unlocked = h.starsNeeded === 0 || unlockedList.includes(h.className);
-                return unlocked && !heroiEmExp(h.className) && heroiElegivel(h.className, tipo, nacaoDia);
+                if (!unlocked || heroiEmExp(h.className)) return false;
+                if (!heroiElegivel(h.className, tipo, nacaoDia)) return false;
+                if (isEvento && st.bossId && !restricaoEvento(h.className, st.bossId).valido) return false;
+                return true;
             });
 
             heroisHTML = disponiveis.length === 0
@@ -5169,13 +5228,20 @@
                 </div>`;
         }
 
-        const heroiPermitido = !selHeroi || heroiElegivel(selHeroi, tipo, nacaoDia);
+        const restricaoEvt = (selHeroi && isEvento && st.bossId)
+            ? restricaoEvento(selHeroi, st.bossId)
+            : { valido: true };
+        const heroiPermitido = !selHeroi
+            || (heroiElegivel(selHeroi, tipo, nacaoDia) && restricaoEvt.valido);
         const sa = slotsAtivos(tipo);
         const sm = slotsMax(tipo);
         const cheios = sa >= sm;
         let motivo = '';
         if (!selHeroi) motivo = 'Escolha um herói';
-        else if (!heroiPermitido) motivo = `Herói acima do limite de raridade (${window._nacaoDayConfig?.[nacaoDia?.diaSemana]?.maxStars}★)`;
+        else if (heroiEmExp(selHeroi)) motivo = 'Herói já está em expedição';
+        else if (!heroiPermitido) motivo = isEvento
+            ? (restricaoEvt.motivo || 'Herói não permitido nesta fase')
+            : `Herói acima do limite de raridade (${window._nacaoDayConfig?.[nacaoDia?.diaSemana]?.maxStars}★)`;
         else if (!faseObj) motivo = 'Escolha uma fase';
         else if (cheios) motivo = `Slots cheios (${sa}/${sm})`;
         else if ((STORY_PROGRESS.gold || 0) < custo) motivo = `Faltam ${custo - (STORY_PROGRESS.gold || 0)} ouro`;
@@ -5228,6 +5294,39 @@
         render(); 
     };
     window._expV86SelChapter = function(cid) { window._expStateV86.chapterId = cid; window._expStateV86.phaseId = null; render(); };
+
+    // Abas de modo bloqueadas: dizem o que falta, em vez de morrer no clique.
+    window._expV86ModoBloqueado = function(t) {
+        const diffAtual = window._expStateV86?.difficulty || 'normal';
+        const diffLabel = DIFF_LABEL[diffAtual] || diffAtual;
+        let msg;
+        if (t === 'evento') {
+            const b = (typeof getBossDoDia === 'function') ? getBossDoDia() : null;
+            msg = b
+                ? `Conclua ao menos uma fase animal de ${b.nome} hoje para liberar a expedição de evento.`
+                : 'Hoje não há evento ativo.';
+        } else {
+            const n = nacaoDoDia();
+            msg = n
+                ? `Conclua uma fase de ${n.nome} hoje, na dificuldade ${diffLabel}, para liberar.`
+                : 'Hoje não há nação ativa.';
+        }
+        if (typeof showToast === 'function') showToast('🔒 Bloqueado', msg, '🔒');
+    };
+
+    // Diagnóstico das duas abas (usar no console).
+    window._debugExpModos = function() {
+        const b = (typeof getBossDoDia === 'function') ? getBossDoDia() : null;
+        const n = nacaoDoDia();
+        const diff = window._expStateV86?.difficulty || 'normal';
+        const progEvt = (b && typeof getEventoProgresso === 'function') ? getEventoProgresso(b.id) : null;
+        console.group('═══ Modos de expedição ═══');
+        console.log('Evento de hoje:', b ? `${b.nome} (${b.id})` : 'nenhum');
+        console.log('Fases de evento concluídas:', progEvt ? progEvt.fasesConcluidas : '—');
+        console.log('Nação de hoje:', n ? `${n.nome} (${n.id})` : 'nenhuma');
+        console.log('Fases da nação nesta semana (' + diff + '):', n ? progressoNacao(n.id, diff) : '—');
+        console.groupEnd();
+    };
     window._expV86SelPhase = function(pid) { window._expStateV86.phaseId = pid; window._expStateV86.faseId = pid; render(); };
     window._expV86SelHero = function(hc) { 
         if (heroiEmExp(hc)) { if(typeof showToast==='function') showToast('⛺', 'Herói já em expedição.', '⛺'); return; }
@@ -5272,14 +5371,32 @@
         const tipo = st.tipo || 'normal';
         const diff = st.difficulty || 'normal';
 
-        if (slotsAtivos(tipo) >= slotsMax(tipo)) return;
-        if (heroiEmExp(st.heroClass)) return;
+        if (slotsAtivos(tipo) >= slotsMax(tipo)) {
+            if (typeof showToast === 'function') {
+                showToast('⛺ Expedição', `Slots cheios (${slotsAtivos(tipo)}/${slotsMax(tipo)}). Colete uma expedição pronta.`, '⛺');
+            }
+            return;
+        }
+        if (heroiEmExp(st.heroClass)) {
+            if (typeof showToast === 'function') {
+                showToast('⛺ Expedição', `${STORY_HERO_CLASSES[st.heroClass]?.displayName || st.heroClass} já está em uma expedição.`, '⛺');
+            }
+            return;
+        }
 
         if (!Array.isArray(STORY_PROGRESS.expeditions)) STORY_PROGRESS.expeditions = [];
 
         if (tipo === 'evento') {
             const base = FASE_EVT_REWARD[st.faseId];
             if (!base || !st.bossId) return;
+
+            const chkRestricao = restricaoEvento(st.heroClass, st.bossId);
+            if (!chkRestricao.valido) {
+                if (typeof showToast === 'function') {
+                    showToast('🚫 Restrição', chkRestricao.motivo, '🚫');
+                }
+                return;
+            }
             const custo = calcCustoEvento(st.faseId, diff);
             if ((STORY_PROGRESS.gold || 0) < custo) return;
             STORY_PROGRESS.gold -= custo;

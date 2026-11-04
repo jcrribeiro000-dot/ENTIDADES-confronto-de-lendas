@@ -1518,11 +1518,11 @@
         const t = setInterval(() => { if (_installHook()) clearInterval(t); }, 200);
     }
 
-    // Safety net: garante que a barra reflita mudanças mesmo se renderPath
-    // for bypassado (ex: skills consumindo path sem chamar renderPath)
-    setInterval(() => {
-        try { renderPreviewBar(); } catch (e) {}
-    }, 400);
+    // DESLIGADO: #storyPreviewBar tem `display:none !important` desde o V10.63.
+    // Reconstruir uma barra invisível a cada 400ms era trabalho jogado fora.
+    // setInterval(() => {
+    //     try { renderPreviewBar(); } catch (e) {}
+    // }, 400);
 
     // Debug
     window._debugPreview = function() {
@@ -1867,7 +1867,8 @@
         const t = setInterval(() => { if (_installHook()) clearInterval(t); }, 200);
     }
 
-    setInterval(() => { try { renderPreviewBarV2(); } catch (e) {} }, 400);
+    // DESLIGADO: #storyPreviewBarV2 também está com `display:none !important`.
+    // setInterval(() => { try { renderPreviewBarV2(); } catch (e) {} }, 400);
 
     // Debug
     window._debugPreviewV2 = function() {
@@ -3246,13 +3247,16 @@
     // =============================================================
     // 1. HELPER: aplicar cura com passiva
     // =============================================================
-    window.aplicarCuraComPassiva = function(player, amount) {
+    window.aplicarCuraComPassiva = function(player, amount, caster) {
         if (!player || player.dead) return 0;
 
         let bonus = 0;
-        const heroData = (typeof STORY_HERO_CLASSES !== 'undefined')
-            ? STORY_HERO_CLASSES[player.class] : null;
-        if (heroData?.passive === 'mae_da_mata_cura_plus') {
+        // A passiva é de QUEM CURA (antes era checada no alvo, então só
+        // funcionava quando a Mãe da Mata curava a si mesma).
+        const casterClass = caster?.class || null;
+        const casterData = (casterClass && typeof STORY_HERO_CLASSES !== 'undefined')
+            ? STORY_HERO_CLASSES[casterClass] : null;
+        if (casterData?.passive === 'mae_da_mata_cura_plus') {
             bonus = 1;
         }
 
@@ -3296,7 +3300,7 @@
         players.forEach(p => {
             if (p.dead) return;
             if (tiles.some(t => t.x === p.x && t.y === p.y)) {
-                const curado = window.aplicarCuraComPassiva(p, valorCura);
+                const curado = window.aplicarCuraComPassiva(p, valorCura, active);
                 if (curado > 0) curasFeitas++;
             }
         });
@@ -3423,7 +3427,7 @@
                         if (p.dead) return;
                         const idx = p.y * 8 + p.x;
                         if (p.id === active.id || tiles.includes(idx)) {
-                            window.aplicarCuraComPassiva(p, 5);
+                            window.aplicarCuraComPassiva(p, 5, active);
                         }
                     });
                 }
@@ -3750,11 +3754,54 @@
         const _innerInit = _init;
         window.initStoryBattle = async function() {
             if (players && Array.isArray(players)) {
-                players.forEach(p => { if (p) p._negrinhoReviveUsed = false; });
+                players.forEach(p => { if (p) { p._negrinhoReviveUsed = false; p._abyaEcoUsado = false; } });
             }
             return _innerInit.apply(this, arguments);
         };
         window.initStoryBattle._v1073Reset = true;
+    }
+
+    // =============================================================
+    // 3b. Abya — Eco Ancestral: 60% de sobreviver com 1 HP (1×/batalha)
+    // =============================================================
+    const _defeatAbya = window.handleStoryDefeat;
+    if (typeof _defeatAbya === 'function' && !_defeatAbya._v1073Abya) {
+        const _innerDefeatAbya = _defeatAbya;
+        window.handleStoryDefeat = function() {
+            if (window._pvpMode || window._coopMode) {
+                return _innerDefeatAbya.apply(this, arguments);
+            }
+
+            if (players && Array.isArray(players)) {
+                const abya = players.find(p =>
+                    p && p.class === 'Abya' &&
+                    p.dead && !p._abyaEcoUsado
+                );
+                if (abya && Math.random() < 0.6) {
+                    abya.dead = false;
+                    abya.hp = 1;
+                    abya._abyaEcoUsado = true;
+
+                    if (typeof showHealEffect === 'function')
+                        showHealEffect(abya.x, abya.y, 1);
+                    if (typeof updateVisuals === 'function') updateVisuals();
+                    if (typeof updateHeroCard === 'function') updateHeroCard();
+                    if (typeof addLog === 'function')
+                        addLog(`🌟 Abya: ECO ANCESTRAL — sobreviveu com 1 HP!`);
+                    if (typeof playSfx === 'function') {
+                        try { playSfx('purificacao'); } catch(e) {}
+                    }
+                    if (typeof spawnFxAt === 'function') {
+                        spawnFxAt('impact', 'fx-impact', abya.x, abya.y,
+                            { duration: 800, scale: 1.5 });
+                    }
+                    return;
+                }
+            }
+
+            return _innerDefeatAbya.apply(this, arguments);
+        };
+        window.handleStoryDefeat._v1073Abya = true;
     }
 
     // =============================================================
@@ -7610,12 +7657,12 @@ if (heroAgora.class === 'Anhanga-Mirim' && heroAgora.hp < heroAgora.maxHp) {
     // ═══════════════════════════════════════════════════════════
     // 5. USO DA SEMENTE
     // ═══════════════════════════════════════════════════════════
-    function _usarSemente() {
+    async function _usarSemente() {
         if ((STORY_PROGRESS.inventory['semente_vento'] || 0) < 1) {
             if (typeof showToast === 'function') showToast('❌', 'Você não tem Semente do Vento.', '❌');
             return;
         }
-        if (!confirm('🌪️ Usar Semente do Vento?\n\nO tabuleiro inteiro será reorganizado.\nTiles corrompidos são preservados.\n\nContinuar?')) return;
+        if (!(await uiConfirm('🌪️ Usar Semente do Vento?\n\nO tabuleiro inteiro será reorganizado.\nTiles corrompidos são preservados.\n\nContinuar?'))) return;
 
         STORY_PROGRESS.inventory['semente_vento'] -= 1;
         if (STORY_PROGRESS.inventory['semente_vento'] <= 0) {
@@ -10011,3 +10058,56 @@ if (heroAgora.class === 'Anhanga-Mirim' && heroAgora.hp < heroAgora.maxHp) {
     console.log('═══════════════════════════════════════════════════');
 })();
 // =================================================================
+
+// =================================================================
+// PAUSA DO BOSS DURANTE O AVISO "O BOSS ESTÁ ENFURECIDO!"
+// -----------------------------------------------------------------
+// Problema: o banner aparece e o boss age por baixo dele, então a
+// ação do boss passa sem ser vista pelo jogador.
+// Fix: o turno do boss espera o banner sair da tela (máx. 4,5s).
+// =================================================================
+(function pausarBossDuranteAvisoEnfurecido() {
+    if (window._pausaAvisoEnfurecido) return;
+    window._pausaAvisoEnfurecido = true;
+
+    function avisoVisivel() {
+        const w = document.getElementById("corruptionWarning");
+        if (!w || !w.isConnected) return false;
+        const st = window.getComputedStyle(w);
+        const op = parseFloat(st.opacity);
+        if (isFinite(op) && op <= 0.02) return false; // já sumiu visualmente
+        return true;
+    }
+
+    async function esperarAvisoSair(limiteMs) {
+        const inicio = Date.now();
+        const limite = limiteMs || 4500;
+        while (avisoVisivel() && (Date.now() - inicio) < limite) {
+            await new Promise(r => setTimeout(r, 120));
+        }
+    }
+
+    const _origStoryAI = window.storyEnemyAI;
+    if (typeof _origStoryAI === "function" && !_origStoryAI._pausaAviso) {
+        window.storyEnemyAI = async function() {
+            await esperarAvisoSair();
+            return _origStoryAI.apply(this, arguments);
+        };
+        window.storyEnemyAI._pausaAviso = true;
+    }
+
+    const _origBossAI = window.bossAI;
+    if (typeof _origBossAI === "function" && !_origBossAI._pausaAviso) {
+        window.bossAI = async function() {
+            await esperarAvisoSair();
+            return _origBossAI.apply(this, arguments);
+        };
+        window.bossAI._pausaAviso = true;
+    }
+
+    window._debugPausaAviso = function() {
+        console.log("[pausa] aviso na tela?", avisoVisivel(), "| instalada:", !!window._pausaAvisoEnfurecido);
+    };
+
+    console.log("✅ [pausa] Boss espera o aviso ENFURECIDO sair antes de agir.");
+})();

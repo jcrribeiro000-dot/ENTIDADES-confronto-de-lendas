@@ -78,7 +78,7 @@
                     if (typeof showToast === 'function') {
                         showToast('🚫 Restrição', check.motivo, '🚫');
                     } else {
-                        alert(check.motivo);
+                        uiAviso(check.motivo);
                     }
                     return; // Bloqueia a entrada
                 }
@@ -3855,7 +3855,7 @@
                     if (typeof showToast === 'function') {
                         showToast('🚫 Restrição', check.motivo, '🚫');
                     } else {
-                        alert(check.motivo);
+                        uiAviso(check.motivo);
                     }
                     return;
                 }
@@ -4791,6 +4791,27 @@
                     const el = document.querySelectorAll('#grid .tile')[t.idx];
                     if (el) el.className = 'tile bg-TERRA';
                 });
+
+                // ⭐ COMPENSAÇÃO: caminho curto até o boss (≤4 tiles) converte
+                // também a área 3×3 ao redor do alvo, senão o PA mudaria pouco.
+                if (tiles.length <= 4) {
+                    const area3x3 = [];
+                    for (let dx = -1; dx <= 1; dx++) {
+                        for (let dy = -1; dy <= 1; dy++) {
+                            const nx = target.x + dx, ny = target.y + dy;
+                            if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) area3x3.push(ny * 8 + nx);
+                        }
+                    }
+                    area3x3.forEach(idx => {
+                        grid[idx] = 'TERRA';
+                        const el = document.querySelectorAll('#grid .tile')[idx];
+                        if (el) el.className = 'tile bg-TERRA';
+                    });
+                    if (typeof addLog === 'function') {
+                        addLog(`🌍 Mãe-do-Ouro: caminho curto (${tiles.length} tiles) → área 3×3 ao redor do alvo convertida em TERRA.`);
+                    }
+                }
+
                 await sleep(600);
 
                 if (typeof applyDmg === 'function') applyDmg(target, totalAtk);
@@ -9839,7 +9860,13 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
 
             const bonus = (typeof getHeroBonusFromLevel === 'function')
                 ? getHeroBonusFromLevel(p.class) : null;
-            if (!bonus || !bonus.healPerTurn || bonus.healPerTurn <= 0) return r;
+            const curaAscensao = (bonus && bonus.healPerTurn > 0) ? bonus.healPerTurn : 0;
+
+            // Cura por turno do AMULETO equipado (antes só existia na raid)
+            const curaAmuleto = Number(p.equippedAmulet?.efeito?.healPerTurn) || 0;
+
+            const curaTotal = curaAscensao + curaAmuleto;
+            if (curaTotal <= 0) return r;
             if (p.hp >= p.maxHp) return r;
 
             // Flag: só cura 1x por turno
@@ -9847,10 +9874,16 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
             if (p._ultimoHealTurno === turnoAtual) return r;
             p._ultimoHealTurno = turnoAtual;
 
-            p.hp = Math.min(p.maxHp, p.hp + bonus.healPerTurn);
-            if (typeof showHealEffect === 'function') showHealEffect(p.x, p.y, bonus.healPerTurn);
+            const restaurado = Math.min(curaTotal, p.maxHp - p.hp);
+            p.hp += restaurado;
+            if (typeof showHealEffect === 'function') showHealEffect(p.x, p.y, restaurado);
             if (typeof updateHeroCard === 'function') updateHeroCard();
-            if (typeof addLog === 'function') addLog(`💚 ${p.name} regenerou ${bonus.healPerTurn} HP (Ascensão).`);
+            if (typeof addLog === 'function') {
+                const fonte = (curaAmuleto > 0 && curaAscensao > 0)
+                    ? `${p.equippedAmulet?.nome || 'Amuleto'} + Ascensão`
+                    : (curaAmuleto > 0 ? (p.equippedAmulet?.nome || 'Amuleto') : 'Ascensão');
+                addLog(`💚 ${p.name} regenerou ${restaurado} HP (${fonte}).`);
+            }
 
             return r;
         };
@@ -10214,12 +10247,12 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
 
                 // Handlers dos botões de reroll
                 screen.querySelectorAll('.stat11-reroll-btn').forEach(btn => {
-                    btn.onclick = function(e) {
+                    btn.onclick = async function(e) {
                         e.stopPropagation();
                         const heroClass = this.getAttribute('data-hero');
                         if (!heroClass) return;
 
-                        if (!confirm(`🎲 Rerollar o stat de ${heroClass}?\n\nCusta 1 Núcleo do Abismo.\nO stat atual será substituído.`)) return;
+                        if (!(await uiConfirm(`🎲 Rerollar o stat de ${heroClass}?\n\nCusta 1 Núcleo do Abismo.\nO stat atual será substituído.`))) return;
 
                         const r = window.rerollStat11(heroClass);
                         if (!r.ok) {
@@ -10687,12 +10720,12 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
                         // Handler do botão
                         const btn = section.querySelector('.stat11-ascend-btn');
                         if (btn) {
-                            btn.onclick = function(e) {
+                            btn.onclick = async function(e) {
                                 e.stopPropagation();
                                 const hc = this.getAttribute('data-hero');
                                 if (!hc) return;
 
-                                if (!confirm(`⚡ Ascender ${hc} ao nível 11?\n\nCusta 1 Núcleo + ${CONFIG_STAT11.XP_NIVEL_11} XP + ${CONFIG_STAT11.OURO_NIVEL_11} ouro.\n\nO stat será ALEATÓRIO.`)) return;
+                                if (!(await uiConfirm(`⚡ Ascender ${hc} ao nível 11?\n\nCusta 1 Núcleo + ${CONFIG_STAT11.XP_NIVEL_11} XP + ${CONFIG_STAT11.OURO_NIVEL_11} ouro.\n\nO stat será ALEATÓRIO.`))) return;
 
                                 if (typeof window.handleRitualAscend === 'function') {
                                     window.handleRitualAscend(hc);
@@ -11036,11 +11069,15 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
                 screen.querySelectorAll('.stat11-ascend-btn').forEach(btn => {
                     if (btn._handler) return;
                     btn._handler = true;
-                    btn.onclick = function(e) {
+                    btn.onclick = async function(e) {
                         e.stopPropagation();
                         const hc = this.getAttribute('data-hero');
                         if (!hc) return;
-                        if (!confirm(`⚡ Ascender ${hc} ao nível 11?\n\nCusta 1 Núcleo + ${CONFIG_STAT11.XP_NIVEL_11} XP + ${CONFIG_STAT11.OURO_NIVEL_11} ouro.\n\nO stat será ALEATÓRIO.`)) return;
+                        const perg = `⚡ Ascender ${hc} ao nível 11?\n\nCusta 1 Núcleo + ${CONFIG_STAT11.XP_NIVEL_11} XP + ${CONFIG_STAT11.OURO_NIVEL_11} ouro.\n\nO stat será ALEATÓRIO.`;
+                        const okAsc = (typeof uiConfirm === 'function')
+                            ? await uiConfirm(perg, { titulo: 'Ascender ao nível 11', ok: 'Ascender', cancelar: 'Cancelar' })
+                            : confirm(perg);
+                        if (!okAsc) return;
                         if (typeof window.handleRitualAscend === 'function') {
                             window.handleRitualAscend(hc);
                         }
@@ -11050,11 +11087,15 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
                 screen.querySelectorAll('.stat11-reroll-btn').forEach(btn => {
                     if (btn._handler) return;
                     btn._handler = true;
-                    btn.onclick = function(e) {
+                    btn.onclick = async function(e) {
                         e.stopPropagation();
                         const hc = this.getAttribute('data-hero');
                         if (!hc) return;
-                        if (!confirm(`🎲 Rerollar o stat de ${hc}?\n\nCusta 1 Núcleo.\nO stat atual será substituído.`)) return;
+                        const perg = `🎲 Rerollar o stat de ${hc}?\n\nCusta 1 Núcleo.\nO stat atual será substituído.`;
+                        const okReroll = (typeof uiConfirm === 'function')
+                            ? await uiConfirm(perg, { titulo: 'Rerrolar stat', ok: 'Rerrolar', cancelar: 'Cancelar' })
+                            : confirm(perg);
+                        if (!okReroll) return;
                         if (typeof window.rerollStat11 === 'function') {
                             const res = window.rerollStat11(hc);
                             if (!res.ok && typeof showToast === 'function') showToast('❌', res.error, '❌');
@@ -11341,11 +11382,15 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
         renderTesourariaScreen();
     };
 
-    window.handleDismantleWeapon = function(id) {
+    window.handleDismantleWeapon = async function(id) {
         const w = getWeaponById(id);
         if (!w) return;
         if (countWeapon(id) === 0) return;
-        if (!confirm(`Desmanchar 1 unidade de "${w.nome}"?\n\nVocê receberá 50% dos materiais de volta.`)) return;
+        const __perg1 = `Desmanchar 1 unidade de "${w.nome}"?\n\nVocê receberá 50% dos materiais de volta.`;
+                const __ok1 = (typeof uiConfirm === 'function')
+                    ? await uiConfirm(__perg1, { titulo: 'Confirmar', ok: 'Confirmar', cancelar: 'Cancelar' })
+                    : confirm(__perg1);
+                if (!__ok1) return;
 
         const arr = STORY_PROGRESS.craftedWeapons;
         const idx = arr.indexOf(id);
@@ -11367,11 +11412,15 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
         renderTesourariaScreen();
     };
 
-    window.handleDismantleAmulet = function(id) {
+    window.handleDismantleAmulet = async function(id) {
         const a = getAmuletById(id);
         if (!a) return;
         if (countAmulet(id) === 0) return;
-        if (!confirm(`Desmanchar 1 unidade de "${a.nome}"?\n\nVocê receberá 50% dos materiais de volta.`)) return;
+        const __perg2 = `Desmanchar 1 unidade de "${a.nome}"?\n\nVocê receberá 50% dos materiais de volta.`;
+                const __ok2 = (typeof uiConfirm === 'function')
+                    ? await uiConfirm(__perg2, { titulo: 'Confirmar', ok: 'Confirmar', cancelar: 'Cancelar' })
+                    : confirm(__perg2);
+                if (!__ok2) return;
 
         const arr = STORY_PROGRESS.craftedAmulets;
         const idx = arr.indexOf(id);
@@ -12076,10 +12125,14 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
         renderTesourariaScreen();
     };
 
-    window.handleDismantleWeapon = function(uid) {
+    window.handleDismantleWeapon = async function(uid) {
         const w = window.getWeaponById(uid);
         if (!w) return;
-        if (!confirm(`Desmanchar "${w.nome}"?\n\nVocê receberá 50% dos materiais de volta.`)) return;
+        const __perg3 = `Desmanchar "${w.nome}"?\n\nVocê receberá 50% dos materiais de volta.`;
+                const __ok3 = (typeof uiConfirm === 'function')
+                    ? await uiConfirm(__perg3, { titulo: 'Confirmar', ok: 'Confirmar', cancelar: 'Cancelar' })
+                    : confirm(__perg3);
+                if (!__ok3) return;
 
         const idx = STORY_PROGRESS.craftedWeapons.indexOf(uid);
         if (idx !== -1) STORY_PROGRESS.craftedWeapons.splice(idx, 1);
@@ -12094,10 +12147,14 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
         renderTesourariaScreen();
     };
 
-    window.handleDismantleAmulet = function(uid) {
+    window.handleDismantleAmulet = async function(uid) {
         const a = window.getAmuletById(uid);
         if (!a) return;
-        if (!confirm(`Desmanchar "${a.nome}"?\n\nVocê receberá 50% dos materiais de volta.`)) return;
+        const __perg4 = `Desmanchar "${a.nome}"?\n\nVocê receberá 50% dos materiais de volta.`;
+                const __ok4 = (typeof uiConfirm === 'function')
+                    ? await uiConfirm(__perg4, { titulo: 'Confirmar', ok: 'Confirmar', cancelar: 'Cancelar' })
+                    : confirm(__perg4);
+                if (!__ok4) return;
 
         const idx = STORY_PROGRESS.craftedAmulets.indexOf(uid);
         if (idx !== -1) STORY_PROGRESS.craftedAmulets.splice(idx, 1);
@@ -12584,10 +12641,14 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
         renderTesourariaScreen();
     };
 
-    window.handleDismantleWeapon = function(uid) {
+    window.handleDismantleWeapon = async function(uid) {
         const w = window.getWeaponById(uid);
         if (!w) return;
-        if (!confirm(`Desmanchar "${w.nome}"?\n\nVocê receberá 50% dos materiais de volta.`)) return;
+        const __perg5 = `Desmanchar "${w.nome}"?\n\nVocê receberá 50% dos materiais de volta.`;
+                const __ok5 = (typeof uiConfirm === 'function')
+                    ? await uiConfirm(__perg5, { titulo: 'Confirmar', ok: 'Confirmar', cancelar: 'Cancelar' })
+                    : confirm(__perg5);
+                if (!__ok5) return;
 
         const idx = STORY_PROGRESS.craftedWeapons.indexOf(uid);
         if (idx !== -1) STORY_PROGRESS.craftedWeapons.splice(idx, 1);
@@ -12602,10 +12663,14 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
         window.openEquipScreen(currentEquipHero); // Recarrega a tela atual
     };
 
-    window.handleDismantleAmulet = function(uid) {
+    window.handleDismantleAmulet = async function(uid) {
         const a = window.getAmuletById(uid);
         if (!a) return;
-        if (!confirm(`Desmanchar "${a.nome}"?\n\nVocê receberá 50% dos materiais de volta.`)) return;
+        const __perg6 = `Desmanchar "${a.nome}"?\n\nVocê receberá 50% dos materiais de volta.`;
+                const __ok6 = (typeof uiConfirm === 'function')
+                    ? await uiConfirm(__perg6, { titulo: 'Confirmar', ok: 'Confirmar', cancelar: 'Cancelar' })
+                    : confirm(__perg6);
+                if (!__ok6) return;
 
         const idx = STORY_PROGRESS.craftedAmulets.indexOf(uid);
         if (idx !== -1) STORY_PROGRESS.craftedAmulets.splice(idx, 1);
@@ -13074,6 +13139,7 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
                 let e = [];
                 if (ef.hpBonus) e.push(`+${ef.hpBonus} HP`);
                 if (ef.atkBonus) e.push(`+${ef.atkBonus} ATK`);
+                if (ef.healPerTurn) e.push(`+${ef.healPerTurn} HP/turno`);
                 if (ef.elementOverride) e.push(ef.elementOverride);
                 statsStr = e.join(' · ') || 'Efeito Único';
             }
@@ -13116,6 +13182,7 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
             let e = [];
             if (ef.hpBonus) e.push(`+${ef.hpBonus} HP`);
             if (ef.atkBonus) e.push(`+${ef.atkBonus} ATK`);
+            if (ef.healPerTurn) e.push(`+${ef.healPerTurn} HP/turno`);
             if (ef.elementOverride) e.push(ef.elementOverride);
             const statsStr = e.join(' · ') || 'Efeito Único';
 
@@ -15647,7 +15714,7 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
         `;
     };
 
-    window.comprarEventoItem = function(itemId, preco, tipo) {
+    window.comprarEventoItem = async function(itemId, preco, tipo) {
         const qtdAtual = STORY_PROGRESS.inventory[ESSENCIA_ID] || 0;
         if (qtdAtual < preco) {
             if (typeof showToast === 'function') showToast('❌', 'Essências insuficientes.', '❌');
@@ -15657,7 +15724,11 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
             if (typeof showToast === 'function') showToast('❌', 'Você já possui este item.', '❌');
             return;
         }
-        if (!confirm(`Comprar este item por ${preco} Essências?`)) return;
+        const __perg7 = `Comprar este item por ${preco} Essências?`;
+                const __ok7 = (typeof uiConfirm === 'function')
+                    ? await uiConfirm(__perg7, { titulo: 'Confirmar', ok: 'Confirmar', cancelar: 'Cancelar' })
+                    : confirm(__perg7);
+                if (!__ok7) return;
 
         STORY_PROGRESS.inventory[ESSENCIA_ID] -= preco;
         

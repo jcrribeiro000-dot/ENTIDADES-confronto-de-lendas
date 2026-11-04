@@ -5428,6 +5428,17 @@
     <script src="coop.js"></script>
     <script src="pvp.js"></script>
     <script src="raid.js"></script>
+    <script src="ui-confirm.js"></script>
+    <script>
+        // Rede de segurança: se ui-confirm.js não subir no deploy, o jogo
+        // continua funcionando com os diálogos nativos do navegador.
+        if (typeof window.uiAviso !== 'function') {
+            window.uiAviso = function (m) { alert(m); };
+        }
+        if (typeof window.uiConfirm !== 'function') {
+            window.uiConfirm = function (m) { return Promise.resolve(confirm(m)); };
+        }
+    </script>
     <script src="aldeia.js"></script>
     <script src="conquistas.js"></script>
     <script src="conhecimento.js"></script>

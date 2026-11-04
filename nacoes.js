@@ -1272,13 +1272,17 @@
     // ═══════════════════════════════════════════════════════════
     // PESADELO MENSAL
     // ═══════════════════════════════════════════════════════════
+    // Um dia aleatório por mês (1 a 28), estável dentro do mês.
+    // Muda todo mês, mas o jogador vê o mesmo dia até o mês virar.
     function _getDiaPesadelo() {
         const d = new Date();
-        const seed = (d.getDate()*31 + (d.getMonth()+1)*7 + d.getFullYear()) % 7;
-        return seed;
+        let h = (d.getFullYear() * 100 + (d.getMonth() + 1)) >>> 0;
+        h = (h * 2654435761) >>> 0;
+        h = (h ^ (h >>> 13)) >>> 0;
+        return (h % 28) + 1;
     }
     function _pesadeloDisponivelHoje() {
-        return new Date().getDay() === _getDiaPesadelo();
+        return new Date().getDate() === _getDiaPesadelo();
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -1344,8 +1348,8 @@
     }
     window._nacaoIniciarFase = _iniciarFaseNacao;
 
-    async function _iniciarPesadelo() {
-        if (!_pesadeloDisponivelHoje()) {
+    async function _iniciarPesadelo(ignorarDia = false) {
+        if (!ignorarDia && !_pesadeloDisponivelHoje()) {
             if (typeof showToast === 'function') showToast('🌑', 'O Pesadelo não está ativo hoje.', '🌑');
             return;
         }
@@ -1356,7 +1360,7 @@
             if (typeof showToast === 'function') showToast('💰', `Precisa ${custo} de ouro.`, '💰');
             return;
         }
-        if (!confirm(`🌑 ENFRENTAR O PESADELO?\n\nCusto: ${custo} ouro. 7 deuses finais em sequência.\n\nContinuar?`)) return;
+        if (!(await uiConfirm(`🌑 ENFRENTAR O PESADELO?\n\nCusto: ${custo} ouro. 7 deuses finais em sequência.\n\nContinuar?`))) return;
 
         STORY_PROGRESS.gold -= custo;
         if (typeof saveStoryProgress === 'function') saveStoryProgress();
@@ -1368,11 +1372,32 @@
 
         if (typeof window.eventoIniciarBatalha === 'function') {
             try {
-                await window.eventoIniciarBatalha('nacao_pesadelo', 'boss');
+                // FIX: com faseId 'boss' o motor monta uma fila de UM inimigo, e
+                // 'nacao_pesadelo' não existe em STORY_ENEMIES (só os 21 deuses).
+                // Passando o número de animais, o motor monta a fila acumulada
+                // e traz os 7 deuses do campo `animais` da configuração.
+                const cfgP = (typeof EVENTO_BOSSES !== 'undefined') ? EVENTO_BOSSES['nacao_pesadelo'] : null;
+                const qtdDeuses = (cfgP && Array.isArray(cfgP.animais) && cfgP.animais.length) ? cfgP.animais.length : 7;
+                await window.eventoIniciarBatalha('nacao_pesadelo', String(qtdDeuses));
             } catch (e) { console.error('[nacoes] erro em eventoIniciarBatalha:', e); }
         }
     }
     window._nacaoIniciarPesadelo = _iniciarPesadelo;
+
+    // Só para teste: abre o Pesadelo mesmo fora do dia sorteado.
+    window._forcarPesadelo = function() { return _iniciarPesadelo(true); };
+
+    window._debugPesadelo = function() {
+        const cfg = (typeof EVENTO_BOSSES !== 'undefined') ? EVENTO_BOSSES['nacao_pesadelo'] : null;
+        console.group('═══ Pesadelo das Nações ═══');
+        console.log('Disponível hoje?', _pesadeloDisponivelHoje(),
+            '| dia do Pesadelo:', _getDiaPesadelo(), '| hoje (dia do mês):', new Date().getDate());
+        console.log('Custo por dificuldade:', CONFIG.custoPesadelo);
+        console.log('Deuses configurados:', cfg ? cfg.animais : 'config não encontrada');
+        console.log('Fila da batalha agora:', window.storyEnemiesRemaining);
+        console.log('Estado da batalha:', window._nacaoBatalha);
+        console.groupEnd();
+    };
 
     // ═══════════════════════════════════════════════════════════
     // HOOKS NO MOTOR DO SETE SELADOS
@@ -1665,7 +1690,7 @@
             </div>
         ` : `
             <div class="nacao-pesadelo-aviso">
-                🌑 O Pesadelo das Nações aparecerá em <b>${diasLabel[_getDiaPesadelo()]}</b> deste mês.
+                🌑 O Pesadelo das Nações aparecerá no dia <b>${_getDiaPesadelo()}</b> deste mês.
             </div>
         `;
 
@@ -1977,7 +2002,7 @@
         console.log('Amuletos:', (STORY_PROGRESS.nacaoAmuletos || []).length, '/ 7');
         console.log('Abya desbloqueado:', STORY_PROGRESS.abyaDesbloqueado);
         console.log('Semana:', _getWeek());
-        console.log('Dia do Pesadelo:', ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'][_getDiaPesadelo()]);
+        console.log('Dia do Pesadelo (dia do mês):', _getDiaPesadelo());
         console.log('Progresso:');
         Object.keys(NACOES).forEach(id => {
             const p = _getProg(id, _getDif());
@@ -3250,7 +3275,7 @@
                 if (typeof showToast === 'function') {
                     showToast('💰', `Faltam ${custo - gold} de ouro!`, '💰');
                 }
-                alert(`💰 OURO INSUFICIENTE\n\nVocê tem: ${gold}\nPrecisa: ${custo}\nFaltam: ${custo - gold}\n\nGanhe ouro completando fases do modo história ou vendendo materiais no Curandeiro.`);
+                uiAviso(`💰 OURO INSUFICIENTE\n\nVocê tem: ${gold}\nPrecisa: ${custo}\nFaltam: ${custo - gold}\n\nGanhe ouro completando fases do modo história ou vendendo materiais no Curandeiro.`);
                 return;
             }
             return _origIniciar.apply(this, arguments);

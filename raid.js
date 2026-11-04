@@ -576,9 +576,15 @@ function raidRenderAnimais() {
         tok.style.width = s + 'px';
         tok.style.height = s + 'px';
         const hpPct = Math.max(0, (a.hp / a.maxHp) * 100);
+        const emojiFallback = a.emoji || raidEmoji('kurupi');
+        const spriteHTML = a.sprite
+            ? `<img src="${a.sprite}" class="raid-animal-sprite" alt="${a.nome || 'Invocação'}"
+                    style="width:100%;height:100%;object-fit:contain;"
+                    onerror="this.outerHTML='&lt;span class=&quot;raid-animal-emoji&quot;&gt;${emojiFallback}&lt;/span&gt;'">`
+            : `<span class="raid-animal-emoji">${emojiFallback}</span>`;
         tok.innerHTML = `
             <div class="hp-container" style="width:80%;"><div class="hp-bar" style="width:${hpPct}%;"></div></div>
-            <span class="raid-animal-emoji">${raidEmoji('kurupi')}</span>
+            ${spriteHTML}
         `;
         board.appendChild(tok);
     });
@@ -591,6 +597,14 @@ function raidRenderRaizes() {
     if (!window.raidRaizes || window.raidRaizes.length === 0) return;
 
     const s = (typeof getStep === 'function') ? getStep() : 59;
+    // Antes o emoji era fixo no código e ignorava o catálogo de assets.
+    const raizAsset = (window.A_RAID_ASSETS?.skills?.pombero_raizes) || {};
+    const raizEmoji = raizAsset.emoji || '🌿';
+    const raizHTML = raizAsset.sprite
+        ? `<img src="${raizAsset.sprite}" class="raid-raiz-sprite" alt="Raízes"
+                style="width:100%;height:100%;object-fit:contain;"
+                onerror="this.outerHTML='&lt;span class=&quot;raid-raiz-emoji&quot;&gt;${raizEmoji}&lt;/span&gt;'">`
+        : `<span class="raid-raiz-emoji">${raizEmoji}</span>`;
     window.raidRaizes.forEach((r, i) => {
         const tok = document.createElement('div');
         tok.className = 'token raid-raiz';
@@ -599,7 +613,7 @@ function raidRenderRaizes() {
         tok.style.top = (r.y * s + 8) + 'px';
         tok.style.width = s + 'px';
         tok.style.height = s + 'px';
-        tok.innerHTML = `<span class="raid-raiz-emoji">🌿</span>`;
+        tok.innerHTML = raizHTML;
         board.appendChild(tok);
     });
 }
@@ -957,7 +971,7 @@ RAID_SKILLS['raid_teju_sete_cabecas'] = async function(enemy, skill) {
         impactScale: 1.55, impactEffect: 'flame_short', impactClass: 'fx-flame-short',
     });
     if (!marcados) return;
-    raidApplyDmgEmTiles(marcados, 1);
+    raidApplyDmgEmTiles(marcados, skill.danoBase || 2, skill);
     await raidTransformarTiles('TERRA', 'FOGO', { stagger: 45, tiles: marcados });
 };
 
@@ -972,7 +986,7 @@ RAID_SKILLS['raid_teju_ima_almas'] = async function(enemy, skill) {
     const tiles = raidGetTilesAround(cx, cy, 2, 2);
     const marcados = await raidTelegraphSkill(skill, tiles, { impactScale: 1.7 });
     if (!marcados) return;
-    raidApplyDmgEmTiles(marcados, 1);
+    raidApplyDmgEmTiles(marcados, skill.danoBase || 2, skill);
 
     const dist = skill.distanciaPuxao || 2;
     players.forEach(p => {
@@ -1040,7 +1054,7 @@ RAID_SKILLS['raid_mboi_inundacao'] = async function(enemy, skill) {
         impactScale: 1.7, impactEffect: 'splash_wave', impactClass: 'fx-splash-wave',
     });
     if (!marcados) return;
-    raidApplyDmgEmTiles(marcados, 1);
+    raidApplyDmgEmTiles(marcados, skill.danoBase || 2, skill);
     await raidTransformarTiles('FOGO', 'AGUA', { stagger: 35, tiles: marcados });
 };
 
@@ -1056,8 +1070,8 @@ RAID_SKILLS['raid_monai_voo_rasante'] = async function(enemy, skill) {
     if (!destination) {
         let nx = 0, ny = 0, tent = 0;
         do {
-            nx = Math.floor(Math.random() * 6);
-            ny = Math.floor(Math.random() * 6);
+            nx = Math.floor(Math.random() * 5);
+            ny = Math.floor(Math.random() * 5);
             tent++;
         } while (tent < 40 && players.some(p =>
             !p.dead && Math.abs(p.x - nx) <= 2 && Math.abs(p.y - ny) <= 2
@@ -1065,9 +1079,10 @@ RAID_SKILLS['raid_monai_voo_rasante'] = async function(enemy, skill) {
         destination = { x: nx, y: ny };
     }
 
+    // Pouso 4x4 (o dobro da area anterior).
     const tiles = [];
-    for (let dx = 0; dx < 2; dx++) {
-        for (let dy = 0; dy < 2; dy++) {
+    for (let dx = 0; dx < 4; dx++) {
+        for (let dy = 0; dy < 4; dy++) {
             tiles.push({ x: destination.x + dx, y: destination.y + dy });
         }
     }
@@ -1194,14 +1209,26 @@ RAID_SKILLS['raid_kurupi_raizes_estranguladoras'] = async function(enemy, skill)
     const alvo = players.find(player => !player.dead);
     if (!alvo) return;
     const target = skill._raidPayload?.target || { x: alvo.x, y: alvo.y, heroId: alvo.id };
-    const marcados = await raidTelegraphSkill(skill, [target], {
+
+    // Área 3×3 centrada no herói: como ele é obrigado a se mover, marcar só o
+    // tile atual deixava a skill sempre inofensiva.
+    const area = [];
+    for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+            const nx = Math.max(0, Math.min(7, target.x + dx));
+            const ny = Math.max(0, Math.min(7, target.y + dy));
+            if (!area.some(t => t.x === nx && t.y === ny)) area.push({ x: nx, y: ny });
+        }
+    }
+
+    const marcados = await raidTelegraphSkill(skill, area, {
         payload: { target },
         impactScale: 1.3,
     });
     if (!marcados) return;
 
     const preso = players.find(player => player.id === target.heroId && !player.dead
-        && player.x === target.x && player.y === target.y);
+        && area.some(t => t.x === player.x && t.y === player.y));
     if (!preso) {
         if (typeof addLog === 'function') addLog('🌿 As raízes fecharam no vazio; você escapou!');
         return;
@@ -1211,7 +1238,7 @@ RAID_SKILLS['raid_kurupi_raizes_estranguladoras'] = async function(enemy, skill)
     }
     preso.preso = true;
     window.raidRaizes.push({ heroiId: preso.id, x: preso.x, y: preso.y });
-    raidApplyDmgHero(preso, 1);
+    raidApplyDmgHero(preso, skill.danoBase || 2, skill);
 
     raidRenderRaizes();
     if (typeof updateVisuals === 'function') updateVisuals();
@@ -1228,7 +1255,7 @@ RAID_SKILLS['raid_kurupi_chamado_mata'] = async function(enemy, skill) {
         impactScale: 1.45, impactEffect: 'spectral_veil', impactClass: 'fx-spectral-veil',
     });
     if (!marcados) return;
-    raidApplyDmgEmTiles(marcados, Math.max(1, Math.ceil(enemy.atk / 2)), skill);
+    raidApplyDmgEmTiles(marcados, skill.danoBase || Math.max(1, Math.ceil(enemy.atk / 2)), skill);
 
     const maxAnimais = skill.maxAnimais || 2;
     if (window.raidAnimais.filter(a => !a.dead).length >= maxAnimais) return;
@@ -1243,13 +1270,18 @@ RAID_SKILLS['raid_kurupi_chamado_mata'] = async function(enemy, skill) {
     if (cands.length === 0) return;
     const pos = cands[Math.floor(Math.random() * cands.length)];
 
+    const cabureAsset = (window.A_RAID_ASSETS?.summons?.pombero_cabure) || {};
     window.raidAnimais.push({
         id: 'animal_' + Date.now(),
+        nome: 'Caburé',
         x: pos.x, y: pos.y,
         hp: skill.animal?.hp || 15, maxHp: skill.animal?.hp || 15,
-        atk: Math.min(1, skill.animal?.atk || 1),
+        atk: 1,
         dead: false, isAnimal: true,
+        emoji: cabureAsset.emoji || '🦉',
+        sprite: cabureAsset.sprite || '',
     });
+    if (typeof addLog === 'function') addLog('🦉 Pombero invoca um Caburé!');
     if (typeof spawnFxAt === 'function') {
         spawnFxAt('heal_orb', 'fx-heal-orb', pos.x, pos.y, { duration: 850, scale: 1.35 });
         spawnFxAt('shockwave', 'fx-shockwave', pos.x, pos.y, { duration: 850, scale: 1.1 });
@@ -1315,7 +1347,7 @@ RAID_SKILLS['raid_aoao_la_energizada'] = async function(enemy, skill) {
 
     const dirs = [{dx:1,dy:1},{dx:1,dy:-1},{dx:-1,dy:1},{dx:-1,dy:-1}];
     const tiles = [];
-    const distProj = skill.distanciaProjetil || 2;
+    const distProj = 8; // diagonais atravessam ate a borda do tabuleiro
 
     for (let pi = 0; pi < (skill.numProjeteis || 4); pi++) {
         const dir = dirs[pi % dirs.length];
@@ -1330,7 +1362,7 @@ RAID_SKILLS['raid_aoao_la_energizada'] = async function(enemy, skill) {
         impactScale: 1.3, impactEffect: 'impact', impactClass: 'fx-impact',
     });
     if (!marcados) return;
-    raidApplyDmgEmTiles(marcados, 1);
+    raidApplyDmgEmTiles(marcados, skill.danoBase || 2, skill);
 };
 
 async function raidAoAoFissao() {
@@ -1397,7 +1429,7 @@ RAID_SKILLS['raid_luison_colheita_sombria'] = async function(enemy, skill) {
             });
         }
     }, Math.min(index * 30, 250)));
-    raidApplyDmgEmTiles(marcados, 1);
+    raidApplyDmgEmTiles(marcados, skill.danoBase || 2, skill);
 };
 
 function raidEncontrarHandler(skillId) {
@@ -1430,7 +1462,7 @@ RAID_SKILLS['raid_luison_legado_filhos'] = async function(enemy, skill) {
         impactScale: 1.65, impactEffect: 'spectral_veil', impactClass: 'fx-spectral-veil',
     });
     if (!marcados) return;
-    raidApplyDmgEmTiles(marcados, 1, skill);
+    raidApplyDmgEmTiles(marcados, skill.danoBase || 2, skill);
 };
 
 // =================================================================
@@ -1605,21 +1637,29 @@ async function raidTurnoAnimais() {
             if (typeof spawnFxAt === 'function') spawnFxAt('impact', 'fx-impact', alvo.x, alvo.y, { duration: 500 });
             await raidSleep(400);
         } else {
-            const dx = Math.sign(alvo.x - animal.x);
-            const dy = Math.sign(alvo.y - animal.y);
-            const tent = [
-                { x: animal.x + dx, y: animal.y },
-                { x: animal.x, y: animal.y + dy },
-                { x: animal.x + dx, y: animal.y + dy },
-            ];
-            for (const t of tent) {
-                if (t.x < 0 || t.x >= 8 || t.y < 0 || t.y >= 8) continue;
-                if (raidIsTileOcupadoPorBoss(t.x, t.y)) continue;
-                if (typeof isOccupied === 'function' && isOccupied(t.x, t.y, -99)) continue;
-                animal.x = t.x; animal.y = t.y;
-                raidRenderAnimais();
-                await raidSleep(200);
-                break;
+            // A invocacao anda ate 2 tiles por turno na direcao do heroi.
+            for (let passo = 0; passo < 2; passo++) {
+                const distAgora = Math.abs(alvo.x - animal.x) + Math.abs(alvo.y - animal.y);
+                if (distAgora <= 1) break;
+                const dx = Math.sign(alvo.x - animal.x);
+                const dy = Math.sign(alvo.y - animal.y);
+                const tent = [
+                    { x: animal.x + dx, y: animal.y },
+                    { x: animal.x, y: animal.y + dy },
+                    { x: animal.x + dx, y: animal.y + dy },
+                ];
+                let moveu = false;
+                for (const t of tent) {
+                    if (t.x < 0 || t.x >= 8 || t.y < 0 || t.y >= 8) continue;
+                    if (raidIsTileOcupadoPorBoss(t.x, t.y)) continue;
+                    if (typeof isOccupied === 'function' && isOccupied(t.x, t.y, -99)) continue;
+                    animal.x = t.x; animal.y = t.y;
+                    moveu = true;
+                    raidRenderAnimais();
+                    await raidSleep(180);
+                    break;
+                }
+                if (!moveu) break;
             }
         }
     }
@@ -1698,14 +1738,14 @@ async function raidIniciarBatalha(raidId) {
             if (typeof faseId === 'string' && faseId.startsWith(RAID_COOP_PREFIX)) {
                 const raidId = faseId.slice(RAID_COOP_PREFIX.length);
                 const cfg = raidGetConfig(raidId);
-                if (!cfg) { alert('Raid inválida.'); return; }
+                if (!cfg) { uiAviso('Raid inválida.'); return; }
 
                 if (!raidTemOuroSuficiente(cfg.custoEntrada)) {
-                    alert('Ouro insuficiente.');
+                    uiAviso('Ouro insuficiente.');
                     return;
                 }
                 if (!raidCobrarEntrada(cfg.custoEntrada)) {
-                    alert('Erro ao cobrar entrada.');
+                    uiAviso('Erro ao cobrar entrada.');
                     return;
                 }
 
@@ -1882,7 +1922,7 @@ function raidAbrirModalEntrada(raidId, tipo) {
     if (!cfg) return;
 
     if (!raidTemOuroSuficiente(cfg.custoEntrada)) {
-        alert(`Ouro insuficiente!\n\nVocê tem ${STORY_PROGRESS.gold || 0}.\nPrecisa de ${cfg.custoEntrada}.`);
+        uiAviso(`Ouro insuficiente!\n\nVocê tem ${STORY_PROGRESS.gold || 0}.\nPrecisa de ${cfg.custoEntrada}.`);
         return;
     }
 
@@ -1979,14 +2019,14 @@ async function raidIniciarSoloViaCoop(raidId, options = {}) {
         pesadelo: { hp: 1.9, damage: 1.75, cost: 2, reward: 2 },
     }[difficulty];
     if (!difficultyScale) {
-        alert('Dificuldade de Raid inválida.');
+        uiAviso('Dificuldade de Raid inválida.');
         return;
     }
 
     const heroClass = (STORY_PROGRESS.selectedHeroes || ['Tupa'])[0];
     const unlockedHeroes = new Set(STORY_PROGRESS.unlockedHeroesStory || STORY_PROGRESS.selectedHeroes || []);
     if (!heroClass || !unlockedHeroes.has(heroClass) || !STORY_HERO_CLASSES[heroClass]) {
-        alert('Selecione um herói desbloqueado na Oca antes de iniciar uma Raid.');
+        uiAviso('Selecione um herói desbloqueado na Oca antes de iniciar uma Raid.');
         return;
     }
 
@@ -1996,26 +2036,30 @@ async function raidIniciarSoloViaCoop(raidId, options = {}) {
     monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
     const weekKey = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`;
     if (attempt?.week === weekKey && !isResume) {
-        alert('Esta Raid já teve sua tentativa semanal consumida, independentemente da dificuldade.');
+        uiAviso('Esta Raid já teve sua tentativa semanal consumida, independentemente da dificuldade.');
         return;
     }
 
     const entryCost = Math.round(cfg.custoEntrada * difficultyScale.cost);
     if (isCoopHost && !isResume && !raidTemOuroSuficiente(entryCost)) {
-        alert('Ouro insuficiente.');
+        uiAviso('Ouro insuficiente.');
         return;
     }
 
     const heroName = STORY_HERO_CLASSES[heroClass].displayName || heroClass;
-    if (!multiplayer && !confirm(
-        `⚔️ ENTRAR NO RAID\n\n${cfg.nome} — ${cfg.titulo}\n` +
-        `Dificuldade: ${difficulty === 'dificil' ? 'Difícil' : difficulty === 'pesadelo' ? 'Pesadelo' : 'Normal'}\n` +
-        `Herói: ${heroName}\nCusto: ${entryCost} ouro\n\n` +
-        `A entrada e a tentativa semanal são consumidas ao começar. Continuar?`
-    )) return;
+    if (!multiplayer) {
+        const okEntradaRaid = await uiConfirm(
+            `⚔️ ENTRAR NO RAID\n\n${cfg.nome} — ${cfg.titulo}\n` +
+            `Dificuldade: ${difficulty === 'dificil' ? 'Difícil' : difficulty === 'pesadelo' ? 'Pesadelo' : 'Normal'}\n` +
+            `Herói: ${heroName}\nCusto: ${entryCost} ouro\n\n` +
+            `A entrada e a tentativa semanal são consumidas ao começar. Continuar?`,
+            { titulo: 'Entrar no raid', ok: 'Entrar', cancelar: 'Cancelar' }
+        );
+        if (!okEntradaRaid) return;
+    }
 
     if (isCoopHost && !isResume && !raidCobrarEntrada(entryCost)) {
-        alert('Erro ao cobrar.');
+        uiAviso('Erro ao cobrar.');
         return;
     }
 
@@ -2570,7 +2614,7 @@ function raidHandleDefeat() {
 function raidMostrarTelaFinal(vitoria, cfg, drops) {
     const overlay = document.getElementById('gameOverlay');
     if (!overlay) {
-        alert(vitoria ? '🏆 VITÓRIA!' : '💀 DERROTA');
+        uiAviso(vitoria ? '🏆 VITÓRIA!' : '💀 DERROTA');
         return;
     }
 
@@ -2683,8 +2727,8 @@ function raidInjetarUI() {
         const btn = document.createElement('button');
         btn.className = 'raid-sair-btn';
         btn.innerHTML = '🚪 SAIR';
-        btn.onclick = () => {
-            if (confirm('Sair da raid?')) {
+        btn.onclick = async () => {
+            if (await uiConfirm('Sair da raid?')) {
                 const returnToEvents = window._regionalRaidContext;
                 window._regionalRaidContext = false;
                 raidLimparEstado();
@@ -2873,16 +2917,16 @@ function raidPodeForjar(arma, inv, gold) {
     return true;
 }
 
-function raidForjarArma(armaId) {
+async function raidForjarArma(armaId) {
     const arma = raidGetArma(armaId);
     if (!arma) return;
     if (!Array.isArray(STORY_PROGRESS.raidArmasForjadas)) STORY_PROGRESS.raidArmasForjadas = [];
-    if (STORY_PROGRESS.raidArmasForjadas.includes(armaId)) { alert('Você já forjou.'); return; }
-    if ((STORY_PROGRESS.gold || 0) < arma.custoOuro) { alert('Ouro insuficiente.'); return; }
+    if (STORY_PROGRESS.raidArmasForjadas.includes(armaId)) { uiAviso('Você já forjou.'); return; }
+    if ((STORY_PROGRESS.gold || 0) < arma.custoOuro) { uiAviso('Ouro insuficiente.'); return; }
     for (const [mid, qty] of Object.entries(arma.receita)) {
-        if ((STORY_PROGRESS.inventory[mid] || 0) < qty) { alert('Materiais insuficientes.'); return; }
+        if ((STORY_PROGRESS.inventory[mid] || 0) < qty) { uiAviso('Materiais insuficientes.'); return; }
     }
-    if (!confirm(`Forjar ${arma.nome}?`)) return;
+    if (!(await uiConfirm(`Forjar ${arma.nome}?`))) return;
 
     STORY_PROGRESS.gold -= arma.custoOuro;
     for (const [mid, qty] of Object.entries(arma.receita)) {

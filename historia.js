@@ -6000,16 +6000,16 @@ function updateStorySaveElementPreview(){
     `;
 }
 
-function confirmStorySaveName(){
+async function confirmStorySaveName(){
     const inp = document.getElementById('storySaveNameInput');
     if (!inp) return;
     const name = inp.value.trim();
-    if (!name) { alert('Digite um nome para o save!'); return; }
-    if (name.length < 2) { alert('O nome precisa ter pelo menos 2 caracteres.'); return; }
+    if (!name) { uiAviso('Digite um nome para o save!'); return; }
+    if (name.length < 2) { uiAviso('O nome precisa ter pelo menos 2 caracteres.'); return; }
 
     const exists = listStorySaves().some(s => s.name.toLowerCase() === name.toLowerCase());
     if (exists) {
-        if (!confirm(`Já existe um save "${name}". Carregar?`)) return;
+        if (!(await uiConfirm(`Já existe um save "${name}". Carregar?`))) return;
         loadStoryProgressByName(name);
     } else {
         createNewStorySave(name);
@@ -6434,7 +6434,7 @@ function renderLojaScreen(){
 }
 
 function buyShopItem(id, price){
-    if (!spendGold(price)) { alert('Ouro insuficiente!'); return; }
+    if (!spendGold(price)) { uiAviso('Ouro insuficiente!'); return; }
     addMaterial(id, 1);
     saveStoryProgress();
     renderLojaScreen();
@@ -6874,8 +6874,8 @@ window.testStarSystem = function(){
     console.log('⭐ Heróis desbloqueados:', STORY_PROGRESS.unlockedHeroesStory);
 };
 
-window.resetStoryMode = function(){
-    if (!confirm('Apagar TODOS os saves do Modo História?')) return;
+window.resetStoryMode = async function(){
+    if (!(await uiConfirm('Apagar TODOS os saves do Modo História?'))) return;
     listStorySaves().forEach(s => {
         try { localStorage.removeItem(getSaveKey(s.name)); } catch(e) {}
     });
@@ -6908,7 +6908,7 @@ window.giveStars = function(count){
     count = parseInt(count) || 10;
     const completed = STORY_PROGRESS.completedPhases;
     if (completed.length === 0) {
-        alert('Complete pelo menos 1 fase antes de dar estrelas.');
+        uiAviso('Complete pelo menos 1 fase antes de dar estrelas.');
         return;
     }
     let given = 0;

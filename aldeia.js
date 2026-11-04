@@ -3803,16 +3803,20 @@
 
     // Quando cria o save, não deixa o jogo fugir para o menu
     const _origConfirm = window.confirmStorySaveName;
-    window.confirmStorySaveName = function() {
+    window.confirmStorySaveName = async function() {
         const inp = document.getElementById('storySaveNameInput');
         if (!inp) return;
         const name = inp.value.trim();
-        if (!name) { alert('Digite um nome para o save!'); return; }
-        if (name.length < 2) { alert('O nome precisa ter pelo menos 2 caracteres.'); return; }
+        if (!name) { if (typeof showToast === 'function') showToast('💾 Save', 'Digite um nome para o save!', '💾'); return; }
+        if (name.length < 2) { if (typeof showToast === 'function') showToast('💾 Save', 'O nome precisa ter pelo menos 2 caracteres.', '💾'); return; }
 
         const exists = (typeof listStorySaves === 'function') ? listStorySaves().some(s => s.name.toLowerCase() === name.toLowerCase()) : false;
         if (exists) {
-            if (!confirm(`Já existe um save "${name}". Carregar?`)) return;
+            const perg = `Já existe um save "${name}". Carregar?`;
+            const carregar = (typeof uiConfirm === 'function')
+                ? await uiConfirm(perg, { titulo: 'Save existente', ok: 'Carregar', cancelar: 'Cancelar' })
+                : confirm(perg);
+            if (!carregar) return;
             if (typeof loadStoryProgressByName === 'function') loadStoryProgressByName(name);
         } else {
             if (typeof createNewStorySave === 'function') createNewStorySave(name);
@@ -4492,19 +4496,23 @@
     // ═══════════════════════════════════════════════════════════
     // confirmStorySaveName — 1 render só, sem timeouts
     // ═══════════════════════════════════════════════════════════
-    window.confirmStorySaveName = function() {
+    window.confirmStorySaveName = async function() {
         const inp = document.getElementById('storySaveNameInput');
         if (!inp) return;
         const name = inp.value.trim();
-        if (!name) { alert('Digite um nome para o save!'); return; }
-        if (name.length < 2) { alert('O nome precisa ter pelo menos 2 caracteres.'); return; }
+        if (!name) { if (typeof showToast === 'function') showToast('💾 Save', 'Digite um nome para o save!', '💾'); return; }
+        if (name.length < 2) { if (typeof showToast === 'function') showToast('💾 Save', 'O nome precisa ter pelo menos 2 caracteres.', '💾'); return; }
 
         const exists = (typeof listStorySaves === 'function')
             ? listStorySaves().some(s => s.name.toLowerCase() === name.toLowerCase())
             : false;
 
         if (exists) {
-            if (!confirm(`Já existe um save "${name}". Carregar?`)) return;
+            const perg = `Já existe um save "${name}". Carregar?`;
+            const carregar = (typeof uiConfirm === 'function')
+                ? await uiConfirm(perg, { titulo: 'Save existente', ok: 'Carregar', cancelar: 'Cancelar' })
+                : confirm(perg);
+            if (!carregar) return;
             if (typeof loadStoryProgressByName === 'function') loadStoryProgressByName(name);
         } else {
             if (typeof createNewStorySave === 'function') createNewStorySave(name);

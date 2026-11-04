@@ -321,7 +321,7 @@ async function coopInit() {
         return true;
     } catch (e) {
         console.error('[coop] Erro no login:', e);
-        alert('Erro ao conectar no Firebase. Verifique se o Auth Anônimo está ativo.');
+        uiAviso('Erro ao conectar no Firebase. Verifique se o Auth Anônimo está ativo.');
         return false;
     }
 }
@@ -686,7 +686,7 @@ async function coopCriarSala(atoId, faseId, content = null) {
     const heroClass = (STORY_PROGRESS.selectedHeroes || ['Tupa'])[0];
     const check = coopValidarConteudo(content, heroClass, true);
     if (!check.valido) {
-        alert(check.motivo);
+        uiAviso(check.motivo);
         return;
     }
 
@@ -710,20 +710,20 @@ async function coopCriarSala(atoId, faseId, content = null) {
             `Dificuldade: ${content.difficulty}\nEntrada paga pelo anfitrião: ${price} ouro.\n` +
             'A tentativa semanal será consumida ao iniciar. Quem entrar não paga a entrada.\n\nContinuar?';
     }
-    if (!confirm(prompt)) {
+    if (!(await uiConfirm(prompt))) {
         return;
     }
 
     if (content?.type === 'nacoes') {
         if ((STORY_PROGRESS.gold || 0) < custoNacao) {
-            alert(`O anfitrião precisa de ${custoNacao} de ouro para abrir esta fase.`);
+            uiAviso(`O anfitrião precisa de ${custoNacao} de ouro para abrir esta fase.`);
             return;
         }
         STORY_PROGRESS.gold -= custoNacao;
         if (typeof saveStoryProgress === 'function') saveStoryProgress();
     } else if (usaChave) {
         if (typeof window.gastarChave !== 'function' || !window.gastarChave(1)) {
-            alert('Não foi possível gastar a chave do anfitrião.');
+            uiAviso('Não foi possível gastar a chave do anfitrião.');
             return;
         }
     }
@@ -781,21 +781,21 @@ async function coopEntrarSala(roomId) {
     try {
         const doc = await fbDb.collection(COOP_ROOMS).doc(roomId).get();
         if (!doc.exists) {
-            alert('Sala não encontrada.');
+            uiAviso('Sala não encontrada.');
             return;
         }
         room = { id: doc.id, ...doc.data() };
     } catch (e) {
-        alert('Erro ao buscar sala: ' + e.message);
+        uiAviso('Erro ao buscar sala: ' + e.message);
         return;
     }
 
     if (room.criador?.uid === coopUser.uid) {
-        alert('Você não pode entrar na sua própria sala.');
+        uiAviso('Você não pode entrar na sua própria sala.');
         return;
     }
     if (room.oponente?.uid) {
-        alert('Esta sala já tem oponente.');
+        uiAviso('Esta sala já tem oponente.');
         return;
     }
 
@@ -804,17 +804,17 @@ async function coopEntrarSala(roomId) {
     const meuNome = coopSanitize(localStorage.getItem('coop_player_name') || 'Jogador');
 
     if (!meuHeroData) {
-        alert('Herói inválido no save.');
+        uiAviso('Herói inválido no save.');
         return;
     }
 
     const contentCheck = coopValidarConteudo(room.coopContent, meuHeroClass, false);
     if (!contentCheck.valido) {
-        alert(contentCheck.motivo);
+        uiAviso(contentCheck.motivo);
         return;
     }
 
-    if (!confirm(`🎮 ENTRAR NA SALA COOP\n\nCriador: ${room.criador.nome} (${room.criador.heroi})\nFase: ${room.fase}\nSeu herói: ${meuHeroData.displayName}\n\nEntrar?`)) {
+    if (!(await uiConfirm(`🎮 ENTRAR NA SALA COOP\n\nCriador: ${room.criador.nome} (${room.criador.heroi})\nFase: ${room.fase}\nSeu herói: ${meuHeroData.displayName}\n\nEntrar?`, { titulo: 'Entrar na sala', ok: 'Entrar', cancelar: 'Cancelar' }))) {
         return;
     }
 
@@ -832,7 +832,7 @@ async function coopEntrarSala(roomId) {
         });
         coopLog('Entrou na sala:', roomId);
     } catch (e) {
-        alert('Erro ao entrar: ' + e.message);
+        uiAviso('Erro ao entrar: ' + e.message);
         return;
     }
 
@@ -2217,7 +2217,7 @@ function coopInstalarListener() {
         .onSnapshot(async doc => {
             if (!doc.exists) {
                 if (window._coopMode) {
-                    alert('⚠️ A sala foi cancelada.');
+                    uiAviso('⚠️ A sala foi cancelada.');
                     coopSairParaAldeia();
                 }
                 return;
@@ -2229,7 +2229,7 @@ function coopInstalarListener() {
             if (!window._coopMode) return;
 
             if (data.status === 'cancelada') {
-                alert('⚠️ O criador cancelou a partida.');
+                uiAviso('⚠️ O criador cancelou a partida.');
                 coopSairParaAldeia();
                 return;
             }
@@ -2347,8 +2347,8 @@ function coopInjetarUI() {
         const btn = document.createElement('button');
         btn.className = 'coop-sair-btn';
         btn.innerHTML = '🚪 SAIR';
-        btn.onclick = () => {
-            if (confirm('Sair da sala? A partida fica pausada.')) coopSairParaAldeia();
+        btn.onclick = async () => {
+            if (await uiConfirm('Sair da sala? A partida fica pausada.')) coopSairParaAldeia();
         };
         acoes.insertBefore(btn, acoes.firstChild);
     }
@@ -2589,12 +2589,12 @@ async function coopContinuarSala(roomId) {
     try {
         const doc = await fbDb.collection(COOP_ROOMS).doc(roomId).get();
         if (!doc.exists) {
-            alert('Sala não encontrada.');
+            uiAviso('Sala não encontrada.');
             return;
         }
         room = { id: doc.id, ...doc.data() };
     } catch (e) {
-        alert('Erro: ' + e.message);
+        uiAviso('Erro: ' + e.message);
         return;
     }
 
@@ -2602,7 +2602,7 @@ async function coopContinuarSala(roomId) {
     const isOponente = room.oponente?.uid === coopUser.uid;
 
     if (!isCriador && !isOponente) {
-        alert('Você não participa desta sala.');
+        uiAviso('Você não participa desta sala.');
         return;
     }
 
@@ -2665,7 +2665,7 @@ async function coopContinuarSala(roomId) {
 }
 
 async function coopCancelarSala(roomId) {
-    if (!confirm('Cancelar e deletar esta partida?\n\nO oponente será avisado.')) return;
+    if (!(await uiConfirm('Cancelar e deletar esta partida?\n\nO oponente será avisado.'))) return;
 
     try {
         await fbDb.collection(COOP_ROOMS).doc(roomId).update({
@@ -2681,7 +2681,7 @@ async function coopCancelarSala(roomId) {
         coopFecharPainel();
         setTimeout(() => coopAbrirPainel(), 300);
     } catch (e) {
-        alert('Erro ao cancelar: ' + e.message);
+        uiAviso('Erro ao cancelar: ' + e.message);
     }
 }
 
@@ -2763,7 +2763,7 @@ async function coopFinalizar(vitoria) {
     }
 
     if (!finalizarPeloMotorEvento && !finalizarPeloMotorRaid) {
-        alert(vitoria
+        uiAviso(vitoria
             ? `🏆 VITÓRIA COOP!${msg}\n\nVoltando à Aldeia.`
             : `💀 DERROTA COOP...\n\nVoltando à Aldeia.`);
     }
@@ -5317,7 +5317,7 @@ console.log('🌑 Núcleo do Abismo:', STORY_PROGRESS.inventory['nucleo_abismo']
                 } else if (typeof showEndGame === 'function') {
                     showEndGame("GAME OVER", false);
                 } else {
-                    alert("💀 DERROTA COOP...");
+                    uiAviso("💀 DERROTA COOP...");
                 }
 
                 // Volta para a aldeia após alguns segundos (quando fechar a tela)
@@ -6479,7 +6479,7 @@ console.log('🌑 Núcleo do Abismo:', STORY_PROGRESS.inventory['nucleo_abismo']
                                 atualizadaEm: firebase.firestore.FieldValue.serverTimestamp(),
                             });
                         }
-                        alert('Esta partida já foi concluída.');
+                        uiAviso('Esta partida já foi concluída.');
                         if (typeof coopFecharPainel === 'function') coopFecharPainel();
                         if (typeof coopAbrirPainel === 'function') setTimeout(coopAbrirPainel, 100);
                         return;

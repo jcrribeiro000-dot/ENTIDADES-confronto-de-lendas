@@ -597,7 +597,7 @@ const A_RAID_ASSETS = {
         cuia_turbilhao:    { sprite: '', emoji: '🌪️', sound: 'splash' },
         besta_varredura:   { sprite: '', emoji: '🌵', sound: 'urro' },
         besta_investida:   { sprite: '', emoji: '💥', sound: 'bote' },
-        pombero_assobio:   { sprite: '', emoji: '🍃', sound: 'asas' },
+        pombero_assobio:   { sprite: 'https://i.imgur.com/2j6GUqw.gif', emoji: '🍃', sound: 'asas' },
         pombero_raizes:    { sprite: '', emoji: '🌱', sound: 'garras' },
         minhocao_cheia:    { sprite: '', emoji: '🌊', sound: 'splash' },
         minhocao_fundo:    { sprite: '', emoji: '🪨', sound: 'bote' },
@@ -605,6 +605,10 @@ const A_RAID_ASSETS = {
         minuano_geada:     { sprite: '', emoji: '🌨️', sound: 'minoa2' },
         guajara_mare:      { sprite: '', emoji: '🌊', sound: 'splash' },
         guajara_voragem:   { sprite: '', emoji: '🌀', sound: 'iara2' },
+    },
+    // 🔮 Invocações (aliados do chefe). Sprite vazio usa o emoji.
+    summons: {
+        pombero_cabure: { sprite: 'https://i.imgur.com/2j6GUqw.gif', emoji: '🦉' },
     },
     weapons: {
         raid_cobra_norato_tacape: 'https://i.imgur.com/hzZfkA7.png', raid_cobra_norato_flecha: 'https://i.imgur.com/G0EFliK.png', raid_cobra_norato_cajado: 'https://i.imgur.com/XrAqHbY.png',

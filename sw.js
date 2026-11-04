@@ -1,4 +1,4 @@
-const CACHE = 'entidades-v135';
+const CACHE = 'entidades-v136';
 const ASSETS = [
   './',
   './index.html',
@@ -17,7 +17,8 @@ const ASSETS = [
   './raid.js',
   './pvp.js',
   './historia-pa-morte.js',
-  './raid-solo.js'
+  './raid-solo.js',
+  './ui-confirm.js'
 ];
 
 self.addEventListener('install', (e) => {

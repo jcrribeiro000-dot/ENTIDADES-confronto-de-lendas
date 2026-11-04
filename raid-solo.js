@@ -120,6 +120,15 @@
         })[char]);
     }
 
+    // Dano base das skills que antes causavam 1 fixo.
+    // A dificuldade multiplica (x1 / x1,35 / x1,75) => 2/3/4 e 4/5/7.
+    const DANO_BASE_RAID = {
+        sete_cabecas: 2, ima_almas: 2, inundacao: 2,
+        raizes_estranguladoras: 2, la_energizada: 2,
+        colheita_sombria: 2, legado_filhos: 2,
+        chamado_mata: 4,
+    };
+
     function cloneSkill(id, name, text, element, timing) {
         const sourceConfig = window.STORY_RAID_CONFIG[SKILL_SOURCES[id]];
         const source = sourceConfig?.skills?.find(skill => skill.id === id);
@@ -130,6 +139,7 @@
             descricao: text,
             elementoPerigo: element,
             _raidTelegraph: timing === 'telegraph',
+            danoBase: DANO_BASE_RAID[id],
         };
     }
 
@@ -516,7 +526,7 @@
         const raid = RAID_DATA.find(item => item.id === raidId);
         if (!difficulty || !selectedHero() || !raid) return;
         if (typeof window.coopCriarSala !== 'function') {
-            alert('O modo cooperativo ainda não está disponível.');
+            uiAviso('O modo cooperativo ainda não está disponível.');
             return;
         }
         window._regionalRaidContext = true;

@@ -2129,8 +2129,8 @@
         console.groupEnd();
     };
 
-    window._forcarTodasConquistas = function() {
-        if (!confirm('Desbloquear TODAS as conquistas? (só pra teste)')) return;
+    window._forcarTodasConquistas = async function() {
+        if (!(await uiConfirm('Desbloquear TODAS as conquistas? (só pra teste)'))) return;
         const ACH = window.ACHIEVEMENTS || [];
         ACH.forEach(a => {
             if (!window.isAchievementUnlocked(a.id)) {
@@ -2142,8 +2142,8 @@
         if (typeof window.renderConquistasScreen === 'function') window.renderConquistasScreen();
     };
 
-    window._resetarConquistas = function() {
-        if (!confirm('Resetar TODAS as conquistas? (só pra teste)')) return;
+    window._resetarConquistas = async function() {
+        if (!(await uiConfirm('Resetar TODAS as conquistas? (só pra teste)'))) return;
         STORY_PROGRESS.achievements = {};
         STORY_PROGRESS.achievementStats = {};
         STORY_PROGRESS.titlesOwned = [];

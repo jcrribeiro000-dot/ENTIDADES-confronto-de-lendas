@@ -1066,7 +1066,7 @@
     // ==============================================================
     // 17. HANDLER: PESADELO
     // ==============================================================
-    function eventoEntrarPesadelo() {
+    async function eventoEntrarPesadelo() {
         if (!pesadeloDisponivelHoje()) {
             if (typeof showToast === 'function') showToast('🌑', 'O Pesadelo não está ativo hoje.', '🌑');
             return;
@@ -1077,7 +1077,7 @@
             return;
         }
 
-        if (!confirm('🌑 ENFRENTAR O PESADELO?\n\nCusta 1 chave. Boss extremamente difícil.\n\nContinuar?')) return;
+        if (!(await uiConfirm('🌑 ENFRENTAR O PESADELO?\n\nCusta 1 chave. Boss extremamente difícil.\n\nContinuar?'))) return;
 
         if (!gastarChave(1)) {
             if (typeof showToast === 'function') showToast('🔑', 'Erro ao gastar chave.', '🔑');
@@ -2445,7 +2445,7 @@
             ? EVENTO_PESADELO
             : EVENTO_BOSSES[bossId];
 
-        if (!bossCfg) { alert('Boss do evento não encontrado.'); return; }
+        if (!bossCfg) { uiAviso('Boss do evento não encontrado.'); return; }
 
         const isPesadelo = (bossId === 'pesadelo');
 
@@ -2477,7 +2477,7 @@
             }
         }
 
-        if (fila.length === 0) { alert('Fila de inimigos vazia.'); return; }
+        if (fila.length === 0) { uiAviso('Fila de inimigos vazia.'); return; }
 
         // Aplica bônus +10/+1 nos animais
         fila.forEach(id => {
@@ -2690,8 +2690,8 @@
             const btn = document.createElement('button');
             btn.className = 'coop-sair-btn evento-sair-btn';
             btn.innerHTML = '🚪 SAIR';
-            btn.onclick = () => {
-                if (confirm('Sair do evento? A chave já foi gasta.')) {
+            btn.onclick = async () => {
+                if (await uiConfirm('Sair do evento? A chave já foi gasta.')) {
                     eventoFinalizarPartida(false, true);
                 }
             };
@@ -2926,7 +2926,7 @@
     // ==============================================================
     function _mostrarTelaFinalEvento(vitoria, drops, dropsResult) {
         const overlay = document.getElementById('gameOverlay');
-        if (!overlay) { alert(vitoria ? '🏆 VITÓRIA!' : '💀 DERROTA'); return; }
+        if (!overlay) { uiAviso(vitoria ? '🏆 VITÓRIA!' : '💀 DERROTA'); return; }
 
         const cfg = _eventoBatalha.isPesadelo
             ? (typeof EVENTO_PESADELO !== 'undefined' ? EVENTO_PESADELO : null)
