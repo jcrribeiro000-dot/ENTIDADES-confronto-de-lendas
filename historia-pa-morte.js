@@ -86,6 +86,12 @@
         };
 
         if (original._v69Passivas) wrapped._v69Passivas = true;
+        // ⭐ V121: preserva os flags dos hooks de conquistas, senão o
+        // reinstalador de conquistas.js acha que já está instalado e não
+        // reenvolve (o hook de formas/bravely/pacifista deixava de rodar).
+        if (original._conqHooked) wrapped._conqHooked = true;
+        if (original._v121Conq) wrapped._v121Conq = true;
+        if (original._fixAnhangaHooked) wrapped._fixAnhangaHooked = true;
         wrapped._storyPaAfterKillFix = true;
         window.executeAction = wrapped;
     }

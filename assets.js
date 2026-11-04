@@ -750,13 +750,22 @@ const A_BGM = {
 
 
 // ================================================================
-// A_EMOJIS — Emojis usados nos arquivos carregados pelo jogo
+// A_EMOJIS — MAPA DE SUBSTITUIÇÃO DE EMOJIS POR SPRITE
 // ----------------------------------------------------------------
-// Cada emoji começa sem sprite. Preencha o valor para preparar a
-// substituição nos pontos que chamarem getAssetEmojiHTML(emoji).
-// O catálogo não altera textos nem emojis automaticamente.
-// Lista baseada nos arquivos carregados pelo index.html; atualize ao
-// adicionar novos emojis ao jogo.
+// USO:  A_EMOJIS['🌎'] = 'https://.../icone-nacoes.png';
+//       Onde o código chama getAssetEmojiHTML('🌎'), sai o <img>.
+//       Valor vazio '' (padrão) = mantém o emoji original.
+//
+// ⚠️ As chaves abaixo já existem todas com ''. Elas formam o catálogo
+//    que o getAssetEmojiHTML consulta — se um emoji não estiver aqui,
+//    ele NUNCA será substituído, mesmo que você adicione a chave depois.
+//    Ao criar emojis novos no jogo, adicione-os a estes grupos.
+//
+// 📌 Só há substituição nos lugares que chamam getAssetEmojiHTML().
+//    Hoje: Aldeia e Conhecimento. O resto dos textos continua emoji.
+//
+// ⚠️ Use PNG quadrado com fundo transparente. NÃO aponte para
+//    screenshots da tela: eles são espremidos no tamanho do ícone.
 // ================================================================
 const A_EMOJIS = {};
 [
@@ -779,6 +788,56 @@ const A_EMOJIS = {};
         A_EMOJIS[emoji] = '';
     });
 });
+
+// -----------------------------------------------------------------
+// ⬇️ PREENCHA AQUI os emojis que você já tem em PNG/GIF.
+//    Exemplo:
+//
+//    const A_EMOJIS_SPRITES = {
+//        '🌎': 'https://i.imgur.com/xxxx.png',
+//        '🌑': 'https://i.imgur.com/yyyy.png',
+//        '⚔️': 'https://i.imgur.com/zzzz.png',
+//    };
+//
+//    Deixe a linha do emoji ausente para ele continuar como emoji.
+// -----------------------------------------------------------------
+const A_EMOJIS_SPRITES = {
+    // Navegação, tempo e estado
+    // '💾': '', '⏳': '', '▶️': '', '🔔': '', '🚪': '',
+
+    // Alertas, controles e símbolos
+    // '✅': '', '❌': '', '⚠️': '', '⭐': '', '❤️': '',
+
+    // Elementos, clima e natureza
+    // '🌊': '', '🌋': '', '🌎': '', '🌑': '', '🌕': '', '🌙': '',
+    // '🌪️': '', '🌱': '', '🌲': '', '🌿': '', '🍄': '', '🗺️': '', '🗿': '',
+
+    // Animais e criaturas
+    // '🐊': '', '🐉': '', '🐺': '', '🦅': '', '🦌': '', '🦜': '', '😈': '', '👻': '',
+
+    // Heróis, pessoas e relações
+    // '👑': 'https://i.imgur.com/Ejd2WD1.png', '🦸': '', '🧙': '', '🤝': '',
+
+    // Combate, magia e recompensas
+    // '⚔️': '', '⚡': '', '✨': '', '💀': '', '💎': '', '🔥': '',
+    // '🔮': '', '🗡️': '', '🛡️': '', '🪄': '', '🪓': '', '🪙': '',
+
+    // Interface, mapas, itens e comunicação
+    // '⛩️': '', '🎁': '', '🎉': '', '🎒': '', '🎯': '', '🎲': '',
+    // '🏅': '', '🏆': 'https://i.imgur.com/2OX9sYX.png', '🏛️': '', '🏹': '', '📅': '', '📜': '',
+    // '📦': '', '📜': '', '🔑': 'https://i.imgur.com/Y4OvSQc.png', '🔒': '', '🧪': '', '🧭': '', '🛒': '',
+};
+
+// Aplica as substituições sobre o catálogo (chaves inexistentes são
+// adicionadas, então um emoji novo também funciona).
+Object.keys(A_EMOJIS_SPRITES).forEach(emoji => {
+    const url = A_EMOJIS_SPRITES[emoji];
+    if (url && String(url).trim() !== '') {
+        A_EMOJIS[emoji] = String(url).trim();
+    }
+});
+
+window.A_EMOJIS_SPRITES = A_EMOJIS_SPRITES;
 
 // ================================================================
 // 🌎 A_NACAO_* — Assets próprios de Nações (nacoes.js)

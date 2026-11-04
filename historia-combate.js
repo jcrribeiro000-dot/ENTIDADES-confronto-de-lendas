@@ -3962,7 +3962,7 @@
     const _execPassiva = window.executeAction;
     if (typeof _execPassiva === 'function' && !_execPassiva._v1073RudaPass) {
         const _innerExec = _execPassiva;
-        window.executeAction = async function() {
+        const _wrappedExec = async function() {
             const r = await _innerExec.apply(this, arguments);
 
             if (!window._pvpMode && !window._coopMode) {
@@ -3980,7 +3980,12 @@
 
             return r;
         };
-        window.executeAction._v1073RudaPass = true;
+        // ⭐ V121: preserva hooks de conquistas (ver historia-combate V121)
+        if (_execPassiva._conqHooked) _wrappedExec._conqHooked = true;
+        if (_execPassiva._v121Conq) _wrappedExec._v121Conq = true;
+        if (_execPassiva._fixAnhangaHooked) _wrappedExec._fixAnhangaHooked = true;
+        _wrappedExec._v1073RudaPass = true;
+        window.executeAction = _wrappedExec;
     }
 
     window._debugV1073 = function() {
@@ -7310,7 +7315,7 @@
         if (cur._v69Passivas) return;
 
         const inner = cur;
-        window.executeAction = async function() {
+        const wrapped = async function() {
             // ⭐ Snapshot do herói ANTES (fix timing Rudá)
             const heroAgora = (typeof players !== 'undefined'
                                 && Array.isArray(players)
@@ -7355,7 +7360,13 @@ if (heroAgora.class === 'Anhanga-Mirim' && heroAgora.hp < heroAgora.maxHp) {
 
             return result;
         };
-        window.executeAction._v69Passivas = true;
+        // ⭐ V121: preserva os hooks de conquistas, senão o reinstalador
+        // delas acha que já estão instalados e o hook nunca volta a rodar.
+        if (cur._conqHooked) wrapped._conqHooked = true;
+        if (cur._v121Conq) wrapped._v121Conq = true;
+        if (cur._fixAnhangaHooked) wrapped._fixAnhangaHooked = true;
+        wrapped._v69Passivas = true;
+        window.executeAction = wrapped;
     }
 
     _installExecHook();

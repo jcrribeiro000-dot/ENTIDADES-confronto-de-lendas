@@ -680,9 +680,68 @@
     if (window._conquistasEngineV10) return;
     window._conquistasEngineV10 = true;
 
-    const ACH = window.ACHIEVEMENTS;
+    // ⭐ V121: nunca capture ACH por valor — a lista pode ser publicada
+    // depois deste arquivo carregar. Lê sempre de window.ACHIEVEMENTS.
+    const _achLista = () => window.ACHIEVEMENTS || [];
     const TITULOS = window.TITULOS_COSMETICOS;
     const SONS = window.ACHIEVEMENT_SOUNDS;
+
+    // ─────────────────────────────────────────────────────────────
+    // INSTALADOR RESILIENTE DE HOOKS (V121)
+    // -----------------------------------------------------------------
+    // Antes, um hook cujo alvo em window ainda não existia era simplesmente
+    // DESCARTADO em silêncio. Agora ele é reagendado algumas vezes.
+    // ─────────────────────────────────────────────────────────────
+    const _hooksPendentes = {};
+    let _tentativasHook = 0;
+
+    // Instala na hora se o alvo existir; caso contrário reagenda.
+    // Importante: o que decide se ainda falta instalar é a FUNÇÃO DE INSTALAÇÃO
+    // registrar sucesso (retornando true), e não o alvo existir em window.
+    function _hookRetry(nome, fn) {
+        if (_hooksPendentes[nome]) return;
+        _hooksPendentes[nome] = fn;
+
+        const tentar = () => {
+            try {
+                if (typeof window[nome] !== 'function') return false;
+                fn();
+                return true;
+            } catch (e) {
+                console.warn('[conquistas] falha ao instalar hook', nome, e);
+                return false;
+            }
+        };
+
+        if (tentar()) { delete _hooksPendentes[nome]; return; }
+        console.log(`[conquistas] aguardando window.${nome} para instalar hook...`);
+
+        if (!_tentativasHook) {
+            _tentativasHook = 1;
+            const timer = setInterval(() => {
+                _tentativasHook++;
+                for (const n in _hooksPendentes) {
+                    const instalar = _hooksPendentes[n];
+                    let ok = false;
+                    try {
+                        if (typeof window[n] === 'function') { instalar(); ok = true; }
+                    } catch (e) {
+                        console.warn('[conquistas] falha ao instalar hook', n, e);
+                        ok = true; // não insiste para sempre
+                    }
+                    if (ok) delete _hooksPendentes[n];
+                }
+                if (Object.keys(_hooksPendentes).length === 0 || _tentativasHook > 120) {
+                    clearInterval(timer);
+                    if (Object.keys(_hooksPendentes).length) {
+                        console.warn('[conquistas] hooks nunca instalados:', Object.keys(_hooksPendentes));
+                    } else {
+                        console.log('✅ [conquistas] todos os hooks instalados.');
+                    }
+                }
+            }, 500);
+        }
+    }
 
     // ─────────────────────────────────────────────────────────────
     // ESTRUTURA NO SAVE
@@ -760,7 +819,7 @@
         _garantirEstrutura();
         if (isUnlocked(id)) return false;
 
-        const a = ACH.find(x => x.id === id);
+        const a = _achLista().find(x => x.id === id);
         if (!a) return false;
 
         STORY_PROGRESS.achievements[id] = { unlockedAt: Date.now() };
@@ -817,7 +876,7 @@
 
         const novos = [];
         try {
-            for (const a of ACH) {
+            for (const a of _achLista()) {
                 if (isUnlocked(a.id)) continue;
                 let passou = false;
                 try { passou = a.condicao(); } catch (e) { passou = false; }
@@ -826,7 +885,7 @@
                 }
             }
         } catch(e) {
-            console.warn('[conquistas] check falhou:', e);
+            console.error('[conquistas] check falhou:', e);
         } finally {
             _checkRunning = false;
         }
@@ -854,7 +913,8 @@
     // ─────────────────────────────────────────────────────────────
     function _installSaveHook() {
         const cur = window.saveStoryProgress;
-        if (typeof cur !== 'function' || cur._conquistasHook) return;
+        if (typeof cur !== 'function') { _hookRetry('saveStoryProgress', _installSaveHook); return; }
+        if (cur._conquistasHook) return;
         const inner = cur;
         window.saveStoryProgress = function() {
             const r = inner.apply(this, arguments);
@@ -870,7 +930,8 @@
     // ─────────────────────────────────────────────────────────────
     function _installLoadHook() {
         const cur = window.loadStoryProgressByName;
-        if (typeof cur !== 'function' || cur._conquistasHook) return;
+        if (typeof cur !== 'function') { _hookRetry('loadStoryProgressByName', _installLoadHook); return; }
+        if (cur._conquistasHook) return;
         const inner = cur;
         window.loadStoryProgressByName = function() {
             const r = inner.apply(this, arguments);
@@ -892,9 +953,10 @@
     // Anhangá kills (por herói único)
     function _hookBossDefeat() {
         const cur = window.handleStoryBossDefeat;
-        if (typeof cur !== 'function' || cur._conqHooked) return;
+        if (typeof cur !== 'function') { _hookRetry('handleStoryBossDefeat', _hookBossDefeat); return; }
+        if (cur._conqHooked) return;
         const inner = cur;
-        window.handleStoryBossDefeat = async function() {
+        const wrapped = async function() {
             try {
                 _garantirEstrutura();
                 const enemyId = Array.isArray(storyEnemiesRemaining) && storyEnemiesRemaining[0];
@@ -909,16 +971,21 @@
             } catch(e) {}
             return inner.apply(this, arguments);
         };
-        window.handleStoryBossDefeat._conqHooked = true;
+        wrapped._conqHooked = true;
+        const _prev = cur; if (_prev && _prev._conqHooked) wrapped._conqHooked = true; if (_prev && _prev._fixAnhangaHooked) wrapped._fixAnhangaHooked = true; window.handleStoryBossDefeat = wrapped;
     }
     _hookBossDefeat();
 
     // applyDmg — maxOverkill
+    // ⭐ V121: detecta pelo FLAG DO FUNCIONAMENTO (dentro do wrapper), não pelo
+    // nome da função externa. fixAnhangaV1 envolve window.applyDmg por cima, o
+    // que trocava o objeto e fazia este hook desaparecer num reload.
     function _hookApplyDmg() {
         const cur = window.applyDmg;
-        if (typeof cur !== 'function' || cur._conqHooked) return;
+        if (typeof cur !== 'function') { _hookRetry('applyDmg', _hookApplyDmg); return; }
+        if (cur._conqHooked) return;
         const inner = cur;
-        window.applyDmg = function(target, amount) {
+        const wrapped = function(target, amount) {
             try {
                 _garantirEstrutura();
                 if (target && target === boss && !target.dead && amount > target.hp) {
@@ -930,16 +997,21 @@
             } catch(e) {}
             return inner.apply(this, arguments);
         };
-        window.applyDmg._conqHooked = true;
+        wrapped._conqHooked = true;
+        const _prev = cur; if (_prev && _prev._conqHooked) wrapped._conqHooked = true; if (_prev && _prev._fixAnhangaHooked) wrapped._fixAnhangaHooked = true; window.applyDmg = wrapped;
     }
     _hookApplyDmg();
 
     // executeAction — formas + maxBravely + mae da mata + pacifista
     function _hookExecuteAction() {
+        // ⭐ V121: se um patch posterior reescreveu a função, ele preservou o
+        // flag (_v121Conq) — sinal de que o hook está vivo lá dentro.
+        if (window.executeAction && window.executeAction._v121Conq) return;
         const cur = window.executeAction;
-        if (typeof cur !== 'function' || cur._conqHooked) return;
+        if (typeof cur !== 'function') { _hookRetry('executeAction', _hookExecuteAction); return; }
+        if (cur._conqHooked) return;
         const inner = cur;
-        window.executeAction = async function() {
+        const wrapped = async function() {
             try {
                 _garantirEstrutura();
                 const p = players?.[currentPlayerIdx];
@@ -979,7 +1051,10 @@
                 return inner.apply(this, arguments);
             }
         };
-        window.executeAction._conqHooked = true;
+        wrapped._conqHooked = true;
+        wrapped._v121Conq = true;
+        if (cur && cur._fixAnhangaHooked) wrapped._fixAnhangaHooked = true;
+        window.executeAction = wrapped;
     }
     _hookExecuteAction();
 
@@ -1021,9 +1096,10 @@
     // chaves usadas
     function _hookChaves() {
         const cur = window.gastarChave;
-        if (typeof cur !== 'function' || cur._conqHooked) return;
+        if (typeof cur !== 'function') { _hookRetry('gastarChave', _hookChaves); return; }
+        if (cur._conqHooked) return;
         const inner = cur;
-        window.gastarChave = function(qtd) {
+        const wrapped = function(qtd) {
             const r = inner.apply(this, arguments);
             try {
                 if (r === true) {
@@ -1033,16 +1109,18 @@
             } catch(e) {}
             return r;
         };
-        window.gastarChave._conqHooked = true;
+        wrapped._conqHooked = true;
+        const _prev = cur; if (_prev && _prev._conqHooked) wrapped._conqHooked = true; if (_prev && _prev._fixAnhangaHooked) wrapped._fixAnhangaHooked = true; window.gastarChave = wrapped;
     }
     _hookChaves();
 
     // coração quebrado
     function _hookQuebrarItem() {
         const cur = window.quebrarItem;
-        if (typeof cur !== 'function' || cur._conqHooked) return;
+        if (typeof cur !== 'function') { _hookRetry('quebrarItem', _hookQuebrarItem); return; }
+        if (cur._conqHooked) return;
         const inner = cur;
-        window.quebrarItem = function(id) {
+        const wrapped = function(id) {
             try {
                 _garantirEstrutura();
                 if (String(id).split('#')[0] === 'coracao_vazio') {
@@ -1051,16 +1129,18 @@
             } catch(e) {}
             return inner.apply(this, arguments);
         };
-        window.quebrarItem._conqHooked = true;
+        wrapped._conqHooked = true;
+        const _prev = cur; if (_prev && _prev._conqHooked) wrapped._conqHooked = true; if (_prev && _prev._fixAnhangaHooked) wrapped._fixAnhangaHooked = true; window.quebrarItem = wrapped;
     }
     _hookQuebrarItem();
 
     // comprar semente do vento
     function _hookComprarEvento() {
         const cur = window.comprarEventoItem;
-        if (typeof cur !== 'function' || cur._conqHooked) return;
+        if (typeof cur !== 'function') { _hookRetry('comprarEventoItem', _hookComprarEvento); return; }
+        if (cur._conqHooked) return;
         const inner = cur;
-        window.comprarEventoItem = function(itemId, preco, tipo) {
+        const wrapped = function(itemId, preco, tipo) {
             const r = inner.apply(this, arguments);
             try {
                 if (itemId === 'semente_vento') {
@@ -1070,16 +1150,18 @@
             } catch(e) {}
             return r;
         };
-        window.comprarEventoItem._conqHooked = true;
+        wrapped._conqHooked = true;
+        const _prev = cur; if (_prev && _prev._conqHooked) wrapped._conqHooked = true; if (_prev && _prev._fixAnhangaHooked) wrapped._fixAnhangaHooked = true; window.comprarEventoItem = wrapped;
     }
     _hookComprarEvento();
 
     // defeats + madrugador + noturno + pacifista
     function _hookFinishPhase() {
         const cur = window.finishStoryPhase;
-        if (typeof cur !== 'function' || cur._conqHooked) return;
+        if (typeof cur !== 'function') { _hookRetry('finishStoryPhase', _hookFinishPhase); return; }
+        if (cur._conqHooked) return;
         const inner = cur;
-        window.finishStoryPhase = function(victory) {
+        const wrapped = function(victory) {
             try {
                 _garantirEstrutura();
                 const st = STORY_PROGRESS.achievementStats;
@@ -1099,16 +1181,18 @@
             } catch(e) {}
             return inner.apply(this, arguments);
         };
-        window.finishStoryPhase._conqHooked = true;
+        wrapped._conqHooked = true;
+        const _prev = cur; if (_prev && _prev._conqHooked) wrapped._conqHooked = true; if (_prev && _prev._fixAnhangaHooked) wrapped._fixAnhangaHooked = true; window.finishStoryPhase = wrapped;
     }
     _hookFinishPhase();
 
     // Reset pacifista + negrinho no início de batalha
     function _hookInitBattle() {
         const cur = window.initStoryBattle;
-        if (typeof cur !== 'function' || cur._conqHooked) return;
+        if (typeof cur !== 'function') { _hookRetry('initStoryBattle', _hookInitBattle); return; }
+        if (cur._conqHooked) return;
         const inner = cur;
-        window.initStoryBattle = async function() {
+        const wrapped = async function() {
             try {
                 if (typeof players !== 'undefined' && Array.isArray(players)) {
                     players.forEach(p => {
@@ -1123,16 +1207,18 @@
             } catch(e) {}
             return inner.apply(this, arguments);
         };
-        window.initStoryBattle._conqHooked = true;
+        wrapped._conqHooked = true;
+        const _prev = cur; if (_prev && _prev._conqHooked) wrapped._conqHooked = true; if (_prev && _prev._fixAnhangaHooked) wrapped._fixAnhangaHooked = true; window.initStoryBattle = wrapped;
     }
     _hookInitBattle();
 
     // corrigir corrupção limpa (via solo sagrado ou purge)
     function _hookLimparCorrupcao() {
         const cur = window.limparCorrupcao;
-        if (typeof cur !== 'function' || cur._conqHooked) return;
+        if (typeof cur !== 'function') { _hookRetry('limparCorrupcao', _hookLimparCorrupcao); return; }
+        if (cur._conqHooked) return;
         const inner = cur;
-        window.limparCorrupcao = function() {
+        const wrapped = function() {
             try {
                 const qtAntes = Array.isArray(window._corruptedTiles) ? window._corruptedTiles.length : 0;
                 const r = inner.apply(this, arguments);
@@ -1145,16 +1231,18 @@
                 return inner.apply(this, arguments);
             }
         };
-        window.limparCorrupcao._conqHooked = true;
+        wrapped._conqHooked = true;
+        const _prev = cur; if (_prev && _prev._conqHooked) wrapped._conqHooked = true; if (_prev && _prev._fixAnhangaHooked) wrapped._fixAnhangaHooked = true; window.limparCorrupcao = wrapped;
     }
     _hookLimparCorrupcao();
 
     // addLog — intercepta logs específicos (curupira 10, anhanga purifica, mae da mata)
     function _hookAddLog() {
         const cur = window.addLog;
-        if (typeof cur !== 'function' || cur._conqHooked) return;
+        if (typeof cur !== 'function') { _hookRetry('addLog', _hookAddLog); return; }
+        if (cur._conqHooked) return;
         const inner = cur;
-        window.addLog = function(msg) {
+        const wrapped = function(msg) {
             try {
                 if (typeof msg === 'string' && STORY_PROGRESS) {
                     _garantirEstrutura();
@@ -1174,7 +1262,8 @@
             } catch(e) {}
             return inner.apply(this, arguments);
         };
-        window.addLog._conqHooked = true;
+        wrapped._conqHooked = true;
+        const _prev = cur; if (_prev && _prev._conqHooked) wrapped._conqHooked = true; if (_prev && _prev._fixAnhangaHooked) wrapped._fixAnhangaHooked = true; window.addLog = wrapped;
     }
     _hookAddLog();
 
@@ -1231,8 +1320,13 @@
 
     // ─────────────────────────────────────────────────────────────
     // Reinstaladores (se patches tardios sobrescreverem)
+    // -----------------------------------------------------------------
+    // ⭐ V121: historia-combate.js reescreve window.executeAction 4 vezes
+    // DEPOIS de conquistas.js carregar, e cada reescrita apaga o wrapper da
+    // conquista. Por isso o reinstalador reaplica a cada 2s E logo após os
+    // patches daquele arquivo rodarem.
     // ─────────────────────────────────────────────────────────────
-    setInterval(() => {
+    function _reinstalarHooks() {
         _installSaveHook();
         _installLoadHook();
         _hookBossDefeat();
@@ -1246,7 +1340,48 @@
         _hookInitBattle();
         _hookLimparCorrupcao();
         _hookAddLog();
-    }, 2000);
+    }
+    window._reinstalarHooksConquistas = _reinstalarHooks;
+
+    setInterval(_reinstalarHooks, 2000);
+    [500, 1500, 3000, 6000, 10000].forEach(ms => setTimeout(_reinstalarHooks, ms));
+
+    // ─────────────────────────────────────────────────────────────
+    // REINSTALAÇÃO OBSERVADA (V121)
+    // -----------------------------------------------------------------
+    // executeAction/applyDmg/finishStoryPhase são reescritos por muitos
+    // arquivos (coop.js, pvp.js, historia-combate.js, historia-expedicoes.js…).
+    // Em vez de editar todos, observamos as reatribuições em window e
+    // reaplicamos o hook na hora.
+    // ─────────────────────────────────────────────────────────────
+    const _observados = ['executeAction', 'applyDmg', 'finishStoryPhase',
+                         'initStoryBattle', 'handleStoryBossDefeat', 'limparCorrupcao'];
+
+    function _observar(nome) {
+        if (!(nome in window)) return;
+        let valorAtual = window[nome];
+        try {
+            Object.defineProperty(window, nome, {
+                configurable: true,
+                get() { return valorAtual; },
+                set(novo) {
+                    valorAtual = novo;
+                    // Reaplica na próxima volta do event loop (evita recursão)
+                    if (!novo || novo._conqHooked || novo._v121Conq) return;
+                    if (window._v121Reinstalando) return;
+                    window._v121Reinstalando = true;
+                    setTimeout(() => {
+                        window._v121Reinstalando = false;
+                        try { _reinstalarHooks(); } catch (e) {}
+                    }, 0);
+                },
+            });
+        } catch (e) {
+            console.warn('[conquistas] não foi possível observar', nome, e);
+        }
+    }
+    _observados.forEach(_observar);
+    console.log('✅ [conquistas] observando reescritas de', _observados.join(', '));
 
     // ─────────────────────────────────────────────────────────────
     // Inicial
@@ -1808,7 +1943,8 @@
     // Hook no _abrirTelaPerfilV3
     function _installPerfilHook() {
         const cur = window._abrirTelaPerfilV3;
-        if (typeof cur !== 'function' || cur._conqHooked) return;
+        if (typeof cur !== 'function') { _hookRetry('_abrirTelaPerfilV3', _installPerfilHook); return; }
+        if (cur._conqHooked) return;
         const inner = cur;
         window._abrirTelaPerfilV3 = function() {
             const r = inner.apply(this, arguments);
@@ -1863,7 +1999,8 @@
 
     function _installPerfilTitulosHook() {
         const cur = window._abrirTelaPerfilV3;
-        if (typeof cur !== 'function' || cur._conqTitHooked) return;
+        if (typeof cur !== 'function') { _hookRetry('_abrirTelaPerfilV3', _installPerfilTitulosHook); return; }
+        if (cur._conqTitHooked) return;
         const inner = cur;
         window._abrirTelaPerfilV3 = function() {
             const r = inner.apply(this, arguments);
@@ -2148,7 +2285,7 @@
         const cur = window.applyDmg;
         if (typeof cur !== 'function' || cur._fixAnhangaHooked) return;
         const inner = cur;
-        window.applyDmg = function(target, amount) {
+        const wrapped = function(target, amount) {
             try {
                 if (target && !target.dead && target.hp > 0 && amount >= target.hp) {
                     // É um golpe fatal — mas é o Anhangá?
@@ -2169,7 +2306,8 @@
             } catch (e) {}
             return inner.apply(this, arguments);
         };
-        window.applyDmg._fixAnhangaHooked = true;
+        wrapped._fixAnhangaHooked = true;
+        const _prev = cur; if (_prev && _prev._conqHooked) wrapped._conqHooked = true; if (_prev && _prev._fixAnhangaHooked) wrapped._fixAnhangaHooked = true; window.applyDmg = wrapped;
         console.log('[fix-anhanga] ✅ Hook 1: applyDmg');
     }
     _hookApplyDmg();
@@ -2181,7 +2319,7 @@
         const cur = window.showPurificacao;
         if (typeof cur !== 'function' || cur._fixAnhangaHooked) return;
         const inner = cur;
-        window.showPurificacao = function(bossType) {
+        const wrapped = function(bossType) {
             try {
                 if (_isAnhangaId(bossType)) {
                     const cls = _getActiveClass();
@@ -2193,7 +2331,8 @@
             } catch (e) {}
             return inner.apply(this, arguments);
         };
-        window.showPurificacao._fixAnhangaHooked = true;
+        wrapped._fixAnhangaHooked = true;
+        const _prev = cur; if (_prev && _prev._conqHooked) wrapped._conqHooked = true; if (_prev && _prev._fixAnhangaHooked) wrapped._fixAnhangaHooked = true; window.showPurificacao = wrapped;
         console.log('[fix-anhanga] ✅ Hook 2: showPurificacao');
     }
     _hookPurificacao();
@@ -2209,7 +2348,7 @@
         const cur = window.finishStoryPhase;
         if (typeof cur !== 'function' || cur._fixAnhangaHooked) return;
         const inner = cur;
-        window.finishStoryPhase = function(victory) {
+        const wrapped = function(victory) {
             let antesAnhanga = false;
             try {
                 antesAnhanga = (STORY_PROGRESS?.bossesDefeated || []).includes('anhanga');
@@ -2231,7 +2370,8 @@
 
             return r;
         };
-        window.finishStoryPhase._fixAnhangaHooked = true;
+        wrapped._fixAnhangaHooked = true;
+        const _prev = cur; if (_prev && _prev._conqHooked) wrapped._conqHooked = true; if (_prev && _prev._fixAnhangaHooked) wrapped._fixAnhangaHooked = true; window.finishStoryPhase = wrapped;
         console.log('[fix-anhanga] ✅ Hook 3: finishStoryPhase');
     }
     _hookFinishPhase();
@@ -2243,7 +2383,7 @@
         const cur = window.handleStoryBossDefeat;
         if (typeof cur !== 'function' || cur._fixAnhangaHooked) return;
         const inner = cur;
-        window.handleStoryBossDefeat = function() {
+        const wrapped = function() {
             try {
                 // Tenta pegar o ID do enemy por VÁRIAS fontes
                 let ehAnhanga = false;
@@ -2285,7 +2425,8 @@
 
             return inner.apply(this, arguments);
         };
-        window.handleStoryBossDefeat._fixAnhangaHooked = true;
+        wrapped._fixAnhangaHooked = true;
+        const _prev = cur; if (_prev && _prev._conqHooked) wrapped._conqHooked = true; if (_prev && _prev._fixAnhangaHooked) wrapped._fixAnhangaHooked = true; window.handleStoryBossDefeat = wrapped;
         console.log('[fix-anhanga] ✅ Hook 4: handleStoryBossDefeat');
     }
     _hookHandleStoryBossDefeat();
@@ -2298,7 +2439,7 @@
         const cur = window.executeAction;
         if (typeof cur !== 'function' || cur._fixAnhangaHooked) return;
         const inner = cur;
-        window.executeAction = async function() {
+        const wrapped = async function() {
             try {
                 const active = (typeof players !== 'undefined' && Array.isArray(players))
                     ? players[currentPlayerIdx] : null;
@@ -2306,7 +2447,8 @@
             } catch (e) {}
             return inner.apply(this, arguments);
         };
-        window.executeAction._fixAnhangaHooked = true;
+        wrapped._fixAnhangaHooked = true;
+        const _prev = cur; if (_prev && _prev._conqHooked) wrapped._conqHooked = true; if (_prev && _prev._fixAnhangaHooked) wrapped._fixAnhangaHooked = true; window.executeAction = wrapped;
         console.log('[fix-anhanga] ✅ Hook 5: executeAction (rastreia atacante)');
     }
     _hookExecuteAction();

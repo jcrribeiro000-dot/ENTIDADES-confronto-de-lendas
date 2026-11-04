@@ -5750,10 +5750,12 @@ console.log('💡 Zeradas:', STORY_PROGRESS.clearedDifficulties || []);
         },
 
         // ---- GUERREIROS (por estrelas) ----
-        'Caboclo d\'Água': {
+        // ⚠️ Sem apóstrofo na chave/className: o ' quebrava o onclick do Ritual
+        // e fazia ascendHero() falhar com "Herói não encontrado".
+        'Caboclo d Água': {
             displayName: 'Caboclo dágua',
             spriteKey: 'heroi_CabocloAgua',
-            className: 'Caboclo d\'Água',
+            className: 'Caboclo d Água',
             role: 'Guerreiro',
             hp: 18, atk: 3, range: 0,
             element: 'AGUA',
@@ -5846,7 +5848,7 @@ console.log('💡 Zeradas:', STORY_PROGRESS.clearedDifficulties || []);
             'Matinta Pereira': '',
             'Naiá': '',
             'Kuatí': '',
-            'Caboclo d\'Água': '',
+            'Caboclo d Água': '',
             'Tupinambá': '',
             'Mbaraká': '',
             'Mãe-do-Ouro': '',

@@ -572,7 +572,11 @@
         const hubIcon = (key) => {
             const url = hs[key];
             if (url && String(url).trim() !== '') {
-                return `<img src="${url}" alt="${key}" style="width:64px;height:64px;object-fit:contain;filter:drop-shadow(0 2px 6px rgba(0,0,0,.6));" onerror="this.outerHTML='<span style=\"font-size:3rem\">${he[key] || '?'}</span>'">`;
+                // ⚠️ As aspas do style do <span> precisam de escape REAL (\\"),
+                // senão fecham o atributo onerror e o emoji vaza como texto.
+                const fallback = `<span style="font-size:3rem;">${he[key] || '?'}</span>`;
+                const fallbackAttr = fallback.replace(/"/g, '&quot;');
+                return `<img src="${url}" alt="${key}" style="width:64px;height:64px;object-fit:contain;filter:drop-shadow(0 2px 6px rgba(0,0,0,.6));" onerror="this.outerHTML='${fallbackAttr}'">`;
             }
             return `<span style="font-size:3rem;">${he[key] || '?'}</span>`;
         };

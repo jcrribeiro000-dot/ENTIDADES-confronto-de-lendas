@@ -166,6 +166,7 @@
 
         STORY_PROGRESS.expeditions.forEach(exp => {
             if (exp.coletada || exp.concluida) return;
+            if (exp.tipo) return;
             const elapsed = Date.now() - exp.startedAt;
             if (elapsed < exp.durationMs) return;
 
@@ -487,7 +488,7 @@
                             <img src="${sprite}" class="exp-slot-sprite" onerror="this.style.display='none'">
                             <div class="exp-slot-info">
                                 <div class="exp-slot-name">${heroData?.displayName || exp.heroClass}</div>
-                                <div class="exp-slot-phase">${exp.phaseId} · ${DIFF_LABEL[exp.difficulty]}</div>
+                                <div class="exp-slot-phase">${exp.phaseName || exp.faseId || exp.phaseId} · ${DIFF_LABEL[exp.difficulty]}</div>
                             </div>
                         </div>
                         <div class="exp-slot-cta">✅ Ver resultado e coletar</div>
@@ -508,7 +509,7 @@
                         <img src="${sprite}" class="exp-slot-sprite" onerror="this.style.display='none'">
                         <div class="exp-slot-info">
                             <div class="exp-slot-name">${heroData?.displayName || exp.heroClass}</div>
-                            <div class="exp-slot-phase">${exp.phaseId} · ${DIFF_LABEL[exp.difficulty]}</div>
+                            <div class="exp-slot-phase">${exp.phaseName || exp.faseId || exp.phaseId} · ${DIFF_LABEL[exp.difficulty]}</div>
                         </div>
                     </div>
                     <div class="exp-slot-progress">
@@ -566,7 +567,7 @@
                 <div class="exp-result-hero">
                     <img src="${sprite}" class="exp-result-sprite" onerror="this.style.display='none'">
                     <div class="exp-result-hero-name">${heroData?.displayName || exp.heroClass}</div>
-                    <div class="exp-result-hero-phase">${exp.phaseId} · ${DIFF_LABEL[exp.difficulty]}</div>
+                    <div class="exp-result-hero-phase">${exp.phaseName || exp.faseId || exp.phaseId} · ${DIFF_LABEL[exp.difficulty]}</div>
                 </div>
                 <div class="exp-result-rewards">
                     ${r.xp > 0 ? `<div class="exp-result-xp">+${r.xp} XP</div>` : ''}
@@ -882,6 +883,92 @@
     console.log('💡 Debug: window._debugExpedicoes()');
     console.log('💡 Forçar: window._forcarConclusaoExpedicao("exp_ID")');
     console.log('═══════════════════════════════════════════════════');
+})();
+// ═══════════════════════════════════════════════════════════════
+// EXPEDIÇÕES TIPADAS — Sete Selados e Sete Nações
+// ═══════════════════════════════════════════════════════════════
+(function resolverExpedicoesDeEvento() {
+    if (window._resolverExpedicoesDeEvento) return;
+    window._resolverExpedicoesDeEvento = true;
+
+    const rewardsEvento = {
+        '1': { xp: 80, gold: 50, essencia: 3 },
+        '2': { xp: 120, gold: 75, essencia: 6 },
+        '3': { xp: 170, gold: 100, essencia: 9 },
+        '4': { xp: 230, gold: 140, essencia: 12 },
+    };
+    const rewardsNacao = {
+        '1': { xp: 200, gold: 150, essencia: 3 },
+        '2': { xp: 350, gold: 250, essencia: 6 },
+        '3': { xp: 500, gold: 400, essencia: 12 },
+    };
+    const eventMultiplier = { normal: 1, dificil: 1.5, pesadelo: 2 };
+    const nationMultiplier = { normal: 1, dificil: 1.5, pesadelo: 2.2 };
+
+    function resultadoPara(exp, sucesso) {
+        const base = exp.tipo === 'nacao'
+            ? rewardsNacao[String(exp.faseId)]
+            : rewardsEvento[String(exp.faseId)];
+        const multiplier = exp.tipo === 'nacao'
+            ? (nationMultiplier[exp.difficulty] || 1)
+            : (eventMultiplier[exp.difficulty] || 1);
+        const savedReward = exp.recompensa;
+
+        if (sucesso) {
+            const drops = Array.isArray(savedReward?.drops)
+                ? savedReward.drops.map(drop => ({ id: drop.id, qty: drop.qty }))
+                : base ? [{
+                    id: exp.tipo === 'nacao' ? 'essencia_ancestral' : 'essencia_sombria',
+                    qty: exp.tipo === 'nacao'
+                        ? Math.floor(base.essencia * multiplier)
+                        : Math.floor(base.essencia * multiplier),
+                }] : [];
+            return {
+                sucesso: true,
+                xp: Number.isFinite(savedReward?.xp) ? savedReward.xp
+                    : Math.floor((base?.xp || 0) * 0.5 * multiplier),
+                gold: Number.isFinite(savedReward?.gold) ? savedReward.gold
+                    : Math.floor((base?.gold || 0) * 0.5 * multiplier),
+                drops,
+            };
+        }
+
+        return {
+            sucesso: false,
+            xp: Math.floor((base?.xp || 0) * 0.15),
+            gold: 0,
+            drops: [],
+        };
+    }
+
+    function concluirExpedicoesTipadas() {
+        const expeditions = STORY_PROGRESS?.expeditions;
+        if (!Array.isArray(expeditions)) return;
+        let changed = false;
+        for (const exp of expeditions) {
+            if (!['evento', 'nacao'].includes(exp.tipo) || exp.coletada || exp.concluida) continue;
+            if (!Number.isFinite(exp.startedAt) || !Number.isFinite(exp.durationMs)
+                || Date.now() - exp.startedAt < exp.durationMs) continue;
+
+            const chance = Number(exp.chance);
+            const sucesso = Number.isFinite(chance) && Math.random() < Math.max(0, Math.min(1, chance));
+            exp.resultado = resultadoPara(exp, sucesso);
+            exp.concluida = true;
+            changed = true;
+        }
+
+        if (changed) {
+            if (typeof saveStoryProgress === 'function') saveStoryProgress();
+            const screen = document.getElementById('storyScreen');
+            if (screen?.classList.contains('active') && screen.innerHTML.includes('OCA')
+                && typeof renderOcaScreenFiltered === 'function') {
+                renderOcaScreenFiltered();
+            }
+        }
+    }
+
+    window._resolverExpedicoesTipadasAgora = concluirExpedicoesTipadas;
+    setInterval(concluirExpedicoesTipadas, 10000);
 })();
 // =================================================================
 // historia.js — V79.1 — Fixes das Expedições
@@ -1660,7 +1747,7 @@
                             <img src="${sprite}" class="exp-slot-sprite" onerror="this.style.display='none'">
                             <div class="exp-slot-info">
                                 <div class="exp-slot-name">${heroData?.displayName || exp.heroClass}</div>
-                                <div class="exp-slot-phase">${exp.phaseId} · ${DIFF_LABEL[exp.difficulty]}</div>
+                                <div class="exp-slot-phase">${exp.phaseName || exp.faseId || exp.phaseId} · ${DIFF_LABEL[exp.difficulty]}</div>
                             </div>
                         </div>
                         <div class="exp-slot-cta">✅ Ver resultado e coletar</div>
@@ -1681,7 +1768,7 @@
                         <img src="${sprite}" class="exp-slot-sprite" onerror="this.style.display='none'">
                         <div class="exp-slot-info">
                             <div class="exp-slot-name">${heroData?.displayName || exp.heroClass}</div>
-                            <div class="exp-slot-phase">${exp.phaseId} · ${DIFF_LABEL[exp.difficulty]}</div>
+                            <div class="exp-slot-phase">${exp.phaseName || exp.faseId || exp.phaseId} · ${DIFF_LABEL[exp.difficulty]}</div>
                         </div>
                     </div>
                     <div class="exp-slot-progress">
@@ -2269,6 +2356,7 @@
         'Teperesik':            { nome: 'Fortaleza Viva',         desc: '+2 HP a todos',                       icon: '🏔️' },
         'Eru':                  { nome: 'Chama de Guerra',        desc: '+1 ATK a todos',                      icon: '🔥' },
         'Kianumanka-Manã':      { nome: 'Chama Ancestral',        desc: '+2 dano quando herói em FOGO',        icon: '☄️' },
+        'Caboclo d Água':       { nome: 'Maré Guerreira',         desc: 'PA +2 dano',                          icon: '🌊' },
         'Caboclo d\'Água':      { nome: 'Maré Guerreira',         desc: 'PA +2 dano',                          icon: '🌊' },
         'Tupinambá':            { nome: 'Resistência Tribal',     desc: '-1 dano recebido em TERRA',           icon: '🛡️' },
         'Mbaraká':              { nome: 'Voo do Vento',           desc: '+1 dano quando herói em AR',          icon: '🌪️' },
@@ -2532,7 +2620,7 @@
     const _origBrav = window.triggerBravelyChain;
     if (typeof _origBrav === 'function' && !_origBrav._v82) {
         window.triggerBravelyChain = async function(active, target, totalAtk) {
-            if (isLeader('Caboclo d\'Água') && !window._pvpMode && !window._coopMode) {
+            if (isLeader('Caboclo d Água') && !window._pvpMode && !window._coopMode) {
                 totalAtk = (totalAtk || 0) + 2;
             }
             return _origBrav.apply(this, arguments);
@@ -4752,6 +4840,58 @@
         return Math.max(0.15, Math.min(0.95, calcHeroPower(heroClass) / (req * 2)));
     }
 
+    function nacaoDoDia() {
+        return Object.values(window.NACOES || {}).find(n => n.diaSemana === new Date().getDay()) || null;
+    }
+
+    function progressoNacao(nacaoId, diff) {
+        const progresso = STORY_PROGRESS.nacaoProgressoPorDificuldade?.[diff]?.[nacaoId];
+        const semana = typeof window.getWeekId === 'function' ? window.getWeekId() : null;
+        if (!progresso || progresso.semana !== semana || !Array.isArray(progresso.fasesConcluidas)) {
+            return [];
+        }
+        return progresso.fasesConcluidas;
+    }
+
+    function raridadeHeroi(heroClass) {
+        if (typeof window.getHeroRarity === 'function') return window.getHeroRarity(heroClass);
+        const hero = STORY_HERO_CLASSES[heroClass];
+        if (!hero) return 1;
+        if (hero.rarity) return hero.rarity;
+        if (hero.starsNeeded === 0) return 1;
+        return hero.starsNeeded < 100 ? 2 : 3;
+    }
+
+    function heroiElegivel(heroClass, tipo, nacao) {
+        if (tipo !== 'nacao' || !nacao) return true;
+        const maxStars = window._nacaoDayConfig?.[nacao.diaSemana]?.maxStars;
+        return maxStars == null || raridadeHeroi(heroClass) <= maxStars;
+    }
+
+    function calcChanceNacao(heroClass, nacao, faseId, diff) {
+        const ids = (nacao.deuses || []).slice(0, Number(faseId));
+        const deuses = ids.map(id => window.NACAO_DEUSES?.[id]).filter(Boolean);
+        const hpSum = deuses.reduce((sum, deus) => sum + (deus.hp || 0), 0);
+        const atkSum = deuses.reduce((sum, deus) => sum + (deus.atk || 0), 0);
+        const diffMult = DIFF_MULT_NORM[diff] || 1;
+        const requirement = Math.max(1, (hpSum + atkSum * 5) * diffMult);
+        return Math.max(0.15, Math.min(0.95, calcHeroPower(heroClass) / (requirement * 2)));
+    }
+
+    function calcRecompensaNacao(faseId, diff) {
+        const phaseRewards = {
+            '1': { xp: 200, gold: 150, essencia: 3 },
+            '2': { xp: 350, gold: 250, essencia: 6 },
+            '3': { xp: 500, gold: 400, essencia: 12 },
+        }[faseId] || { xp: 0, gold: 0, essencia: 0 };
+        const multiplier = { normal: 1, dificil: 1.5, pesadelo: 2.2 }[diff] || 1;
+        return {
+            xp: Math.floor(phaseRewards.xp * 0.5 * multiplier),
+            gold: Math.floor(phaseRewards.gold * 0.5 * multiplier),
+            essencia: Math.floor(phaseRewards.essencia * multiplier),
+        };
+    }
+
     function calcCustoNormal(chapterId, phaseId, diff) {
         const ch = STORY_CHAPTERS[chapterId];
         const ph = ch?.phases.find(p => p.id === phaseId);
@@ -4768,12 +4908,12 @@
 
     function slotsAtivos(tipo) {
         const exps = STORY_PROGRESS.expeditions || [];
-        if (tipo === 'evento') return exps.filter(e => e.tipo === 'evento' && !e.coletada).length;
-        return exps.filter(e => e.tipo !== 'evento' && !e.coletada).length;
+        if (tipo === 'evento' || tipo === 'nacao') return exps.filter(e => e.tipo === tipo && !e.coletada).length;
+        return exps.filter(e => e.tipo !== 'evento' && e.tipo !== 'nacao' && !e.coletada).length;
     }
     
     function slotsMax(tipo) {
-        if (tipo === 'evento') return SLOTS_EVENTO;
+        if (tipo === 'evento' || tipo === 'nacao') return SLOTS_EVENTO;
         const estrelas = (typeof getTotalStars === 'function') ? getTotalStars() : 0;
         return estrelas >= 200 ? 5 : estrelas >= 100 ? 4 : 3;
     }
@@ -4798,6 +4938,8 @@
         const tipo = st.tipo || 'normal';
         const selHeroi = st.heroClass;
         const isEvento = tipo === 'evento';
+        const isNacao = tipo === 'nacao';
+        const nacaoDia = isNacao ? nacaoDoDia() : null;
 
         const heroData = selHeroi ? STORY_HERO_CLASSES[selHeroi] : null;
         const heroPower = selHeroi ? calcHeroPower(selHeroi) : 0;
@@ -4820,12 +4962,19 @@
         const temFasesEvento = bossDia && (typeof getEventoProgresso === 'function')
             ? getEventoProgresso(bossDia.id).fasesConcluidas.filter(f => f !== 'boss').length > 0
             : false;
+        const nacaoDisponivel = nacaoDoDia();
+        const temFasesNacao = nacaoDisponivel
+            ? progressoNacao(nacaoDisponivel.id, diff).length > 0
+            : false;
 
         const modoHTML = `
             <div class="exp-chapter-list">
-                <button class="exp-chapter-btn ${!isEvento ? 'active' : ''}" onclick="window._expV86SelTipo('normal')">📖 História</button>
+                <button class="exp-chapter-btn ${!isEvento && !isNacao ? 'active' : ''}" onclick="window._expV86SelTipo('normal')">📖 História</button>
                 <button class="exp-chapter-btn ${isEvento ? 'active' : ''}" onclick="window._expV86SelTipo('evento')" ${temFasesEvento ? '' : 'disabled style="opacity:.4;cursor:not-allowed;"'}>
                     ⛺ Evento do Dia
+                </button>
+                <button class="exp-chapter-btn ${isNacao ? 'active' : ''}" onclick="window._expV86SelTipo('nacao')" ${temFasesNacao ? '' : 'disabled style="opacity:.4;cursor:not-allowed;"'}>
+                    🌎 Sete Nações
                 </button>
             </div>`;
 
@@ -4874,6 +5023,39 @@
                         essencia: Math.floor(base.essencia * dm),
                     };
                     recFalha = { xp: Math.floor(base.xp * 0.15), gold: 0, essencia: 0 };
+                }
+            }
+        } else if (isNacao) {
+            if (!nacaoDia) {
+                secoesHTML = `<div style="color:#8a7a52;text-align:center;padding:20px;font-style:italic;">Nenhuma nação disponível hoje.</div>`;
+            } else {
+                const fasesDisp = ['1', '2', '3'].filter(f => progressoNacao(nacaoDia.id, diff).includes(f));
+                if (fasesDisp.length === 0) {
+                    secoesHTML = `<div style="color:#8a7a52;text-align:center;padding:20px;font-style:italic;">
+                        Nenhuma fase desta nação foi concluída em ${DIFF_LABEL[diff]} nesta semana.</div>`;
+                } else {
+                    if (!st.faseId || !fasesDisp.includes(String(st.faseId))) st.faseId = fasesDisp[0];
+                    const faseId = String(st.faseId);
+                    const dayConfig = window._nacaoDayConfig?.[nacaoDia.diaSemana];
+                    const restriction = dayConfig?.maxStars == null
+                        ? 'Sem limite de raridade.'
+                        : `Heróis permitidos: até ${dayConfig.maxStars}★.`;
+                    const botoes = fasesDisp.map(f =>
+                        `<button class="exp-phase-btn ${f === faseId ? 'active' : ''}" onclick="window._expV86SelPhase('${f}')">Fase ${f}</button>`
+                    ).join('');
+                    secoesHTML = `
+                        <div class="exp-section">
+                            <div class="exp-section-title">FASE — ${nacaoDia.nome}</div>
+                            <div class="exp-phase-list">${botoes}</div>
+                            <div style="color:#c8b787;text-align:center;margin-top:8px;">${restriction}</div>
+                        </div>`;
+                    faseObj = { id: faseId, nome: `${nacaoDia.nome} — Fase ${faseId}` };
+                    chance = calcChanceNacao(selHeroi, nacaoDia, faseId, diff);
+                    custo = window._nacaoConfig?.custoEntrada?.[diff] || 500;
+                    tempoMs = TEMPO_EVENTO[diff];
+                    recSucesso = calcRecompensaNacao(faseId, diff);
+                    const baseXp = { '1': 200, '2': 350, '3': 500 }[faseId] || 0;
+                    recFalha = { xp: Math.floor(baseXp * 0.15), gold: 0, essencia: 0 };
                 }
             }
         } else {
@@ -4947,11 +5129,11 @@
             const unlockedList = STORY_PROGRESS.unlockedHeroesStory || ['Tupa','Sume','Caipora'];
             const disponiveis = Object.values(STORY_HERO_CLASSES).filter(h => {
                 const unlocked = h.starsNeeded === 0 || unlockedList.includes(h.className);
-                return unlocked && !heroiEmExp(h.className);
+                return unlocked && !heroiEmExp(h.className) && heroiElegivel(h.className, tipo, nacaoDia);
             });
 
             heroisHTML = disponiveis.length === 0
-                ? `<div style="color:#8a7a52;text-align:center;padding:15px;font-style:italic;">Todos os heróis em expedição.</div>`
+                ? `<div style="color:#8a7a52;text-align:center;padding:15px;font-style:italic;">Nenhum herói disponível para esta expedição. Confira a raridade exigida ou aguarde um herói voltar.</div>`
                 : `<div class="exp-ev-heroes-grid">${disponiveis.map(h => {
                     const s = SPRITES?.[h.className] || '';
                     return `<div class="exp-ev-hero-card" onclick="window._expV86SelHero('${h.className.replace(/'/g,"\\'")}')">
@@ -4976,7 +5158,7 @@
                     <div class="exp-preview-row"><span>Tempo:</span><b>${tempoLabel}</b></div>
                     <div class="exp-preview-row" style="color:#8ac070;">
                         <span>Sucesso:</span>
-                        <b>+${recSucesso.xp} XP · +${recSucesso.gold} 🪙${recSucesso.essencia > 0 ? ` · +${recSucesso.essencia} 🌑` : ''}</b>
+                        <b>+${recSucesso.xp} XP · +${recSucesso.gold} 🪙${recSucesso.essencia > 0 ? ` · +${recSucesso.essencia} ${isNacao ? '🌎' : '🌑'}` : ''}</b>
                     </div>
                     <div class="exp-preview-row dim" style="font-size:.8rem;"><span>Falha:</span><b>+${recFalha.xp} XP</b></div>
                     <div class="exp-preview-row" style="border-top:1px solid rgba(232,185,35,.2);padding-top:8px;margin-top:8px;">
@@ -4987,11 +5169,13 @@
                 </div>`;
         }
 
+        const heroiPermitido = !selHeroi || heroiElegivel(selHeroi, tipo, nacaoDia);
         const sa = slotsAtivos(tipo);
         const sm = slotsMax(tipo);
         const cheios = sa >= sm;
         let motivo = '';
         if (!selHeroi) motivo = 'Escolha um herói';
+        else if (!heroiPermitido) motivo = `Herói acima do limite de raridade (${window._nacaoDayConfig?.[nacaoDia?.diaSemana]?.maxStars}★)`;
         else if (!faseObj) motivo = 'Escolha uma fase';
         else if (cheios) motivo = `Slots cheios (${sa}/${sm})`;
         else if ((STORY_PROGRESS.gold || 0) < custo) motivo = `Faltam ${custo - (STORY_PROGRESS.gold || 0)} ouro`;
@@ -5036,6 +5220,7 @@
     window._expV86SelTipo = function(t) { 
         const st = window._expStateV86; st.tipo = t; st.chapterId = null; st.phaseId = null; st.faseId = null; 
         if (t === 'evento') st.difficulty = STORY_PROGRESS.eventoDificuldade || 'normal';
+        else if (t === 'nacao') st.difficulty = typeof storyCurrentDifficulty !== 'undefined' ? storyCurrentDifficulty : STORY_PROGRESS.difficulty || 'normal';
         render(); 
     };
     window._expV86SelDiff = function(d) { 
@@ -5046,6 +5231,11 @@
     window._expV86SelPhase = function(pid) { window._expStateV86.phaseId = pid; window._expStateV86.faseId = pid; render(); };
     window._expV86SelHero = function(hc) { 
         if (heroiEmExp(hc)) { if(typeof showToast==='function') showToast('⛺', 'Herói já em expedição.', '⛺'); return; }
+        const nacao = window._expStateV86.tipo === 'nacao' ? nacaoDoDia() : null;
+        if (!heroiElegivel(hc, window._expStateV86.tipo, nacao)) {
+            if (typeof showToast === 'function') showToast('🚫', 'Este herói excede a raridade permitida hoje.', '🚫');
+            return;
+        }
         window._expStateV86.heroClass = hc; render(); 
     };
 
@@ -5088,23 +5278,75 @@
         if (!Array.isArray(STORY_PROGRESS.expeditions)) STORY_PROGRESS.expeditions = [];
 
         if (tipo === 'evento') {
+            const base = FASE_EVT_REWARD[st.faseId];
+            if (!base || !st.bossId) return;
             const custo = calcCustoEvento(st.faseId, diff);
             if ((STORY_PROGRESS.gold || 0) < custo) return;
             STORY_PROGRESS.gold -= custo;
             const chance = calcChanceEvento(st.heroClass, st.faseId, diff);
+            const multiplier = DIFF_MULT_EVT[diff] || 1;
+            const recompensa = {
+                xp: Math.floor(base.xp * 0.5 * multiplier),
+                gold: Math.floor(base.gold * 0.5 * multiplier),
+                essencia: Math.floor(base.essencia * multiplier),
+            };
             
             STORY_PROGRESS.expeditions.push({
                 id: 'exp_evt_' + Date.now(),
                 tipo: 'evento', bossId: st.bossId, faseId: st.faseId, 
-                heroClass: st.heroClass, difficulty: diff,
+                heroClass: st.heroClass, phaseName: `Fase ${st.faseId}`, difficulty: diff,
                 chance, startedAt: Date.now(), durationMs: TEMPO_EVENTO[diff],
                 concluida: false, coletada: false, resultado: null, custoPago: custo,
+                recompensa: {
+                    xp: recompensa.xp,
+                    gold: recompensa.gold,
+                    drops: recompensa.essencia > 0
+                        ? [{ id: 'essencia_sombria', qty: recompensa.essencia }]
+                        : [],
+                },
             });
             if (typeof saveStoryProgress === 'function') saveStoryProgress();
             document.getElementById('expedicaoOverlayV86')?.remove();
             if (typeof showToast === 'function') showToast('⛺', `Enviado! -${custo} ouro`, '⛺');
             if (typeof renderOcaScreenFiltered === 'function') renderOcaScreenFiltered();
             
+        } else if (tipo === 'nacao') {
+            const nacao = nacaoDoDia();
+            const faseId = String(st.faseId || '');
+            if (!nacao || !heroiElegivel(st.heroClass, tipo, nacao)
+                || !progressoNacao(nacao.id, diff).includes(faseId)) return;
+            const custo = window._nacaoConfig?.custoEntrada?.[diff] || 500;
+            if ((STORY_PROGRESS.gold || 0) < custo) return;
+            const recompensa = calcRecompensaNacao(faseId, diff);
+            const chance = calcChanceNacao(st.heroClass, nacao, faseId, diff);
+            STORY_PROGRESS.gold -= custo;
+            STORY_PROGRESS.expeditions.push({
+                id: 'exp_nacao_' + Date.now(),
+                tipo: 'nacao',
+                nacaoId: nacao.id,
+                faseId,
+                phaseName: `${nacao.nome} — Fase ${faseId}`,
+                heroClass: st.heroClass,
+                difficulty: diff,
+                chance,
+                startedAt: Date.now(),
+                durationMs: TEMPO_EVENTO[diff],
+                concluida: false,
+                coletada: false,
+                resultado: null,
+                custoPago: custo,
+                recompensa: {
+                    xp: recompensa.xp,
+                    gold: recompensa.gold,
+                    drops: recompensa.essencia > 0
+                        ? [{ id: 'essencia_ancestral', qty: recompensa.essencia }]
+                        : [],
+                },
+            });
+            if (typeof saveStoryProgress === 'function') saveStoryProgress();
+            document.getElementById('expedicaoOverlayV86')?.remove();
+            if (typeof showToast === 'function') showToast('🌎', `Enviado! -${custo} ouro`, '🌎');
+            if (typeof renderOcaScreenFiltered === 'function') renderOcaScreenFiltered();
         } else {
             const ch = STORY_CHAPTERS[st.chapterId];
             const ph = ch?.phases.find(p => p.id === st.phaseId);

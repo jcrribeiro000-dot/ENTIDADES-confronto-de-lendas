@@ -555,7 +555,7 @@ function renderBestiaryScreen() {
             if (!discovered) {
                 // Card bloqueado (silhueta + ???)
                 cardsHTML += `
-                    <div class="bestiary-card locked" onclick="showToast('🔒 Selado', 'Derrote este inimigo para desbloquear.', '🔒')">
+                    <div class="bestiary-card locked" data-enemy-id="${enemyId}" onclick="showToast('🔒 Selado', 'Derrote este inimigo para desbloquear.', '🔒')">
                         <div class="bestiary-card-header">
                             ${imgHTML}
                             <div class="bestiary-card-info">
@@ -603,7 +603,7 @@ function renderBestiaryScreen() {
             });
 
             cardsHTML += `
-                <div class="bestiary-card unlocked ${tipo === 'final' ? 'bestiary-final' : ''} ${tipo === 'boss' ? 'bestiary-boss' : ''} ${tipo === 'miniboss' ? 'bestiary-miniboss' : ''}">
+                <div class="bestiary-card unlocked ${tipo === 'final' ? 'bestiary-final' : ''} ${tipo === 'boss' ? 'bestiary-boss' : ''} ${tipo === 'miniboss' ? 'bestiary-miniboss' : ''}" data-enemy-id="${enemyId}">
                     <div class="bestiary-card-header">
                         ${imgHTML}
                         <div class="bestiary-card-info">
@@ -3331,3 +3331,46 @@ function getAmuletIcon(amuletId, size = 'normal') {
 
 console.log('✅ Tabelas de sprites de arma/amuleto carregadas.');
 // =================================================================
+// =================================================================
+// historia-progresso.js — V121 — Publicação em window (ver bloco V121
+// de historia.js para o diagnóstico completo)
+// -----------------------------------------------------------------
+// ascendHero/rerollStat11 são sobrescritos depois pelo V36.0 em
+// historia-sistemas.js. Os HOOKS (conquistas.js) precisam vê-los em window,
+// e o Ritual precisa chamar via window para que o hook seja executado.
+// =================================================================
+(function exporGlobaisProgressoV121() {
+    if (window._exporGlobaisProgressoV121) return;
+    window._exporGlobaisProgressoV121 = true;
+
+    const W = window;
+
+    // handleRitualAscend → ascendHero (via window, para os hooks rodarem)
+    if (typeof W.handleRitualAscend === 'function' && !W.handleRitualAscend._v121) {
+        const _orig = W.handleRitualAscend;
+        W.handleRitualAscend = function (heroClass) {
+            const r = _orig.apply(this, arguments);
+            // Re-publica ascendHero/reroll após o V36.0 tê-los envolvido
+            if (typeof W._exporGlobaisV121Extras === 'function') {
+                try { W._exporGlobaisV121Extras(); } catch (e) {}
+            }
+            return r;
+        };
+        W.handleRitualAscend._v121 = true;
+    }
+
+    // ascendHero → versão roteada (window), preservando o binding léxico
+    if (typeof W.ascendHero === 'function' && !W.ascendHero._v121) {
+        const _orig = W.ascendHero;
+        W.ascendHero = function (heroClass) {
+            const r = _orig.apply(this, arguments);
+            if (r && r.ok && typeof W.checkAchievements === 'function') {
+                try { W.checkAchievements(); } catch (e) {}
+            }
+            return r;
+        };
+        W.ascendHero._v121 = true;
+    }
+
+    console.log('✅ [V121/progresso] ascendHero + rerollStat11 roteados por window.');
+})();

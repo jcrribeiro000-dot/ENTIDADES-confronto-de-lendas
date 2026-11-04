@@ -16406,3 +16406,96 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
     console.log('✅ [V10.53] Corrupção Pronta (Reset Ativo + Banner).');
 })();
 // =================================================================
+// =================================================================
+// historia.js — V120 — Fix Caboclo d'Água (apóstrofo quebrava o Ritual)
+// -----------------------------------------------------------------
+// PROBLEMA:
+//   O className do herói era "Caboclo d'Água". Esse ' era escapado em
+//   handleRitualAscend('Caboclo d\'Água') e chegava corrompido no
+//   ascendHero(), devolvendo "Herói não encontrado." — só no ritual de
+//   subir de nível (nível 11), apesar do card aparecer na lista.
+//
+// SOLUÇÃO:
+//   Mesmo tratamento já usado na Tapyra (V34.0): o herói passa a usar
+//   "Caboclo d Água" (sem apóstrofo) na chave e no className, e o save
+//   do jogador é migrado automaticamente.
+// =================================================================
+
+(function renomearCabocloAguaV120() {
+    if (window._renomearCabocloV120) return;
+    window._renomearCabocloV120 = true;
+
+    const ANTIGO = "Caboclo d'Água";
+    const NOVO   = "Caboclo d Água";
+
+    // 1. STORY_HERO_CLASSES — move a chave (a definição nova pode não existir
+    //    caso o herói tenha sido adicionado antes do patch).
+    if (typeof STORY_HERO_CLASSES !== 'undefined') {
+        const heroVelho = STORY_HERO_CLASSES[ANTIGO];
+        if (heroVelho) {
+            heroVelho.className   = NOVO;
+            heroVelho.displayName = 'Caboclo dágua';
+            STORY_HERO_CLASSES[NOVO] = heroVelho;
+            delete STORY_HERO_CLASSES[ANTIGO];
+        }
+        if (STORY_HERO_CLASSES[NOVO]) {
+            STORY_HERO_CLASSES[NOVO].displayName = 'Caboclo dágua';
+            STORY_HERO_CLASSES[NOVO].className   = NOVO;
+        }
+    }
+
+    // 2. Unlocks por estrelas
+    if (typeof STORY_HERO_UNLOCKS !== 'undefined' && Array.isArray(STORY_HERO_UNLOCKS)) {
+        STORY_HERO_UNLOCKS.forEach(entry => {
+            if (entry.className === ANTIGO) entry.className = NOVO;
+            if (entry.displayName === 'Caboclo d\'Água') entry.displayName = 'Caboclo dágua';
+        });
+    }
+
+    // 3. Detalhes ("?" do herói)
+    if (typeof STORY_HERO_DETAILS !== 'undefined' && STORY_HERO_DETAILS[ANTIGO]) {
+        STORY_HERO_DETAILS[NOVO] = STORY_HERO_DETAILS[ANTIGO];
+        delete STORY_HERO_DETAILS[ANTIGO];
+    }
+
+    // 4. GIFs do Bravely
+    if (typeof STORY_BRAVELY_GIFS !== 'undefined' && STORY_BRAVELY_GIFS[ANTIGO] !== undefined) {
+        STORY_BRAVELY_GIFS[NOVO] = STORY_BRAVELY_GIFS[ANTIGO];
+        delete STORY_BRAVELY_GIFS[ANTIGO];
+    }
+
+    // 5. Save do jogador — níveis, stat 11, desbloqueios, seleção e líder
+    if (typeof STORY_PROGRESS !== 'undefined') {
+        let mudou = false;
+
+        ['heroLevels', 'heroStat11'].forEach(campo => {
+            const mapa = STORY_PROGRESS[campo];
+            if (mapa && mapa[ANTIGO] !== undefined) {
+                mapa[NOVO] = mapa[ANTIGO];
+                delete mapa[ANTIGO];
+                mudou = true;
+            }
+        });
+
+        ['unlockedHeroesStory', 'selectedHeroes'].forEach(campo => {
+            if (Array.isArray(STORY_PROGRESS[campo])) {
+                const idx = STORY_PROGRESS[campo].indexOf(ANTIGO);
+                if (idx !== -1) {
+                    STORY_PROGRESS[campo][idx] = NOVO;
+                    mudou = true;
+                }
+            }
+        });
+
+        if (STORY_PROGRESS.leader === ANTIGO) {
+            STORY_PROGRESS.leader = NOVO;
+            mudou = true;
+        }
+
+        // Não salva aqui: o progresso precisa estar carregado.
+        // A migração será persistida no próximo saveStoryProgress().
+        if (mudou) console.log('[V120] Save migrado: Caboclo d\'Água → Caboclo d Água');
+    }
+
+    console.log('✅ [V120] Caboclo d Água: ritual de nível 11 funcionando sem apóstrofo.');
+})();

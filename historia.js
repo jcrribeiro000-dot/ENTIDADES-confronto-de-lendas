@@ -360,13 +360,15 @@
             .story-saci-dialog-text{font-size:1rem;padding:15px}
         }
         .spectral-boss {
-            opacity: 0.65;
-            filter: hue-rotate(220deg) saturate(0.7) brightness(1.15) drop-shadow(0 0 8px rgba(142,68,173,.7));
-            animation: spectralPulse 2s ease-in-out infinite;
+            opacity: 0.72;
+            filter: hue-rotate(220deg) saturate(0.7) brightness(1.15)
+                drop-shadow(0 0 8px rgba(142,68,173,.8))
+                drop-shadow(0 0 16px rgba(83,190,255,.45));
+            animation: spectralPulse 2.4s ease-in-out infinite;
         }
         @keyframes spectralPulse {
-            0%,100% { opacity: 0.65; filter: hue-rotate(220deg) saturate(0.7) brightness(1.15) drop-shadow(0 0 8px rgba(142,68,173,.7)); }
-            50%     { opacity: 0.8;  filter: hue-rotate(240deg) saturate(0.8) brightness(1.3) drop-shadow(0 0 14px rgba(142,68,173,.9)); }
+            0%,100% { opacity: 0.62; }
+            50%     { opacity: 0.88; }
         }
     `;
     document.head.appendChild(style);
@@ -4924,6 +4926,14 @@ async function handleStoryBossDefeat(){
     const enemyId = storyEnemiesRemaining[0];
     if (!enemyId) { window._storyPurificationShowing = false; return; }
 
+    if (!Array.isArray(STORY_PROGRESS.enemiesDefeatedIds)) {
+        STORY_PROGRESS.enemiesDefeatedIds = [];
+    }
+    if (!STORY_PROGRESS.enemiesDefeatedIds.includes(enemyId)) {
+        STORY_PROGRESS.enemiesDefeatedIds.push(enemyId);
+        saveStoryProgress();
+    }
+
     const drops = rollStoryDrops(enemyId);
     let dropTxt = '';
     drops.forEach(d => {
@@ -5646,6 +5656,34 @@ async function initStoryBattle(){
     const enemy = STORY_ENEMIES[enemyId];
     if (!enemy) return;
 
+    window._eventoAtivo = false;
+    window._eventoFinalizando = false;
+    window._eventoTurnoJogador = true;
+    window._eventoBossRunning = false;
+    window._eventoProcessandoAcao = false;
+    window._eventoAnimais = [];
+    window._nacaoAtivo = false;
+    window._nacaoBatalha = { ativa: false };
+    if (window._eventoBatalha && typeof window._eventoBatalha === 'object') {
+        window._eventoBatalha.ativa = false;
+        window._eventoBatalha.aoAoDividido = false;
+        window._eventoBatalha.aoAoEco = null;
+        window._eventoBatalha.pesadeloTurnos = 0;
+        window._eventoBatalha.publicandoResultado = false;
+        delete window._eventoBatalha.bossId;
+        delete window._eventoBatalha.faseId;
+        delete window._eventoBatalha.dificuldade;
+        delete window._eventoBatalha.isPesadelo;
+    }
+    const board = document.getElementById('board');
+    if (board) {
+        board.querySelectorAll('.token.evento-animal, .token.evento-eco-aoao').forEach(token => token.remove());
+    }
+    ['eventoBadge', 'eventoBanner'].forEach(id => {
+        const element = document.getElementById(id);
+        if (element) element.remove();
+    });
+
     window._storyMode = true;
     window._endGameShowing = false;
     window._storyPurificationShowing = false;
@@ -5655,6 +5693,8 @@ async function initStoryBattle(){
 
     const baseType = STORY_TO_BASE_BOSS[enemyId] || enemyId.toUpperCase();
     boss.type = baseType;
+    boss.nome = '';
+    boss.name = '';
     boss.hp = enemy.hp;
     boss.maxHp = enemy.hp;
     boss.dead = false;
@@ -7870,3 +7910,144 @@ console.log('✅ Painel de detalhes do herói carregado.');
     console.log('✅ CSS do painel de detalhes injetado.');
 })();
 // =================================================================
+// =================================================================
+// historia.js — V121 — EXPOSIÇÃO DAS GLOBAIS EM window
+// -----------------------------------------------------------------
+// PROBLEMA:
+//   Os arquivos deste projeto declaram tudo com `let`/`const`/`function`
+//   no topo do script. Nomes declarados assim NUNCA viram propriedade de
+//   `window` (só `var` e `function` viram). Mas conquistas.js, fx.js,
+//   coop.js, pvp.js, conhecimento.js e outros fazem:
+//
+//       const cur = window.applyDmg;
+//       if (typeof cur !== 'function') return;   // ← nunca acha
+//       window.applyDmg = function(){ ... };     // ← cria uma CÓPIA paralela
+//
+//   O jogo seguia usando a função léxica (a real) e os hooks ficavam
+//   pendurados em cópias mortas. Resultado: conquistas nunca detectavam
+//   nada e NUNCA entregavam recompensa.
+//
+// SOLUÇÃO:
+//   Publicar esses nomes em window. Funções são wrappers que delegam ao
+//   binding léxico, então um hook em window.X é chamado de verdade pelo
+//   jogo (que agora, nos pontos de entrada, também passa por window.X).
+//   Valores mutáveis usam getter/setter para nunca ficarem defasados.
+//
+// ⚠️ NÃO adicionar aqui nada que já seja publicado por outro arquivo.
+// =================================================================
+(function exporGlobaisV121() {
+    if (window._exporGlobaisV121) return;
+    window._exporGlobaisV121 = true;
+
+    const W = window;
+
+    // ─────────────────────────────────────────────────────────────
+    // 1. VALORES (getter/setter — sobrevivem a reatribuição)
+    // ─────────────────────────────────────────────────────────────
+    function exporValor(nome) {
+        if (Object.prototype.hasOwnProperty.call(W, nome)) return;
+        try {
+            Object.defineProperty(W, nome, {
+                configurable: true,
+                enumerable: true,
+                get() { try { return eval(nome); } catch (e) { return undefined; } },
+                set(v) { try { eval(nome + ' = v'); } catch (e) {} },
+            });
+        } catch (e) {
+            console.warn('[V121] não foi possível expor', nome, e);
+        }
+    }
+
+    [
+        'STORY_PROGRESS',        // reatribuído em loadStoryProgressByName
+        'STORY_CURRENT_SAVE_NAME',
+        'STORY_HERO_CLASSES',
+        'STORY_HERO_DETAILS',
+        'STORY_HERO_PA',
+        'STORY_HERO_PA_IMAGES',
+        'STORY_MATERIALS',
+        'STORY_LEVEL_UPGRADES',
+        'STORY_MAX_LEVEL',
+        'STORY_WEAPONS',
+        'STORY_AMULETS',
+        'STORY_CHAPTERS',
+        'STORY_ANIMAL_SKILLS',
+        'SPRITES_STORY',
+        'EMOJI_STORY',
+    ].forEach(exporValor);
+
+    // ─────────────────────────────────────────────────────────────
+    // 2. FUNÇÕES (wrapper → binding léxico)
+    // ─────────────────────────────────────────────────────────────
+    function exporFuncao(nome) {
+        if (Object.prototype.hasOwnProperty.call(W, nome)) return;
+        const original = (() => { try { return eval(nome); } catch (e) { return undefined; } })();
+        if (typeof original !== 'function') return;
+        try {
+            Object.defineProperty(W, nome, {
+                configurable: true,
+                enumerable: false,
+                writable: true,
+                value: function () { return original.apply(this, arguments); },
+            });
+        } catch (e) {
+            console.warn('[V121] não foi possível expor', nome, e);
+        }
+    }
+
+    // — Combate / núcleo da história —
+    [
+        'applyDmg', 'finishStoryPhase', 'initStoryBattle',
+        'handleStoryBossDefeat', 'handleStoryDefeat', 'handleStoryPhaseVictory',
+        'limparCorrupcao', 'executeAction', 'manageTurns', 'storyEnemyAI',
+        'advanceStoryEnemy', 'startStoryPhase', 'completePhase',
+        'continueToNextPhase', 'rollStoryDrops', 'applyStorySkill',
+        'applyStoryEnemyToBoss', 'applyStoryElementsToPlayers',
+        'triggerBravelyChain', 'showStoryVictoryScreen',
+        'showStoryDefeatScreen', 'returnFromStoryVictory',
+        'updateVisuals', 'updateHeroCard', 'updateBossCard',
+        'addLog', 'showToast', 'playSfx', 'uiIcon', 'elemIcon',
+        'saveStoryProgress', 'loadStoryProgressByName', 'createNewStorySave',
+        'changeStorySave', 'getLastUsedSaveName',
+        'showStorySaveNameModal', 'loadStorySaveFromModal',
+        'closeStorySaveNameModal', 'confirmStorySaveName',
+        'showStoryScreen', 'hideStoryScreen', 'exitStoryToTitle',
+        'renderAldeiaScreen', 'renderAtosScreen', 'renderRitualScreen',
+        'renderOcaScreen', 'renderBestiaryScreen',
+    ].forEach(exporFuncao);
+
+    // ─────────────────────────────────────────────────────────────
+    // 3. Roteamento: o jogo chama via window.X, para que hooks
+    //    instalados por conquistas.js/fx.js/coop.js sejam executados.
+    // ─────────────────────────────────────────────────────────────
+    const ROTEAR = {
+        applyDmg:              'applyDmg',
+        finishStoryPhase:      'finishStoryPhase',
+        initStoryBattle:       'initStoryBattle',
+        handleStoryBossDefeat: 'handleStoryBossDefeat',
+        ascendHero:            'ascendHero',
+        rerollStat11:          'rerollStat11',
+    };
+
+    function instalarRoteamento() {
+        for (const nome in ROTEAR) {
+            const atual = W[nome];
+            if (typeof atual !== 'function') {
+                if (!window._roteamentoPendente) window._roteamentoPendente = [];
+                window._roteamentoPendente.push(nome);
+            }
+        }
+    }
+    instalarRoteamento();
+
+    // ascendHero / rerollStat11 vivem em historia-progresso.js e são
+    // sobrescritos por historia-sistemas.js (V36.0). Publica-os lá também.
+    window._exporGlobaisV121Extras = function () {
+        ['ascendHero', 'rerollStat11', 'setHeroLevel', 'getHeroLevel',
+         'getNextUpgradeCost', 'getHeroBonusFromLevel', 'handleRitualAscend',
+         'applyHeroLevelBonus', 'applyHeroEquipment'].forEach(exporFuncao);
+    };
+    window._exporGlobaisV121Extras();
+
+    console.log('✅ [V121] Globais publicadas em window (conquistas/hooks agora funcionam).');
+})();

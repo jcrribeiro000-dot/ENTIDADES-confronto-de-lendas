@@ -5101,3 +5101,45 @@ document.addEventListener("DOMContentLoaded", function() {
 
     console.log('✅ [entidades] Títulos desativados com sucesso. O +0.5 morreu.');
 })();
+// =================================================================
+// entidades.js — V121 — EXPOSIÇÃO DAS GLOBAIS EM window
+// -----------------------------------------------------------------
+// Mesmo motivo do bloco V121 de historia.js: `let`/`function` no topo do
+// script não criam propriedade em window, e outros arquivos dependem disso.
+// Aqui ficam as funções/variáveis de entidades.js usadas via window.X.
+// =================================================================
+(function exporGlobaisEntidadesV121() {
+    if (window._exporGlobaisEntidadesV121) return;
+    window._exporGlobaisEntidadesV121 = true;
+
+    const W = window;
+    let expostos = 0;
+
+    function exporFuncao(nome) {
+        if (Object.prototype.hasOwnProperty.call(W, nome)) return;
+        const fn = (() => { try { return eval(nome); } catch (e) { return undefined; } })();
+        if (typeof fn !== 'function') return;
+        Object.defineProperty(W, nome, {
+            configurable: true, enumerable: false, writable: true,
+            value: function () { return fn.apply(this, arguments); },
+        });
+        expostos++;
+    }
+
+    function exporValor(nome) {
+        if (Object.prototype.hasOwnProperty.call(W, nome)) return;
+        try {
+            Object.defineProperty(W, nome, {
+                configurable: true, enumerable: true,
+                get() { try { return eval(nome); } catch (e) { return undefined; } },
+                set(v) { try { eval(nome + ' = v'); } catch (e) {} },
+            });
+            expostos++;
+        } catch (e) {}
+    }
+
+    ['beginTutorial', 'unlockAudio', 'playSfx'].forEach(exporFuncao);
+    ['isExecutingAction', 'tutorialMode'].forEach(exporValor);
+
+    console.log(`✅ [V121/entidades] ${expostos} globais publicadas em window.`);
+})();

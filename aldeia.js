@@ -2140,7 +2140,7 @@
     const autoOpenAldeia = () => {
         if (_autoOpenFired) return;
         if (typeof window.showStoryScreen !== 'function') return;
-        if (typeof window.STORY_PROGRESS === 'undefined') return;
+        if (typeof STORY_PROGRESS === 'undefined' || !STORY_PROGRESS) return;
 
         // Se o usuário explicitamente escolheu menu → respeita
         try {
