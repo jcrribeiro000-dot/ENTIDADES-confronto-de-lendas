@@ -3171,17 +3171,22 @@ STORY_ANIMAL_SKILLS['boitata_explosoes'] = async () => {
     const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg').value) || 4;
     playSfx('skill1');
     addLog(`🔥 Boitatá invoca explosões de fogo!`);
+    // FIX: antes o sorteio podia cair no MESMO tile várias vezes, e o herói
+    // levava um dano por vez — até 5 numa skill só.
+    const usados = new Set();
     let count = 0, attempts = 0;
     while (count < 5 && attempts < 50) {
-        let idx = Math.floor(Math.random() * 64);
-        if (grid[idx] === 'FOGO') {
-            triggerFlare(idx % 8, Math.floor(idx / 8));
-            players.forEach(p => {
-                if (!p.dead && p.x === idx % 8 && p.y === Math.floor(idx / 8)) applyDmg(p, bossAtk);
-            });
-            count++;
-        }
+        const idx = Math.floor(Math.random() * 64);
         attempts++;
+        if (grid[idx] !== 'FOGO') continue;
+        if (usados.has(idx)) continue; // nunca explode o mesmo tile duas vezes
+        usados.add(idx);
+        const tx = idx % 8, ty = Math.floor(idx / 8);
+        triggerFlare(tx, ty);
+        players.forEach(p => {
+            if (!p.dead && p.x === tx && p.y === ty) applyDmg(p, bossAtk);
+        });
+        count++;
     }
     await sleep(500);
 };
