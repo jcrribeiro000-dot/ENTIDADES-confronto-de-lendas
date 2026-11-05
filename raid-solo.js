@@ -303,7 +303,7 @@
                 width: min(1050px, calc(100% - 24px));
                 margin: 24px auto;
                 padding: 28px;
-                background: linear-gradient(180deg, rgba(42,31,16,.97), rgba(20,14,8,.98));
+                background: linear-gradient(180deg, rgba(42,31,16,.88), rgba(20,14,8,.92));
                 border: 2px solid #6a5024;
                 border-radius: 12px;
                 box-shadow: 0 12px 40px rgba(0,0,0,.7), 0 0 24px rgba(201,162,39,.12);
@@ -592,9 +592,14 @@
         };
 
         // Fundo da tela (wide/mobile como nas outras sub-telas)
+        // Prioridade: A_EVENTOS_HUB.background → INTERFACE_BACKGROUNDS.eventos → SPRITES_STORY.aldeia_eventos
         const bgCfg = hubCfg.background || {};
+        const ifaceCfg = window.INTERFACE_BACKGROUNDS?.eventos || {};
+        const cenarioFallback = (typeof SPRITES_STORY !== 'undefined' && SPRITES_STORY?.aldeia_eventos) || '';
         const isMob = window.matchMedia('(max-width: 700px)').matches || window.matchMedia('(orientation: portrait)').matches;
-        let bgUrl = isMob ? (bgCfg.mobile || bgCfg.wide) : (bgCfg.wide || bgCfg.mobile);
+        const wideUrl = bgCfg.wide || ifaceCfg.wide || cenarioFallback || '';
+        const mobileUrl = bgCfg.mobile || ifaceCfg.mobile || cenarioFallback || '';
+        let bgUrl = isMob ? (mobileUrl || wideUrl) : (wideUrl || mobileUrl);
         screen.style.backgroundImage = '';
         screen.style.backgroundSize = '';
         screen.style.backgroundPosition = '';
@@ -638,6 +643,24 @@
             </div>`;
         screen.classList.add('active');
         screen.style.display = 'flex';
+
+        // Reaplica o fundo depois que o innerHTML é montado
+        // (alguns patches limpam o style da #storyScreen)
+        if (bgUrl && String(bgUrl).trim() !== '') {
+            const aplicar = () => {
+                const s = document.getElementById('storyScreen');
+                if (!s || !s.classList.contains('active')) return;
+                if (!s.querySelector('.event-hub-container')) return;
+                s.style.backgroundImage = `linear-gradient(rgba(10,6,2,0.60), rgba(10,6,2,0.60)), url('${bgUrl}')`;
+                s.style.backgroundSize = 'cover, cover';
+                s.style.backgroundPosition = 'center, center';
+                s.style.backgroundRepeat = 'no-repeat, no-repeat';
+                s.style.backgroundColor = '#1a1208';
+            };
+            setTimeout(aplicar, 0);
+            setTimeout(aplicar, 120);
+            setTimeout(aplicar, 400);
+        }
     }
 
     function renderHubDestination(destination) {

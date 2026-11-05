@@ -18,6 +18,7 @@ const A_SPRITES = {
     Tupa:    'https://i.imgur.com/R2WKPky.gif',   // ✓
     Sume:    'https://i.imgur.com/xXwuVKW.gif',   // ✓
     Caipora: 'https://i.imgur.com/3bayQJu.gif',   // ✓
+    Abya:    'https://i.imgur.com/3gom0Dy.gif',   // ✓ (Herói / Líder)
 
     BOITATA:     'https://i.imgur.com/4PEG3BL.gif',   // ✓
     MAPINGUARI:  'https://i.imgur.com/oIhDjT8.gif',   // ✓
@@ -176,6 +177,7 @@ const A_HEROIS = {
     heroi_PajeAcu:         'https://i.imgur.com/bpt2idM.gif',  // ✓
     heroi_Negrinho:        'https://i.imgur.com/TD6Wz71.gif',  // ✓
     heroi_Ruda:            'https://i.imgur.com/fCvtKEx.gif',  // ✓
+    heroi_Abya:            'https://i.imgur.com/3gom0Dy.gif',  // ✓
 };
 
 
@@ -226,6 +228,7 @@ const A_CENARIOS = {
     aldeia_ritual:     'https://i.imgur.com/wb2Nu4l.png',  // ✓
     aldeia_bestiario:  'https://i.imgur.com/RQn91EK.png',  // ✓
     aldeia_tesouraria: 'https://i.imgur.com/vrurP0D.png',  // ✓
+    aldeia_eventos:    '',                                 // Fundo tela de Eventos (opcional em A_CENARIOS)
 
     // ---- Armas (ícones) ----
     arma_cajado:  'https://i.imgur.com/gPTB4uf.png',  // ✓
@@ -992,6 +995,7 @@ const A_INTERFACE_BACKGROUNDS = {
     coop:       { wide: 'https://i.imgur.com/uSImbPP.jpeg', mobile: 'https://i.imgur.com/4Lo60gV.jpeg' },
     ritual:     { wide: 'https://i.imgur.com/PbCqOwg.jpeg', mobile: 'https://i.imgur.com/rbiOooI.jpeg' },
     bestiario:  { wide: 'https://i.imgur.com/cjAclBV.jpeg', mobile: 'https://i.imgur.com/7qrW4Bh.jpeg' },
+    eventos:    { wide: 'https://i.imgur.com/lpUg7TX.jpeg', mobile: 'https://i.imgur.com/cCB8qX5.jpeg' }, // 🌟 TELA PRINCIPAL DE EVENTOS (Hub da Aldeia)
 };
 
 // ================================================================
@@ -1001,7 +1005,7 @@ const A_INTERFACE_BACKGROUNDS = {
 //   • sprite por card  (vazio '' → usa o emoji abaixo)
 //   • emoji por card   (fallback quando não tem sprite)
 //   • fundo da tela    (wide = desktop, mobile = vertical)
-// Basta substituir as URLs. Vazio = fallback.
+// Basta substituir as URLs de "background". Vazio = fallback.
 // ================================================================
 const A_EVENTOS_HUB = {
     // ---- Ícone/emoji de cada card ----
@@ -1015,10 +1019,10 @@ const A_EVENTOS_HUB = {
         selados: '🌑',
         raids:   '⚔️',
     },
-    // ---- Fundo da tela (igual às outras sub-telas) ----
+    // ---- Fundo da tela principal de EVENTOS ----
     background: {
-        wide:   'https://i.imgur.com/lpUg7TX.jpeg',   // ← fundo desktop
-        mobile: 'https://i.imgur.com/cCB8qX5.jpeg',   // ← fundo mobile
+        wide:   'https://i.imgur.com/lpUg7TX.jpeg',   // ← fundo desktop da tela principal de eventos
+        mobile: 'https://i.imgur.com/cCB8qX5.jpeg',   // ← fundo mobile da tela principal de eventos
     },
 };
 window.A_EVENTOS_HUB = A_EVENTOS_HUB;
@@ -1254,7 +1258,29 @@ window.showLootNotification = function(title, items) {
 
     // ---- Aldeia e fundos das telas ----
     if (window.ALDEIA_CONFIG) window.ALDEIA_CONFIG.bgImage = A_ALDEIA_BACKGROUND;
+    // Sincroniza background de Eventos entre A_INTERFACE_BACKGROUNDS e A_EVENTOS_HUB
+    if (A_INTERFACE_BACKGROUNDS.eventos && typeof A_EVENTOS_HUB !== 'undefined' && A_EVENTOS_HUB.background) {
+        if (A_INTERFACE_BACKGROUNDS.eventos.wide && !A_EVENTOS_HUB.background.wide) {
+            A_EVENTOS_HUB.background.wide = A_INTERFACE_BACKGROUNDS.eventos.wide;
+        }
+        if (A_INTERFACE_BACKGROUNDS.eventos.mobile && !A_EVENTOS_HUB.background.mobile) {
+            A_EVENTOS_HUB.background.mobile = A_INTERFACE_BACKGROUNDS.eventos.mobile;
+        }
+        if (A_EVENTOS_HUB.background.wide) {
+            A_INTERFACE_BACKGROUNDS.eventos.wide = A_EVENTOS_HUB.background.wide;
+        }
+        if (A_EVENTOS_HUB.background.mobile) {
+            A_INTERFACE_BACKGROUNDS.eventos.mobile = A_EVENTOS_HUB.background.mobile;
+        }
+    }
     aplicarConfiguracao(A_INTERFACE_BACKGROUNDS, window.INTERFACE_BACKGROUNDS);
+    if (window.A_EVENTOS_HUB && A_EVENTOS_HUB.background) {
+        window.A_EVENTOS_HUB.background = Object.assign({}, A_EVENTOS_HUB.background);
+    }
+    if (typeof SPRITES !== 'undefined' && A_NACAO_SPRITES?.heroi_Abya) {
+        SPRITES['Abya'] = A_NACAO_SPRITES.heroi_Abya;
+        SPRITES['heroi_Abya'] = A_NACAO_SPRITES.heroi_Abya;
+    }
 
     // ---- SFX via CUSTOM_SFX ----
     window.CUSTOM_SFX = window.CUSTOM_SFX || {};

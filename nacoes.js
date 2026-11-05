@@ -6059,7 +6059,15 @@
 
     function _atualizarFundo(force) {
         const chave = _resolverChave();
-        const url = chave ? _resolverURL(chave) : null;
+        // Não limpa fundos de outras telas que não sejam Nações (ex: Hub de Eventos, Oca, etc.)
+        if (!chave) {
+            if (_ultimaChave) {
+                _ultimaChave = null;
+                _ultimaURL = null;
+            }
+            return;
+        }
+        const url = _resolverURL(chave);
 
         // Se nada mudou e não é force, não faz nada
         if (!force && chave === _ultimaChave && url === _ultimaURL) return;

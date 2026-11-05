@@ -1748,6 +1748,13 @@ async function coopRodarBossP2() {
     if (isEventoCoop) window._eventoTurnoJogador = false;
 
     try {
+        // Aguarda banner "BOSS ENFURECIDO" sair antes de agir (máx. 4s)
+        if (window._bossEnfurecidoAviso) {
+            const _inicio = Date.now();
+            while (window._bossEnfurecidoAviso && (Date.now() - _inicio) < 4500) {
+                await new Promise(r => setTimeout(r, 100));
+            }
+        }
         if (window._raidMode && window.raidAtual) {
             if (typeof window.raidTurnoBoss !== 'function') {
                 throw new Error('A IA da Raid não está disponível durante o turno cooperativo.');

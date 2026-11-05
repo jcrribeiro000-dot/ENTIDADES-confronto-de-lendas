@@ -3501,6 +3501,7 @@
     // ═══════════════════════════════════════════════════════════
     window.INTERFACE_BACKGROUNDS = window.INTERFACE_BACKGROUNDS || {
         'oca':        { wide: 'https://i.imgur.com/HB9c4ao.jpeg', mobile: 'https://i.imgur.com/LaoJuyF.jpeg' },
+        'eventos':    { wide: 'https://i.imgur.com/lpUg7TX.jpeg', mobile: 'https://i.imgur.com/cCB8qX5.jpeg' },
         'atos':       { wide: 'https://i.imgur.com/R2AyONo.jpeg', mobile: 'https://i.imgur.com/Nvz8pVj.jpeg' },
         'tesouraria': { wide: 'https://i.imgur.com/Z8D5wpO.jpeg', mobile: 'https://i.imgur.com/dTXPHi4.jpeg' },
         'loja':       { wide: 'https://i.imgur.com/EZjkZGq.jpeg', mobile: 'https://i.imgur.com/lbR77Ta.jpeg' },
@@ -3551,6 +3552,7 @@
         if (titleTxt.includes('TESOURARIA')) return 'tesouraria';
         if (titleTxt.includes('CURANDEIRO') || titleTxt.includes('ESCAMBO')) return 'loja';
         if (titleTxt.includes('SEMANA DAS SOMBRAS')) return 'evento';
+        if (titleTxt.includes('EVENTOS')) return 'eventos';
         if (titleTxt.includes('PVP')) return 'pvp';
         if (titleTxt.includes('COOP')) return 'coop';
         if (titleTxt.includes('RITUAL')) return 'ritual';
@@ -3573,13 +3575,16 @@
         const telaKey = detectarTela(titleEl.textContent.toUpperCase());
         if (!telaKey) return;
 
-        const config = window.INTERFACE_BACKGROUNDS[telaKey];
+        const config = window.INTERFACE_BACKGROUNDS[telaKey] || (telaKey === 'eventos' ? window.A_EVENTOS_HUB?.background : null);
         if (!config) return;
 
         const mob = isMobile();
         let bgUrl = mob ? config.mobile : config.wide;
         if (!bgUrl && mob) bgUrl = config.wide;
         if (!bgUrl && !mob) bgUrl = config.mobile;
+        if (!bgUrl && telaKey === 'eventos' && typeof SPRITES_STORY !== 'undefined') {
+            bgUrl = SPRITES_STORY.aldeia_eventos || '';
+        }
 
         if (bgUrl && bgUrl.trim() !== '') {
             aplicarFundo(screen, bgUrl);
@@ -4943,6 +4948,7 @@
         if (T.includes('TESOURARIA')) return 'tesouraria';
         if (T.includes('CURANDEIRO') || T.includes('ESCAMBO')) return 'loja';
         if (T.includes('SEMANA DAS SOMBRAS')) return 'evento';
+        if (T.includes('EVENTOS')) return 'eventos';
         if (T.includes('PVP')) return 'pvp';
         if (T.includes('COOP')) return 'coop';
         if (T.includes('RITUAL')) return 'ritual';
@@ -4951,13 +4957,21 @@
     }
 
     function _getURLDaTela(telaKey) {
-        const config = window.INTERFACE_BACKGROUNDS?.[telaKey];
-        if (!config) return null;
+        const config = window.INTERFACE_BACKGROUNDS?.[telaKey] || (telaKey === 'eventos' ? window.A_EVENTOS_HUB?.background : null);
+        if (!config) {
+            if (telaKey === 'eventos' && typeof SPRITES_STORY !== 'undefined' && SPRITES_STORY.aldeia_eventos) {
+                return SPRITES_STORY.aldeia_eventos;
+            }
+            return null;
+        }
         const isMobile = window.matchMedia('(max-width: 700px)').matches
                         || window.matchMedia('(orientation: portrait)').matches;
         let bgUrl = isMobile ? config.mobile : config.wide;
         if (!bgUrl && isMobile) bgUrl = config.wide;
         if (!bgUrl && !isMobile) bgUrl = config.mobile;
+        if (!bgUrl && telaKey === 'eventos' && typeof SPRITES_STORY !== 'undefined') {
+            bgUrl = SPRITES_STORY.aldeia_eventos || null;
+        }
         return (bgUrl && bgUrl.trim() !== '') ? bgUrl : null;
     }
 

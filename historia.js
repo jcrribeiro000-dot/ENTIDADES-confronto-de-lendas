@@ -7118,6 +7118,7 @@ const STORY_HERO_PA_IMAGES = {
     'Pajé Anhanguera':   '',
     'Araci':             '',
     "Tapyra'yawara":     '',
+    'Abya':              '',
 };
 
 // =================================================================
@@ -7229,6 +7230,15 @@ const STORY_HERO_DETAILS = {
         tactical: 'Área 3×3 ao redor do herói; o alvo precisa estar em posição válida para ser puxado.',
         notes: 'Guerreiro de água. O Poder Ancestral combina controle de posição e dano.'
     },
+
+    // ---- HERÓIS ESPECIAIS ----
+    'Abya': {
+        paName: 'Chamado dos Sete',
+        paDesc: 'Abya ergue os braços e invoca o poder das sete nações ancestrais. Uma cruz de energia primordial se forma no alvo, atravessando o tabuleiro na horizontal e na vertical.',
+        paExtra: 'Cruz completa no alvo (15 tiles). Dano do Poder Ancestral em todos os atingidos.',
+        tactical: 'Alcance: 3 (ataca à distância). 16 HP · 6 ATK.',
+        notes: 'Filho das Sete. Desbloqueado ao reunir os 7 Fragmentos Ancestrais. Passiva Eco Ancestral: sobrevive com 1 HP (1× por batalha).'
+    },
 };
 
 // =================================================================
@@ -7322,7 +7332,7 @@ function renderPAMiniGrid(heroClass) {
             }
         }
     }
-    else if (paKey === 'bicho_cruz_completa') {
+    else if (paKey === 'bicho_cruz_completa' || paKey === 'abya_chamado_sete') {
         // Cruz completa no alvo
         for (let x = 0; x < gridSize; x++) afetados[targetMock.y][x] = true;
         for (let y = 0; y < gridSize; y++) afetados[y][targetMock.x] = true;
@@ -7369,8 +7379,20 @@ function openHeroDetails(heroClass) {
     const heroData = STORY_HERO_CLASSES[heroClass];
     if (!heroData) return;
 
-    const details = STORY_HERO_DETAILS[heroClass];
-    if (!details) return;
+    // Fallback: heróis especiais (ex.: Abya) podem não ter detalhes cadastrados
+    if (typeof window.ensureStoryHeroDetails === 'function') {
+        window.ensureStoryHeroDetails(heroClass);
+    }
+    let details = STORY_HERO_DETAILS[heroClass];
+    if (!details) {
+        details = STORY_HERO_DETAILS[heroClass] = {
+            paName: 'Poder Ancestral',
+            paDesc: `O Poder Ancestral de ${heroData.displayName}.`,
+            paExtra: 'Veja a área afetada abaixo.',
+            tactical: `Alcance: ${heroData.range} · ${heroData.hp} HP · ${heroData.atk} ATK.`,
+            notes: `${heroData.role || 'Herói'}. Elemento: ${heroData.element || 'Diverso'}.`
+        };
+    }
 
     // Fecha se já estiver aberto
     closeHeroDetails();
@@ -7518,9 +7540,13 @@ function closeHeroDetails() {
             btn.className = 'hero-details-btn';
             btn.innerHTML = '?';
             btn.title = 'Ver detalhes';
+            btn.setAttribute('data-hero', heroClass);
             btn.onclick = (e) => {
                 e.stopPropagation();
                 e.preventDefault();
+                if (typeof window.ensureStoryHeroDetails === 'function') {
+                    window.ensureStoryHeroDetails(heroClass);
+                }
                 openHeroDetails(heroClass);
             };
             card.appendChild(btn);

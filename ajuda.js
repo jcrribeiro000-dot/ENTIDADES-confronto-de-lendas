@@ -199,6 +199,8 @@
                         <br>
                         • <b>Matinta Pereira:</b> +2 ATK aos arqueiros
                         <br>
+                        • <b>Abya:</b> +5 HP e +5 ATK para heróis de Terra
+                        <br>
                         • <b>Sume:</b> +8% XP em todas as batalhas
                         <br>
                         • <b>Mãe-do-Ouro:</b> +10% ouro em todas as batalhas

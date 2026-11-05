@@ -2384,6 +2384,7 @@
         'Anhanga-Mirim':        { nome: 'Poder Abissal',          desc: '+2 HP e +1 ATK a todos',              icon: '🌑' },
         'Negrinho do Pastoreio':{ nome: 'Cruz Curativa',          desc: 'Todo PA cura +1 HP extra',            icon: '💚' },
         'Rudá':                 { nome: 'Amor Divino',            desc: 'Toda cura +3',                        icon: '💖' },
+        'Abya':                 { nome: 'Eco da Terra',           desc: '+5 HP e +5 ATK para heróis de Terra', icon: '🌍' },
 
         // ---- ARQUEIROS ----
         'Juruá':                { nome: 'Rajada',                 desc: 'ZIGZAG +1 dano',                      icon: '🌪️' },
@@ -2410,11 +2411,23 @@
     function isLeader(c) { return STORY_PROGRESS.leader === c; }
     function getLeaderAbility() { return LEADER_ABILITIES[getLeader()] || null; }
 
-    function getLeaderHpBonus() {
+    function isHeroElement(p, targetElement) {
+        if (!p) return false;
+        const heroClass = p.class || p.className;
+        const h = (typeof STORY_HERO_CLASSES !== 'undefined' && heroClass) ? STORY_HERO_CLASSES[heroClass] : null;
+        const elem = p.element || h?.element || (typeof calcularElementoDoHeroi === 'function' && heroClass ? calcularElementoDoHeroi(heroClass) : null);
+        return elem === targetElement;
+    }
+
+    function getLeaderHpBonus(p) {
         const l = getLeader();
         if (l === 'Tupa') return 1;
         if (l === 'Kanarott' || l === 'Teperesik') return 2;
         if (l === 'Anhanga-Mirim') return 2;
+        if (l === 'Abya') {
+            if (!p) return 5;
+            return isHeroElement(p, 'TERRA') ? 5 : 0;
+        }
         return 0;
     }
 
@@ -2426,6 +2439,7 @@
         if (l === 'Anhanga-Mirim') b += 1;
         if (l === 'Pajé Anhanguera' && active.role === 'Mago') b += 2;
         if (l === 'Matinta Pereira' && active.role === 'Arqueiro') b += 2;
+        if (l === 'Abya' && isHeroElement(active, 'TERRA')) b += 5;
         if (l === 'Caipora' && shape) b += 1;
         if (l === 'Juruá' && shape === 'ZIGZAG') b += 1;
         if (l === 'Araci' && shape === 'LINHA') b += 1;
@@ -2479,13 +2493,29 @@
     if (typeof _origInit === 'function' && !_origInit._v82) {
         window.initStoryBattle = async function() {
             const r = await _origInit.apply(this, arguments);
-            const hpBonus = getLeaderHpBonus();
-            if (hpBonus > 0 && Array.isArray(players)) {
+            const l = getLeader();
+            if (Array.isArray(players)) {
+                let anyApplied = false;
                 players.forEach(p => {
-                    if (p) { p.maxHp += hpBonus; p.hp = p.maxHp; }
+                    if (p) {
+                        const hpBonus = getLeaderHpBonus(p);
+                        if (hpBonus > 0) {
+                            p.maxHp += hpBonus;
+                            p.hp = p.maxHp;
+                            anyApplied = true;
+                        }
+                    }
                 });
-                if (typeof updateHeroCard === 'function') updateHeroCard();
-                if (typeof addLog === 'function') addLog(`👑 Líder: +${hpBonus} HP máximo a todos`);
+                if (anyApplied) {
+                    if (typeof updateHeroCard === 'function') updateHeroCard();
+                    if (typeof addLog === 'function') {
+                        if (l === 'Abya') {
+                            addLog(`👑 Líder Abya: +5 HP máximo aos heróis de Terra`);
+                        } else {
+                            addLog(`👑 Líder: +${getLeaderHpBonus()} HP máximo a todos`);
+                        }
+                    }
+                }
             }
             return r;
         };
@@ -2660,7 +2690,8 @@
 
         const leader = getLeader();
         const ability = leader ? LEADER_ABILITIES[leader] : null;
-        const spriteURL = (leader && typeof SPRITES !== 'undefined' && SPRITES[leader]) || '';
+        const heroData = leader ? STORY_HERO_CLASSES[leader] : null;
+        const spriteURL = (leader && typeof SPRITES !== 'undefined' && (SPRITES[leader] || SPRITES[heroData?.spriteKey])) || (typeof SPRITES_STORY !== 'undefined' && (SPRITES_STORY[leader] || SPRITES_STORY[heroData?.spriteKey])) || '';
 
         const section = document.createElement('div');
         section.id = 'ocaLeaderSection';
@@ -2712,7 +2743,7 @@
         const cardsHTML = unlocked.map(h => {
             const ability = LEADER_ABILITIES[h.className];
             const isCurrent = h.className === currentLeader;
-            const spriteURL = (typeof SPRITES !== 'undefined' && SPRITES[h.className]) || '';
+            const spriteURL = (typeof SPRITES !== 'undefined' && (SPRITES[h.className] || SPRITES[h.spriteKey])) || (typeof SPRITES_STORY !== 'undefined' && (SPRITES_STORY[h.className] || SPRITES_STORY[h.spriteKey])) || '';
             return `
                 <div class="escolher-lider-card ${isCurrent ? 'current' : ''}" data-lider="${h.className}">
                     <img src="${spriteURL}" class="escolher-lider-sprite" onerror="this.style.display='none'">
@@ -2949,6 +2980,8 @@
         console.groupEnd();
     };
 
+    window.LEADER_ABILITIES = LEADER_ABILITIES;
+
     window._setLider = function(heroClass) {
         if (!STORY_HERO_CLASSES[heroClass]) { console.warn('Herói inválido'); return; }
         STORY_PROGRESS.leader = heroClass;
@@ -3012,6 +3045,13 @@
         // ATK por classe (sempre ativo para a classe)
         if (leader === 'Pajé Anhanguera' && heroData.role === 'Mago') atk = 2;
         if (leader === 'Matinta Pereira' && heroData.role === 'Arqueiro') atk = 2;
+
+        // Líder Abya: +5 HP e +5 ATK para heróis de Terra
+        const elem = heroData.element || (typeof calcularElementoDoHeroi === 'function' ? calcularElementoDoHeroi(heroClass) : null);
+        if (leader === 'Abya' && elem === 'TERRA') {
+            hp += 5;
+            atk += 5;
+        }
 
         return { hp, atk };
     }

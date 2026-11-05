@@ -1422,6 +1422,8 @@
     window.eventoIcon = eventoIcon;
     window.getChavesAtuais = getChavesAtuais;
     window.gastarChave = gastarChave;
+    window.getChaveData = getChaveData;
+    window.salvarChaveData = salvarChaveData;
     window.resetarChavesManualmente = resetarChavesManualmente;
     window.getDiaSemanaAtual = getDiaSemanaAtual;
     window.getBossDoDia = getBossDoDia;
@@ -5168,9 +5170,13 @@
                     btn.className = 'hero-details-btn';
                     btn.innerHTML = '?';
                     btn.title = 'Ver detalhes';
+                    btn.setAttribute('data-hero', heroClass);
                     btn.onclick = (e) => {
                         e.stopPropagation();
                         e.preventDefault();
+                        if (typeof window.ensureStoryHeroDetails === 'function') {
+                            window.ensureStoryHeroDetails(heroClass);
+                        }
                         window.openHeroDetails(heroClass);
                     };
                     card.appendChild(btn);
@@ -5347,9 +5353,13 @@
                         btn.className = 'hero-details-btn';
                         btn.innerHTML = '?';
                         btn.title = 'Ver detalhes';
+                        btn.setAttribute('data-hero', heroClass);
                         btn.onclick = (e) => {
                             e.stopPropagation();
                             e.preventDefault();
+                            if (typeof window.ensureStoryHeroDetails === 'function') {
+                                window.ensureStoryHeroDetails(heroClass);
+                            }
                             if (typeof window.openHeroDetails === 'function') {
                                 window.openHeroDetails(heroClass);
                             }

@@ -784,14 +784,74 @@ function renderOcaScreenFiltered() {
             btn.className = 'hero-details-btn';
             btn.innerHTML = '?';
             btn.title = 'Ver detalhes';
+            btn.setAttribute('data-hero', heroClass);
             btn.onclick = (e) => {
                 e.stopPropagation();
                 e.preventDefault();
+                if (typeof window.ensureStoryHeroDetails === 'function') {
+                    window.ensureStoryHeroDetails(heroClass);
+                }
                 openHeroDetails(heroClass);
             };
             card.appendChild(btn);
         });
     };
+})();
+
+// =================================================================
+// 🔧 FIX: botão "?" não abria em heróis especiais (ex.: Abya)
+// -----------------------------------------------------------------
+// Causas:
+//   1. openHeroDetails() retornava sem abrir se o herói não tivesse
+//      entrada em STORY_HERO_DETAILS (o "?". ficava morto)
+//   2. O clique no botão podia ser capturado pelo listener de captura
+//      do walker da Aldeia (aldeia.js) que chama preventDefault +
+//      stopImmediatePropagation em cliques no #storyScreen
+// =================================================================
+(function fixBotaoDetalhesHeroisV1() {
+    if (window._fixBotaoDetalhesHeroisV1) return;
+    window._fixBotaoDetalhesHeroisV1 = true;
+
+    // 1. Fallback de detalhes: nunca deixa o painel mudo
+    window.ensureStoryHeroDetails = function(heroClass) {
+        const heroData = (typeof STORY_HERO_CLASSES !== 'undefined')
+            ? STORY_HERO_CLASSES[heroClass] : null;
+        if (!heroData) return false;
+
+        if (!STORY_HERO_DETAILS[heroClass]) {
+            const role = heroData.role || 'Herói';
+            STORY_HERO_DETAILS[heroClass] = {
+                paName: STORY_HERO_PA?.[heroData.paKey]?.nome || 'Poder Ancestral',
+                paDesc: STORY_HERO_PA?.[heroData.paKey]?.desc || `O Poder Ancestral de ${heroData.displayName}.`,
+                paExtra: 'Veja a área afetada abaixo.',
+                tactical: `Alcance: ${heroData.range} · ${heroData.hp} HP · ${heroData.atk} ATK.`,
+                notes: `${role}. Elemento: ${heroData.element || 'Diverso'}.`
+            };
+        }
+        return true;
+    };
+
+    // 2. Envolve o clique do "?" em fase de captura na própria raiz,
+    //    para que nenhum listener de captura externo o engula.
+    const _onClickCaptura = (e) => {
+        const btn = e.target && e.target.closest && e.target.closest('.hero-details-btn');
+        if (!btn) return;
+        const heroClass = btn.getAttribute('data-hero')
+            || btn.dataset.hero
+            || (btn.closest('.story-hero-card')?.getAttribute('data-hero'));
+        if (!heroClass) return;
+
+        e.preventDefault();
+        e.stopImmediatePropagation();
+
+        if (typeof window.ensureStoryHeroDetails === 'function') {
+            window.ensureStoryHeroDetails(heroClass);
+        }
+        if (typeof window.openHeroDetails === 'function') {
+            window.openHeroDetails(heroClass);
+        }
+    };
+    window.addEventListener('click', _onClickCaptura, true);
 })();
 
 // =================================================================

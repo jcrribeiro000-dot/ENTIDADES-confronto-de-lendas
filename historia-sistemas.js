@@ -15733,10 +15733,12 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
         STORY_PROGRESS.inventory[ESSENCIA_ID] -= preco;
         
         if (tipo === 'chave') {
-            if (typeof getChaveData === 'function') {
-                const data = getChaveData();
+            const _getChave = window.getChaveData || (typeof getChaveData !== 'undefined' ? getChaveData : null);
+            const _salvarChave = window.salvarChaveData || (typeof salvarChaveData !== 'undefined' ? salvarChaveData : null);
+            if (typeof _getChave === 'function') {
+                const data = _getChave();
                 data.quantidade = (data.quantidade || 0) + 1;
-                if (typeof salvarChaveData === 'function') salvarChaveData(data);
+                if (typeof _salvarChave === 'function') _salvarChave(data);
             }
         } else if (tipo === 'material') {
             STORY_PROGRESS.inventory[itemId] = (STORY_PROGRESS.inventory[itemId] || 0) + 1;
@@ -16313,6 +16315,9 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
         const oldBanner = document.getElementById('corruptionWarning');
         if (oldBanner) oldBanner.remove();
 
+        // 🔒 Pausa o turno do boss enquanto o banner está visível
+        window._bossEnfurecidoAviso = true;
+
         const warning = document.createElement('div');
         warning.id = 'corruptionWarning';
         warning.innerHTML = `
@@ -16327,7 +16332,9 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
             pointer-events: none; animation: fadeInOut 2s ease forwards;
         `;
         document.body.appendChild(warning);
-        
+
+        // Libera o turno do boss após o banner desaparecer visualmente (2s = duração da animação)
+        setTimeout(() => { window._bossEnfurecidoAviso = false; }, 2200);
         setTimeout(() => { if (warning.parentNode) warning.remove(); }, 4000);
 
         // Aplica a corrupção nos tiles
