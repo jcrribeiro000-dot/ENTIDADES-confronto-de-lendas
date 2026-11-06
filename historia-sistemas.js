@@ -9857,22 +9857,32 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
 
             const p = players[idx];
             if (!p || p.dead) return r;
+            // A cura de raids é processada pelo wrapper de raid-solo.js.
+            if (window._raidMode) return r;
 
             const bonus = (typeof getHeroBonusFromLevel === 'function')
                 ? getHeroBonusFromLevel(p.class) : null;
             const curaAscensao = (bonus && bonus.healPerTurn > 0) ? bonus.healPerTurn : 0;
 
-            // Cura por turno do AMULETO equipado (antes só existia na raid)
-            const curaAmuleto = Number(p.equippedAmulet?.efeito?.healPerTurn) || 0;
-
-            const curaTotal = curaAscensao + curaAmuleto;
-            if (curaTotal <= 0) return r;
+            // Cura por turno do AMULETO equipado: rola a chance conforme o tier.
+            const amuleto = p.equippedAmulet;
+            const curaAmuletoBase = Number(amuleto?.efeito?.healPerTurn) || 0;
+            if (curaAscensao <= 0 && curaAmuletoBase <= 0) return r;
             if (p.hp >= p.maxHp) return r;
 
-            // Flag: só cura 1x por turno
+            // Marca a tentativa no turno antes da rolagem, inclusive se falhar.
             const turnoAtual = (typeof RANKING !== 'undefined') ? RANKING.turns : 0;
             if (p._ultimoHealTurno === turnoAtual) return r;
             p._ultimoHealTurno = turnoAtual;
+
+            const tierAmuleto = Number(amuleto?.tier)
+                || (typeof getTierFromUid === 'function' ? getTierFromUid(amuleto?.uid || amuleto?.id) : 0)
+                || 0;
+            const chanceCuraAmuleto = [0.50, 0.60, 0.80][Math.max(0, Math.min(2, tierAmuleto))];
+            const curaAmuleto = curaAmuletoBase > 0 && Math.random() < chanceCuraAmuleto
+                ? curaAmuletoBase : 0;
+            const curaTotal = curaAscensao + curaAmuleto;
+            if (curaTotal <= 0) return r;
 
             const restaurado = Math.min(curaTotal, p.maxHp - p.hp);
             p.hp += restaurado;

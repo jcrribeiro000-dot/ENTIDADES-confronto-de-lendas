@@ -794,7 +794,9 @@
 
         const wrapped = function(idx) {
             const result = original.apply(this, arguments);
-            if (!window._storyMode && !window._eventoAtivo && !window._raidMode) return result;
+            // História/evento são tratados pelo hook principal em historia-sistemas.js;
+            // este wrapper fica apenas como fallback para raids regionais solo.
+            if (!window._raidMode) return result;
             if (window._pvpMode || window._coopMode) return result;
 
             const player = typeof players !== 'undefined' ? players[idx] : null;
@@ -806,7 +808,7 @@
                 || (equipment?.amuleto && typeof window.getAmuletById === 'function'
                     ? window.getAmuletById(equipment.amuleto) : null);
             const heal = Number(amulet?.efeito?.healPerTurn) || 0;
-            if (heal <= 0) return result;
+            if (heal <= 0 || player.hp >= player.maxHp) return result;
 
             const turn = window._raidMode
                 ? `raid:${window._regionalRaidRound || 0}`
@@ -815,7 +817,13 @@
             if (player._lastAmuletHealTurn === turnKey) return result;
             player._lastAmuletHealTurn = turnKey;
 
-            if (player.hp >= player.maxHp) return result;
+            const tier = Number(amulet?.tier)
+                || (typeof window.getTierFromUid === 'function'
+                    ? window.getTierFromUid(amulet?.uid || amulet?.id || equipment?.amuleto) : 0)
+                || 0;
+            const chance = [0.50, 0.60, 0.80][Math.max(0, Math.min(2, tier))];
+            if (Math.random() >= chance) return result;
+
             const restored = Math.min(heal, player.maxHp - player.hp);
             player.hp += restored;
             if (typeof showHealEffect === 'function') {
