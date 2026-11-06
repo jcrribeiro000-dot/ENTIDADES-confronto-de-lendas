@@ -1176,11 +1176,23 @@ const STORY_DROP_TABLE = {
     anhanga:{comum:{id:'fragmento_abismo',chance:100},raro:{id:'essencia_anhanga',chance:100}}
 };
 
-function rollStoryDrops(enemyId){
+function rollStoryDrops(enemyId, difficultyOverride){
     const drops = [], table = STORY_DROP_TABLE[enemyId];
     if(!table) return drops;
-    if(table.comum && Math.random()*100 < table.comum.chance) drops.push({id:table.comum.id,qty:1});
-    if(table.raro  && Math.random()*100 < table.raro.chance)  drops.push({id:table.raro.id,qty:1});
+
+    const difficulty = difficultyOverride || storyCurrentDifficulty || 'normal';
+    const diff = (typeof STORY_DIFFICULTIES !== 'undefined')
+        ? STORY_DIFFICULTIES[difficulty] : null;
+    const qtyMult = Math.max(1, Number(diff && diff.rewardMult) || 1);
+    const rollItem = item => {
+        if (!item || Math.random() * 100 >= item.chance) return;
+        const wholeQty = Math.floor(qtyMult);
+        const extraQty = Math.random() < qtyMult - wholeQty ? 1 : 0;
+        drops.push({ id: item.id, qty: wholeQty + extraQty });
+    };
+
+    rollItem(table.comum);
+    rollItem(table.raro);
     return drops;
 }
 

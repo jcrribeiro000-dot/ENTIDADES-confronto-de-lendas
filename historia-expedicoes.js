@@ -137,7 +137,7 @@
         const drops = [];
         if (typeof rollStoryDrops === 'function') {
             phase.enemies.forEach(eid => {
-                const enemyDrops = rollStoryDrops(eid);
+                const enemyDrops = rollStoryDrops(eid, dificuldade);
                 enemyDrops.forEach(d => {
                     if (d.id === 'nucleo_abismo') return; // só manual
                     if (d.id === 'essencia_sombria') return; // só evento manual

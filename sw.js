@@ -1,4 +1,4 @@
-const CACHE = 'entidades-v139';
+const CACHE = 'entidades-v140';
 const ASSETS = [
   './',
   './index.html',
