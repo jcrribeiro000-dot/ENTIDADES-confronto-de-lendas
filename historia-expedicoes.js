@@ -6285,3 +6285,133 @@
     console.log('💡 Debug: window._debugCorrupcaoVisual()');
     console.log('═══════════════════════════════════════════════════');
 })();
+
+// =================================================================
+// historia-expedicoes.js — Vexp1 — Heróis em expedição bloqueados na OCA
+// -----------------------------------------------------------------
+// Heróis enviados para expedição ficam completamente bloqueados na
+// tela da OCA: não clicáveis, visual escurecido com badge "⛺ Em expedição".
+// Ao retornar, voltam ao estado normal automaticamente.
+// =================================================================
+(function bloqueioExpedicaoNaOcaVexp1() {
+    if (window._bloqueioExpedicaoOcaVexp1) return;
+    window._bloqueioExpedicaoOcaVexp1 = true;
+
+    // ═══════════════════════════════════════════════════════════
+    // CSS — aparência de bloqueado por expedição
+    // ═══════════════════════════════════════════════════════════
+    if (!document.getElementById('vexp1CSS')) {
+        const s = document.createElement('style');
+        s.id = 'vexp1CSS';
+        s.textContent = `
+            /* Card em expedição: não clicável, escurecido */
+            .story-hero-card.heroi-em-expedicao {
+                pointer-events: none !important;
+                cursor: default !important;
+                opacity: 0.55 !important;
+                filter: grayscale(60%) !important;
+                position: relative;
+            }
+
+            /* Badge de expedição no canto superior esquerdo */
+            .story-hero-card.heroi-em-expedicao .expedicao-badge-oca {
+                position: absolute;
+                top: 6px;
+                left: 6px;
+                background: linear-gradient(135deg, rgba(20,40,60,0.95), rgba(10,25,40,0.95));
+                border: 1px solid #4a8cb5;
+                border-radius: 6px;
+                padding: 2px 7px;
+                font-size: 0.72rem;
+                color: #90cef4;
+                font-family: 'EB Garamond', serif;
+                white-space: nowrap;
+                pointer-events: none;
+                z-index: 10;
+                line-height: 1.4;
+            }
+
+            /* Remove o onclick visualmente (cursor) em cards de expedição */
+            .story-hero-card.heroi-em-expedicao * {
+                pointer-events: none !important;
+            }
+        `;
+        document.head.appendChild(s);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // Aplica/remove visual nos cards da OCA
+    // ═══════════════════════════════════════════════════════════
+    function _aplicarBloqueioExpedicao() {
+        const cards = document.querySelectorAll('.story-hero-card:not(.locked)');
+        if (!cards.length) return;
+
+        cards.forEach(card => {
+            // Descobre o heroClass do card pelo onclick
+            const onclick = card.getAttribute('onclick') || '';
+            const match = onclick.match(/toggleHeroSelection\('((?:\\'|[^'])*)'\)/);
+            if (!match) return;
+            const heroClass = match[1].replace(/\\'/g, "'");
+
+            // Verifica se está em expedição
+            const emExp = (typeof window.heroiEmExpedicao === 'function')
+                ? window.heroiEmExpedicao(heroClass)
+                : (STORY_PROGRESS.expeditions || []).some(e => e.heroClass === heroClass && !e.coletada);
+
+            if (emExp) {
+                // Bloqueia
+                card.classList.add('heroi-em-expedicao');
+
+                // Adiciona badge se ainda não tem
+                if (!card.querySelector('.expedicao-badge-oca')) {
+                    const badge = document.createElement('div');
+                    badge.className = 'expedicao-badge-oca';
+                    badge.textContent = '⛺ Em expedição';
+                    card.insertBefore(badge, card.firstChild);
+                }
+
+                // Remove onclick para garantir que não é clicável
+                card.dataset.onclickBackup = card.getAttribute('onclick') || '';
+                card.removeAttribute('onclick');
+
+            } else {
+                // Desbloqueia — restaura estado normal
+                if (card.classList.contains('heroi-em-expedicao')) {
+                    card.classList.remove('heroi-em-expedicao');
+
+                    // Remove badge
+                    const badge = card.querySelector('.expedicao-badge-oca');
+                    if (badge) badge.remove();
+
+                    // Restaura onclick
+                    if (card.dataset.onclickBackup) {
+                        card.setAttribute('onclick', card.dataset.onclickBackup);
+                        delete card.dataset.onclickBackup;
+                    }
+                }
+            }
+        });
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // Hook em renderOcaScreenFiltered — roda após cada render
+    // ═══════════════════════════════════════════════════════════
+    const _origOcaVexp1 = window.renderOcaScreenFiltered;
+    if (typeof _origOcaVexp1 === 'function') {
+        window.renderOcaScreenFiltered = function() {
+            const r = _origOcaVexp1.apply(this, arguments);
+            // Aguarda patches pós-render (injetarBotaoExpedicao etc.)
+            setTimeout(_aplicarBloqueioExpedicao, 150);
+            setTimeout(_aplicarBloqueioExpedicao, 400);
+            return r;
+        };
+        window.renderOcaScreenFiltered._vexp1 = true;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // Expõe para uso externo (outros sistemas podem chamar)
+    // ═══════════════════════════════════════════════════════════
+    window.aplicarBloqueioExpedicaoOca = _aplicarBloqueioExpedicao;
+
+    console.log('✅ [Vexp1] Heróis em expedição bloqueados na OCA (não clicáveis + visual).');
+})();
