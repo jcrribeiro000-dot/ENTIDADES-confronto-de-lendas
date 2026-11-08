@@ -768,11 +768,19 @@ const A_BGM = {
 //    ele NUNCA será substituído, mesmo que você adicione a chave depois.
 //    Ao criar emojis novos no jogo, adicione-os a estes grupos.
 //
-// 📌 Só há substituição nos lugares que chamam getAssetEmojiHTML().
-//    Hoje: Aldeia e Conhecimento. O resto dos textos continua emoji.
+// 📌 A substituição acontece em DOIS caminhos:
+//    1) Onde o código chama getAssetEmojiHTML() (Aldeia, Conhecimento, Ajuda).
+//    2) EM TODAS AS OUTRAS TELAS pela varredura automática do fim deste
+//       arquivo (iniciarEmojisGlobais). Ela troca qualquer emoji que
+//       tenha URL em A_EMOJIS_SPRITES — inclusive títulos de tela.
+//       Para desligar essa varredura: A_EMOJIS_GLOBAIS_ATIVO = false.
 //
 // ⚠️ Use PNG quadrado com fundo transparente. NÃO aponte para
 //    screenshots da tela: eles são espremidos no tamanho do ícone.
+//
+// 🆕 V10.81 — Varredura completa (07/11): 7 emojis usados no jogo
+//    estavam FORA do catálogo (☠️ 🌈 🌬️ 💜 🛠️ 🦀 🧶 — drops e telas
+//    de Raid). Já foram adicionados abaixo, no fim de cada grupo.
 // ================================================================
 const A_EMOJIS = {};
 [
@@ -781,15 +789,15 @@ const A_EMOJIS = {};
     // Alertas, controles e símbolos
     '♻️|⚖️|⚗️|⚙️|⚠️|⚪|⚫|⛔|✅|✔|❌|❓|➕|⬆️|⬜|🆕|🆘|🚧|🚨|🚫|❤️|⭐',
     // Elementos, clima e natureza
-    '☀️|☁️|☄️|⛈️|❄️|🌀|🌊|🌋|🌌|🌍|🌎|🌐|🌑|🌕|🌙|🌟|🌪️|🌫️|🌱|🌲|🌳|🌵|🌸|🌾|🌿|🍄|🍯|🕯️|🕳️|🕷️|🕸️|🗺️|🗿|🪨|🪶',
+    '☀️|☁️|☄️|⛈️|❄️|🌀|🌊|🌋|🌌|🌍|🌎|🌐|🌑|🌕|🌙|🌟|🌪️|🌫️|🌱|🌲|🌳|🌵|🌸|🌾|🌿|🍄|🍯|🕯️|🕳️|🕷️|🕸️|🗺️|🗿|🪨|🪶|🌈|🌬️',
     // Animais e criaturas
-    '🐂|🐃|🐄|🐆|🐈|🐉|🐊|🐍|🐎|🐏|🐐|🐑|🐕|🐗|🐚|🐛|🐜|🐟|🐠|🐢|🐦|🐬|🐲|🐴|🐸|🐺|🐻|🐾|🐿️|🦅|🦇|🦉|🦊|🦋|🦌|🦏|🦔|🦛|🦜|🦝|🦥|🦦|🦭|🦴|🦷|👹|👺|👻|👾|😈|🙈|🥚',
+    '🐂|🐃|🐄|🐆|🐈|🐉|🐊|🐍|🐎|🐏|🐐|🐑|🐕|🐗|🐚|🐛|🐜|🐟|🐠|🐢|🐦|🐬|🐲|🐴|🐸|🐺|🐻|🐾|🐿️|🦅|🦇|🦉|🦊|🦋|🦌|🦏|🦔|🦛|🦜|🦝|🦥|🦦|🦭|🦴|🦷|🦀|👹|👺|👻|👾|😈|🙈|🥚',
     // Heróis, pessoas e relações
     '👁️|👅|👑|👣|👤|👥|🦸|🧙|🧙‍♀️|🧜‍♀️|🤝|💬',
     // Combate, magia e recompensas
-    '⚔️|⚡|✨|💀|💊|💎|💔|💖|💚|💡|💧|💨|💫|💰|💸|🔥|🔮|🔴|🔵|🔷|🖤|🗡️|🛡️|🥇|🥈|🥉|🪄|🪓|🪙|🪬|🧿',
+    '⚔️|⚡|✨|💀|💊|💎|💔|💖|💚|💡|💧|💨|💫|💰|💸|🔥|🔮|🔴|🔵|🔷|🖤|🗡️|🛡️|🥇|🥈|🥉|🪄|🪓|🪙|🪬|🧿|☠️|💜',
     // Interface, mapas, itens e comunicação
-    '⛩️|⛰️|⛺|🎁|🎉|🎒|🎓|🎖️|🎨|🎬|🎭|🎮|🎯|🎲|🎵|🏅|🏆|🏔️|🏘️|🏚️|🏛️|🏜️|🏞️|🏠|🏪|🏷️|🏹|🏺|📅|📆|📊|📋|📌|📒|📓|📔|📕|📖|📗|📘|📙|📚|📜|📝|📢|📦|📱|📸|📿|🔑|🔒|🔤|🔧|🔨|🖼️|🗂️|🗑️|🧠|🧣|🧪|🧭|🧲|🩹|🪞|🛒|🟠|🟡|🟢|🟣|🟤|🟦|🟨|🟩|🟪|🟫',
+    '⛩️|⛰️|⛺|🎁|🎉|🎒|🎓|🎖️|🎨|🎬|🎭|🎮|🎯|🎲|🎵|🏅|🏆|🏔️|🏘️|🏚️|🏛️|🏜️|🏞️|🏠|🏪|🏷️|🏹|🏺|📅|📆|📊|📋|📌|📒|📓|📔|📕|📖|📗|📘|📙|📚|📜|📝|📢|📦|📱|📸|📿|🔑|🔒|🔤|🔧|🔨|🖼️|🗂️|🗑️|🧠|🧣|🧪|🧭|🧲|🩹|🪞|🛒|🛠️|🧶|🟠|🟡|🟢|🟣|🟤|🟦|🟨|🟩|🟪|🟫',
 ].forEach(group => {
     group.split('|').forEach(emoji => {
         A_EMOJIS[emoji] = '';
@@ -797,27 +805,21 @@ const A_EMOJIS = {};
 });
 
 // -----------------------------------------------------------------
-// ⬇️ PREENCHA AQUI os emojis que você já tem em PNG/GIF.
-//    Exemplo:
-//
-//    const A_EMOJIS_SPRITES = {
-//        '🌎': 'https://i.imgur.com/xxxx.png',
-//        '🌑': 'https://i.imgur.com/yyyy.png',
-//        '⚔️': 'https://i.imgur.com/zzzz.png',
-//    };
-//
-//    Deixe a linha do emoji ausente para ele continuar como emoji.
+// ⬇️ As URLs agora ficam no arquivo assets-emojis.js (é só lá).
+//    Bloco abaixo é só reserva: se o assets-emojis.js não carregar,
+//    o que estiver preenchido aqui ainda vale.
+//    Deixe as linhas comentadas (com //) para não brigar com o outro.
 // -----------------------------------------------------------------
 const A_EMOJIS_SPRITES = {
     // Navegação, tempo e estado
     // '💾': '', '⏳': '', '▶️': '', '🔔': '', '🚪': '',
 
     // Alertas, controles e símbolos
-    // '✅': '', '❌': '', '⚠️': '', '⭐': '', '❤️': '',
+    // '✅': '', '❌': '', '⚠️': 'https://i.imgur.com/p1w8rbr.png', '⭐': 'https://i.imgur.com/2sAWf9l.png', '❤️': '',
 
     // Elementos, clima e natureza
     // '🌊': '', '🌋': '', '🌎': '', '🌑': '', '🌕': '', '🌙': '',
-    // '🌪️': '', '🌱': '', '🌲': '', '🌿': '', '🍄': '', '🗺️': '', '🗿': '',
+    // '🌪️': '', '🌱': '', '🌲': '', '🌿': '', '🍄': '', '🗺️': 'https://i.imgur.com/1XbKc43.png', '🗿': '',
 
     // Animais e criaturas
     // '🐊': '', '🐉': '', '🐺': '', '🦅': '', '🦌': '', '🦜': '', '😈': '', '👻': '',
@@ -826,14 +828,41 @@ const A_EMOJIS_SPRITES = {
     // '👑': 'https://i.imgur.com/Ejd2WD1.png', '🦸': '', '🧙': '', '🤝': '',
 
     // Combate, magia e recompensas
-    // '⚔️': '', '⚡': '', '✨': '', '💀': '', '💎': '', '🔥': '',
-    // '🔮': '', '🗡️': '', '🛡️': '', '🪄': '', '🪓': '', '🪙': '',
+    // '⚔️': 'https://i.imgur.com/ez6BPlh.png', '⚡': '', '✨': 'https://i.imgur.com/ksXPDMa.png', '💀': '', '💎': '', '🔥': '',
+    // '🔮': '', '🗡️': '', '🛡️': '', '🪄': 'https://i.imgur.com/yIazf0k.png', '🪓': 'https://i.imgur.com/vcd54H6.png', '🪙': '',
 
     // Interface, mapas, itens e comunicação
-    // '⛩️': '', '🎁': '', '🎉': '', '🎒': '', '🎯': '', '🎲': '',
-    // '🏅': '', '🏆': 'https://i.imgur.com/2OX9sYX.png', '🏛️': '', '🏹': '', '📅': '', '📜': '',
-    // '📦': '', '📜': '', '🔑': 'https://i.imgur.com/Y4OvSQc.png', '🔒': '', '🧪': '', '🧭': '', '🛒': '',
+    // '🎉': 'https://i.imgur.com/xHkPS6Y.png',  ← TÍTULO "🎉 EVENTOS" (hub, Sete Nações, Semana das Sombras).
+    //                                            A tela da Aldeia usa A_ALDEIA_SPRITES.evento, que é outra chave:
+    //                                            por isso trocar lá NÃO trocava o emoji do cabeçalho.
+    // '🛠️': '',  ← FORJA DE RAID (raid.js, título e botão)
+    // '☠️': '',  ← drop cranio_menor (raid.js)
+    // '💜': '',  ← drop nucleo_do_pesadelo (raid.js)
+    // '🧶': '',  ← drop la_negra (raid.js)
+    // '🌈': '',  ← drop pluma_arco_iris (raid.js)
+    // '🌬️': '', ← drop presa_do_vento + chefe Minuano (raid.js / raid-solo.js)
+    // '🦀': '',  ← chefe Guajará (raid-solo.js)
+    // '⛩️': 'https://i.imgur.com/aL5KByZ.png', '🎁': '', '🎒': '', '🎯': '', '🎲': '',
+    // '🏅': '', '🏆': 'https://i.imgur.com/2OX9sYX.png', '🏛️': '', '🏹': 'https://i.imgur.com/zuBrBm1.png', '📅': '', '📜': 'https://i.imgur.com/aL5KByZ.png',
+    // '📦': '', '📜': 'https://i.imgur.com/aL5KByZ.png', '🔑': 'https://i.imgur.com/Y4OvSQc.png', '🔒': 'https://i.imgur.com/ocjUX5Z.png', '🧪': '', '🧭': '', '🛒': '',
 };
+
+// ================================================================
+// 🔗 TABELA DE EMOJI → SPRITE (vem do assets-emojis.js)
+// ----------------------------------------------------------------
+// ⚠️ NÃO coloque URLs aqui: este arquivo SOBRESCREVE a tabela.
+//    A tabela de verdade é o arquivo assets-emojis.js (carregado
+//    antes deste). Aqui só juntamos as duas, para nada se perder.
+// ================================================================
+(function juntarTabelaDeEmojis() {
+    const tabelaDoEspelho = window.A_EMOJIS_SPRITES || {};
+    Object.keys(tabelaDoEspelho).forEach(emoji => {
+        const url = tabelaDoEspelho[emoji];
+        if (url && String(url).trim() !== '') {
+            A_EMOJIS_SPRITES[emoji] = String(url).trim();
+        }
+    });
+})();
 
 // Aplica as substituições sobre o catálogo (chaves inexistentes são
 // adicionadas, então um emoji novo também funciona).
@@ -844,7 +873,8 @@ Object.keys(A_EMOJIS_SPRITES).forEach(emoji => {
     }
 });
 
-window.A_EMOJIS_SPRITES = A_EMOJIS_SPRITES;
+// (a antiga linha `window.A_EMOJIS_SPRITES = A_EMOJIS_SPRITES;` saiu:
+//  era ela que apagava a sua tabela do assets-emojis.js)
 
 // ================================================================
 // 🌎 A_NACAO_* — Assets próprios de Nações (nacoes.js)
@@ -941,15 +971,16 @@ const A_NACAO_FRAGMENTS = {
 // These icons already accept either an emoji or an image URL.
 const A_CONQUISTA_ICONS = {
     trophy: 'https://i.imgur.com/2OX9sYX.png',
-    icone_bloqueada: '🔒',
-    icone_desbloqueada: '✅',
+    icone_bloqueada: 'https://i.imgur.com/7udy5E7.png',
+    icone_desbloqueada: 'https://i.imgur.com/f9OAlJd.png',
     cat_jornada: 'https://i.imgur.com/BrloIjF.png',
-    cat_herois: '🦸',
+    cat_herois: 'https://i.imgur.com/Ejd2WD1.png',
     cat_colecao: 'https://i.imgur.com/vrurP0D.png',
-    cat_combate: '🔥',
-    cat_selados: '🎉',
-    cat_nacoes: '🌎',
-    cat_social: '🤝',
+    cat_combate: 'https://i.imgur.com/ez6BPlh.png',
+    cat_selados: 'https://i.imgur.com/TqmooRN.png',
+    cat_nacoes: 'https://i.imgur.com/OfTg5Zu.png',
+    cat_social: 'https://i.imgur.com/4mQ21Ne.png',
+    cat_raids: 'https://i.imgur.com/qW4nfB8.png', // ícone já usado no hub de Eventos / Raids
     cat_secretas: 'https://i.imgur.com/2IMTxPN.png',
     recompensa_ouro: 'https://i.imgur.com/eot4lpq.png',
     recompensa_xp: 'https://i.imgur.com/gDpWAVD.png',
@@ -958,10 +989,12 @@ const A_CONQUISTA_ICONS = {
     titulo_purificador: '🗿',
     titulo_estrelado: 'https://i.imgur.com/2sAWf9l.png',
     titulo_filho_sete: '🧙',
-    titulo_filho_vento: '🌪️',
-    titulo_domador: '💀',
-    titulo_lenda_coliseu: '🔥',
+    titulo_filho_vento: 'https://i.imgur.com/f1iVHmr.png',
+    titulo_domador: 'https://i.imgur.com/gsGOKMB.png',
+    titulo_lenda_coliseu: 'https://i.imgur.com/sl0XfJ0.png',
     titulo_sete_das_sete: '🎉',
+    // Substitua esta URL se criar um emblema próprio para Guardião das Provações.
+    titulo_guardiao_provacoes: 'https://i.imgur.com/3payBIK.gif', // sprite Cobra Norato da A_RAID_ASSETS.bosses
 };
 
 const A_ACHIEVEMENT_SOUNDS = {
@@ -1377,3 +1410,189 @@ console.log('• Slots ⬜ usam emoji/fallback do código');
 console.log(`• A_EMOJIS: ${Object.keys(A_EMOJIS).length} emojis catalogados`);
 console.log('• Debug: window._debugAssets()');
 console.log('═══════════════════════════════════════════════════');
+
+// ================================================================
+// 🖼️ V10.81 — SUBSTITUIÇÃO AUTOMÁTICA DE EMOJIS (todas as telas)
+// ----------------------------------------------------------------
+// PROBLEMA QUE ISTO RESOLVE:
+//   Só a Aldeia, o Conhecimento e a Ajuda chamavam getAssetEmojiHTML().
+//   Todo o resto do jogo (títulos das telas, cabeçalhos das salas,
+//   listas de drops, cartas, badges) escrevia o emoji direto no HTML.
+//   Resultado: você trocava o sprite na Aldeia e o emoji continuava
+//   aparecendo dentro da sala (ex.: "🎉 EVENTOS" no cabeçalho).
+//
+// COMO FUNCIONA:
+//   Varre o texto de qualquer elemento que aparecer na tela e troca
+//   cada emoji que TENHA URL em A_EMOJIS_SPRITES por <img>.
+//   Emoji sem URL continua emoji, exatamente como antes.
+//
+// ⚠️ NÃO afeta os emojis de dados que usam A_ALDEIA_EMOJIS /
+//    A_NACAO_EMOJIS / A_CONQUISTA_ICONS como fallback de sprite
+//    próprio (esses já têm o caminho deles e não são tocados).
+//
+// ✅ Basta preencher A_EMOJIS_SPRITES (lá em cima). Nada mais.
+// ================================================================
+const A_EMOJIS_GLOBAIS_ATIVO = true;
+function iniciarEmojisGlobais() {
+    if (!A_EMOJIS_GLOBAIS_ATIVO) return;
+    if (window._emojisGlobaisAtivos) return;
+    // ⚠️ Lê a tabela GLOBAL (window.A_EMOJIS_SPRITES). Se alguém trocar a
+    // tabela depois (ex.: carregar o assets-emojis.js de novo), o motor
+    // enxerga a nova, porque o mapa é lido na hora de montar a regex.
+    const mapa = () => window.A_EMOJIS_SPRITES || {};
+    const renderer = window.getAssetEmojiHTML;
+    if (!window.A_EMOJIS_SPRITES || typeof renderer !== 'function') return;
+    window._emojisGlobaisAtivos = true;
+
+    // Regex de reserva: qualquer emoji (usada quando a tabela ainda está vazia)
+    const REGEX_GENERICO = /(\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic})*|\p{Regional_Indicator}{2})/gu;
+    let lista = [];
+    let regex = REGEX_GENERICO;
+
+    function montarRegex() {
+        // Só os emojis que TÊM URL, dos mais longos para os mais curtos
+        // (senão '❤' comeria o começo de '❤️').
+        const atual = mapa();
+        lista = Object.keys(atual)
+            .filter(e => atual[e] && String(atual[e]).trim() !== '')
+            .sort((a, b) => b.length - a.length);
+        if (!lista.length) {
+            regex = REGEX_GENERICO;
+            return;
+        }
+        const EMOJI_ALT = '(?:\\uFE0F|\\u200D|\\u20E3|[\\u{1F3FB}-\\u{1F3FF}])*';
+        regex = new RegExp(
+            lista.map(e => e.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + EMOJI_ALT,
+            'gu'
+        );
+    }
+    montarRegex();
+
+    // Se o emoji não tem sprite, devolve o próprio texto (não muda nada)
+    const temSprite = emoji => {
+        const atual = mapa();
+        return !!(atual[emoji] && String(atual[emoji]).trim());
+    };
+
+    // Tags onde trocar o emoji quebraria o HTML
+    const PULAR = new Set(['SCRIPT', 'STYLE', 'TEXTAREA', 'NOSCRIPT', 'IMG', 'SVG', 'CODE', 'PRE']);
+
+    function trocarNoTexto(no) {
+        const texto = no.nodeValue;
+        if (!texto || !texto.trim()) return;
+        regex.lastIndex = 0;
+        if (!regex.test(texto)) return;
+        regex.lastIndex = 0;
+
+        const frag = document.createDocumentFragment();
+        let pos = 0;
+        let achou = false;
+        let m;
+        while ((m = regex.exec(texto)) !== null) {
+            if (!temSprite(m[0])) {           // emoji sem sprite: fica como está
+                if (m[0].length === 0) regex.lastIndex++;
+                continue;
+            }
+            achou = true;
+            if (m.index > pos) frag.appendChild(document.createTextNode(texto.slice(pos, m.index)));
+            const molde = document.createElement('span');
+            molde.innerHTML = renderer(m[0], 'emoji-sprite');
+            while (molde.firstChild) frag.appendChild(molde.firstChild);
+            pos = m.index + m[0].length;
+        }
+        if (!achou) return;
+        if (pos < texto.length) frag.appendChild(document.createTextNode(texto.slice(pos)));
+        no.parentNode && no.parentNode.replaceChild(frag, no);
+    }
+
+    function varrer(raiz) {
+        if (!raiz) return;
+        if (raiz.nodeType === 3) { trocarNoTexto(raiz); return; }
+        if (raiz.nodeType !== 1) return;
+        if (PULAR.has(raiz.tagName)) return;
+
+        const walker = document.createTreeWalker(raiz, NodeFilter.SHOW_TEXT, {
+            acceptNode: no => (no.parentNode && PULAR.has(no.parentNode.tagName))
+                ? NodeFilter.FILTER_REJECT
+                : NodeFilter.FILTER_ACCEPT,
+        });
+        const alvos = [];
+        while (walker.nextNode()) alvos.push(walker.currentNode);
+        alvos.forEach(trocarNoTexto);
+    }
+
+    // ---- 1. Varre o que já está na tela ----
+    varrer(document.body);
+
+    // ---- 2. Observa telas montadas depois (innerHTML) ----
+    let pendente = null;
+    const observer = new MutationObserver(mutacoes => {
+        let temTexto = false;
+        for (const m of mutacoes) {
+            if (m.type === 'childList' && m.addedNodes.length) { temTexto = true; break; }
+            if (m.type === 'characterData') { temTexto = true; break; }
+        }
+        if (!temTexto) return;
+        clearTimeout(pendente);
+        pendente = setTimeout(() => {
+            mutacoes.forEach(m => {
+                if (m.type === 'characterData') { trocarNoTexto(m.target); return; }
+                m.addedNodes.forEach(no => {
+                    if (no.nodeType === 3) trocarNoTexto(no);
+                    else if (no.nodeType === 1) varrer(no);
+                });
+            });
+        }, 16);
+    });
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+
+    // ---- 3. API para o console ----
+    window.reaplicarEmojis = function () {
+        montarRegex();
+        varrer(document.body);
+        const n = lista.length;
+        console.log(n
+            ? `[emojis] ${n} emoji(s) com sprite — aplicados na tela.`
+            : '[emojis] Nenhum sprite em A_EMOJIS_SPRITES ainda — os emojis continuam como emoji.');
+    };
+    const qtd = lista.length;
+    console.log(qtd
+        ? `[emojis] Substituição global ativa — ${qtd} emoji(s) com sprite.`
+        : '[emojis] Vigia ativo. Nenhum sprite configurado ainda — preencha A_EMOJIS_SPRITES e rode window.reaplicarEmojis().');
+}
+
+// Aplica no jogo. Para DESLIGAR tudo: troque A_EMOJIS_GLOBAIS_ATIVO para false.
+iniciarEmojisGlobais();
+
+// Rede de segurança 1: se a tabela do assets-emojis.js não chegou
+// (arquivo não encontrado, cache velho, ordem errada), busca e aplica na mão.
+(function garantirTabelaDeEmojis() {
+    if (window._tabelaEmojisRecebida) return;
+    const carregar = () => {
+        if (window._tabelaEmojisRecebida) return;
+        const tag = document.createElement('script');
+        tag.src = 'assets-emojis.js?v=' + Date.now();
+        tag.onload = () => {
+            window._tabelaEmojisRecebida = 1;
+            Object.keys(window.A_EMOJIS_SPRITES || {}).forEach(e => {
+                const u = window.A_EMOJIS_SPRITES[e];
+                if (u && String(u).trim()) A_EMOJIS[e] = String(u).trim();
+            });
+            if (typeof window.reaplicarEmojis === 'function') window.reaplicarEmojis();
+        };
+        tag.onerror = () => console.warn('[emojis] assets-emojis.js não carregou — usando só o catálogo do assets.js');
+        document.body.appendChild(tag);
+    };
+    if (document.readyState === 'complete') setTimeout(carregar, 0);
+    else window.addEventListener('load', carregar, { once: true });
+})();
+
+// Rede de segurança 2: se a tabela chegar DEPOIS do assets.js (ordem trocada
+// no index.html ou carregamento atrasado), religa o motor sozinho.
+window.addEventListener('load', () => {
+    if (!window._emojisGlobaisAtivos) iniciarEmojisGlobais();
+    else if (typeof window.reaplicarEmojis === 'function') window.reaplicarEmojis();
+});
+setTimeout(() => {
+    if (typeof window.reaplicarEmojis === 'function') window.reaplicarEmojis();
+}, 1500);

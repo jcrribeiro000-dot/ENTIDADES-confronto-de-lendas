@@ -1,4 +1,4 @@
-const CACHE = 'entidades-v141';
+const CACHE = 'entidades-v148';
 const ASSETS = [
   './',
   './index.html',
@@ -18,7 +18,10 @@ const ASSETS = [
   './pvp.js',
   './historia-pa-morte.js',
   './raid-solo.js',
-  './ui-confirm.js'
+  './ui-confirm.js',
+  './assets-emojis.js',
+  './assets.js',
+  './selo-novo.js'
 ];
 
 self.addEventListener('install', (e) => {
@@ -37,6 +40,12 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
+  // nunca servir HTML do cache: se o index.html for velho, ele carrega
+  // scripts velhos (foi assim que a tabela de emojis ficou sem efeito)
+  if (e.request.mode === 'navigate') {
+    e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
+    return;
+  }
   const url = new URL(e.request.url);
   if (url.origin !== location.origin) return;
 
