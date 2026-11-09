@@ -3094,7 +3094,8 @@
                 color: #c8e0a8;
             }
             .tutorial-chapter-icon {
-                font-size: 4rem;
+                /* a capa do card agora tem ~190px de altura: o ícone acompanha */
+                font-size: 5.5rem;
                 line-height: 1;
                 filter: drop-shadow(0 0 20px rgba(107, 163, 92, 0.6));
             }

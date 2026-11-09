@@ -161,6 +161,16 @@
         .story-back-btn:hover{background:linear-gradient(135deg,#5a4220,#3d2d18);color:#e8dcc4;border-color:#c9a227}
         .story-sprite{width:32px;height:32px;object-fit:contain;vertical-align:middle;filter:drop-shadow(0 0 4px rgba(0,0,0,.6))}
         .story-sprite-large{width:64px;height:64px;object-fit:contain;filter:drop-shadow(0 0 8px rgba(0,0,0,.6))}
+        /* 🖼️ Capas grandes: ATOS (cover) e FASES (phase). A imagem preenche a
+           largura do card em vez de ficar um selo de 64px no meio do vazio. */
+        .story-sprite-cover{width:100%;height:auto;max-height:220px;min-height:120px;object-fit:cover;object-position:center;display:block;filter:drop-shadow(0 6px 18px rgba(0,0,0,.55))}
+        .story-sprite-phase{width:100%;height:auto;max-height:170px;min-height:90px;object-fit:cover;object-position:center;display:block;filter:drop-shadow(0 5px 14px rgba(0,0,0,.5))}
+        .story-emoji-cover{font-size:5.5rem;line-height:1}
+        .story-emoji-phase{font-size:4rem;line-height:1}
+        .story-chapter-cover{padding:0;min-height:0;align-items:stretch}
+        .story-phase-bg{padding:0;min-height:0;align-items:stretch}
+        /* o card precisa de menos respiro em volta da imagem */
+        .story-chapter-cover,.story-phase-bg{overflow:hidden}
         .story-emoji{font-size:1.5rem;line-height:1}
         .story-emoji-large{font-size:3rem;line-height:1;filter:drop-shadow(0 0 8px rgba(0,0,0,.5))}
         .story-boss-emoji{font-size:2.5rem;line-height:1;filter:drop-shadow(0 0 10px rgba(0,0,0,.8));animation:storyBossFloat 2s ease-in-out infinite;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none}
@@ -239,6 +249,8 @@
             .story-title{font-size:1.6rem}
             .story-ald-title{font-size:1.4rem}
             .story-chapters-grid,.story-phases-grid,.story-shop-grid{grid-template-columns:1fr}
+            .story-sprite-cover{max-height:190px;min-height:110px}
+            .story-sprite-phase{max-height:150px;min-height:85px}
             .story-heroes-grid{grid-template-columns:repeat(2,1fr)}
             .story-result-title{font-size:1.3rem}
             .story-save-input-wrap{flex-direction:column}
@@ -635,11 +647,12 @@ function storySprite(key){
         : `<span class="story-emoji">${EMOJI_STORY[key]||'?'}</span>`;
 }
 
-function storySpriteLarge(key){
+function storySpriteLarge(key, variante){
     const url = SPRITES_STORY[key];
+    const classe = 'story-sprite-large' + (variante ? ' story-sprite-' + variante : '');
     return (url && url.trim()!=='')
-        ? `<img src="${url}" class="story-sprite-large" alt="${key}" onerror="this.outerHTML='<span class=\\'story-emoji-large\\'>${EMOJI_STORY[key]||'?'}</span>'">`
-        : `<span class="story-emoji-large">${EMOJI_STORY[key]||'?'}</span>`;
+        ? `<img src="${url}" class="${classe}" alt="${key}" onerror="this.style.display='none';this.nextElementSibling&&(this.nextElementSibling.style.display='flex')"><span class="story-emoji-large${variante ? ' story-emoji-' + variante : ''}" style="display:none">${EMOJI_STORY[key]||'?'}</span>`
+        : `<span class="story-emoji-large${variante ? ' story-emoji-' + variante : ''}">${EMOJI_STORY[key]||'?'}</span>`;
 }
 
 // =================================================================
@@ -6230,7 +6243,7 @@ function renderAtosScreen(){
 
         if (un) {
             html += `<div class="story-chapter-card unlocked" onclick="selectStoryChapter(${ch.id})">
-                <div class="story-chapter-cover">${storySpriteLarge(ch.capa)}</div>
+                <div class="story-chapter-cover">${storySpriteLarge(ch.capa, 'cover')}</div>
                 <div class="story-chapter-info">
                     <h3 class="story-chapter-name">${ch.name}</h3>
                     <p class="story-chapter-desc">${ch.description}</p>
@@ -6242,7 +6255,7 @@ function renderAtosScreen(){
             </div>`;
         } else {
             html += `<div class="story-chapter-card locked">
-                <div class="story-chapter-cover">${storySpriteLarge('icon_locked')}</div>
+                <div class="story-chapter-cover">${storySpriteLarge('icon_locked', 'cover')}</div>
                 <div class="story-chapter-info">
                     <h3 class="story-chapter-name">${ch.name}</h3>
                     <p class="story-chapter-desc">Complete o ato anterior para desbloquear.</p>
@@ -6303,7 +6316,7 @@ function renderChapterPhases(ch){
             finalBoss ? 'final-boss' : ''
         ].join(' ');
         html += `<div class="${cls}" ${un?`onclick="startStoryPhase('${ch.id}','${ph.id}')"`:''}>
-            <div class="story-phase-bg">${ph.bg?storySpriteLarge(ph.bg):''}</div>
+            <div class="story-phase-bg">${ph.bg?storySpriteLarge(ph.bg, 'phase'):''}</div>
             <div class="story-phase-header">
                 <span class="story-phase-num">${ph.id}</span>
                 ${starsHTML}

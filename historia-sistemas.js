@@ -1087,7 +1087,7 @@
             ].join(' ');
 
             html += `<div class="${cls}" ${un?`onclick="startStoryPhase('${ch.id}','${ph.id}')"`:''}>
-                <div class="story-phase-bg">${ph.bg?storySpriteLarge(ph.bg):''}</div>
+                <div class="story-phase-bg">${ph.bg?storySpriteLarge(ph.bg, 'phase'):''}</div>
                 <div class="story-phase-header">
                     <span class="story-phase-num">${ph.id}</span>
                     ${starsHTML}
