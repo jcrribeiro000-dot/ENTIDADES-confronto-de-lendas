@@ -192,18 +192,18 @@ const A_CENARIOS = {
     bg_1_4:   'https://i.imgur.com/A25ehvZ.png',  // ✓
     bg_1_boss:'https://i.imgur.com/s6xi6kN.png',  // ✓
 
-    bg_2_1:'', bg_2_2:'', bg_2_3:'', bg_2_4:'', bg_2_boss:'', // ⬜
-    bg_3_1:'', bg_3_2:'', bg_3_3:'', bg_3_4:'', bg_3_boss:'', // ⬜
-    bg_4_1:'', bg_4_2:'', bg_4_3:'', bg_4_4:'', bg_4_boss:'', // ⬜
-    bg_5_1:'', bg_5_2:'', bg_5_3:'', bg_5_4:'', bg_5_boss:'', // ⬜
-    bg_6_1:'', bg_6_2:'', bg_6_3:'', bg_6_4:'', bg_6_boss:'', // ⬜
-    bg_7_1:'', bg_7_2:'', bg_7_3:'', bg_7_4:'', bg_7_boss:'', // ⬜
-    bg_8_1:'', bg_8_2:'', bg_8_3:'', bg_8_4:'', bg_8_boss:'', // ⬜
-    bg_9_1:'', bg_9_2:'', bg_9_3:'', bg_9_4:'', bg_9_boss:'', // ⬜
-    bg_10_1:'', bg_10_2:'', bg_10_3:'', bg_10_4:'', bg_10_boss:'', // ⬜
-    bg_11_1:'', bg_11_2:'', bg_11_3:'', bg_11_4:'', bg_11_boss:'', // ⬜
-    bg_12_1:'', bg_12_2:'', bg_12_3:'', bg_12_4:'', bg_12_boss:'', // ⬜
-    bg_13_1:'', bg_13_2:'', bg_13_3:'', bg_13_4:'', // ⬜
+    bg_2_1:'https://i.imgur.com/kSyUim6.jpeg', bg_2_2:'https://i.imgur.com/FR75Ki7.jpeg', bg_2_3:'https://i.imgur.com/xSxokwA.jpeg', bg_2_4:'https://i.imgur.com/ai1sF2j.jpeg', bg_2_boss:'https://i.imgur.com/GZDfSUE.jpeg', // ⬜
+    bg_3_1:'https://i.imgur.com/APJZ3H5.jpeg', bg_3_2:'https://i.imgur.com/NIZjVp9.jpeg', bg_3_3:'https://i.imgur.com/AKpmxZP.jpeg', bg_3_4:'https://i.imgur.com/i3RazUV.jpeg', bg_3_boss:'https://i.imgur.com/Z6neiCK.jpeg', // ⬜
+    bg_4_1:'https://i.imgur.com/XSzRFKS.jpeg', bg_4_2:'https://i.imgur.com/qoRT3Ow.jpeg', bg_4_3:'https://i.imgur.com/Q7JffSc.jpeg', bg_4_4:'https://i.imgur.com/5jKzAMz.jpeg', bg_4_boss:'https://i.imgur.com/uReOh8Y.jpeg', // ⬜
+    bg_5_1:'https://i.imgur.com/xB12YG4.jpeg', bg_5_2:'https://i.imgur.com/OELqKGH.jpeg', bg_5_3:'https://i.imgur.com/zl13TEE.jpeg', bg_5_4:'', bg_5_boss:'', // ⬜
+    bg_6_1:'https://i.imgur.com/0uA0EmJ.jpeg', bg_6_2:'https://i.imgur.com/TNiYIOW.jpeg', bg_6_3:'https://i.imgur.com/R7dy3l1.jpeg', bg_6_4:'', bg_6_boss:'https://i.imgur.com/PM2X03k.jpeg', // ⬜
+    bg_7_1:'https://i.imgur.com/2V5Vade.jpeg', bg_7_2:'https://i.imgur.com/vFYrS6u.jpeg', bg_7_3:'https://i.imgur.com/uuwebc7.jpeg', bg_7_4:'https://i.imgur.com/c5v6Xhq.jpeg', bg_7_boss:'https://i.imgur.com/3jcyTxM.jpeg', // ⬜
+    bg_8_1:'https://i.imgur.com/LjK6iRf.jpeg', bg_8_2:'https://i.imgur.com/cJnBgr2.jpeg', bg_8_3:'https://i.imgur.com/i8I1DX9.jpeg', bg_8_4:'https://i.imgur.com/yeBRVQS.jpeg', bg_8_boss:'https://i.imgur.com/h5tOZTg.jpeg', // ⬜
+    bg_9_1:'https://i.imgur.com/ps4lpmO.jpeg', bg_9_2:'https://i.imgur.com/CcGDrP3.jpeg', bg_9_3:'https://i.imgur.com/bffYrxS.jpeg', bg_9_4:'https://i.imgur.com/GOn5cq2.jpeg', bg_9_boss:'https://i.imgur.com/Hxuk4D7.jpeg', // ⬜
+    bg_10_1:'https://i.imgur.com/uk6orEA.jpeg', bg_10_2:'https://i.imgur.com/oKSFTrj.jpeg', bg_10_3:'https://i.imgur.com/xESwVbd.jpeg', bg_10_4:'https://i.imgur.com/H6nMV0a.jpeg', bg_10_boss:'blob:https://imgur.com/c5d6c510-8a7e-4c76-9e4d-e9951bfecac7', // ⬜
+    bg_11_1:'https://i.imgur.com/ng5p9I9.jpeg', bg_11_2:'https://i.imgur.com/mpjAdwu.jpeg', bg_11_3:'', bg_11_4:'https://i.imgur.com/ZcGX6EM.jpeg', bg_11_boss:'https://i.imgur.com/ON12mrt.jpeg', // ⬜
+    bg_12_1:'https://i.imgur.com/0uA0EmJ.jpeg', bg_12_2:'https://i.imgur.com/TNiYIOW.jpeg', bg_12_3:'https://i.imgur.com/DVpLGlv.jpeg', bg_12_4:'https://i.imgur.com/Z2m51qR.jpeg', bg_12_boss:'https://i.imgur.com/uU42bT0.jpeg', // ⬜
+    bg_13_1:'https://i.imgur.com/rkJEdJp.jpeg', bg_13_2:'https://i.imgur.com/S5eE3KZ.jpeg', bg_13_3:'https://i.imgur.com/WBaIVqS.jpeg', bg_13_4:'https://i.imgur.com/Ch1ScWr.jpeg', // ⬜
 
     // ---- Capas (Atos) ----
     capa_ato1: 'https://i.imgur.com/pEXoYe0.jpeg',  // ✓
