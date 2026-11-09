@@ -1858,6 +1858,12 @@ async function raidProcessarMorteBossCoop() {
             if (typeof saveStoryProgress === 'function') saveStoryProgress();
         }
 
+        if (cfg && coopRole === 'criador' && window._regionalRaidContext
+            && typeof window.registrarRegionalRaidVictory === 'function') {
+            window.registrarRegionalRaidVictory(cfg.id, STORY_PROGRESS.raidAttempts?.[cfg.id]?.difficulty
+                || window._regionalRaidDifficulty || 'normal');
+        }
+
         if (typeof showPurificacao === 'function') {
             try { await showPurificacao(boss.type, boss.x, boss.y, false); } catch (e) {}
         }
@@ -2013,6 +2019,7 @@ async function raidIniciarSoloViaCoop(raidId, options = {}) {
     window._regionalRaidWonEquipment = null;
 
     const difficulty = options.difficulty || 'normal';
+    window._regionalRaidDifficulty = difficulty;
     const difficultyScale = {
         normal: { hp: 1, damage: 1, cost: 1, reward: 1 },
         dificil: { hp: 1.45, damage: 1.35, cost: 1.5, reward: 1.5 },
@@ -2583,8 +2590,13 @@ async function raidHandleBossDefeat() {
         && typeof window.registrarConhecimentoRaid === 'function') {
         window._regionalRaidKnowledgeResult = window.registrarConhecimentoRaid(cfg.id);
     }
+    if (window._regionalRaidContext && cfg && coopRole !== 'oponente'
+        && typeof window.registrarRegionalRaidVictory === 'function') {
+        window.registrarRegionalRaidVictory(cfg.id, STORY_PROGRESS.raidAttempts?.[cfg.id]?.difficulty
+            || window._regionalRaidDifficulty || 'normal');
+    }
 
-    const drops = [];
+    const drops = []
     if (cfg) {
         if (cfg.fragmentoComum) {
             const qtd = 1 + Math.floor(Math.random() * 3);

@@ -1,7 +1,7 @@
 // =================================================================
 // conquistas.js — V1.0 — Sistema de Conquistas
 // =================================================================
-// 70 conquistas · 7 títulos cosméticos · 8 categorias
+// 77 conquistas · 8 títulos cosméticos · 9 categorias (7 novas conquistas de Raid).
 //
 // 🖼️  SUBSTITUIR POR SPRITES:
 //     Todos os ícones estão em SPRITES_CONQUISTAS (topo do arquivo).
@@ -17,6 +17,7 @@
 //       🎉  cat_selados          — categoria Sete Selados
 //       🌎  cat_nacoes           — categoria Sete Nações
 //       🤝  cat_social           — categoria Social
+//       ⚔️  cat_raids             — categoria Raids Regionais
 //       😈  cat_secretas         — categoria Secretas
 //       🔒  icone_bloqueada      — overlay de bloqueio
 //       ✅  icone_desbloqueada   — selo de desbloqueio
@@ -31,6 +32,7 @@
 //       💀  titulo_domador       — título "Domador do Abismo"
 //       🔥  titulo_lenda_coliseu — título "Lenda do Coliseu"
 //       🎉  titulo_sete_das_sete — título "Sete das Sete"
+//       🛡️  titulo_guardiao_provacoes — título "Guardião das Provações"
 //
 // Cole no index.html:
 //   <script src="conquistas.js"></script>
@@ -58,6 +60,7 @@
         'cat_selados':         '🎉',
         'cat_nacoes':          '🌎',
         'cat_social':          '🤝',
+        'cat_raids':           '⚔️',
         'cat_secretas':        '😈',
 
         // ─── Recompensas ───
@@ -74,6 +77,7 @@
         'titulo_domador':       '💀',
         'titulo_lenda_coliseu': '🔥',
         'titulo_sete_das_sete': '🎉',
+        'titulo_guardiao_provacoes': '🛡️',
     };
 
     // ═══════════════════════════════════════════════════════════
@@ -97,6 +101,7 @@
         selados:  { nome: 'Sete Selados',  emojiKey: 'cat_selados',  cor: '#9b59b6' },
         nacoes:   { nome: 'Sete Nações',   emojiKey: 'cat_nacoes',   cor: '#27ae60' },
         social:   { nome: 'Social',        emojiKey: 'cat_social',   cor: '#3498db' },
+        raids:    { nome: 'Raids Regionais',emojiKey: 'cat_raids',    cor: '#c27c38' },
         secretas: { nome: 'Secretas',      emojiKey: 'cat_secretas', cor: '#e67e22' },
     };
 
@@ -111,6 +116,7 @@
         domador:        { id: 'domador',        nome: 'Domador do Abismo',     emojiKey: 'titulo_domador',       cor: '#8e44ad', conquista: 'domador_abismo' },
         lenda_coliseu:  { id: 'lenda_coliseu',  nome: 'Lenda do Coliseu',      emojiKey: 'titulo_lenda_coliseu', cor: '#a83232', conquista: 'lenda_coliseu' },
         sete_das_sete:  { id: 'sete_das_sete',  nome: 'Sete das Sete',         emojiKey: 'titulo_sete_das_sete', cor: '#27ae60', conquista: 'sete_das_sete' },
+        guardiao_provacoes: { id: 'guardiao_provacoes', nome: 'Guardião das Provações', emojiKey: 'titulo_guardiao_provacoes', cor: '#c27c38', conquista: 'regional_raid_all' },
     };
 
     // ═══════════════════════════════════════════════════════════
@@ -194,10 +200,33 @@
         const prog = STORY_PROGRESS?.eventoProgresso || {};
         return ids.filter(id => (prog[id]?.fasesConcluidas || []).includes('boss')).length;
     };
+    const _raidIds = () => {
+        const configs = window.RAID_SOLO_CONFIG || [];
+        return configs.map(raid => raid.id).filter(Boolean);
+    };
+    const _raidIdsEsperados = ['cobra_norato', 'cabeca_cuia', 'besta_fera', 'pombero',
+        'minhocao_pantanal', 'minuano', 'guajara'];
+    const _raidIdsAtivos = () => _raidIdsEsperados.slice();
+    const _raidsDerrotadas = () => {
+        const victories = STORY_PROGRESS?.regionalRaidVictories || {};
+        return _raidIdsAtivos().filter(id => victories[id]
+            && typeof victories[id] === 'object'
+            && Object.values(victories[id]).some(Boolean));
+    };
+    const _raidsDerrotadasNaDificuldade = (difficulty) => {
+        const victories = STORY_PROGRESS?.regionalRaidVictories || {};
+        return _raidIdsAtivos().filter(id => victories[id]?.[difficulty] === true).length;
+    };
+    const _raidsEquipamentos = () => {
+        const weapons = STORY_PROGRESS?.craftedWeapons || [];
+        const amulets = STORY_PROGRESS?.craftedAmulets || [];
+        return _raidIdsAtivos().filter(id => weapons.some(uid => String(uid).split('#')[0].startsWith(`raid_${id}_`))
+            || amulets.some(uid => String(uid).split('#')[0] === `raid_${id}_amuleto`)).length;
+    };
     const _stat = (key, def) => (STORY_PROGRESS?.achievementStats?.[key] ?? def);
 
     // ═══════════════════════════════════════════════════════════
-    // AS 70 CONQUISTAS
+    // AS 77 CONQUISTAS
     // ═══════════════════════════════════════════════════════════
     window.ACHIEVEMENTS = [
         // ═══════════════════════════════════════════════════════
@@ -669,6 +698,50 @@
           condicao: () => _stat('defeats', 0) >= 10,
           progresso: () => ({ atual: _stat('defeats', 0), meta: 10 }),
           recompensa: { ouro: 500, xp: 200 } },
+
+        // ═══════════════
+        // ⚔️ RAIDS REGIONAIS (7) — vitórias em guardiões diferentes
+        // ═══════════════
+        { id: 'regional_raid_first', categoria: 'raids', raridade: 'comum',
+          nome: 'A Primeira Provação', desc: 'Derrote um guardião de Raid Regional.',
+          condicao: () => _raidsDerrotadas().length >= 1,
+          recompensa: { ouro: 500, xp: 250 } },
+
+        { id: 'regional_raid_three', categoria: 'raids', raridade: 'raro',
+          nome: 'Três Guardiões', desc: 'Derrote 3 guardiões regionais diferentes.',
+          condicao: () => _raidsDerrotadas().length >= 3,
+          progresso: () => ({ atual: _raidsDerrotadas().length, meta: 3 }),
+          recompensa: { ouro: 1200, xp: 600, essenciaAncestral: 5 } },
+
+        { id: 'regional_raid_all', categoria: 'raids', raridade: 'lendario',
+          nome: 'As Sete Provações', desc: 'Derrote os sete guardiões regionais distintos.',
+          condicao: () => _raidIdsAtivos().length === 7 && _raidsDerrotadas().length >= 7,
+          progresso: () => ({ atual: _raidsDerrotadas().length, meta: 7 }),
+          recompensa: { ouro: 5000, xp: 2500, essenciaAncestral: 20, essenciaSombria: 10 } },
+
+        { id: 'regional_raid_dificil', categoria: 'raids', raridade: 'raro',
+          nome: 'À Prova de Fogo', desc: 'Derrote 3 guardiões regionais na dificuldade Difícil.',
+          condicao: () => _raidsDerrotadasNaDificuldade('dificil') >= 3,
+          progresso: () => ({ atual: _raidsDerrotadasNaDificuldade('dificil'), meta: 3 }),
+          recompensa: { ouro: 1800, xp: 900, essenciaAncestral: 8 } },
+
+        { id: 'regional_raid_pesadelo', categoria: 'raids', raridade: 'lendario',
+          nome: 'Além do Medo', desc: 'Derrote 3 guardiões regionais na dificuldade Pesadelo.',
+          condicao: () => _raidsDerrotadasNaDificuldade('pesadelo') >= 3,
+          progresso: () => ({ atual: _raidsDerrotadasNaDificuldade('pesadelo'), meta: 3 }),
+          recompensa: { ouro: 3500, xp: 1800, essenciaAncestral: 15, essenciaSombria: 8 } },
+
+        { id: 'regional_raid_equipment', categoria: 'raids', raridade: 'raro',
+          nome: 'Relíquias dos Guardiões', desc: 'Obtenha equipamento de Raid de 3 guardiões diferentes.',
+          condicao: () => _raidsEquipamentos() >= 3,
+          progresso: () => ({ atual: _raidsEquipamentos(), meta: 3 }),
+          recompensa: { ouro: 1500, xp: 750, essenciaSombria: 8 } },
+
+        { id: 'regional_raid_knowledge', categoria: 'raids', raridade: 'raro',
+          nome: 'Estudioso das Provações', desc: 'Alcance conhecimento nível 3 em 3 guardiões regionais.',
+          condicao: () => _raidIdsAtivos().filter(id => (STORY_PROGRESS?.knowledge?.[id] || 0) >= 3).length >= 3,
+          progresso: () => ({ atual: _raidIdsAtivos().filter(id => (STORY_PROGRESS?.knowledge?.[id] || 0) >= 3).length, meta: 3 }),
+          recompensa: { ouro: 1800, xp: 900, essenciaSombria: 8 } },
     ];
 
     console.log(`✅ [conquistas] ${window.ACHIEVEMENTS.length} conquistas carregadas.`);
@@ -949,6 +1022,20 @@
     // ═══════════════════════════════════════════════════════════
     // HOOKS DE STAT TRACKING
     // ═══════════════════════════════════════════════════════════
+
+    window.registrarRegionalRaidVictory = function(raidId, difficulty) {
+        const validIds = ['cobra_norato', 'cabeca_cuia', 'besta_fera', 'pombero',
+            'minhocao_pantanal', 'minuano', 'guajara'];
+        if (!validIds.includes(raidId) || !['normal', 'dificil', 'pesadelo'].includes(difficulty)) return false;
+        _garantirEstrutura();
+        if (!STORY_PROGRESS.regionalRaidVictories) STORY_PROGRESS.regionalRaidVictories = {};
+        if (!STORY_PROGRESS.regionalRaidVictories[raidId]) STORY_PROGRESS.regionalRaidVictories[raidId] = {};
+        STORY_PROGRESS.regionalRaidVictories[raidId][difficulty] = true;
+        window._regionalRaidDifficulty = difficulty;
+        if (typeof saveStoryProgress === 'function') saveStoryProgress();
+        else checkAchievements();
+        return true;
+    };
 
     // Anhangá kills (por herói único)
     function _hookBossDefeat() {
