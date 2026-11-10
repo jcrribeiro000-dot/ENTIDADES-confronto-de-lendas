@@ -1513,11 +1513,22 @@
                     }
                 }
 
-                // Fragmento
-                const chFrag = b.isPesadeloNacao ? CONFIG.dropPesadeloFragmento : (CONFIG.dropFragmento[diff] || 0.10);
-                if (Math.random() < chFrag && nacaoId !== 'pesadelo') {
-                    const frag = 'fragmento_nacao_' + nacaoId;
-                    if (!STORY_PROGRESS.nacaoFragmentos.includes(frag)) {
+                // Fragmento: Fase 3 de uma nação dá o dela; o Pesadelo
+                // pode dar qualquer fragmento ainda não coletado.
+                const chFrag = b.isPesadeloNacao
+                    ? CONFIG.dropPesadeloFragmento
+                    : (CONFIG.dropFragmento[diff] || 0.10);
+                if (Math.random() < chFrag) {
+                    if (!Array.isArray(STORY_PROGRESS.nacaoFragmentos)) {
+                        STORY_PROGRESS.nacaoFragmentos = [];
+                    }
+                    const fragmentosPendentes = Object.keys(FRAGMENTOS)
+                        .filter(id => !STORY_PROGRESS.nacaoFragmentos.includes(id));
+                    const frag = b.isPesadeloNacao
+                        ? fragmentosPendentes[Math.floor(Math.random() * fragmentosPendentes.length)]
+                        : `fragmento_nacao_${nacaoId}`;
+
+                    if (frag && !STORY_PROGRESS.nacaoFragmentos.includes(frag)) {
                         STORY_PROGRESS.nacaoFragmentos.push(frag);
                         _log(`🌎 FRAGMENTO ANCESTRAL dropado!`);
                         const fragInfo = (window.NACAO_FRAGMENTOS || {})[frag];
@@ -1527,9 +1538,13 @@
                             quantity: '+1',
                             iconHTML: window.getRewardIconHTML(frag, fragEmoji, 'large'),
                         });
+                        if (typeof saveStoryProgress === 'function') saveStoryProgress();
                         // Desbloqueio do Abya
                         if (STORY_PROGRESS.nacaoFragmentos.length >= 7 && !STORY_PROGRESS.abyaDesbloqueado) {
                             STORY_PROGRESS.abyaDesbloqueado = true;
+                            if (!Array.isArray(STORY_PROGRESS.unlockedHeroesStory)) {
+                                STORY_PROGRESS.unlockedHeroesStory = ['Tupa', 'Sume', 'Caipora'];
+                            }
                             if (!STORY_PROGRESS.unlockedHeroesStory.includes('Abya')) {
                                 STORY_PROGRESS.unlockedHeroesStory.push('Abya');
                             }

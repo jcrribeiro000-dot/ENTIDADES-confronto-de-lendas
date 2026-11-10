@@ -12068,7 +12068,7 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
     window.getWeaponById = function(uid) {
         if (!uid) return null;
         const baseId = getBaseId(uid);
-        const w = STORY_WEAPONS[baseId];
+        const w = STORY_WEAPONS[baseId] || EVENTO_ARMAS?.[baseId];
         if (w) return { ...w, uid: uid, baseId: baseId, id: uid }; // id = uid para manter compatibilidade
         return null;
     };
@@ -12458,7 +12458,7 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
             weaponsHTML = `<div class="inv-empty-line">Nenhuma arma forjada ainda.</div>`;
         } else {
             weaponsHTML = uniqueWeapons.map(baseId => {
-                const w = STORY_WEAPONS[baseId];
+                const w = STORY_WEAPONS[baseId] || EVENTO_ARMAS?.[baseId];
                 if (!w) return '';
                 const equippedBy = usageMap[baseId] || [];
                 const owner = equippedBy.length > 0 ? equippedBy.map(hc => STORY_HERO_CLASSES[hc]?.displayName || hc).join(', ') : null;
@@ -12590,7 +12590,7 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
     window.getWeaponById = function(uid) {
         if (!uid) return null;
         const baseId = getBaseId(uid);
-        const w = STORY_WEAPONS[baseId];
+        const w = STORY_WEAPONS[baseId] || EVENTO_ARMAS?.[baseId];
         if (w) return { ...w, uid: uid, baseId: baseId, id: uid };
         return null;
     };
@@ -13414,7 +13414,7 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
             weaponsHTML = `<div class="inv-empty-line">Nenhuma arma forjada ainda.</div>`;
         } else {
             weaponsHTML = uniqueWeapons.map(baseId => {
-                const w = STORY_WEAPONS[baseId];
+                const w = STORY_WEAPONS[baseId] || EVENTO_ARMAS?.[baseId];
                 if (!w) return '';
                 const equippedBy = usageMap[baseId] || [];
                 const owner = equippedBy.length > 0 ? equippedBy.map(hc => STORY_HERO_CLASSES[hc]?.displayName || hc).join(', ') : null;

@@ -4744,7 +4744,11 @@
     window._migrarItensSemUID = function() {
         if (typeof STORY_PROGRESS === 'undefined') return false;
         let mudou = false;
-        const getBase = window.getBaseId;
+        const getBase = window.getBaseId || (id => id ? String(id).split('#')[0] : null);
+        if (!Array.isArray(STORY_PROGRESS.craftedWeapons)) STORY_PROGRESS.craftedWeapons = [];
+        if (!Array.isArray(STORY_PROGRESS.craftedAmulets)) STORY_PROGRESS.craftedAmulets = [];
+        if (!Array.isArray(STORY_PROGRESS.eventoArmas)) STORY_PROGRESS.eventoArmas = [];
+        if (!Array.isArray(STORY_PROGRESS._v1080_armasRecuperadas)) STORY_PROGRESS._v1080_armasRecuperadas = [];
 
         function migrarArray(arr) {
             if (!Array.isArray(arr)) return arr;
@@ -4819,20 +4823,9 @@
             }
         }
 
-        // ⭐ SYNC: eventoArmas → craftedWeapons (com UID)
-        // O _aplicarDrops (V9.5-P2B) empurra pra eventoArmas, não craftedWeapons.
-        // Aqui garante que o item aparece no inventário.
-        if (Array.isArray(STORY_PROGRESS.eventoArmas) && Array.isArray(STORY_PROGRESS.craftedWeapons)) {
-            const basesWeapons = new Set(STORY_PROGRESS.craftedWeapons.map(getBase));
-            STORY_PROGRESS.eventoArmas.forEach(baseId => {
-                if (baseId && !basesWeapons.has(baseId)) {
-                    STORY_PROGRESS.craftedWeapons.push(
-                        `${baseId}#${Date.now()}${Math.floor(Math.random()*1000000)}`
-                    );
-                    mudou = true;
-                }
-            });
-        }
+        // EVENTO_ARMAS são drops únicos, mas craftedWeapons guarda cada cópia
+        // com UID. Não sincronizar toda a lista aqui para não duplicar drops.
+        // A rotina V10.83 abaixo corrige somente o item pendente do save.
 
         if (mudou && typeof saveStoryProgress === 'function') saveStoryProgress();
         return mudou;
@@ -4933,7 +4926,8 @@
                 }
             }
 
-            // ⭐ Migra itens após tudo (drops usam ID raw)
+            // Migra os IDs e garante que cada arma dropada esteja também na
+            // coleção lida pelo inventário e pela tela de equipamento.
             window._migrarItensSemUID();
 
             return result;
@@ -5009,9 +5003,48 @@
         window.openEquipScreen._v1080 = true;
     }
 
+    // Recupera itens de evento já salvos em eventoArmas mas ausentes do array
+    // craftedWeapons, que é a fonte usada tanto pelo inventário quanto por equipar.
+    const _origMigrarEventosComuns = window._migrarItensSemUID;
+    if (typeof _origMigrarEventosComuns === 'function' && !_origMigrarEventosComuns._v1084) {
+        window._migrarItensSemUID = function() {
+            let mudou = _origMigrarEventosComuns.apply(this, arguments);
+            if (typeof STORY_PROGRESS === 'undefined') return mudou;
+
+            if (!Array.isArray(STORY_PROGRESS.craftedWeapons)) STORY_PROGRESS.craftedWeapons = [];
+            if (!Array.isArray(STORY_PROGRESS.eventoArmas)) STORY_PROGRESS.eventoArmas = [];
+            if (!Array.isArray(STORY_PROGRESS._v1080_armasRecuperadas)) {
+                STORY_PROGRESS._v1080_armasRecuperadas = [];
+            }
+            const recuperadas = new Set(STORY_PROGRESS._v1080_armasRecuperadas);
+            const bases = new Set(STORY_PROGRESS.craftedWeapons.map(id => String(id).split('#')[0]));
+
+            STORY_PROGRESS.eventoArmas.forEach(itemId => {
+                const baseId = String(itemId || '').split('#')[0];
+                if (!baseId || recuperadas.has(baseId)) return;
+                if (!bases.has(baseId)) {
+                    STORY_PROGRESS.craftedWeapons.push(
+                        `${baseId}#${Date.now()}${Math.floor(Math.random() * 1000000)}`
+                    );
+                    bases.add(baseId);
+                    mudou = true;
+                }
+                recuperadas.add(baseId);
+                mudou = true;
+            });
+            STORY_PROGRESS._v1080_armasRecuperadas = Array.from(recuperadas);
+
+            if (mudou && typeof saveStoryProgress === 'function') saveStoryProgress();
+            return mudou;
+        };
+        window._migrarItensSemUID._v1084 = true;
+    }
+
     // =============================================================
     // 8. Migração inicial ao carregar (saves antigos)
     // =============================================================
+
+
     setTimeout(() => {
         if (window._migrarItensSemUID()) {
             console.log('[V10.80] Migração inicial concluída (saves antigos).');
@@ -5251,9 +5284,12 @@
                         console.log(`[V10.82] Arma recuperada uma vez: ${baseId}`);
                     }
 
-                    // Marca como recuperada (mesmo que já estivesse lá)
-                    STORY_PROGRESS._v1080_armasRecuperadas.push(baseId);
-                    mudou = true;
+                    // Marca como recuperada (mesmo que já estivesse lá), sem
+                    // gravar a mesma base várias vezes no array de controle.
+                    if (!STORY_PROGRESS._v1080_armasRecuperadas.includes(baseId)) {
+                        STORY_PROGRESS._v1080_armasRecuperadas.push(baseId);
+                        mudou = true;
+                    }
                 });
             }
 

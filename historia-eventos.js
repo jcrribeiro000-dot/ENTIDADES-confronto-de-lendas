@@ -2809,14 +2809,30 @@
 
         if (drops.arma) {
             if (!Array.isArray(STORY_PROGRESS.eventoArmas)) STORY_PROGRESS.eventoArmas = [];
-            if (!STORY_PROGRESS.eventoArmas.includes(drops.arma)) {
-                STORY_PROGRESS.eventoArmas.push(drops.arma);
-                resultado.arma = drops.arma;
-            } else {
-                // Já tinha — guarda mesmo assim (drops repetidos viram "duplicatas")
-                resultado.arma = drops.arma;
-                resultado.armaRepetida = true;
+            if (!Array.isArray(STORY_PROGRESS.craftedWeapons)) STORY_PROGRESS.craftedWeapons = [];
+            if (!Array.isArray(STORY_PROGRESS._v1080_armasRecuperadas)) {
+                STORY_PROGRESS._v1080_armasRecuperadas = [];
             }
+
+            const baseId = String(drops.arma).split('#')[0];
+            if (!STORY_PROGRESS.eventoArmas.includes(baseId)) {
+                STORY_PROGRESS.eventoArmas.push(baseId);
+            }
+
+            // O inventário/equipamento lê craftedWeapons, não eventoArmas.
+            // Se a mesma base ficou pendente (save antigo), este drop a recupera
+            // uma vez; cópias já presentes continuam sendo exibidas normalmente.
+            const idsComUid = STORY_PROGRESS.craftedWeapons.map(id => String(id).split('#')[0]);
+            const temArmaNoInventario = idsComUid.includes(baseId);
+            const recuperadaAntes = STORY_PROGRESS._v1080_armasRecuperadas.includes(baseId);
+            if (!temArmaNoInventario && !recuperadaAntes) {
+                STORY_PROGRESS.craftedWeapons.push(
+                    `${baseId}#${Date.now()}${Math.floor(Math.random() * 1000000)}`
+                );
+            }
+            if (!recuperadaAntes) STORY_PROGRESS._v1080_armasRecuperadas.push(baseId);
+            resultado.arma = baseId;
+            if (temArmaNoInventario || recuperadaAntes) resultado.armaRepetida = true;
         }
 
         if (drops.fragmento) {
@@ -4825,10 +4841,17 @@
                 if (!Array.isArray(STORY_PROGRESS.craftedWeapons)) STORY_PROGRESS.craftedWeapons = [];
                 if (!Array.isArray(STORY_PROGRESS.eventoArmas)) STORY_PROGRESS.eventoArmas = [];
 
-                // Adiciona as armas do evento na lista de forjadas
+                // Mantém compatibilidade com saves antigos que guardavam IDs raw.
+                // Drops novos entram no inventário com UID em craftedWeapons.
                 STORY_PROGRESS.eventoArmas.forEach(armaId => {
-                    if (!STORY_PROGRESS.craftedWeapons.includes(armaId)) {
-                        STORY_PROGRESS.craftedWeapons.push(armaId);
+                    const baseId = String(armaId || '').split('#')[0];
+                    const existe = STORY_PROGRESS.craftedWeapons.some(id =>
+                        String(id).split('#')[0] === baseId
+                    );
+                    if (baseId && !existe) {
+                        STORY_PROGRESS.craftedWeapons.push(
+                            `${baseId}#${Date.now()}${Math.floor(Math.random() * 1000000)}`
+                        );
                     }
                 });
             }
