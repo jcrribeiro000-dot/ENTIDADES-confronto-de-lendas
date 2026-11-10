@@ -2485,8 +2485,18 @@
             bar.style.display = 'none';
             return;
         }
-        if (!data) { bar.style.display = 'none'; return; }
+        if (!data) {
+            bar.style.display = 'none';
+            bar.dataset.lastState = '';
+            return;
+        }
 
+        const stateKey = `${data.tiles}_${data.shape}_${data.isBravely}_${data.dano}_${data.nota}_${data.heal}_${data.recarrega}_${data.totalAtk}`;
+        if (bar.dataset.lastState === stateKey && bar.children.length > 0) {
+            bar.style.display = 'flex';
+            return;
+        }
+        bar.dataset.lastState = stateKey;
         bar.style.display = 'flex';
 
         const chips = [];
@@ -2503,17 +2513,18 @@
         }
 
         if (data.dano > 0) {
-            chips.push(`<span class="preview-chip dano">⚔️ ~${data.dano} dano</span>`);
+            chips.push(`<span class="preview-chip dano"><span class="preview-chip-icon">⚔️</span> ~${data.dano} dano</span>`);
         }
         if (data.nota) {
             const cls = data.mata ? 'kill' : 'dim';
-            chips.push(`<span class="preview-chip ${cls}">${data.nota}</span>`);
+            const notaFormatada = String(data.nota).replace(/(\d+)×(\d+)/, (m, g, a) => `${g}×${Number(a) * 10}`);
+            chips.push(`<span class="preview-chip ${cls}">${notaFormatada}</span>`);
         }
 
         if (data.heal > 0)  chips.push(`<span class="preview-chip heal">💚 +${data.heal} HP</span>`);
         if (data.recarrega) chips.push(`<span class="preview-chip recarrega">♻️ Recarrega</span>`);
 
-        chips.push(`<span class="preview-chip help" title="ATK base ${data.totalAtk} · estimativa">?</span>`);
+        chips.push(`<span class="preview-chip help" title="ATK base ${data.totalAtk * 10} · estimativa">?</span>`);
 
         bar.innerHTML = chips.join('');
     }
@@ -3039,8 +3050,18 @@
             bar.style.display = 'none';
             return;
         }
-        if (!data) { bar.style.display = 'none'; return; }
+        if (!data) {
+            bar.style.display = 'none';
+            bar.dataset.lastState = '';
+            return;
+        }
 
+        const stateKey = `${data.tiles}_${data.shape}_${data.isBravely}_${data.dano}_${data.nota}_${data.heal}_${data.recarrega}_${data.totalAtk}`;
+        if (bar.dataset.lastState === stateKey && bar.children.length > 0) {
+            bar.style.display = 'flex';
+            return;
+        }
+        bar.dataset.lastState = stateKey;
         bar.style.display = 'flex';
 
         const chips = [];
@@ -3054,15 +3075,16 @@
             chips.push(`<span class="preview-chip dim">⚡ ${data.tiles}/${data.threshold}</span>`);
         }
         if (data.dano > 0) {
-            chips.push(`<span class="preview-chip dano">⚔️ ~${data.dano} dano</span>`);
+            chips.push(`<span class="preview-chip dano"><span class="preview-chip-icon">⚔️</span> ~${data.dano} dano</span>`);
         }
         if (data.nota) {
             const cls = data.mata ? 'kill' : 'dim';
-            chips.push(`<span class="preview-chip ${cls}">${data.nota}</span>`);
+            const notaFormatada = String(data.nota).replace(/(\d+)×(\d+)/, (m, g, a) => `${g}×${Number(a) * 10}`);
+            chips.push(`<span class="preview-chip ${cls}">${notaFormatada}</span>`);
         }
         if (data.heal > 0)  chips.push(`<span class="preview-chip heal">💚 +${data.heal} HP</span>`);
         if (data.recarrega) chips.push(`<span class="preview-chip recarrega">♻️ Recarrega</span>`);
-        chips.push(`<span class="preview-chip help" title="ATK base ${data.totalAtk} · estimativa">?</span>`);
+        chips.push(`<span class="preview-chip help" title="ATK base ${data.totalAtk * 10} · estimativa">?</span>`);
 
         bar.innerHTML = chips.join('');
     }

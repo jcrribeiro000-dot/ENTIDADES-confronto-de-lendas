@@ -1478,7 +1478,10 @@ function iniciarEmojisGlobais() {
     const PULAR = new Set(['SCRIPT', 'STYLE', 'TEXTAREA', 'NOSCRIPT', 'IMG', 'SVG', 'CODE', 'PRE']);
 
     function trocarNoTexto(no) {
-        const texto = no.nodeValue;
+        const textoOriginal = (typeof window.getVisualStats10xSourceText === 'function')
+            ? window.getVisualStats10xSourceText(no)
+            : (no.__vs10xOriginal || no.nodeValue);
+        const texto = textoOriginal;
         if (!texto || !texto.trim()) return;
         regex.lastIndex = 0;
         if (!regex.test(texto)) return;

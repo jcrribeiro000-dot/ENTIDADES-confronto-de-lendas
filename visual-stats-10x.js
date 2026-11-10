@@ -1,11 +1,23 @@
 (function installVisualStats10x() {
     'use strict';
 
+    if (window.__visualStats10xInstalled) return;
+    window.__visualStats10xInstalled = true;
+
     const FACTOR = 10;
     const QUERY_PARAM = 'visualStats10x';
     const changedTextNodes = new Map();
     let observer = null;
     let enabled = false;
+
+    function getSourceText(textNode) {
+        if (!textNode) return '';
+        const previous = changedTextNodes.get(textNode);
+        if (previous && textNode.data === previous.rendered) return previous.original;
+        if (textNode.__vs10xOriginal && textNode.data === textNode.__vs10xRendered) return textNode.__vs10xOriginal;
+        return textNode.data;
+    }
+    window.getVisualStats10xSourceText = getSourceText;
 
     function scaleNumber(value) {
         const sign = value[0] === '+' || value[0] === '-' ? value[0] : '';
@@ -35,18 +47,31 @@
         });
     }
 
-    function findScaleMode(textNode) {
+    function findScaleMode(textNode, sourceText = textNode.data) {
         const element = textNode.parentElement;
-        if (!element) return null;
+        if (!element) return 'none';
 
-        if (element.closest(
-            '.dmg-float, .heal-float, .hero-status-atk, .story-hero-level, .bestiary-card-stats, #bossStatsDisplay, #bossCardHp'
-        )) {
+        // O ATK do herói em combate:
+        if (element.closest('.hero-status-atk')) return 'all';
+
+        // Metas de itens / forja / inventário / oca:
+        const itemMeta = element.closest('.forge-effects, .forge-meta, .inv-equip-meta, .equip-card-bonus, .equip-slot-stats, .avail-stats, .battle-hero-modal-line');
+        if (itemMeta) {
+            return /\b(?:HP|ATK)\b/i.test(sourceText) ? 'labeled' : 'none';
+        }
+
+        // Barra de preview de dano esperado na batalha:
+        const previewBar = element.closest('.story-preview-bar, .story-preview-bar-v3, #storyPreviewBarV3, #storyPreviewBarV2, #storyPreviewBar');
+        if (previewBar) {
+            if (element.closest('.preview-chip.dano, .preview-chip.heal')) return 'labeled';
+            return 'none';
+        }
+
+        if (element.closest('.dmg-float, .heal-float, .story-hero-level, .bestiary-card-stats, #bossStatsDisplay, #bossCardHp')) {
             return 'all';
         }
 
         if (/^player\d+HP$/i.test(element.id)) return 'all';
-
         if (element.matches('.hero-status-hp > span:first-child')) return 'all';
 
         const detailValue = element.closest('.hero-details-stat-value');
@@ -76,20 +101,33 @@
 
         const previous = changedTextNodes.get(textNode);
         if (previous && textNode.data === previous.rendered) return;
+        if (textNode.__vs10xRendered && textNode.data === textNode.__vs10xRendered) return;
 
-        const original = textNode.data;
-        const mode = findScaleMode(textNode);
-        const rendered = mode === 'all'
-            ? scaleAllNumbers(original)
-            : scaleLabeledNumbers(original);
-
-        if (rendered === original) {
+        const original = getSourceText(textNode);
+        const mode = findScaleMode(textNode, original);
+        if (mode === 'none') {
+            if (previous && textNode.data === previous.rendered) {
+                textNode.data = previous.original;
+            } else if (textNode.__vs10xOriginal && textNode.data === textNode.__vs10xRendered) {
+                textNode.data = textNode.__vs10xOriginal;
+            }
+            delete textNode.__vs10xOriginal;
+            delete textNode.__vs10xRendered;
             changedTextNodes.delete(textNode);
             return;
         }
 
-        changedTextNodes.set(textNode, { original, rendered });
-        textNode.data = rendered;
+        const rendered = mode === 'all'
+            ? scaleAllNumbers(original)
+            : scaleLabeledNumbers(original);
+
+        textNode.__vs10xOriginal = original;
+        textNode.__vs10xRendered = rendered;
+        changedTextNodes.set(textNode, { original, rendered, mode });
+
+        if (textNode.data !== rendered) {
+            textNode.data = rendered;
+        }
     }
 
     function processSubtree(root) {
@@ -106,17 +144,29 @@
         }
     }
 
+    function forgetTextNode(textNode) {
+        const previous = changedTextNodes.get(textNode);
+        if (previous && textNode.data === previous.rendered) {
+            textNode.data = previous.original;
+        } else if (textNode.__vs10xOriginal && textNode.data === textNode.__vs10xRendered) {
+            textNode.data = textNode.__vs10xOriginal;
+        }
+        delete textNode.__vs10xOriginal;
+        delete textNode.__vs10xRendered;
+        changedTextNodes.delete(textNode);
+    }
+
     function forgetSubtree(root) {
         if (!root) return;
         if (root.nodeType === Node.TEXT_NODE) {
-            changedTextNodes.delete(root);
+            forgetTextNode(root);
             return;
         }
 
         const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
         let textNode;
         while ((textNode = walker.nextNode())) {
-            changedTextNodes.delete(textNode);
+            forgetTextNode(textNode);
         }
     }
 
@@ -136,7 +186,9 @@
                     return;
                 }
                 record.addedNodes.forEach(processSubtree);
-                record.removedNodes.forEach(forgetSubtree);
+                record.removedNodes.forEach(node => {
+                    if (!node.isConnected) forgetSubtree(node);
+                });
             });
         });
         observer.observe(document.body, {
@@ -156,12 +208,21 @@
 
         changedTextNodes.forEach((value, textNode) => {
             if (textNode.data === value.rendered) textNode.data = value.original;
+            delete textNode.__vs10xOriginal;
+            delete textNode.__vs10xRendered;
         });
         changedTextNodes.clear();
         console.info('[VisualStats10x] Desativado; os números da interface voltaram ao normal.');
     }
 
-    window.formatVisualStats10x = scaleLabeledNumbers;
+    window.formatVisualStats10x = function(text) {
+        const wrapper = document.createElement('span');
+        wrapper.textContent = String(text);
+        processSubtree(wrapper);
+        const rendered = wrapper.textContent;
+        forgetSubtree(wrapper);
+        return rendered;
+    };
     window.enableVisualStats10x = enable;
     window.disableVisualStats10x = disable;
 

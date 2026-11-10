@@ -51,8 +51,8 @@ const ICONS = {
     'elem_ar':       'https://i.imgur.com/f1iVHmr.png',
 
     // ---- Status de Combate ----
-    'espadas':       '',
-    'muiraquita':    '',
+    'espadas':       'https://i.imgur.com/ez6BPlh.png',
+    'muiraquita':    'https://i.imgur.com/9BRRudo.png',
     'turno':         'https://i.imgur.com/IxwGkhV.png',
     'dialogo':       '',
     'caveira':       '',
