@@ -4027,6 +4027,7 @@
         2: { qtd: 10000 },
     };
     const MULT_UPGRADE = { 1: 10, 2: 100 };
+    window.MULT_UPGRADE = MULT_UPGRADE;
 
     // ═══════════════════════════════════════════════════════════
     // HELPERS DE TIER
@@ -4060,6 +4061,7 @@
 
     window.getTierFromUid = getTierFromUid;
     window.getTierInfo = getTierInfo;
+    window.getBaseId = window.getBaseId || getUidSemTier;
     window.TIER_MAX = TIER_MAX;
     window.TIER_NOME = TIER_NOME;
 
@@ -4093,7 +4095,7 @@
     // ═══════════════════════════════════════════════════════════
     window.getWeaponById = function(uid) {
         if (!uid) return null;
-        const baseId = window.getBaseId(uid);
+        const baseId = String(uid).split('#')[0].split('@')[0];
         const tier = getTierFromUid(uid);
         let base = (typeof STORY_WEAPONS !== 'undefined') ? STORY_WEAPONS[baseId] : null;
         const isEvent = !base && (typeof EVENTO_ARMAS !== 'undefined') && EVENTO_ARMAS[baseId];
@@ -4111,7 +4113,7 @@
 
     window.getAmuletById = function(uid) {
         if (!uid) return null;
-        const baseId = window.getBaseId(uid);
+        const baseId = String(uid).split('#')[0].split('@')[0];
         const tier = getTierFromUid(uid);
         const base = (typeof STORY_AMULETS !== 'undefined') ? STORY_AMULETS[baseId] : null;
         if (!base) return null;
@@ -4201,7 +4203,8 @@
                 return;
             }
         } else {
-            const ess = STORY_PROGRESS.inventory['essencia_sombria'] || 0;
+            const currencyId = cost.moedaId || 'essencia_sombria';
+            const ess = STORY_PROGRESS.inventory[currencyId] || 0;
             if (ess < cost.qtd) {
                 if (typeof showToast==='function')
                     showToast('❌',`Essências insuficientes (precisa ${cost.qtd}).`,'❌');
@@ -4216,9 +4219,10 @@
             }
             STORY_PROGRESS.gold -= cost.ouro;
         } else {
-            STORY_PROGRESS.inventory['essencia_sombria'] -= cost.qtd;
-            if (STORY_PROGRESS.inventory['essencia_sombria'] <= 0)
-                delete STORY_PROGRESS.inventory['essencia_sombria'];
+            const currencyId = cost.moedaId || 'essencia_sombria';
+            STORY_PROGRESS.inventory[currencyId] -= cost.qtd;
+            if (STORY_PROGRESS.inventory[currencyId] <= 0)
+                delete STORY_PROGRESS.inventory[currencyId];
         }
 
         const novoUid = setTierInUid(uid, proximoTier);
@@ -4500,9 +4504,13 @@
             reqHTML += `<div class="up-req-row ${ouroOk?'ok':'no'}"><span>💰 Ouro</span><span><b style="color:${ouroOk?'#8ac070':'#d05050'};">${STORY_PROGRESS.gold||0}</b> / ${cost.ouro}</span></div>`;
             podePagar = Object.entries(cost.receita).every(([k,v]) => (STORY_PROGRESS.inventory[k]||0) >= v) && ouroOk;
         } else {
-            const ess = STORY_PROGRESS.inventory['essencia_sombria'] || 0;
+            const currencyId = cost.moedaId || 'essencia_sombria';
+            const isAncestral = currencyId === 'essencia_ancestral';
+            const ess = STORY_PROGRESS.inventory[currencyId] || 0;
             const ok = ess >= cost.qtd;
-            reqHTML = `<div class="up-req-row ${ok?'ok':'no'}"><span>🌑 Essências Sombrias</span><span><b style="color:${ok?'#8ac070':'#d05050'};">${ess}</b> / ${cost.qtd}</span></div>`;
+            const label = isAncestral ? 'Essências Ancestrais' : 'Essências Sombrias';
+            const emoji = isAncestral ? '🌎' : '🌑';
+            reqHTML = `<div class="up-req-row ${ok?'ok':'no'}"><span>${emoji} ${label}</span><span><b style="color:${ok?'#8ac070':'#d05050'};">${ess}</b> / ${cost.qtd}</span></div>`;
             podePagar = ok;
         }
 
@@ -4561,50 +4569,103 @@
         return 1 + MULT_UPGRADE[1] + MULT_UPGRADE[2];
     }
 
+    function calcDismantleRefund(item) {
+        const baseId = item.baseId || window.getBaseId(item.uid || item.id);
+        const tier = Number(item.tier) || 0;
+        const refund = {};
+        const add = (id, qty) => { refund[id] = (refund[id] || 0) + qty; };
+        const halve = () => Object.keys(refund).forEach(id => { refund[id] = Math.floor(refund[id] / 2); });
+
+        // Equipamentos de raid são drops gratuitos: retorna metade apenas das essências pagas nos upgrades.
+        if (item.raidOnly || String(baseId).startsWith('raid_')) {
+            for (let t = 1; t <= tier; t++) {
+                const spent = t === 1 ? 500 : 5000;
+                add('essencia_sombria', spent);
+                add('essencia_ancestral', spent);
+            }
+            // Raid no tier 0 é drop grátis; tiers 1/2 custam 500 e 5.000
+            // de CADA moeda, sem receita de craft ou investimento inicial.
+            Object.keys(refund).forEach(id => { refund[id] = Math.floor(refund[id] * 0.5); });
+            return refund;
+        }
+
+        if (String(baseId).startsWith('arma_nacao_') || String(baseId).startsWith('amuleto_nacao_')) {
+            if (String(baseId).startsWith('arma_nacao_')) add('essencia_ancestral', 1000);
+            for (let t = 1; t <= tier; t++) add('essencia_ancestral', t === 1 ? 1000 : 10000);
+            halve();
+            return refund;
+        }
+
+        if (item.isEventWeapon || (typeof EVENTO_ARMAS !== 'undefined' && EVENTO_ARMAS[baseId])) {
+            add('essencia_sombria', 1000);
+            for (let t = 1; t <= tier; t++) add('essencia_sombria', t === 1 ? 1000 : 10000);
+            halve();
+            return refund;
+        }
+
+        if (baseId === 'coracao_vazio') {
+            add('essencia_sombria', 10000);
+            for (let t = 1; t <= tier; t++) add('essencia_sombria', t === 1 ? 1000 : 10000);
+            halve();
+            return refund;
+        }
+
+        const mult = calcMultTotal(tier);
+        Object.entries(item.receita || {}).forEach(([id, qty]) => { refund[id] = Math.floor(qty * mult / 2); });
+        return refund;
+    }
+
+    function creditDismantleRefund(refund) {
+        if (!STORY_PROGRESS.inventory) STORY_PROGRESS.inventory = {};
+        Object.entries(refund).forEach(([id, qty]) => {
+            if (qty > 0) STORY_PROGRESS.inventory[id] = (STORY_PROGRESS.inventory[id] || 0) + qty;
+        });
+        return Object.entries(refund).filter(([, qty]) => qty > 0)
+            .map(([id, qty]) => `${STORY_MATERIALS[id]?.emoji || '📦'} ×${qty}`);
+    }
+
     window.handleDismantleWeapon = async function(uid) {
         const w = window.getWeaponById(uid);
-        if (!w) return;
-        if (!(await uiConfirm(`Desmanchar "${w.nome} ${getTierInfo(w.tier).nome}"?\n\nReceberá 50% dos materiais de TODO o investimento.`))) return;
+        if (!w || !STORY_PROGRESS.craftedWeapons.includes(uid)) return;
+        if (!(await uiConfirm(`Desmanchar "${w.nome} ${getTierInfo(w.tier).nome}"?\n\nReceberá 50% dos materiais/essências investidos.`))) return;
 
-        const mult = calcMultTotal(w.tier);
-        const refund = {};
-        Object.entries(w.receita || {}).forEach(([k, v]) => {
-            refund[k] = Math.floor(v * mult * 0.5);
-        });
+        const refund = calcDismantleRefund(w);
+        STORY_PROGRESS.craftedWeapons.splice(STORY_PROGRESS.craftedWeapons.indexOf(uid), 1);
+        for (const hc in STORY_PROGRESS.heroEquipment || {}) {
+            if (STORY_PROGRESS.heroEquipment[hc].arma === uid) STORY_PROGRESS.heroEquipment[hc].arma = null;
+        }
+        const received = creditDismantleRefund(refund);
+        if (String(w.baseId || '').startsWith('arma_nacao_')) {
+            const legacy = STORY_PROGRESS.nacaoArmas || [];
+            const legacyIndex = legacy.indexOf(w.baseId);
+            if (legacyIndex !== -1) legacy.splice(legacyIndex, 1);
+        }
 
-        const idx = STORY_PROGRESS.craftedWeapons.indexOf(uid);
-        if (idx !== -1) STORY_PROGRESS.craftedWeapons.splice(idx, 1);
-
-        Object.entries(refund).forEach(([k, v]) => {
-            if (v > 0) STORY_PROGRESS.inventory[k] = (STORY_PROGRESS.inventory[k] || 0) + v;
-        });
-
-        if (typeof saveStoryProgress==='function') saveStoryProgress();
-        if (typeof showToast==='function') showToast('🔥','Desmanchado (50% devolvido).','🔥');
-        renderTesourariaScreen();
+        if (typeof saveStoryProgress === 'function') saveStoryProgress();
+        if (typeof showToast === 'function') showToast('🔥', 'Desmanchado: ' + (received.join(', ') || 'sem materiais/essências para devolver.'), '🔥');
+        if (typeof renderTesourariaScreen === 'function') renderTesourariaScreen();
     };
 
     window.handleDismantleAmulet = async function(uid) {
         const a = window.getAmuletById(uid);
-        if (!a) return;
-        if (!(await uiConfirm(`Desmanchar "${a.nome} ${getTierInfo(a.tier).nome}"?\n\nReceberá 50% dos materiais.`))) return;
+        if (!a || !STORY_PROGRESS.craftedAmulets.includes(uid)) return;
+        if (!(await uiConfirm(`Desmanchar "${a.nome} ${getTierInfo(a.tier).nome}"?\n\nReceberá 50% dos materiais/essências investidos.`))) return;
 
-        const mult = calcMultTotal(a.tier);
-        const refund = {};
-        Object.entries(a.receita || {}).forEach(([k, v]) => {
-            refund[k] = Math.floor(v * mult * 0.5);
-        });
+        const refund = calcDismantleRefund(a);
+        STORY_PROGRESS.craftedAmulets.splice(STORY_PROGRESS.craftedAmulets.indexOf(uid), 1);
+        for (const hc in STORY_PROGRESS.heroEquipment || {}) {
+            if (STORY_PROGRESS.heroEquipment[hc].amuleto === uid) STORY_PROGRESS.heroEquipment[hc].amuleto = null;
+        }
+        const received = creditDismantleRefund(refund);
+        if (String(a.baseId || '').startsWith('amuleto_nacao_')) {
+            const legacy = STORY_PROGRESS.nacaoAmuletos || [];
+            const legacyIndex = legacy.indexOf(a.baseId);
+            if (legacyIndex !== -1) legacy.splice(legacyIndex, 1);
+        }
 
-        const idx = STORY_PROGRESS.craftedAmulets.indexOf(uid);
-        if (idx !== -1) STORY_PROGRESS.craftedAmulets.splice(idx, 1);
-
-        Object.entries(refund).forEach(([k, v]) => {
-            if (v > 0) STORY_PROGRESS.inventory[k] = (STORY_PROGRESS.inventory[k] || 0) + v;
-        });
-
-        if (typeof saveStoryProgress==='function') saveStoryProgress();
-        if (typeof showToast==='function') showToast('🔥','Desmanchado.','🔥');
-        renderTesourariaScreen();
+        if (typeof saveStoryProgress === 'function') saveStoryProgress();
+        if (typeof showToast === 'function') showToast('🔥', 'Desmanchado: ' + (received.join(', ') || 'sem materiais/essências para devolver.'), '🔥');
+        if (typeof renderTesourariaScreen === 'function') renderTesourariaScreen();
     };
 
     // ═══════════════════════════════════════════════════════════

@@ -6358,11 +6358,13 @@
     // ─────────────────────────────────────────────────────────────
     const _origDismW = window.handleDismantleWeapon;
     if (typeof _origDismW === 'function' && !_origDismW._v28) {
-        window.handleDismantleWeapon = function(uid) {
+        window.handleDismantleWeapon = async function(uid) {
             const baseId = (typeof window.getBaseId === 'function')
                 ? window.getBaseId(uid) : (uid ? String(uid).split('#')[0] : null);
-            const r = _origDismW.apply(this, arguments);
-            if (baseId && baseId.startsWith('arma_nacao_')) {
+            const ownedBefore = (STORY_PROGRESS.craftedWeapons || []).includes(uid);
+            const r = await _origDismW.apply(this, arguments);
+            const stillOwned = (STORY_PROGRESS.craftedWeapons || []).includes(uid);
+            if (ownedBefore && !stillOwned && baseId && baseId.startsWith('arma_nacao_')) {
                 const arr = STORY_PROGRESS.nacaoArmas || [];
                 const idx = arr.indexOf(baseId);
                 if (idx !== -1) arr.splice(idx, 1);
@@ -6378,11 +6380,13 @@
     // ─────────────────────────────────────────────────────────────
     const _origDismA = window.handleDismantleAmulet;
     if (typeof _origDismA === 'function' && !_origDismA._v28) {
-        window.handleDismantleAmulet = function(uid) {
+        window.handleDismantleAmulet = async function(uid) {
             const baseId = (typeof window.getBaseId === 'function')
                 ? window.getBaseId(uid) : (uid ? String(uid).split('#')[0] : null);
-            const r = _origDismA.apply(this, arguments);
-            if (baseId && baseId.startsWith('amuleto_nacao_')) {
+            const ownedBefore = (STORY_PROGRESS.craftedAmulets || []).includes(uid);
+            const r = await _origDismA.apply(this, arguments);
+            const stillOwned = (STORY_PROGRESS.craftedAmulets || []).includes(uid);
+            if (ownedBefore && !stillOwned && baseId && baseId.startsWith('amuleto_nacao_')) {
                 const arr = STORY_PROGRESS.nacaoAmuletos || [];
                 const idx = arr.indexOf(baseId);
                 if (idx !== -1) arr.splice(idx, 1);
