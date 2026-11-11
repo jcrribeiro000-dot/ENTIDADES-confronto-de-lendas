@@ -5393,10 +5393,21 @@
              */
             #storyPreviewBarV3 {
                 display: flex !important;
-                min-height: 36px !important;
+                height: 40px !important;
+                min-height: 40px !important;
+                max-height: 40px !important;
+                flex-wrap: nowrap !important;
+                justify-content: flex-start !important;
+                overflow-x: auto !important;
+                overflow-y: hidden !important;
+                scrollbar-width: thin;
+                touch-action: pan-x;
                 opacity: 0;
                 transition: opacity 0.15s;
                 pointer-events: none;
+            }
+            #storyPreviewBarV3 .preview-chip {
+                flex: 0 0 auto;
             }
             #storyPreviewBarV3.preview-active {
                 opacity: 1;
