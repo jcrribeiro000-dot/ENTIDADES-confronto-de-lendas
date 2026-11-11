@@ -3277,9 +3277,10 @@
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                gap: 12px;
-                padding: 12px 20px;
-                margin: 0 15px 10px;
+                gap: 8px;
+                padding: 6px 12px;
+                margin: 0 15px 6px;
+                flex-wrap: wrap;
                 background: linear-gradient(180deg, rgba(155,89,182,0.15), transparent 60%),
                             linear-gradient(135deg, rgba(42,20,55,0.9), rgba(20,10,30,0.9));
                 border: 2px solid #9b59b6;
@@ -3288,11 +3289,11 @@
                 color: #e8dcc4;
                 box-shadow: 0 4px 15px rgba(0,0,0,0.5), 0 0 20px rgba(155,89,182,0.3);
             }
-            .evento-banner-icon { font-size: 1.5rem; }
-            .evento-banner-text { font-size: 1rem; font-weight: 900; letter-spacing: 2px; }
+            .evento-banner-icon { font-size: 1.1rem; }
+            .evento-banner-text { font-size: 0.85rem; font-weight: 900; letter-spacing: 1.5px; }
             .evento-banner-hint {
                 font-family: 'EB Garamond', serif;
-                font-size: 0.8rem;
+                font-size: 0.72rem;
                 font-style: italic;
                 opacity: 0.85;
                 padding: 2px 10px;
