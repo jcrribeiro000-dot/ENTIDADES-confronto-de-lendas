@@ -4098,8 +4098,15 @@
         const baseId = String(uid).split('#')[0].split('@')[0];
         const tier = getTierFromUid(uid);
         let base = (typeof STORY_WEAPONS !== 'undefined') ? STORY_WEAPONS[baseId] : null;
-        const isEvent = !base && (typeof EVENTO_ARMAS !== 'undefined') && EVENTO_ARMAS[baseId];
-        if (!base && isEvent) base = EVENTO_ARMAS[baseId];
+        let isEvent = false;
+        if (!base && (typeof EVENTO_ARMAS !== 'undefined') && EVENTO_ARMAS[baseId]) {
+            base = EVENTO_ARMAS[baseId];
+            isEvent = true;
+        }
+        if (!base && typeof window.NACAO_ARMAS !== 'undefined' && window.NACAO_ARMAS[baseId]) {
+            base = window.NACAO_ARMAS[baseId];
+            isEvent = true;
+        }
         if (!base) return null;
         const baseAtk = base.atkBonus || 0;
         return {
@@ -4115,7 +4122,10 @@
         if (!uid) return null;
         const baseId = String(uid).split('#')[0].split('@')[0];
         const tier = getTierFromUid(uid);
-        const base = (typeof STORY_AMULETS !== 'undefined') ? STORY_AMULETS[baseId] : null;
+        let base = (typeof STORY_AMULETS !== 'undefined') ? STORY_AMULETS[baseId] : null;
+        if (!base && typeof window.NACAO_AMULETOS !== 'undefined' && window.NACAO_AMULETOS[baseId]) {
+            base = window.NACAO_AMULETOS[baseId];
+        }
         if (!base) return null;
         const ef = base.efeito ? { ...base.efeito } : {};
         if (ef.atkBonus)    ef.atkBonus    += tier;

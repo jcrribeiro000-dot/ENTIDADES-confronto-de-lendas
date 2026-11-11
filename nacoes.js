@@ -1485,7 +1485,9 @@
                     if (armasN.length > 0) {
                         const arma = armasN[Math.floor(Math.random() * armasN.length)];
                         if (!Array.isArray(STORY_PROGRESS.nacaoArmas)) STORY_PROGRESS.nacaoArmas = [];
+                        if (!Array.isArray(STORY_PROGRESS.craftedWeapons)) STORY_PROGRESS.craftedWeapons = [];
                         STORY_PROGRESS.nacaoArmas.push(arma.id);
+                        STORY_PROGRESS.craftedWeapons.push(`${arma.id}#${Date.now()}${Math.floor(Math.random() * 1000000)}`);
                         _log(`⚔️ Arma dropada: ${arma.nome}!`);
                         lootNotifications.push({
                             name: arma.nome,
@@ -1501,7 +1503,9 @@
                     if (Math.random() < 0.20 && todasArmas.length > 0) {
                         const arma = todasArmas[Math.floor(Math.random() * todasArmas.length)];
                         if (!Array.isArray(STORY_PROGRESS.nacaoArmas)) STORY_PROGRESS.nacaoArmas = [];
+                        if (!Array.isArray(STORY_PROGRESS.craftedWeapons)) STORY_PROGRESS.craftedWeapons = [];
                         STORY_PROGRESS.nacaoArmas.push(arma.id);
+                        STORY_PROGRESS.craftedWeapons.push(`${arma.id}#${Date.now()}${Math.floor(Math.random() * 1000000)}`);
                         _log(`⚔️ Arma (Pesadelo): ${arma.nome}!`);
                         lootNotifications.push({
                             name: arma.nome,
@@ -1563,6 +1567,8 @@
                     const amuId = 'amuleto_nacao_' + nacaoId;
                     if (!STORY_PROGRESS.nacaoAmuletos.includes(amuId)) {
                         STORY_PROGRESS.nacaoAmuletos.push(amuId);
+                        if (!Array.isArray(STORY_PROGRESS.craftedAmulets)) STORY_PROGRESS.craftedAmulets = [];
+                        STORY_PROGRESS.craftedAmulets.push(`${amuId}#${Date.now()}${Math.floor(Math.random() * 1000000)}`);
                         _log(`🧿 AMULETO dropado: ${AMULETOS[amuId]?.nome || amuId}!`);
                         lootNotifications.push({
                             name: AMULETOS[amuId]?.nome || amuId,
@@ -1860,7 +1866,7 @@
 
         const armasHTML = Object.values(ARMAS).map(a => {
             const jaTem = (STORY_PROGRESS.nacaoArmas || []).includes(a.id);
-            const preco = 80;
+            const preco = Number(CONFIG.precoArma) || 1000;
             const pode = ess >= preco && !jaTem;
             return `
                 <div class="nacao-shop-card ${jaTem?'owned':''}">
@@ -1898,8 +1904,9 @@
         const a = ARMAS[id]; if (!a) return;
         if ((STORY_PROGRESS.nacaoArmas || []).includes(id)) return;
         const ess = STORY_PROGRESS.inventory[CONFIG.moedaId] || 0;
-        if (ess < 80) return;
-        STORY_PROGRESS.inventory[CONFIG.moedaId] -= 80;
+        const preco = Number(CONFIG.precoArma) || 1000;
+        if (ess < preco) return;
+        STORY_PROGRESS.inventory[CONFIG.moedaId] -= preco;
         if (!Array.isArray(STORY_PROGRESS.nacaoArmas)) STORY_PROGRESS.nacaoArmas = [];
         STORY_PROGRESS.nacaoArmas.push(id);
         if (typeof saveStoryProgress === 'function') saveStoryProgress();
@@ -6275,17 +6282,20 @@
         const gerarUid = (base) => `${base}#${Date.now()}${Math.floor(Math.random()*1000000)}`;
         let mudou = false;
 
-        // ─── STEP 1: recupera equipamentos órfãos (já equipados mas fora do inventário) ───
+        // ─── STEP 1: recupera itens equipados órfãos apenas se ainda estão
+        // registrados como posse na lista legada; evita ressuscitar desmanches.
         const eq = STORY_PROGRESS.heroEquipment || {};
         for (const hc in eq) {
             const e = eq[hc];
             if (!e) continue;
             if (e.arma && String(e.arma).startsWith('arma_nacao_')
+                && (STORY_PROGRESS.nacaoArmas || []).includes(String(e.arma).split('#')[0])
                 && !STORY_PROGRESS.craftedWeapons.includes(e.arma)) {
                 STORY_PROGRESS.craftedWeapons.push(e.arma);
                 mudou = true;
             }
             if (e.amuleto && String(e.amuleto).startsWith('amuleto_nacao_')
+                && (STORY_PROGRESS.nacaoAmuletos || []).includes(String(e.amuleto).split('#')[0])
                 && !STORY_PROGRESS.craftedAmulets.includes(e.amuleto)) {
                 STORY_PROGRESS.craftedAmulets.push(e.amuleto);
                 mudou = true;
@@ -6302,16 +6312,22 @@
             const b = String(u).split('#')[0];
             cwCount[b] = (cwCount[b] || 0) + 1;
         });
-        Object.keys(naCount).forEach(baseId => {
+        const allWeaponBases = new Set([...Object.keys(naCount), ...Object.keys(cwCount).filter(id => id.startsWith('arma_nacao_'))]);
+        allWeaponBases.forEach(baseId => {
             const have = cwCount[baseId] || 0;
-            const want = naCount[baseId];
+            const want = naCount[baseId] || 0;
             for (let i = have; i < want; i++) {
                 STORY_PROGRESS.craftedWeapons.push(gerarUid(baseId));
                 mudou = true;
             }
-            if (want > have) {
-                console.log(`[V2.8] +${want - have}x arma: ${baseId}`);
+            for (let i = want; i < have; i++) {
+                const index = STORY_PROGRESS.craftedWeapons.findIndex(uid => String(uid).split('#')[0] === baseId);
+                if (index !== -1) {
+                    STORY_PROGRESS.craftedWeapons.splice(index, 1);
+                    mudou = true;
+                }
             }
+            if (want > have) console.log(`[V2.8] +${want - have}x arma: ${baseId}`);
         });
 
         // ─── STEP 3: sync amuletos ───
@@ -6324,16 +6340,22 @@
             const b = String(u).split('#')[0];
             caCount[b] = (caCount[b] || 0) + 1;
         });
-        Object.keys(namCount).forEach(baseId => {
+        const allAmuletBases = new Set([...Object.keys(namCount), ...Object.keys(caCount).filter(id => id.startsWith('amuleto_nacao_'))]);
+        allAmuletBases.forEach(baseId => {
             const have = caCount[baseId] || 0;
-            const want = namCount[baseId];
+            const want = namCount[baseId] || 0;
             for (let i = have; i < want; i++) {
                 STORY_PROGRESS.craftedAmulets.push(gerarUid(baseId));
                 mudou = true;
             }
-            if (want > have) {
-                console.log(`[V2.8] +${want - have}x amuleto: ${baseId}`);
+            for (let i = want; i < have; i++) {
+                const index = STORY_PROGRESS.craftedAmulets.findIndex(uid => String(uid).split('#')[0] === baseId);
+                if (index !== -1) {
+                    STORY_PROGRESS.craftedAmulets.splice(index, 1);
+                    mudou = true;
+                }
             }
+            if (want > have) console.log(`[V2.8] +${want - have}x amuleto: ${baseId}`);
         });
 
         return mudou;
@@ -6364,10 +6386,15 @@
             const ownedBefore = (STORY_PROGRESS.craftedWeapons || []).includes(uid);
             const r = await _origDismW.apply(this, arguments);
             const stillOwned = (STORY_PROGRESS.craftedWeapons || []).includes(uid);
-            if (ownedBefore && !stillOwned && baseId && baseId.startsWith('arma_nacao_')) {
+            const uidWasRemoved = ownedBefore && !stillOwned;
+            if (uidWasRemoved && baseId && baseId.startsWith('arma_nacao_')) {
                 const arr = STORY_PROGRESS.nacaoArmas || [];
                 const idx = arr.indexOf(baseId);
                 if (idx !== -1) arr.splice(idx, 1);
+                const ownedCount = (STORY_PROGRESS.craftedWeapons || [])
+                    .filter(id => String(id).split('#')[0].split('@')[0] === baseId).length;
+                const legacyCount = arr.filter(id => id === baseId).length;
+                for (let i = legacyCount; i < ownedCount; i++) arr.push(baseId);
                 if (typeof saveStoryProgress === 'function') saveStoryProgress();
             }
             return r;
@@ -6386,10 +6413,15 @@
             const ownedBefore = (STORY_PROGRESS.craftedAmulets || []).includes(uid);
             const r = await _origDismA.apply(this, arguments);
             const stillOwned = (STORY_PROGRESS.craftedAmulets || []).includes(uid);
-            if (ownedBefore && !stillOwned && baseId && baseId.startsWith('amuleto_nacao_')) {
+            const uidWasRemoved = ownedBefore && !stillOwned;
+            if (uidWasRemoved && baseId && baseId.startsWith('amuleto_nacao_')) {
                 const arr = STORY_PROGRESS.nacaoAmuletos || [];
                 const idx = arr.indexOf(baseId);
                 if (idx !== -1) arr.splice(idx, 1);
+                const ownedCount = (STORY_PROGRESS.craftedAmulets || [])
+                    .filter(id => String(id).split('#')[0].split('@')[0] === baseId).length;
+                const legacyCount = arr.filter(id => id === baseId).length;
+                for (let i = legacyCount; i < ownedCount; i++) arr.push(baseId);
                 if (typeof saveStoryProgress === 'function') saveStoryProgress();
             }
             return r;
@@ -6499,10 +6531,14 @@
     window._droparNacaoDebug = function(baseId) {
         if (baseId.startsWith('arma_nacao_')) {
             if (!Array.isArray(STORY_PROGRESS.nacaoArmas)) STORY_PROGRESS.nacaoArmas = [];
+            if (!Array.isArray(STORY_PROGRESS.craftedWeapons)) STORY_PROGRESS.craftedWeapons = [];
             STORY_PROGRESS.nacaoArmas.push(baseId);
+            STORY_PROGRESS.craftedWeapons.push(`${baseId}#${Date.now()}${Math.floor(Math.random() * 1000000)}`);
         } else if (baseId.startsWith('amuleto_nacao_')) {
             if (!Array.isArray(STORY_PROGRESS.nacaoAmuletos)) STORY_PROGRESS.nacaoAmuletos = [];
+            if (!Array.isArray(STORY_PROGRESS.craftedAmulets)) STORY_PROGRESS.craftedAmulets = [];
             STORY_PROGRESS.nacaoAmuletos.push(baseId);
+            STORY_PROGRESS.craftedAmulets.push(`${baseId}#${Date.now()}${Math.floor(Math.random() * 1000000)}`);
         } else {
             console.warn('baseId inválido (precisa começar com arma_nacao_ ou amuleto_nacao_)');
             return;
@@ -6589,13 +6625,25 @@
             const b = String(u).split('#')[0];
             cwCount[b] = (cwCount[b] || 0) + 1;
         });
-        Object.keys(naCount).forEach(baseId => {
+        const weaponBases = new Set([...Object.keys(naCount), ...Object.keys(cwCount).filter(id => id.startsWith('arma_nacao_'))]);
+        weaponBases.forEach(baseId => {
             const have = cwCount[baseId] || 0;
-            const want = naCount[baseId];
+            const want = naCount[baseId] || 0;
             for (let i = have; i < want; i++) {
                 STORY_PROGRESS.craftedWeapons.push(_gerarUid(baseId));
                 mudou = true;
                 console.log(`[V2.9] +${baseId} → craftedWeapons`);
+            }
+            if (have > want) {
+                let excess = have - want;
+                for (let i = STORY_PROGRESS.craftedWeapons.length - 1; i >= 0 && excess > 0; i--) {
+                    const uid = STORY_PROGRESS.craftedWeapons[i];
+                    if (String(uid).split('#')[0].split('@')[0] === baseId) {
+                        STORY_PROGRESS.craftedWeapons.splice(i, 1);
+                        excess--;
+                        mudou = true;
+                    }
+                }
             }
         });
 
@@ -6609,13 +6657,25 @@
             const b = String(u).split('#')[0];
             caCount[b] = (caCount[b] || 0) + 1;
         });
-        Object.keys(namCount).forEach(baseId => {
+        const amuletBases = new Set([...Object.keys(namCount), ...Object.keys(caCount).filter(id => id.startsWith('amuleto_nacao_'))]);
+        amuletBases.forEach(baseId => {
             const have = caCount[baseId] || 0;
-            const want = namCount[baseId];
+            const want = namCount[baseId] || 0;
             for (let i = have; i < want; i++) {
                 STORY_PROGRESS.craftedAmulets.push(_gerarUid(baseId));
                 mudou = true;
                 console.log(`[V2.9] +${baseId} → craftedAmulets`);
+            }
+            if (have > want) {
+                let excess = have - want;
+                for (let i = STORY_PROGRESS.craftedAmulets.length - 1; i >= 0 && excess > 0; i--) {
+                    const uid = STORY_PROGRESS.craftedAmulets[i];
+                    if (String(uid).split('#')[0].split('@')[0] === baseId) {
+                        STORY_PROGRESS.craftedAmulets.splice(i, 1);
+                        excess--;
+                        mudou = true;
+                    }
+                }
             }
         });
 
@@ -6863,7 +6923,8 @@
         if (!a) return;
 
         const moeda = CONFIG.moedaId || COR;
-        const preco = 80;
+        const preco = Number(CONFIG.precoArma) || 1000;
+        if ((STORY_PROGRESS.nacaoArmas || []).includes(id)) return;
         const saldo = STORY_PROGRESS.inventory[moeda] || 0;
         if (saldo < preco) {
             if (typeof showToast === 'function') showToast('❌', 'Essências insuficientes.', '❌');
@@ -6874,7 +6935,11 @@
 
         if (!Array.isArray(STORY_PROGRESS.nacaoArmas)) STORY_PROGRESS.nacaoArmas = [];
         STORY_PROGRESS.nacaoArmas.push(id);
-        _syncLocal(); // ⭐ força sync imediato
+        const uid = `${id}#${Date.now()}${Math.floor(Math.random() * 1000000)}`;
+        if (!Array.isArray(STORY_PROGRESS.craftedWeapons)) STORY_PROGRESS.craftedWeapons = [];
+        STORY_PROGRESS.craftedWeapons.push(uid);
+        if (typeof saveStoryProgress === 'function') saveStoryProgress();
+        _syncLocal(); // registra o item no inventário antes de voltar para a loja
         if (typeof saveStoryProgress === 'function') saveStoryProgress();
         if (typeof showToast === 'function') showToast('🌎', `Arma: ${a.nome}`, '🌎');
         if (typeof window.renderLojaNacoes === 'function') window.renderLojaNacoes();
