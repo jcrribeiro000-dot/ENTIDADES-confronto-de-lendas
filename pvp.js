@@ -108,7 +108,7 @@ async function pvpInit() {
         return true;
     } catch (e) {
         console.error('[pvp] Erro no login:', e);
-        uiAviso('Erro ao conectar no Firebase.');
+        alert('Erro ao conectar no Firebase.');
         return false;
     }
 }
@@ -304,12 +304,8 @@ function pvpAbrirPainel() {
         </div>
     `;
     document.body.appendChild(painel);
-    // Garante login antes de assinar listeners, senão as regras negam leitura.
-    (pvpUser ? Promise.resolve(true) : pvpInit()).then(ok => {
-        if (!ok) { console.warn('[pvp] Sem login, listeners não assinados.'); return; }
-        pvpAssinarMinhas();
-        pvpAssinarAbertas();
-    });
+    pvpAssinarMinhas();
+    pvpAssinarAbertas();
 }
 
 function pvpFecharPainel() {
@@ -438,7 +434,7 @@ async function pvpCriarSala() {
 
         pvpMeuHeroClass = (STORY_PROGRESS.selectedHeroes || ['Tupa'])[0];
         const heroData = STORY_HERO_CLASSES[pvpMeuHeroClass];
-        if (!heroData) { uiAviso('Selecione um herói antes.'); return; }
+        if (!heroData) { alert('Selecione um herói antes.'); return; }
 
         pvpMeuNome = pvpSanitize(localStorage.getItem('coop_player_name') || 'Jogador');
 
@@ -504,7 +500,7 @@ async function pvpCriarSala() {
     } catch (e) {
         console.error('[pvp] ERRO em pvpCriarSala:', e);
         console.error(e.stack);
-        uiAviso('Erro ao criar sala: ' + e.message);
+        alert('Erro ao criar sala: ' + e.message);
     }
 }
 
@@ -556,17 +552,17 @@ async function pvpEntrarSala(roomId) {
         let room;
         try {
             const doc = await pvpFbDb.collection(PVP_ROOMS).doc(roomId).get();
-            if (!doc.exists) { uiAviso('Sala não encontrada.'); return; }
+            if (!doc.exists) { alert('Sala não encontrada.'); return; }
             room = { id: doc.id, ...doc.data() };
-        } catch (e) { uiAviso('Erro: ' + e.message); return; }
+        } catch (e) { alert('Erro: ' + e.message); return; }
 
-        if (room.criador?.uid === pvpUser.uid) { uiAviso('Você não pode entrar na sua própria sala.'); return; }
-        if (room.oponente?.uid) { uiAviso('Sala já tem oponente.'); return; }
+        if (room.criador?.uid === pvpUser.uid) { alert('Você não pode entrar na sua própria sala.'); return; }
+        if (room.oponente?.uid) { alert('Sala já tem oponente.'); return; }
 
         const meuHeroClass = (STORY_PROGRESS.selectedHeroes || ['Tupa'])[0];
         const meuHeroData = STORY_HERO_CLASSES[meuHeroClass];
         const meuNome = pvpSanitize(localStorage.getItem('coop_player_name') || 'Jogador');
-        if (!meuHeroData) { uiAviso('Herói inválido.'); return; }
+        if (!meuHeroData) { alert('Herói inválido.'); return; }
 
         const aceitou = await pvpModalAceitar(room);
         if (!aceitou) return;
@@ -582,7 +578,7 @@ async function pvpEntrarSala(roomId) {
                 'estadoJogo.turnoDe': 'criador',
                 atualizadaEm: firebase.firestore.FieldValue.serverTimestamp(),
             });
-        } catch (e) { uiAviso('Erro ao entrar: ' + e.message); return; }
+        } catch (e) { alert('Erro ao entrar: ' + e.message); return; }
 
         // Estado
         window._pvpMode = true;
@@ -643,7 +639,7 @@ async function pvpEntrarSala(roomId) {
         pvpLog('Entrou na sala. Aguardando turno do criador.');
     } catch (e) {
         console.error('[pvp] ERRO em pvpEntrarSala:', e);
-        uiAviso('Erro ao entrar: ' + e.message);
+        alert('Erro ao entrar: ' + e.message);
     }
 }
 
@@ -858,8 +854,8 @@ function pvpInjetarUI() {
         const btn = document.createElement('button');
         btn.className = 'coop-sair-btn pvp-sair-btn';
         btn.innerHTML = '🚪 SAIR';
-        btn.onclick = async () => {
-            if (await uiConfirm('Sair da partida?')) pvpSairParaAldeia();
+        btn.onclick = () => {
+            if (confirm('Sair da partida?')) pvpSairParaAldeia();
         };
         acoes.insertBefore(btn, acoes.firstChild);
     }
@@ -1219,7 +1215,7 @@ function pvpInstalarListener() {
     pvpListenerUnsub = pvpFbDb.collection(PVP_ROOMS).doc(pvpRoomId)
         .onSnapshot(async doc => {
             if (!doc.exists) {
-                if (window._pvpMode) { uiAviso('Sala cancelada.'); pvpSairParaAldeia(); }
+                if (window._pvpMode) { alert('Sala cancelada.'); pvpSairParaAldeia(); }
                 return;
             }
 
@@ -1228,7 +1224,7 @@ function pvpInstalarListener() {
             if (!window._pvpMode) return;
 
             if (data.status === 'cancelada') {
-                uiAviso('O criador cancelou.');
+                alert('O criador cancelou.');
                 pvpSairParaAldeia();
                 return;
             }
@@ -1591,7 +1587,7 @@ async function pvpFinalizar(euVenco) {
         try { if (typeof playSfx === 'function') playSfx(euVenco ? 'win' : 'gameover'); } catch(e) {}
 
         const overlay = document.getElementById('gameOverlay');
-        if (!overlay) { uiAviso(euVenco ? '🏆 VITÓRIA!' : '💀 DERROTA...'); pvpFinalizando = false; return; }
+        if (!overlay) { alert(euVenco ? '🏆 VITÓRIA!' : '💀 DERROTA...'); pvpFinalizando = false; return; }
 
         const advNome = adv?.name || 'Adversário';
         const temAposta = apostaXP > 0 || apostaGold > 0;
@@ -1647,7 +1643,7 @@ async function pvpFinalizar(euVenco) {
         pvpLog('Tela final exibida.');
     } catch(e) {
         console.error('[pvp] Erro tela final:', e);
-        uiAviso(euVenco ? '🏆 VITÓRIA!' : '💀 DERROTA...');
+        alert(euVenco ? '🏆 VITÓRIA!' : '💀 DERROTA...');
     }
 
     pvpFinalizando = false;
@@ -1704,12 +1700,12 @@ async function pvpContinuarSala(roomId) {
     try {
         if (!pvpUser) { const ok = await pvpInit(); if (!ok) return; }
         const doc = await pvpFbDb.collection(PVP_ROOMS).doc(roomId).get();
-        if (!doc.exists) { uiAviso('Sala não encontrada.'); return; }
+        if (!doc.exists) { alert('Sala não encontrada.'); return; }
         const room = { id: doc.id, ...doc.data() };
 
         const isC = room.criador?.uid === pvpUser.uid;
         const isO = room.oponente?.uid === pvpUser.uid;
-        if (!isC && !isO) { uiAviso('Você não participa.'); return; }
+        if (!isC && !isO) { alert('Você não participa.'); return; }
 
         if (room.status === 'pausada') {
             const turnoDe = room.estadoJogo?.turnoDe || 'criador';
@@ -1763,12 +1759,12 @@ async function pvpContinuarSala(roomId) {
         if (typeof initGame === 'function') await initGame();
     } catch (e) {
         console.error('[pvp] Erro continuar:', e);
-        uiAviso('Erro: ' + e.message);
+        alert('Erro: ' + e.message);
     }
 }
 
 async function pvpCancelarSala(roomId) {
-    if (!(await uiConfirm('Cancelar e deletar esta partida?'))) return;
+    if (!confirm('Cancelar e deletar esta partida?')) return;
     try {
         await pvpFbDb.collection(PVP_ROOMS).doc(roomId).update({
             status: 'cancelada',
@@ -1778,7 +1774,7 @@ async function pvpCancelarSala(roomId) {
         await pvpFbDb.collection(PVP_ROOMS).doc(roomId).delete();
         pvpFecharPainel();
         setTimeout(() => pvpAbrirPainel(), 300);
-    } catch(e) { uiAviso('Erro: ' + e.message); }
+    } catch(e) { alert('Erro: ' + e.message); }
 }
 
 // =================================================================
@@ -2109,7 +2105,7 @@ console.log('✅ pvp.js V3.0 (baseado no coop) carregado.');
                 try { if (typeof playSfx === 'function') playSfx(euVenco ? 'win' : 'gameover'); } catch(e) {}
 
                 const overlay = document.getElementById('gameOverlay');
-                if (!overlay) { uiAviso(euVenco ? '🏆 VITÓRIA!' : '💀 DERROTA...'); pvpFinalizando = false; return; }
+                if (!overlay) { alert(euVenco ? '🏆 VITÓRIA!' : '💀 DERROTA...'); pvpFinalizando = false; return; }
 
                 const advNome = adv?.name || 'Adversário';
                 const aposta = pvpRoomData?.aposta || pvpMinhaAposta || { xp: 0, gold: 0 };
@@ -2168,7 +2164,7 @@ console.log('✅ pvp.js V3.0 (baseado no coop) carregado.');
                 console.log('[V3.1] Tela final exibida.');
             } catch(e) {
                 console.error('[V3.1] Erro tela final:', e);
-                uiAviso(euVenco ? '🏆 VITÓRIA!' : '💀 DERROTA...');
+                alert(euVenco ? '🏆 VITÓRIA!' : '💀 DERROTA...');
             }
 
             pvpFinalizando = false;
@@ -2541,7 +2537,7 @@ console.log('✅ pvp.js V3.0 (baseado no coop) carregado.');
                 return await _origCriar.apply(this, arguments);
             } catch (e) {
                 console.error('[V5.0] Erro ao criar:', e);
-                uiAviso('Erro: ' + e.message);
+                alert('Erro: ' + e.message);
             }
         };
     }
@@ -2558,7 +2554,7 @@ console.log('✅ pvp.js V3.0 (baseado no coop) carregado.');
                 return await _origEntrar.apply(this, arguments);
             } catch (e) {
                 console.error('[V5.0] Erro ao entrar:', e);
-                uiAviso('Erro: ' + e.message);
+                alert('Erro: ' + e.message);
             }
         };
     }
