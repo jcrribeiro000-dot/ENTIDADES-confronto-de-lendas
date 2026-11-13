@@ -304,8 +304,12 @@ function pvpAbrirPainel() {
         </div>
     `;
     document.body.appendChild(painel);
-    pvpAssinarMinhas();
-    pvpAssinarAbertas();
+    // Garante login antes de assinar listeners, senão as regras negam leitura.
+    (pvpUser ? Promise.resolve(true) : pvpInit()).then(ok => {
+        if (!ok) { console.warn('[pvp] Sem login, listeners não assinados.'); return; }
+        pvpAssinarMinhas();
+        pvpAssinarAbertas();
+    });
 }
 
 function pvpFecharPainel() {

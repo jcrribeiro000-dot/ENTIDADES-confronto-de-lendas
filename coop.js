@@ -542,8 +542,12 @@ function coopAbrirPainel() {
         .forEach(id => document.getElementById(id)?.addEventListener('change', () => {
             coopRenderSalasAbertas(coopSalasAbertasCache);
         }));
-    coopAssinarMinhas();
-    coopAssinarAbertas();
+    // Garante login antes de assinar listeners, senão as regras negam leitura.
+    (coopUser ? Promise.resolve(true) : coopInit()).then(ok => {
+        if (!ok) { console.warn('[coop] Sem login, listeners não assinados.'); return; }
+        coopAssinarMinhas();
+        coopAssinarAbertas();
+    });
 }
 
 function coopFecharPainel() {

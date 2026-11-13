@@ -26,15 +26,15 @@ window._raidMode = false;
 // =================================================================
 const RAID_SPRITES = {
     'teju_jagua':'', 'mboi_tui':'', 'monai':'', 'jasy_jatere':'',
-    'kurupi':'', 'ao_ao':'', 'luison':'', 'pesadelo':'',
+    'kurupi':'', 'ao_ao':'', 'luison':'', 'pesadelo':'', 'lampiao':'',
 
     'escama_flamejante':'', 'pluma_arco_iris':'', 'asa_de_tempestade':'',
     'cabelo_solar':'', 'raiz_viva':'', 'la_negra':'',
-    'sombra_solidificada':'', 'essencia_corrompida':'',
+    'sombra_solidificada':'', 'essencia_corrompida':'', 'chapeu_couro':'', 'peixeira_ferro':'',
 
     'olho_de_cabeca':'', 'bico_petrificado':'', 'presa_do_vento':'',
     'coroa_do_sol':'', 'chifre_da_mata':'', 'presa_tripla':'',
-    'cranio_menor':'', 'nucleo_do_pesadelo':'',
+    'cranio_menor':'', 'nucleo_do_pesadelo':'', 'chapeu_couro_raro':'', 'peixeira_lendaria':'',
 
     'tacape_teju':'', 'flecha_teju':'', 'cajado_teju':'',
     'tacape_mboi':'', 'flecha_mboi':'', 'cajado_mboi':'',
@@ -44,19 +44,20 @@ const RAID_SPRITES = {
     'tacape_aoao':'', 'flecha_aoao':'', 'cajado_aoao':'',
     'tacape_luison':'', 'flecha_luison':'', 'cajado_luison':'',
     'tacape_pesadelo':'', 'flecha_pesadelo':'', 'cajado_pesadelo':'',
+    'tacape_lampiao':'https://i.imgur.com/jjgVWxa.png', 'flecha_lampiao':'https://i.imgur.com/g97eCH4.png', 'cajado_lampiao':'https://i.imgur.com/g97eCH4.png',
 };
 
 const RAID_EMOJIS = {
     'teju_jagua':'🐉', 'mboi_tui':'🐍', 'monai':'🐲', 'jasy_jatere':'☀️',
-    'kurupi':'🌳', 'ao_ao':'🐑', 'luison':'💀', 'pesadelo':'👹',
+    'kurupi':'🌳', 'ao_ao':'🐑', 'luison':'💀', 'pesadelo':'👹', 'lampiao':'🤠',
 
     'escama_flamejante':'🔥', 'pluma_arco_iris':'🌈', 'asa_de_tempestade':'🌪️',
     'cabelo_solar':'✨', 'raiz_viva':'🌱', 'la_negra':'🧶',
-    'sombra_solidificada':'🌑', 'essencia_corrompida':'🟣',
+    'sombra_solidificada':'🌑', 'essencia_corrompida':'🟣', 'chapeu_couro':'🤠', 'peixeira_ferro':'🔪',
 
     'olho_de_cabeca':'👁️', 'bico_petrificado':'🦜', 'presa_do_vento':'🌬️',
     'coroa_do_sol':'👑', 'chifre_da_mata':'🦌', 'presa_tripla':'🦷',
-    'cranio_menor':'☠️', 'nucleo_do_pesadelo':'💜',
+    'cranio_menor':'☠️', 'nucleo_do_pesadelo':'💜', 'chapeu_couro_raro':'🎩', 'peixeira_lendaria':'⚔️',
 
     'tacape_teju':'🪓','flecha_teju':'🏹','cajado_teju':'🪄',
     'tacape_mboi':'🪓','flecha_mboi':'🏹','cajado_mboi':'🪄',
@@ -66,6 +67,7 @@ const RAID_EMOJIS = {
     'tacape_aoao':'🪓','flecha_aoao':'🏹','cajado_aoao':'🪄',
     'tacape_luison':'🪓','flecha_luison':'🏹','cajado_luison':'🪄',
     'tacape_pesadelo':'🪓','flecha_pesadelo':'🏹','cajado_pesadelo':'🪄',
+    'tacape_lampiao':'🪓','flecha_lampiao':'🏹','cajado_lampiao':'🪄',
 };
 
 function raidIcon(key, size) {
@@ -103,6 +105,8 @@ const RAID_SKILL_SOUNDS = {
     'raid_pesadelo_14_legados':'skill1',
     'raid_fissao_voraz':'minoa2',
     'raid_sussurro_anhanga':'skill1',
+    'raid_lampiao_tiro':'bote',
+    'raid_lampiao_peixeira':'bote',
 };
 
 function raidTocarSom(handlerKey) {
@@ -257,6 +261,24 @@ const STORY_RAID_CONFIG = {
             { skillOrigem:'luison',      skillId:'legado_filhos',          peso:1 },
         ],
     },
+    'lampiao': {
+        id:'lampiao', nome:'Lampião', titulo:'O Rei do Cangaço',
+        elemento:'FOGO',
+        descricao:'O lendário cangaceiro com seu chapéu de couro e peixeira afiada. Mestre da tirolesa e do combate corpo a corpo.',
+        hp:180, atk:5, size:2,
+        custoEntrada:15000, recompensaOuro:22500, recompensaXP:6000,
+        desbloqueiaComAto:13,
+        raidMensal: true,
+        fragmentoComum:'chapeu_couro', fragmentoRaro:'chapeu_couro_raro',
+        armas:{tacape:'tacape_lampiao', flecha:'flecha_lampiao', cajado:'cajado_lampiao'},
+        passiva:{ id:'solo_sagrado', soloSagradoPorQuadrado:1, maxSoloSagrado:2 },
+        skills:[
+            { id:'tiro', nome:'Tiro Certeiro', handler:'raid_lampiao_tiro',
+              danoBase:5, danoBonusElemento:0.5, elementoPerigo:'FOGO', distancia:3, tipo:'projetil' },
+            { id:'peixeira', nome:'Golpe de Peixeira', handler:'raid_lampiao_peixeira',
+              danoBase:6, danoBonusElemento:0.5, elementoPerigo:'FOGO', tipo:'corpo_a_corpo', alcance:1 },
+        ],
+    },
 };
 
 // =================================================================
@@ -279,6 +301,10 @@ const RAID_MATERIAIS = {
     'presa_tripla':{id:'presa_tripla',nome:'Presa Tripla',tipo:'raro',raid:'ao_ao'},
     'cranio_menor':{id:'cranio_menor',nome:'Crânio Menor',tipo:'raro',raid:'luison'},
     'nucleo_do_pesadelo':{id:'nucleo_do_pesadelo',nome:'Núcleo do Pesadelo',tipo:'raro',raid:'pesadelo'},
+    'chapeu_couro':{id:'chapeu_couro',nome:'Chapéu de Couro',tipo:'comum',raid:'lampiao'},
+    'peixeira_ferro':{id:'peixeira_ferro',nome:'Peixeira de Ferro',tipo:'comum',raid:'lampiao'},
+    'chapeu_couro_raro':{id:'chapeu_couro_raro',nome:'Chapéu do Cangaceiro',tipo:'raro',raid:'lampiao'},
+    'peixeira_lendaria':{id:'peixeira_lendaria',nome:'Peixeira Lendária',tipo:'raro',raid:'lampiao'},
 };
 
 const RAID_ARMAS = {
@@ -306,6 +332,9 @@ const RAID_ARMAS = {
     'tacape_pesadelo':{id:'tacape_pesadelo',nome:'Tacape do Pesadelo',tipo:'tacape',raid:'pesadelo',atkBonus:5,elemento:'ANY',elementoBonus:5,custoOuro:20000,receita:{essencia_corrompida:3,nucleo_do_pesadelo:1}},
     'flecha_pesadelo':{id:'flecha_pesadelo',nome:'Flecha do Pesadelo',tipo:'flecha',raid:'pesadelo',atkBonus:5,elemento:'ANY',elementoBonus:5,custoOuro:20000,receita:{essencia_corrompida:3,nucleo_do_pesadelo:1}},
     'cajado_pesadelo':{id:'cajado_pesadelo',nome:'Cajado do Pesadelo',tipo:'cajado',raid:'pesadelo',atkBonus:5,elemento:'ANY',elementoBonus:5,custoOuro:20000,receita:{essencia_corrompida:3,nucleo_do_pesadelo:1}},
+    'tacape_lampiao':{id:'tacape_lampiao',nome:'Tacape do Cangaço',tipo:'tacape',raid:'lampiao',atkBonus:5,elemento:'FOGO',elementoBonus:5,custoOuro:18000,receita:{chapeu_couro:3,chapeu_couro_raro:1}},
+    'flecha_lampiao':{id:'flecha_lampiao',nome:'Flecha do Cangaço',tipo:'flecha',raid:'lampiao',atkBonus:5,elemento:'FOGO',elementoBonus:5,custoOuro:18000,receita:{chapeu_couro:3,chapeu_couro_raro:1}},
+    'cajado_lampiao':{id:'cajado_lampiao',nome:'Cajado do Cangaço',tipo:'cajado',raid:'lampiao',atkBonus:5,elemento:'FOGO',elementoBonus:5,custoOuro:18000,receita:{chapeu_couro:3,chapeu_couro_raro:1}},
 };
 
 // =================================================================
@@ -315,7 +344,7 @@ window.STORY_RAID_CONFIG = STORY_RAID_CONFIG;
 window.RAID_SKILL_SOUNDS = RAID_SKILL_SOUNDS;
 function raidGetConfig(raidId) { return STORY_RAID_CONFIG[raidId] || null; }
 function raidListAll() {
-    return ['teju_jagua','mboi_tui','monai','jasy_jatere','kurupi','ao_ao','luison','pesadelo']
+    return ['teju_jagua','mboi_tui','monai','jasy_jatere','kurupi','ao_ao','luison','pesadelo','lampiao']
         .map(id => STORY_RAID_CONFIG[id]).filter(Boolean);
 }
 function raidGetArma(id) { return RAID_ARMAS[id] || null; }
@@ -1448,8 +1477,13 @@ function raidEncontrarHandler(skillId) {
         'la_energizada':'raid_aoao_la_energizada',
         'colheita_sombria':'raid_luison_colheita_sombria',
         'legado_filhos':'raid_luison_legado_filhos',
+        'lampiao_tiro':'raid_lampiao_tiro',
+        'lampiao_peixeira':'raid_lampiao_peixeira',
+        'tiro':'raid_lampiao_tiro',
+        'peixeira':'raid_lampiao_peixeira',
     };
-    return mapa[skillId] || null;
+    const raidMensalSkillHandler = window.A_RAID_MENSAL?.skillHandlers?.[skillId];
+    return mapa[skillId] || raidMensalSkillHandler || null;
 }
 
 RAID_SKILLS['raid_luison_legado_filhos'] = async function(enemy, skill) {
@@ -1492,6 +1526,60 @@ RAID_SKILLS['raid_pesadelo_14_legados'] = async function(enemy, skill) {
     await RAID_SKILLS[hk](enemy, mock);
 };
 
+// =================================================================
+// HANDLERS — RAID MENSAL (LAMPIÃO)
+// =================================================================
+RAID_SKILLS['raid_lampiao_tiro'] = async function(enemy, skill) {
+    raidTocarSom('raid_lampiao_tiro');
+    if (typeof addLog === 'function') addLog(`${raidEmoji('lampiao')} ${skill.nome}!`);
+
+    const b = raidGetBossPrimario();
+    const c = raidGetBossCentro(b);
+    const cx = Math.floor(c.x), cy = Math.floor(c.y);
+
+    // Tiro em linha reta até distância 3
+    const tiles = [];
+    const dirs = [{dx:1,dy:0},{dx:-1,dy:0},{dx:0,dy:1},{dx:0,dy:-1}];
+    const dir = dirs[Math.floor(Math.random() * dirs.length)];
+    for (let i = 1; i <= 3; i++) {
+        const nx = cx + dir.dx * i, ny = cy + dir.dy * i;
+        if (nx < 0 || nx >= 8 || ny < 0 || ny >= 8) break;
+        tiles.push({ x: nx, y: ny });
+    }
+
+    const marcados = await raidTelegraphSkill(skill, tiles, {
+        impactScale: 1.5, impactEffect: 'flame_short', impactClass: 'fx-flame-short',
+    });
+    if (!marcados) return;
+    raidApplyDmgEmTiles(marcados, skill.danoBase || 5, skill);
+};
+
+RAID_SKILLS['raid_lampiao_peixeira'] = async function(enemy, skill) {
+    raidTocarSom('raid_lampiao_peixeira');
+    if (typeof addLog === 'function') addLog(`${raidEmoji('lampiao')} ${skill.nome}!`);
+
+    const b = raidGetBossPrimario();
+    const c = raidGetBossCentro(b);
+    const cx = Math.floor(c.x), cy = Math.floor(c.y);
+
+    // Área 3x3 ao redor do boss (corpo a corpo)
+    const tiles = [];
+    for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+            const nx = cx + dx, ny = cy + dy;
+            if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) {
+                tiles.push({ x: nx, y: ny });
+            }
+        }
+    }
+
+    const marcados = await raidTelegraphSkill(skill, tiles, {
+        impactScale: 1.7, impactEffect: 'slash', impactClass: 'fx-slash',
+    });
+    if (!marcados) return;
+    raidApplyDmgEmTiles(marcados, skill.danoBase || 6, skill);
+};
+
 function raidPesadeloSussurro() {
     if (!window._raidMode) return;
     window.raidPesadeloTurnos = (window.raidPesadeloTurnos || 0) + 1;
@@ -1525,7 +1613,7 @@ async function raidApplySkill(enemy, skill) {
         return RAID_SKILLS['raid_pesadelo_14_legados'](enemy, skill);
     }
 
-    const hk = raidEncontrarHandler(skill.id);
+    const hk = (skill && (skill.handler || skill.skillHandler)) || raidEncontrarHandler(skill.id);
     if (!hk || !RAID_SKILLS[hk]) {
         console.error('[raid] Handler não encontrado:', skill.id);
         if (typeof addLog === 'function') addLog(`⚠️ A habilidade ${skill.nome || skill.id} falhou; nenhum dano foi causado.`);
@@ -1541,6 +1629,18 @@ async function raidApplySkill(enemy, skill) {
 async function raidTurnoBoss() {
     if (!window._raidMode) return;
     if (!window.raidAtual) return;
+    if (window.raidAtual === 'lampiao') {
+        window._lampiaoTurnoPerfeito = true;
+        for (let y = 0; y < 8; y++) {
+            for (let x = 0; x < 8; x++) {
+                const i = y * 8 + x;
+                if (players.some(p => !p.dead && p.x === x && p.y === y) && grid[i] !== 'TERRA') {
+                    window._lampiaoTurnoPerfeito = false;
+                }
+                grid[i] = 'TERRA';
+            }
+        }
+    }
     if (window._endGameShowing) return;
 
     const cfg = raidGetConfig(window.raidAtual);
@@ -1591,7 +1691,7 @@ async function raidTurnoBoss() {
         await raidTurnoAnimais();
     }
 
-    // 3. Skill
+    // 3. Skill — usa os skills definidos no config (boss mensal usa skillHandler real)
     const atacante = bs[0];
     if (atacante && !atacante.dead) {
         const skill = cfg.skills[Math.floor(Math.random() * cfg.skills.length)];
@@ -1686,6 +1786,7 @@ const RAID_COOP_PREFIX = 'Raid:';
 function raidPrepararModoRaid(raidId) {
     const cfg = raidGetConfig(raidId);
     if (!cfg) return false;
+    if (typeof window.validarRaidMensal === 'function' && !window.validarRaidMensal(raidId)) return false;
 
     window._raidMode = true;
     window.raidAtual = raidId;
@@ -1739,6 +1840,7 @@ async function raidIniciarBatalha(raidId) {
                 const raidId = faseId.slice(RAID_COOP_PREFIX.length);
                 const cfg = raidGetConfig(raidId);
                 if (!cfg) { uiAviso('Raid inválida.'); return; }
+                if (typeof window.validarRaidMensal === 'function' && !window.validarRaidMensal(raidId)) return;
 
                 if (!raidTemOuroSuficiente(cfg.custoEntrada)) {
                     uiAviso('Ouro insuficiente.');
@@ -2012,6 +2114,7 @@ function raidAbrirModalEntrada(raidId, tipo) {
 async function raidIniciarSoloViaCoop(raidId, options = {}) {
     const cfg = raidGetConfig(raidId);
     if (!cfg) return;
+    if (typeof window.validarRaidMensal === 'function' && !window.validarRaidMensal(raidId)) return;
     const multiplayer = options.coop === true;
     const isResume = options.resume === true;
     const isCoopHost = !multiplayer || coopRole === 'criador';
@@ -2042,8 +2145,13 @@ async function raidIniciarSoloViaCoop(raidId, options = {}) {
     const monday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
     const weekKey = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`;
-    if (attempt?.week === weekKey && !isResume) {
-        uiAviso('Esta Raid já teve sua tentativa semanal consumida, independentemente da dificuldade.');
+    const raidMensalConfig = cfg.raidMensal && typeof window.getRaidMensalConfig === 'function'
+        ? window.getRaidMensalConfig() : null;
+    const attemptKey = raidMensalConfig?.monthKey || weekKey;
+    if ((raidMensalConfig ? attempt?.month === attemptKey : attempt?.week === weekKey) && !isResume) {
+        uiAviso(raidMensalConfig
+            ? 'Você já usou sua tentativa mensal contra o Lampião.'
+            : 'Esta Raid já teve sua tentativa semanal consumida, independentemente da dificuldade.');
         return;
     }
 
@@ -2055,11 +2163,12 @@ async function raidIniciarSoloViaCoop(raidId, options = {}) {
 
     const heroName = STORY_HERO_CLASSES[heroClass].displayName || heroClass;
     if (!multiplayer) {
+        const periodoTexto = raidMensalConfig ? 'mensal' : 'semanal';
         const okEntradaRaid = await uiConfirm(
             `⚔️ ENTRAR NO RAID\n\n${cfg.nome} — ${cfg.titulo}\n` +
             `Dificuldade: ${difficulty === 'dificil' ? 'Difícil' : difficulty === 'pesadelo' ? 'Pesadelo' : 'Normal'}\n` +
             `Herói: ${heroName}\nCusto: ${entryCost} ouro\n\n` +
-            `A entrada e a tentativa semanal são consumidas ao começar. Continuar?`,
+            `A entrada e a tentativa ${periodoTexto} são consumidas ao começar. Continuar?`,
             { titulo: 'Entrar no raid', ok: 'Entrar', cancelar: 'Cancelar' }
         );
         if (!okEntradaRaid) return;
@@ -2075,7 +2184,7 @@ async function raidIniciarSoloViaCoop(raidId, options = {}) {
             STORY_PROGRESS.raidAttempts = {};
         }
         STORY_PROGRESS.raidAttempts[raidId] = {
-            week: weekKey,
+            ...(raidMensalConfig ? { month: attemptKey } : { week: weekKey }),
             difficulty,
             heroes: [heroClass],
             startedAt: Date.now(),
@@ -2110,6 +2219,7 @@ async function raidIniciarSoloViaCoop(raidId, options = {}) {
 
     // Configura modo raid
     raidPrepararModoRaid(raidId);
+    if (cfg.raidMensal) window._regionalRaidContext = true;
     raidRole = null;
     raidRoomId = null;
     if (!multiplayer) {
@@ -2406,8 +2516,13 @@ async function raidExecutarAcao(active) {
     const info = CLASS_DB[active.class] || { atk: 2, min: 0 };
     const heroData = STORY_HERO_CLASSES[active.class] || { role: 'Guerreiro' };
     const usedPath = [...path];
-    const threshold = parseInt(document.getElementById('bravely_tiles')?.value) || 9;
+    const lampiaoConfig = raidGetConfig('lampiao');
+    const lampiaoActive = window.raidAtual === 'lampiao';
+    const sacredBonus = lampiaoActive ? (window._lampiaoSoloSagradoBonus || 0) : 0;
+    const baseThreshold = parseInt(document.getElementById('bravely_tiles')?.value) || 9;
+    const threshold = Math.max(1, baseThreshold - sacredBonus);
     const isBravely = usedPath.length >= threshold;
+    let lampiaoQuadradoBonus = 0;
 
     let skillAtkBonus = 0;
     const shape = (typeof detectShape === 'function') ? detectShape(usedPath) : null;
@@ -2415,7 +2530,10 @@ async function raidExecutarAcao(active) {
         if (shape === 'LINHA') { skillAtkBonus = 2; active.hp = Math.min(active.maxHp, active.hp + 1); if (typeof showHealEffect === 'function') showHealEffect(active.x, active.y, 1); }
         if (shape === 'L') { active.hp = Math.min(active.maxHp, active.hp + 2); if (typeof showHealEffect === 'function') showHealEffect(active.x, active.y, 2); }
         if (shape === 'ZIGZAG') skillAtkBonus = 3;
-        if (shape === 'QUADRADO') active.skillUsed = false;
+        if (shape === 'QUADRADO') {
+            active.skillUsed = false;
+            if (lampiaoActive) lampiaoQuadradoBonus = lampiaoConfig?.passiva?.soloSagradoPorQuadrado || 1;
+        }
     }
 
     let levelBonus = { atk: 0 };
@@ -2437,6 +2555,23 @@ async function raidExecutarAcao(active) {
     const titleAtkBonus = active.titleBonus?.ATK || 0;
     const tileBonus = (usedPath.length > 0 && grid[usedPath[0]] === active.element) ? 1 : 0;
     const totalAtk = info.atk + (active.bonusAtk || 0) + (levelBonus.atk || 0) + tileBonus + skillAtkBonus + titleAtkBonus + weaponElementBonus;
+
+    // A janela de piso perfeito começa quando o boss inicia seu turno e termina
+    // quando o primeiro herói completa a próxima ação: assim os dois heróis de
+    // uma partida em dupla não ganham cargas repetidas no mesmo turno do chefe.
+    if (lampiaoActive) {
+        window._lampiaoActionSerial = (window._lampiaoActionSerial || 0) + 1;
+        window._lampiaoTurnoPerfeito = true;
+        for (let y = 0; y < 8; y++) {
+            for (let x = 0; x < 8; x++) {
+                const i = y * 8 + x;
+                const isMarked = path.includes(i);
+                const protectedGround = grid[i] === 'TERRA' || grid[i] === 'AGUA';
+                if (isMarked && !protectedGround) window._lampiaoTurnoPerfeito = false;
+                if (protectedGround) grid[i] = 'TERRA';
+            }
+        }
+    }
 
     if (heroData.role === 'Guerreiro') {
         const deal = () => {
@@ -2493,7 +2628,39 @@ async function raidExecutarAcao(active) {
 
     if (isBravely) {
         const b = raidGetBossPrimario();
-        await raidExecutarPoderAncestral(active, b, totalAtk);
+        const oldLength = path.length;
+        try {
+            if (sacredBonus > 0 && oldLength >= threshold) {
+                const target = raidGetTargetForPoderAncestral(active, b);
+                const damageBefore = b?.hp;
+                const storyModeAnterior = window._storyMode;
+                const applyDmgOriginal = window.applyDmg;
+                window._storyMode = true;
+                if (typeof applyDmgOriginal === 'function') {
+                    window.applyDmg = function(alvo, dano) {
+                        const raidBoss = raidGetBosses().find(item => item === alvo || (alvo === target && item === b));
+                        return raidBoss ? raidAplicarDanoNoBoss(raidBoss, dano) : applyDmgOriginal.apply(this, arguments);
+                    };
+                }
+                try {
+                    if (typeof triggerBravelyChain === 'function') await triggerBravelyChain(active, target, totalAtk);
+                } finally {
+                    if (typeof applyDmgOriginal === 'function') window.applyDmg = applyDmgOriginal;
+                    window._storyMode = storyModeAnterior;
+                }
+                if (lampiaoActive && b && b.hp < damageBefore) {
+                    window._lampiaoSoloSagradoBonus = 0;
+                    if (typeof addLog === 'function') addLog('🔫 O rifle mágico atravessou a aura do Lampião!');
+                }
+            } else {
+                await raidExecutarPoderAncestral(active, b, totalAtk);
+            }
+        } finally {
+            if (lampiaoActive) {
+                const cap = lampiaoConfig?.passiva?.maxSoloSagrado || 2;
+                window._lampiaoSoloSagradoBonus = Math.min(cap, (window._lampiaoSoloSagradoBonus || 0) + lampiaoQuadradoBonus);
+            }
+        }
     }
 
     path = [];
@@ -2524,6 +2691,17 @@ async function raidAposTurnoSolo() {
         if (typeof updateHeroCard === 'function') updateHeroCard();
         return;
     }
+
+    // A passiva do Lampião aumenta o threshold depois de resolução limpa do turno.
+    if (window.raidAtual === 'lampiao' && window._lampiaoTurnoPerfeito) {
+        const cfg = raidGetConfig('lampiao');
+        const cap = cfg?.passiva?.maxSoloSagrado || 2;
+        if ((window._lampiaoSoloSagradoBonus || 0) < cap) {
+            window._lampiaoSoloSagradoBonus = (window._lampiaoSoloSagradoBonus || 0) + 1;
+            if (typeof addLog === 'function') addLog(`🤠 O Chapéu de Couro brilhou: +1 casa no próximo Poder Ancestral (${window._lampiaoSoloSagradoBonus}/${cap}).`);
+        }
+    }
+    window._lampiaoTurnoPerfeito = false;
 
     // Turno do boss
     window._raidTurnoRodando = true;
@@ -2645,9 +2823,12 @@ function raidMostrarTelaFinal(vitoria, cfg, drops) {
         dropsHTML += '</div>';
     }
     const equipment = window._regionalRaidWonEquipment;
+    const monthlyEquipment = vitoria && cfg?.raidMensal ? cfg.recompensaMensal : null;
     const equipmentHTML = equipment
         ? `<div class="victory-lore">${equipment.emoji} <b>${equipment.nome}</b> caiu como recompensa rara e foi para a Tesouraria.</div>`
-        : '';
+        : monthlyEquipment
+            ? `<div class="victory-lore">${monthlyEquipment.emoji} <b>${monthlyEquipment.nome}</b> foi para a Tesouraria.</div>`
+            : '';
     const knowledge = vitoria && window._regionalRaidKnowledgeResult;
     const knowledgeHTML = knowledge
         ? `<div class="victory-lore">📖 Conhecimento do chefe: nível ${knowledge.nivel}${knowledge.nivel === 3 ? ' · DOMINADO' : ''}${knowledge.mudou ? ' (novo)' : ''}. Consulte o Bestiário.</div>`
@@ -3163,6 +3344,42 @@ window.raidAbrirTelaSelecao = raidAbrirTelaSelecao;
 window.raidAbrirModalEntrada = raidAbrirModalEntrada;
 window.raidAbrirTelaForja = raidAbrirTelaForja;
 window.raidForjarArma = raidForjarArma;
+// =================================================================
+// SISTEMA DE RAID MENSAL (LAMPIÃO)
+// =================================================================
+function getRaidMensalConfig() {
+    const agora = new Date();
+    const monthKey = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}`;
+    const day = agora.getDate();
+    const active = day >= 1 && day <= 5;
+    const endDay = 5;
+    return { monthKey, active, endDay, bossId: 'lampiao' };
+}
+window.getRaidMensalConfig = getRaidMensalConfig;
+
+function validarRaidMensal(raidId) {
+    if (raidId !== 'lampiao') return true;
+    const cfg = getRaidMensalConfig();
+    if (!cfg.active) {
+        if (typeof uiAviso === 'function') {
+            uiAviso(`⏳ O Lampião só aparece do dia 1 ao 5 de cada mês.\nHoje é dia ${new Date().getDate()} — tente novamente no próximo período!`);
+        }
+        return false;
+    }
+    return true;
+}
+window.validarRaidMensal = validarRaidMensal;
+
+const A_RAID_MENSAL = {
+    bossId: 'lampiao',
+    skillHandlers: {
+        'lampiao_tiro': 'raid_lampiao_tiro',
+        'lampiao_peixeira': 'raid_lampiao_peixeira',
+    },
+};
+window.A_RAID_MENSAL = A_RAID_MENSAL;
+
+// =================================================================
 window.raidIcon = raidIcon;
 window.raidEmoji = raidEmoji;
 window.raidGetConfig = raidGetConfig;
@@ -3174,6 +3391,9 @@ window.raidLimparEstado = raidLimparEstado;
 window.raidIniciarSoloViaCoop = raidIniciarSoloViaCoop;
 window.RAID_SPRITES = RAID_SPRITES;
 window.RAID_EMOJIS = RAID_EMOJIS;
+window.getRaidMensalConfig = getRaidMensalConfig;
+window.validarRaidMensal = validarRaidMensal;
+window.A_RAID_MENSAL = A_RAID_MENSAL;
 
 console.log('✅ raid.js V5.0 — Bloco 5/5 (UI + CSS) carregado.');
 console.log('⚔️ Modo RAID pronto. Aldeia → ⚔️ RAID');
