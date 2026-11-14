@@ -48,6 +48,8 @@ let coopPartidaConcluida = false;
 let coopEventosTurno = [];
 let coopReplayRodando = false;
 let coopSalasAbertasCache = [];
+let coopUltimoTurnoBossKey = null;
+let coopBossTurnoArmado = false;
 
 // Buffer de eventos do boss
 let coopBufferEventosBoss = [];
@@ -73,6 +75,42 @@ function coopMeuIdx() {
 
 function coopMeuUid() {
     return coopUser?.uid || null;
+}
+
+// Validação da restrição de classe/elemento do evento dos Sete Selados.
+// Vale para QUALQUER jogador (anfitrião ou convidado) e também ao
+// continuar uma sala já existente.
+function coopValidarRestricaoConteudo(content, heroClass) {
+    if (!content || content.type !== 'selados') return { valido: true };
+    if (String(content.phaseId) === 'pesadelo' || content.bossId === 'pesadelo') {
+        return { valido: true };
+    }
+    const boss = window.EVENTO_BOSSES?.[content.bossId];
+    if (!boss?.restricao) return { valido: true };
+
+    const hero = STORY_HERO_CLASSES[heroClass];
+    if (!hero) return { valido: false, motivo: 'Herói inválido no save.' };
+
+    const restricao = boss.restricao;
+    const nomeHeroi = hero.displayName || heroClass;
+    if (restricao.tipo === 'classe' && hero.role !== restricao.valor) {
+        return {
+            valido: false,
+            motivo: `Este ato exige ${restricao.valor}s. Seu herói atual (${nomeHeroi}) é ${hero.role}.`,
+        };
+    }
+    if (restricao.tipo === 'elemento') {
+        const elemento = typeof window.getElementoRealDoHeroi === 'function'
+            ? window.getElementoRealDoHeroi(heroClass)
+            : hero.element;
+        if (elemento && elemento !== restricao.valor) {
+            return {
+                valido: false,
+                motivo: `Este ato exige heróis de ${restricao.valor}. Seu herói atual (${nomeHeroi}) é de ${elemento}.`,
+            };
+        }
+    }
+    return { valido: true };
 }
 
 function coopValidarConteudo(content, heroClass, isHost) {
@@ -131,6 +169,12 @@ function coopValidarConteudo(content, heroClass, isHost) {
         if (boss && boss.diaSemana !== new Date().getDay()) {
             return { valido: false, motivo: 'Este evento dos Sete Selados não está ativo hoje.' };
         }
+        // Restrição de classe/elemento do dia vale para QUALQUER jogador
+        // (anfitrião ou convidado). Sem isso o convidado entrava na sala e
+        // ficava preso numa tela escura, porque eventoIniciarBatalha recusa
+        // a batalha no meio da inicialização.
+        const restricaoCheck = coopValidarRestricaoConteudo(content, heroClass);
+        if (!restricaoCheck.valido) return restricaoCheck;
         if (isHost) {
             const progress = typeof window.getEventoProgresso === 'function'
                 ? window.getEventoProgresso(content.bossId) : null;
@@ -160,13 +204,30 @@ function coopValidarConteudo(content, heroClass, isHost) {
         const monday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
         monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
         const week = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`;
-        if (STORY_PROGRESS.raidAttempts?.[content.raidId]?.week === week) {
-            return { valido: false, motivo: 'Esta Raid já teve sua tentativa semanal consumida.' };
-        }
-        const costMultiplier = { normal: 1, dificil: 1.5, pesadelo: 2 }[content.difficulty] || 1;
-        const cost = Math.round(cfg.custoEntrada * costMultiplier);
-        if (isHost && (STORY_PROGRESS.gold || 0) < cost) {
-            return { valido: false, motivo: `O anfitrião precisa de ${cost} ouro para abrir esta Raid.` };
+        // A tentativa (semanal/mensal) pertence a quem ABRE a sala.
+        // Convidados jogam de graça e podem entrar mesmo já tendo
+        // consumido a própria tentativa.
+        if (isHost) {
+            const mensal = cfg.raidMensal && typeof window.getRaidMensalConfig === 'function'
+                ? window.getRaidMensalConfig()
+                : null;
+            const tentativa = STORY_PROGRESS.raidAttempts?.[content.raidId];
+            const consumida = mensal
+                ? tentativa?.month === mensal.monthKey
+                : tentativa?.week === week;
+            if (consumida) {
+                return {
+                    valido: false,
+                    motivo: mensal
+                        ? 'Esta Raid já teve sua tentativa mensal consumida.'
+                        : 'Esta Raid já teve sua tentativa semanal consumida.',
+                };
+            }
+            const costMultiplier = { normal: 1, dificil: 1.5, pesadelo: 2 }[content.difficulty] || 1;
+            const cost = Math.round(cfg.custoEntrada * costMultiplier);
+            if ((STORY_PROGRESS.gold || 0) < cost) {
+                return { valido: false, motivo: `O anfitrião precisa de ${cost} ouro para abrir esta Raid.` };
+            }
         }
         return { valido: true };
     }
@@ -857,6 +918,8 @@ async function coopEntrarSala(roomId) {
     coopBufferEventosBoss = [];
     coopCapturandoEventosBoss = false;
     coopEnemyAlreadyDead = false;
+    coopBossTurnoArmado = false;
+    coopUltimoTurnoBossKey = null;
     window._coopCriadorHeroClass = room.criador.heroiClass;
     window._coopOponenteHeroClass = meuHeroClass;
     window._coopOponenteNome = meuNome;
@@ -1002,7 +1065,7 @@ function coopRebuildPlayers() {
 
     coopRenderTudo();
 
-    if (rd.coopContent?.type === 'raid-regional'
+    if ((rd.coopContent?.type === 'raid-regional' || window._raidMode)
         && rd.estadoJogo?.raid
         && typeof window.raidAplicarEstadoCoop === 'function') {
         window.raidAplicarEstadoCoop(rd.estadoJogo.raid);
@@ -1406,6 +1469,16 @@ async function coopProcessarMorteBoss() {
         return;
     }
 
+    // ⭐ Guard anti-duplicação (fases com vários inimigos).
+    // Chamadas atrasadas (ex.: V10.6 com 600ms) podem chegar DEPOIS de o
+    // próximo inimigo já ter entrado em campo (boss.dead = false). Sem esta
+    // checagem, a segunda chamada "pulava" um inimigo ou declarava vitória
+    // cedo — era o travamento nas fases com mais de um inimigo.
+    if (!boss || boss.dead !== true) {
+        coopLog('Morte ignorada: o inimigo atual não está morto.');
+        return;
+    }
+
     coopProcessandoMorteBoss = true;
     coopLog('Boss morreu. Verificando se tem próximo...');
     coopLog('  storyEnemiesRemaining:', storyEnemiesRemaining);
@@ -1582,9 +1655,10 @@ function coopCapturarEstado() {
             class: p.class, element: p.element, name: p.name,
             skillUsed: p.skillUsed, dead: p.dead, bonusAtk: p.bonusAtk || 0,
         })),
+        enemiesRemaining: Array.isArray(storyEnemiesRemaining) ? [...storyEnemiesRemaining] : [],
         boss: {
             x: boss.x, y: boss.y, hp: boss.hp, maxHp: boss.maxHp,
-            type: boss.type, dead: boss.dead,
+            type: boss.type, nome: boss.nome, dead: boss.dead,
             _corruptedTriggered: boss._corruptedTriggered === true,
         },
     };
@@ -1721,183 +1795,211 @@ async function coopRodarBossP2() {
     if (!coopRoomId) return;
     if (coopPartidaConcluida) return;
     if (coopEnemyAlreadyDead) {
-        coopLog('coopRodarBossP2: inimigo já morto, ignorando.');
-        return;
+        // Um novo inimigo pode ter entrado em campo (P1 avançou a fila).
+        // Sem este reset o P2 ignorava todos os turnos seguintes do boss.
+        if (boss && !boss.dead) {
+            coopEnemyAlreadyDead = false;
+        } else {
+            coopLog('coopRodarBossP2: inimigo já morto, ignorando.');
+            return;
+        }
     }
 
     coopBossRunning = true;
     coopLog('P2 rodando boss...');
 
     try {
-        const doc = await fbDb.collection(COOP_ROOMS).doc(coopRoomId).get();
-        if (doc.exists) {
-            coopRoomData = { id: doc.id, ...doc.data() };
-            coopAplicarEstadoDoRoom(coopRoomData);
-        }
-    } catch (e) {}
-
-    await coopSleep(500);
-
-    // Snapshot do HP antes
-    const hpAntes = players.map(p => ({ id: p.id, hp: p.hp, maxHp: p.maxHp }));
-    const bossXAntes = boss.x;
-    const bossYAntes = boss.y;
-
-    // Inicia captura
-    coopBufferEventosBoss = [];
-    coopCapturandoEventosBoss = true;
-    coopForcarBoss = true;
-    window._coopV82BatchHasApplySkill = false; // Limpa flag de batch
-    const isEventoCoop = ['selados', 'nacoes'].includes(coopContent?.type);
-    if (isEventoCoop) window._eventoTurnoJogador = false;
-
-    try {
-        // Aguarda banner "BOSS ENFURECIDO" sair antes de agir (máx. 4s)
-        if (window._bossEnfurecidoAviso) {
-            const _inicio = Date.now();
-            while (window._bossEnfurecidoAviso && (Date.now() - _inicio) < 4500) {
-                await new Promise(r => setTimeout(r, 100));
+        try {
+            const doc = await fbDb.collection(COOP_ROOMS).doc(coopRoomId).get();
+            if (doc.exists) {
+                coopRoomData = { id: doc.id, ...doc.data() };
+                coopAplicarEstadoDoRoom(coopRoomData);
             }
-        }
-        if (window._raidMode && window.raidAtual) {
-            if (typeof window.raidTurnoBoss !== 'function') {
-                throw new Error('A IA da Raid não está disponível durante o turno cooperativo.');
+        } catch (e) {}
+
+        await coopSleep(500);
+
+        // Snapshot do HP antes
+        const hpAntes = players.map(p => ({ id: p.id, hp: p.hp, maxHp: p.maxHp }));
+        const bossXAntes = boss.x;
+        const bossYAntes = boss.y;
+
+        // Inicia captura
+        coopBufferEventosBoss = [];
+        coopCapturandoEventosBoss = true;
+        coopForcarBoss = true;
+        window._coopV82BatchHasApplySkill = false; // Limpa flag de batch
+        const isEventoCoop = ['selados', 'nacoes'].includes(coopContent?.type);
+        if (isEventoCoop) window._eventoTurnoJogador = false;
+
+        try {
+            // Aguarda banner "BOSS ENFURECIDO" sair antes de agir (máx. 4s)
+            if (window._bossEnfurecidoAviso) {
+                const _inicio = Date.now();
+                while (window._bossEnfurecidoAviso && (Date.now() - _inicio) < 4500) {
+                    await new Promise(r => setTimeout(r, 100));
+                }
             }
-            await window.raidTurnoBoss();
-        } else if (typeof storyEnemyAI === 'function') {
-            await storyEnemyAI();
-        } else if (typeof bossAI === 'function') {
-            await bossAI();
-        }
-    } catch (e) {
-        console.error('[coop] Erro na IA:', e);
-    } finally {
-        if (isEventoCoop) window._eventoTurnoJogador = true;
-    }
-
-    coopForcarBoss = false;
-    coopCapturandoEventosBoss = false;
-
-    await coopSleep(500);
-
-    // Se boss morreu durante o turno
-    if (boss.dead) {
-        coopLog('Boss morreu durante o turno do P2.');
-        coopEnemyAlreadyDead = true;
-
-        // Se ainda não processou a morte, processa agora
-        if (!coopProcessandoMorteBoss && !coopPartidaConcluida) {
-            coopLog('Processando morte do boss após turno do P2.');
-            await coopProcessarMorteBoss();
+            if (window._raidMode && window.raidAtual) {
+                if (typeof window.raidTurnoBoss !== 'function') {
+                    throw new Error('A IA da Raid não está disponível durante o turno cooperativo.');
+                }
+                await window.raidTurnoBoss();
+            } else if (typeof storyEnemyAI === 'function') {
+                await storyEnemyAI();
+            } else if (typeof bossAI === 'function') {
+                await bossAI();
+            }
+        } catch (e) {
+            console.error('[coop] Erro na IA:', e);
+        } finally {
+            if (isEventoCoop) window._eventoTurnoJogador = true;
         }
 
-        coopBossRunning = false;
-        return;
-    }
+        coopForcarBoss = false;
+        coopCapturandoEventosBoss = false;
 
-    // Verifica movimento final
-    if (boss.x !== bossXAntes || boss.y !== bossYAntes) {
-        const jaTemMovimentoFinal = coopBufferEventosBoss.some(
-            e => e.tipo === 'boss_move' && e.x === boss.x && e.y === boss.y
-        );
-        if (!jaTemMovimentoFinal) {
-            coopBufferEventosBoss.push({
-                tipo: 'boss_move',
-                x: boss.x,
-                y: boss.y,
-                uid: coopMeuUid(),
-                role: coopRole,
-                em: Date.now(),
-            });
-        }
-    }
+        await coopSleep(500);
 
-    const bossAtk = parseInt(document.getElementById('atk_BOSS_cfg')?.value) || 4;
+        // Se boss morreu durante o turno
+        if (boss.dead) {
+            coopLog('Boss morreu durante o turno do P2.');
+            coopEnemyAlreadyDead = true;
 
-    // Fallback conservador: só aplica dano se dist <= 1 E se a skill não aplicou
-    players.forEach((p, i) => {
-        if (p.dead) return;
-        const antes = hpAntes[i];
-        if (!antes) return;
-        const hpMudou = p.hp < antes.hp;
-        if (hpMudou) {
-            coopLog(`${p.name} já recebeu dano da IA (${antes.hp} → ${p.hp})`);
+            // Se ainda não processou a morte, processa agora
+            if (!coopProcessandoMorteBoss && !coopPartidaConcluida) {
+                coopLog('Processando morte do boss após turno do P2.');
+                await coopProcessarMorteBoss();
+            }
+
             return;
         }
-        const dist = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
-        if (dist <= 1) {
-            p.hp = Math.max(0, p.hp - bossAtk);
-            if (typeof showDmgEffect === 'function') showDmgEffect(p.x, p.y, bossAtk);
-            coopLog(`Fallback: dano ${bossAtk} em ${p.name} (dist ${dist})`);
-            if (p.hp <= 0) {
-                p.dead = true;
-                const tok = document.getElementById(`tokenP${i}`);
-                if (tok) tok.classList.add('dead');
+
+        // Verifica movimento final
+        if (boss.x !== bossXAntes || boss.y !== bossYAntes) {
+            const jaTemMovimentoFinal = coopBufferEventosBoss.some(
+                e => e.tipo === 'boss_move' && e.x === boss.x && e.y === boss.y
+            );
+            if (!jaTemMovimentoFinal) {
+                coopBufferEventosBoss.push({
+                    tipo: 'boss_move',
+                    x: boss.x,
+                    y: boss.y,
+                    uid: coopMeuUid(),
+                    role: coopRole,
+                    em: Date.now(),
+                });
             }
         }
-    });
 
-    if (typeof updateVisuals === 'function') updateVisuals();
-    if (typeof updateHeroCard === 'function') updateHeroCard();
-
-    const estado = coopCapturarEstado();
-    const todosMortos = estado.players.every(p => p.dead);
-    const temProximoInimigo = Array.isArray(storyEnemiesRemaining)
-                              && storyEnemiesRemaining.length > 1;
-
-    // Eventos de ataque do boss
-    const eventosBoss = [...coopBufferEventosBoss];
-    players.forEach((p, i) => {
-        const antes = hpAntes[i];
-        if (!antes) return;
-        const dmgTomado = antes.hp - p.hp;
-        if (dmgTomado > 0) {
-            eventosBoss.push({
-                tipo: 'boss_attack',
-                alvoId: p.id,
-                alvoX: p.x,
-                alvoY: p.y,
-                dmg: dmgTomado,
-                uid: coopMeuUid(),
-                role: coopRole,
-                em: Date.now(),
-            });
+        // Eventos (Sete Selados/Nações): no turno de um ANIMAL, o fallback
+        // deve usar o ATK do animal atual — não o ATK configurado do boss.
+        let bossAtk = parseInt(document.getElementById('atk_BOSS_cfg')?.value) || 4;
+        if (window._eventoBatalha && Array.isArray(storyEnemiesRemaining)
+            && storyEnemiesRemaining.length > 0) {
+            const idAtual = storyEnemiesRemaining[0];
+            const cfgAtual = typeof STORY_ENEMIES !== 'undefined' ? STORY_ENEMIES[idAtual] : null;
+            if (cfgAtual && Number(cfgAtual.atk) > 0) {
+                bossAtk = Number(cfgAtual.atk);
+            }
         }
-    });
 
-    const update = {
-        'estadoJogo.grid': estado.grid,
-        'estadoJogo.amulets': estado.amulets,
-        'estadoJogo.corruptedTiles': estado.corruptedTiles,
-        'estadoJogo.players': estado.players,
-        'estadoJogo.boss': estado.boss,
-        'estadoJogo.ultimaAcao': {
-            tipo: 'turno_boss',
-            resumo: 'Boss atacou',
-            em: Date.now(),
-        },
-        'estadoJogo.eventosTurno': eventosBoss,
-        atualizadaEm: firebase.firestore.FieldValue.serverTimestamp(),
-    };
+        // Fallback conservador: só aplica dano se dist <= 1 E se a skill não aplicou
+        players.forEach((p, i) => {
+            if (p.dead) return;
+            const antes = hpAntes[i];
+            if (!antes) return;
+            const hpMudou = p.hp < antes.hp;
+            if (hpMudou) {
+                coopLog(`${p.name} já recebeu dano da IA (${antes.hp} → ${p.hp})`);
+                return;
+            }
+            const dist = Math.abs(p.x - boss.x) + Math.abs(p.y - boss.y);
+            if (dist <= 1) {
+                p.hp = Math.max(0, p.hp - bossAtk);
+                if (typeof showDmgEffect === 'function') showDmgEffect(p.x, p.y, bossAtk);
+                coopLog(`Fallback: dano ${bossAtk} em ${p.name} (dist ${dist})`);
+                if (p.hp <= 0) {
+                    p.dead = true;
+                    const tok = document.getElementById(`tokenP${i}`);
+                    if (tok) tok.classList.add('dead');
+                }
+            }
+        });
 
-    if (todosMortos) {
-        update.status = 'concluida';
-        update.vencedor = 'boss';
-        coopPartidaConcluida = true;
-    } else {
-        update.status = 'turno_joao';
-        update['estadoJogo.turnoDe'] = 'criador';
-    }
+        if (typeof updateVisuals === 'function') updateVisuals();
+        if (typeof updateHeroCard === 'function') updateHeroCard();
 
-    await fbDb.collection(COOP_ROOMS).doc(coopRoomId).update(update);
-    coopLog('Boss rodou (pelo P2). Status:', update.status, '| eventos:', eventosBoss.length);
+        const estado = coopCapturarEstado();
+        const todosMortos = estado.players.every(p => p.dead);
+        const temProximoInimigo = Array.isArray(storyEnemiesRemaining)
+                                  && storyEnemiesRemaining.length > 1;
 
-    coopBossRunning = false;
+        // Eventos de ataque do boss
+        const eventosBoss = [...coopBufferEventosBoss];
+        players.forEach((p, i) => {
+            const antes = hpAntes[i];
+            if (!antes) return;
+            const dmgTomado = antes.hp - p.hp;
+            if (dmgTomado > 0) {
+                eventosBoss.push({
+                    tipo: 'boss_attack',
+                    alvoId: p.id,
+                    alvoX: p.x,
+                    alvoY: p.y,
+                    dmg: dmgTomado,
+                    uid: coopMeuUid(),
+                    role: coopRole,
+                    em: Date.now(),
+                });
+            }
+        });
 
-    if (update.status === 'concluida') {
-        coopFinalizar(false);
-    } else {
-        coopPausar();
+        const update = {
+            'estadoJogo.grid': estado.grid,
+            'estadoJogo.amulets': estado.amulets,
+            'estadoJogo.corruptedTiles': estado.corruptedTiles,
+            'estadoJogo.players': estado.players,
+            'estadoJogo.boss': estado.boss,
+            'estadoJogo.enemiesRemaining': Array.isArray(storyEnemiesRemaining) ? [...storyEnemiesRemaining] : [],
+            'estadoJogo.ultimaAcao': {
+                tipo: 'turno_boss',
+                resumo: 'Boss atacou',
+                em: Date.now(),
+            },
+            'estadoJogo.eventosTurno': eventosBoss,
+            atualizadaEm: firebase.firestore.FieldValue.serverTimestamp(),
+        };
+
+        // Raid: o P1 precisa ver a telegrafia e o movimento dos bosses
+        // feitos no turno do P2 (estadoJogo.boss só cobre o boss principal).
+        if (window._raidMode && typeof window.raidCapturarEstadoCoop === 'function') {
+            try {
+                update['estadoJogo.raid'] = window.raidCapturarEstadoCoop();
+            } catch (e) {
+                console.warn('[coop] Falha ao capturar estado da raid:', e);
+            }
+        }
+
+        if (todosMortos) {
+            update.status = 'concluida';
+            update.vencedor = 'boss';
+            coopPartidaConcluida = true;
+        } else {
+            update.status = 'turno_joao';
+            update['estadoJogo.turnoDe'] = 'criador';
+        }
+
+        await fbDb.collection(COOP_ROOMS).doc(coopRoomId).update(update);
+        coopLog('Boss rodou (pelo P2). Status:', update.status, '| eventos:', eventosBoss.length);
+
+        if (update.status === 'concluida') {
+            coopFinalizar(false);
+        } else {
+            coopPausar();
+        }
+    } finally {
+        coopBossRunning = false;
     }
 }
 
@@ -1945,7 +2047,12 @@ function coopAplicarEstadoDoRoom(room) {
             if (emoji) emoji.remove();
 
             const idFromBoss = coopBossTypeToEnemyId(bt);
-            if (Array.isArray(storyEnemiesRemaining) && storyEnemiesRemaining.length > 0) {
+            // Só usa o fallback antigo (id derivado do tipo do boss) quando a
+            // sala NÃO publica a fila completa. Com `enemiesRemaining`, a fila
+            // é a fonte da verdade — sobrescrever aqui fazia o animal em campo
+            // virar o id do boss e assumir as skills dele.
+            if (!Array.isArray(room.estadoJogo.enemiesRemaining)
+                && Array.isArray(storyEnemiesRemaining) && storyEnemiesRemaining.length > 0) {
                 if (storyEnemiesRemaining[0] !== idFromBoss) {
                     console.log('[coop] Sincronizando fila:', storyEnemiesRemaining[0], '→', idFromBoss);
                     storyEnemiesRemaining[0] = idFromBoss;
@@ -1991,7 +2098,22 @@ function coopAplicarEstadoDoRoom(room) {
 
     coopRenderTudo();
 
-    if (room.coopContent?.type === 'raid-regional'
+    // Fila de inimigos: mantém os dois clientes exatamente iguais.
+    // Sem isso o P2 ficava com inimigos duplicados/velhos e travava
+    // nas fases com mais de um inimigo.
+    if (Array.isArray(room.estadoJogo.enemiesRemaining)
+        && Array.isArray(storyEnemiesRemaining)) {
+        const fila = room.estadoJogo.enemiesRemaining.filter(Boolean);
+        const igual = fila.length === storyEnemiesRemaining.length
+            && fila.every((id, i) => id === storyEnemiesRemaining[i]);
+        if (fila.length > 0 && !igual) {
+            storyEnemiesRemaining.length = 0;
+            fila.forEach(id => storyEnemiesRemaining.push(id));
+            coopLog('[coop] Fila de inimigos sincronizada:', fila);
+        }
+    }
+
+    if ((room.coopContent?.type === 'raid-regional' || window._raidMode)
         && room.estadoJogo.raid
         && typeof window.raidAplicarEstadoCoop === 'function') {
         window.raidAplicarEstadoCoop(room.estadoJogo.raid);
@@ -2049,9 +2171,36 @@ async function coopReproduzirEventos(eventos) {
         }
     } finally {
         coopCapturandoEventosBoss = tempCaptura;
+        // Reconsulta o #grid: se o tabuleiro foi recriado durante o replay,
+        // o elemento capturado no início fica obsoleto e a trava continuava
+        // no elemento novo. Aplicar nos dois é barato e seguro.
         if (gridEl) gridEl.style.pointerEvents = '';
+        const gridAtual = document.getElementById('grid');
+        if (gridAtual) gridAtual.style.pointerEvents = '';
         coopReplayRodando = false;
         coopLog('Replay finalizado.');
+        // ⭐ Reavalia o turno DEPOIS do replay. Se o snapshot do meu turno
+        // chegou enquanto o replay rodava, o desbloqueio agendado era
+        // descartado e o tabuleiro/botões ficavam travados. Aqui garantimos
+        // que o estado final (meu turno / turno do outro) seja aplicado.
+        setTimeout(() => {
+            if (!coopReplayRodando && typeof coopReavaliarTurno === 'function') {
+                // ⭐ Reaplica o estado autoritativo da sala depois do replay.
+                // Os handlers de skill restauram só os arrays internos
+                // (grid/players), não as classes dos tiles. Sem isso o
+                // tabuleiro ficava com cores diferentes do grid real (ex.:
+                // Julgamento da Bochica deixava tudo TERRA) e o jogador não
+                // conseguia montar o caminho — parecia "tabuleiro travado".
+                if (coopRoomData) {
+                    try {
+                        coopAplicarEstadoDoRoom(coopRoomData);
+                    } catch (e) {
+                        console.warn('[coop] Falha ao reaplicar estado após replay:', e);
+                    }
+                }
+                coopReavaliarTurno();
+            }
+        }, 150);
     }
 }
 
@@ -2071,6 +2220,11 @@ async function coopReproduzirEventoIndividual(evento) {
         }
 
         case 'boss_move': {
+            // Atualiza estado interno do boss
+            boss.x = evento.x;
+            boss.y = evento.y;
+
+            // Atualiza visual
             const bossToken = document.getElementById('tokenBoss');
             if (bossToken) {
                 const s = (typeof getStep === 'function') ? getStep() : 59;
@@ -2288,8 +2442,10 @@ function coopInstalarListener() {
             const meuTurnoDe = coopRole === 'criador' ? 'criador' : 'oponente';
             const meuTurno = turnoDe === meuTurnoDe;
 
-            // Sincroniza fila
-            if (data.estadoJogo?.boss?.type) {
+            // Sincroniza fila de inimigos. Quando a sala publica a fila
+            // completa, ela é aplicada em coopAplicarEstadoDoRoom; aqui só
+            // mantemos o fallback antigo (salas criadas antes do campo existir).
+            if (data.estadoJogo?.boss?.type && !Array.isArray(data.estadoJogo?.enemiesRemaining)) {
                 const bt = coopBossTypeNormalize(data.estadoJogo.boss.type);
                 const idFromBoss = coopBossTypeToEnemyId(bt);
                 if (Array.isArray(storyEnemiesRemaining) && storyEnemiesRemaining.length > 0) {
@@ -2311,6 +2467,54 @@ function coopInstalarListener() {
                 if (eventosOutros.length > 0) {
                     await coopReproduzirEventos(eventos);
                 }
+            }
+
+            // =========================================================
+            // TURNO DO BOSS NO P2
+            // ---------------------------------------------------------
+            // O P1 avança para o próximo inimigo e publica turno_boss.
+            // Sem este gatilho o P2 só pausava (meuTurno = false) e os
+            // dois jogadores ficavam parados para sempre em fases com
+            // mais de um inimigo (Sete Nações etc.).
+            // =========================================================
+            const bossTurnAgora = data.status === 'turno_boss' || turnoDe === 'boss';
+            if (coopRole === 'oponente' && bossTurnAgora
+                && !coopPartidaConcluida) {
+                if (!coopBossTurnoArmado) {
+                    coopBossTurnoArmado = true;
+                    coopUltimoTurnoBossKey = `${data.status}|${turnoDe}`;
+                    coopLog('[coop] Turno do boss recebido. P2 vai rodar.');
+                    try {
+                        coopAplicarEstadoDoRoom(data);
+                    } catch (e) {
+                        console.warn('[coop] Falha ao aplicar estado antes do boss:', e);
+                    }
+                    // Se o replay de eventos ainda estiver rodando, espera
+                    // ele terminar. Antes o gatilho era simplesmente ignorado
+                    // e o P2 ficava travado esperando um novo snapshot.
+                    const tentarRodarBoss = (tentativa = 0) => {
+                        if (!window._coopMode || coopRole !== 'oponente' || coopPartidaConcluida) return;
+                        if (coopReplayRodando) {
+                            if (tentativa < 120) {
+                                setTimeout(() => tentarRodarBoss(tentativa + 1), 250);
+                            }
+                            return;
+                        }
+                        // Outro caminho (publicação do próprio P2) já está
+                        // rodando o boss; não dispara em duplicidade.
+                        if (coopBossRunning) return;
+                        // A sala já saiu do turno do boss (outro caminho
+                        // rodou e publicou turno_joao). Não repete.
+                        const statusAtual = coopRoomData?.status;
+                        const turnoAtual = coopRoomData?.estadoJogo?.turnoDe;
+                        if (statusAtual !== 'turno_boss' && turnoAtual !== 'boss') return;
+                        Promise.resolve(coopRodarBossP2())
+                            .catch(e => console.warn('[coop] Erro no turno do boss (P2):', e));
+                    };
+                    setTimeout(() => tentarRodarBoss(0), 400);
+                }
+            } else if (!bossTurnAgora) {
+                coopBossTurnoArmado = false;
             }
 
             const meuIdx = coopMeuIdx();
@@ -2461,8 +2665,40 @@ function coopHabilitarBotoes() {
     }
 }
 
-function coopDesbloquear() {
-    if (coopReplayRodando) return;
+function coopDesbloquear(tentativa) {
+    tentativa = Number(tentativa) || 0;
+    if (coopReplayRodando) {
+        // ⭐ O replay ainda está rodando. Antes retornávamos de vez e o
+        // tabuleiro ficava travado quando o snapshot do MEU turno chegava
+        // durante a reprodução dos eventos do outro jogador. Agora tenta
+        // de novo até o replay terminar.
+        if (tentativa < 40 && window._coopMode) {
+            setTimeout(() => coopDesbloquear(tentativa + 1), 250);
+        }
+        return;
+    }
+    if (coopRole === 'oponente' && (coopBossTurnoArmado || coopBossRunning)) {
+        // Não libera o tabuleiro no meio do turno do boss.
+        coopPausar();
+        return;
+    }
+
+    // ⭐ Guarda de turno: se a sala já não está no meu turno, não abre o
+    // tabuleiro. Sem isso, um destravamento atrasado (retry/replay) podia
+    // liberar o P1 depois que o turno já tinha ido para o P2.
+    const turnoDe = coopRoomData?.estadoJogo?.turnoDe;
+    const statusSala = coopRoomData?.status;
+    if (turnoDe) {
+        const meuTurnoDe = coopRole === 'criador' ? 'criador' : 'oponente';
+        if (turnoDe !== meuTurnoDe) {
+            coopPausar();
+            return;
+        }
+        if (statusSala === 'pausada' || statusSala === 'concluida'
+            || statusSala === 'cancelada') {
+            return;
+        }
+    }
 
     const meuIdx = coopMeuIdx();
     const p = players[meuIdx];
@@ -2500,6 +2736,22 @@ function coopPausar() {
     if (gridEl) gridEl.style.pointerEvents = 'none';
 
     coopAtualizarUI();
+}
+
+// Reavalia o bloqueio/desbloqueio do tabuleiro a partir do último estado
+// conhecido da sala. Usado após o replay para não deixar o turno travado.
+function coopReavaliarTurno() {
+    if (!window._coopMode) return;
+    const turnoDe = coopRoomData?.estadoJogo?.turnoDe;
+    const status = coopRoomData?.status;
+    if (!turnoDe) return;
+    if (status === 'pausada' || status === 'concluida' || status === 'cancelada') return;
+    const meuTurnoDe = coopRole === 'criador' ? 'criador' : 'oponente';
+    if (turnoDe === meuTurnoDe) {
+        coopDesbloquear();
+    } else {
+        coopPausar();
+    }
 }
 
 function coopEhMeuTurno() {
@@ -2561,6 +2813,8 @@ async function coopSairParaAldeia() {
     coopBufferEventosBoss = [];
     coopCapturandoEventosBoss = false;
     coopEnemyAlreadyDead = false;
+    coopBossTurnoArmado = false;
+    coopUltimoTurnoBossKey = null;
 
     if (coopListenerUnsub) {
         coopListenerUnsub();
@@ -2617,6 +2871,17 @@ async function coopContinuarSala(roomId) {
         return;
     }
 
+    // Mesma restrição do evento vale ao retomar uma sala (evita
+    // continuar e cair na tela escura por causa de eventoIniciarBatalha).
+    const restricaoCheck = coopValidarRestricaoConteudo(
+        room.coopContent,
+        (STORY_PROGRESS.selectedHeroes || ['Tupa'])[0]
+    );
+    if (!restricaoCheck.valido) {
+        uiAviso(restricaoCheck.motivo);
+        return;
+    }
+
     if (room.status === 'pausada') {
         try {
             const turnoDe = room.estadoJogo?.turnoDe || 'criador';
@@ -2649,6 +2914,8 @@ async function coopContinuarSala(roomId) {
     coopBufferEventosBoss = [];
     coopCapturandoEventosBoss = false;
     coopEnemyAlreadyDead = false;
+    coopBossTurnoArmado = false;
+    coopUltimoTurnoBossKey = null;
 
     window._coopCriadorHeroClass = room.criador.heroiClass;
     window._coopOponenteHeroClass = room.oponente?.heroiClass;
@@ -4242,6 +4509,7 @@ console.log('✅ coop.js V8.5 (boss não renasce + skills sem duplicata + IA rod
         const skillName = evento.skillName || evento.skill;
         const handlerKey = evento.skill;
         let reproduzido = false;
+        let skillMock = null;
 
         try {
             if (typeof STORY_ANIMAL_SKILLS !== 'undefined' &&
@@ -4259,7 +4527,7 @@ console.log('✅ coop.js V8.5 (boss não renasce + skills sem duplicata + IA rod
                         || 'Boss',
                     atk: atkReplay,
                 };
-                const skillMock = { name: skillName, handler: handlerKey };
+                skillMock = { name: skillName, handler: handlerKey };
                 console.log('[V8.8] Reproduzindo skill com snapshot:', skillName);
                 await handler(enemyMock, skillMock);
                 reproduzido = true;
@@ -4279,7 +4547,7 @@ console.log('✅ coop.js V8.5 (boss não renasce + skills sem duplicata + IA rod
                     nome: evento.enemyNome || 'Boss', name: evento.enemyNome || 'Boss',
                     atk: atkReplay,
                 };
-                const skillMock = { nome: skillName, name: skillName, handler: handlerKey };
+                skillMock = { nome: skillName, name: skillName, handler: handlerKey };
                 console.log('[V8.8] Reproduzindo skill de NAÇÃO com snapshot:', skillName);
                 await window.NACAO_SKILL_HANDLERS[handlerKey](enemyMock, skillMock);
                 reproduzido = true;
@@ -4297,7 +4565,7 @@ console.log('✅ coop.js V8.5 (boss não renasce + skills sem duplicata + IA rod
                     nome: evento.enemyNome || 'Boss', name: evento.enemyNome || 'Boss',
                     atk: atkReplay,
                 };
-                const skillMock = { nome: skillName, name: skillName, handler: handlerKey,
+                skillMock = { nome: skillName, name: skillName, handler: handlerKey,
                     danoBase: atkReplay, dano: atkReplay };
                 console.log('[V8.8] Reproduzindo skill de EVENTO com snapshot:', skillName);
                 await window.EVENTO_SKILLS[handlerKey](enemyMock, skillMock);
@@ -4307,62 +4575,108 @@ console.log('✅ coop.js V8.5 (boss não renasce + skills sem duplicata + IA rod
             }
         }
 
+        // FIX: Suporte para RAID_SKILLS (raid bosses como Lampião, Teju, etc.)
+        if (!reproduzido && handlerKey && typeof window.RAID_SKILLS !== 'undefined'
+            && typeof window.RAID_SKILLS[handlerKey] === 'function') {
+            try {
+                const atkReplay = Number(evento.enemyAtk) > 0 ? Number(evento.enemyAtk)
+                    : (window.raidGetConfig && window.raidGetConfig(window.raidAtual)?.atk) || 4;
+                const enemyMock = {
+                    id: evento.enemyId,
+                    nome: evento.enemyNome || 'Boss', name: evento.enemyNome || 'Boss',
+                    atk: atkReplay,
+                };
+                skillMock = { nome: skillName, name: skillName, handler: handlerKey,
+                    danoBase: atkReplay, dano: atkReplay };
+                console.log('[V8.8] Reproduzindo skill de RAID com snapshot:', skillName);
+
+                // Para skills de RAID telegrafadas (telegraph=true), não restaurar estado
+                // depois do replay, para manter o _raidPendingSkill e tiles de perigo visíveis
+                const isTelegraphSkill = skillMock.telegraph === true ||
+                    (skillMock.id && window.raidGetConfig &&
+                     window.raidGetConfig(window.raidAtual)?.skills?.some(s => s.id === skillMock.id && s.telegraph === true));
+
+                await window.RAID_SKILLS[handlerKey](enemyMock, skillMock);
+                reproduzido = true;
+
+                // Se é skill telegrafada, preservar o pending skill visual
+                if (isTelegraphSkill && window._raidPendingSkill) {
+                    console.log('[V8.8] Skill telegrafada: preservando estado de perigo visual');
+                    // Não restaura estado atual - mantém tiles de perigo visíveis
+                    return;
+                }
+            } catch (e) {
+                console.warn('[V8.8] Falha ao reproduzir skill de RAID:', skillName, e);
+            }
+        }
+
         // Fallback
         if (!reproduzido && typeof window[handlerKey] === 'function') {
             try {
                 window[handlerKey].apply(window, evento.argsRaw || []);
                 reproduzido = true;
-            } catch (e) {
-                console.warn('[V8.8] Fallback falhou:', handlerKey, e);
+} catch (e) {
+                console.warn('[V8.8] Falha ao reproduzir skill de RAID:', skillName, e);
             }
         }
 
-        await coopSleep(600);
+        // Para skills telegrafadas, NÃO restaura estado - mantém tiles de perigo visíveis
+        if (!reproduzido || !(skillMock && (skillMock.telegraph === true ||
+            (skillMock.id && window.raidGetConfig &&
+             window.raidGetConfig(window.raidAtual)?.skills?.some(s => s.id === skillMock.id && s.telegraph === true))))) {
+            await coopSleep(600);
 
-        // ---- Restaura estado ATUAL ----
-        boss.x = estadoAtual.boss.x;
-        boss.y = estadoAtual.boss.y;
-        boss.hp = estadoAtual.boss.hp;
-        boss.maxHp = estadoAtual.boss.maxHp;
-        boss.type = estadoAtual.boss.type;
-        boss.dead = estadoAtual.boss.dead;
+            // ---- Restaura estado ATUAL ----
+            boss.x = estadoAtual.boss.x;
+            boss.y = estadoAtual.boss.y;
+            boss.hp = estadoAtual.boss.hp;
+            boss.maxHp = estadoAtual.boss.maxHp;
+            boss.type = estadoAtual.boss.type;
+            boss.dead = estadoAtual.boss.dead;
 
-        estadoAtual.players.forEach((pAtual, i) => {
-            if (players[i]) {
-                players[i].x = pAtual.x;
-                players[i].y = pAtual.y;
-                players[i].hp = pAtual.hp;
-                players[i].maxHp = pAtual.maxHp;
-                players[i].dead = pAtual.dead;
-                players[i].element = pAtual.element;
+            estadoAtual.players.forEach((pAtual, i) => {
+                if (players[i]) {
+                    players[i].x = pAtual.x;
+                    players[i].y = pAtual.y;
+                    players[i].hp = pAtual.hp;
+                    players[i].maxHp = pAtual.maxHp;
+                    players[i].dead = pAtual.dead;
+                    players[i].element = pAtual.element;
+                }
+            });
+
+            for (let i = 0; i < 64; i++) {
+                if (estadoAtual.grid[i]) grid[i] = estadoAtual.grid[i];
             }
-        });
-
-        for (let i = 0; i < 64; i++) {
-            if (estadoAtual.grid[i]) grid[i] = estadoAtual.grid[i];
-        }
-        for (let i = 0; i < 64; i++) {
-            amulets[i] = estadoAtual.amulets[i] || false;
-        }
-
-        // Reposiciona tokens VISUALMENTE de volta
-        const bossTokenRestore = document.getElementById('tokenBoss');
-        if (bossTokenRestore) {
-            bossTokenRestore.style.left = (estadoAtual.boss.x * s + 8) + 'px';
-            bossTokenRestore.style.top = (estadoAtual.boss.y * s + 8) + 'px';
-        }
-        estadoAtual.players.forEach((pAtual, i) => {
-            const tok = document.getElementById(`tokenP${i}`);
-            if (tok) {
-                tok.style.left = (pAtual.x * s + 8) + 'px';
-                tok.style.top = (pAtual.y * s + 8) + 'px';
+            for (let i = 0; i < 64; i++) {
+                amulets[i] = estadoAtual.amulets[i] || false;
             }
-        });
 
-        // Atualiza visual
-        if (typeof updateVisuals === 'function') updateVisuals();
-        if (typeof updateHeroCard === 'function') updateHeroCard();
-        if (typeof updateBossCard === 'function') updateBossCard();
+            // Reposiciona tokens VISUALMENTE de volta
+            const bossTokenRestore = document.getElementById('tokenBoss');
+            if (bossTokenRestore) {
+                bossTokenRestore.style.left = (estadoAtual.boss.x * s + 8) + 'px';
+                bossTokenRestore.style.top = (estadoAtual.boss.y * s + 8) + 'px';
+            }
+            estadoAtual.players.forEach((pAtual, i) => {
+                const tok = document.getElementById(`tokenP${i}`);
+                if (tok) {
+                    tok.style.left = (pAtual.x * s + 8) + 'px';
+                    tok.style.top = (pAtual.y * s + 8) + 'px';
+                }
+            });
+
+            // Atualiza visual
+            if (typeof updateVisuals === 'function') updateVisuals();
+            if (typeof updateHeroCard === 'function') updateHeroCard();
+            if (typeof updateBossCard === 'function') updateBossCard();
+        } else {
+            console.log('[V8.8] Skill telegrafada: estado NÃO restaurado - tiles de perigo mantidos');
+            // Atualiza visual apenas para mostrar tiles de perigo
+            if (typeof updateVisuals === 'function') updateVisuals();
+            if (typeof updateHeroCard === 'function') updateHeroCard();
+            if (typeof updateBossCard === 'function') updateBossCard();
+        }
     }
 
     window.coopReproduzirSkillComSnapshot = coopReproduzirSkillComSnapshot;
@@ -5030,7 +5344,8 @@ console.log('🌑 Núcleo do Abismo:', STORY_PROGRESS.inventory['nucleo_abismo']
                     // Limpa as travas de morte locais do P2
                     coopProcessandoMorteBoss = false;
                     window.coopBossMortoNesteTurno = false;
-                    coopBossRunning = false;
+                    // NÃO zera coopBossRunning aqui: isso quebraria a guarda
+                    // de reentrada enquanto coopRodarBossP2 ainda está rodando.
 
                     // Força o boss local a aceitar a vida e o tipo da sala
                     if (boss && boss.dead) {
@@ -6092,6 +6407,7 @@ console.log('🌑 Núcleo do Abismo:', STORY_PROGRESS.inventory['nucleo_abismo']
             'estadoJogo.corruptedTiles': estado.corruptedTiles || [], // ⭐ FIX
             'estadoJogo.players': estado.players,
             'estadoJogo.boss': estado.boss,
+            'estadoJogo.enemiesRemaining': estado.enemiesRemaining || [],
             'estadoJogo.ultimaAcao': {
                 tipo: coopRole === 'criador' ? 'turno_criador' : 'turno_maria',
                 resumo: `${players[coopMeuIdx()]?.name} jogou`,
@@ -7318,12 +7634,23 @@ console.log('🌑 Núcleo do Abismo:', STORY_PROGRESS.inventory['nucleo_abismo']
                     const dx = Math.sign(alvo.x - boss.x);
                     const dy = Math.sign(alvo.y - boss.y);
                     const passos = Math.min(2, dMin - 1);
+                    // Não atravessar heróis/outros inimigos no move forçado.
+                    const ocupado = (x, y) => {
+                        if (typeof isOccupiedEvento === 'function') return isOccupiedEvento(x, y);
+                        if ((players || []).some(p => !p.dead && p.x === x && p.y === y)) return true;
+                        if (window._eventoAnimais?.some(a => !a.dead && a.x === x && a.y === y)) return true;
+                        return false;
+                    };
                     for (let i = 0; i < passos; i++) {
+                        let nx = boss.x, ny = boss.y;
                         if (Math.abs(alvo.x - boss.x) >= Math.abs(alvo.y - boss.y) && dx !== 0) {
-                            boss.x = Math.max(0, Math.min(7, boss.x + dx));
+                            nx = Math.max(0, Math.min(7, boss.x + dx));
                         } else if (dy !== 0) {
-                            boss.y = Math.max(0, Math.min(7, boss.y + dy));
+                            ny = Math.max(0, Math.min(7, boss.y + dy));
                         }
+                        if (nx === boss.x && ny === boss.y) break;
+                        if (ocupado(nx, ny)) break;
+                        boss.x = nx; boss.y = ny;
                         if (typeof updateVisuals === 'function') updateVisuals();
                         await new Promise(r => setTimeout(r, 250));
                     }
@@ -7331,7 +7658,10 @@ console.log('🌑 Núcleo do Abismo:', STORY_PROGRESS.inventory['nucleo_abismo']
                 }
             }
 
-            // ⭐ PASSO 2: skill via eventoAplicarSkill (dispara hook de captura)
+            // ⭐ PASSO 2: skill pelo caminho CORRETO do handler.
+            // Animal → applyStorySkill (usa o handler próprio e o x/y do
+            // tabuleiro, respeitando alcance/área). Evento/nação →
+            // eventoAplicarSkill.
             const enemyMock = {
                 id: enemyId,
                 nome: enemy.name || enemy.nome || 'Boss',
@@ -7345,12 +7675,17 @@ console.log('🌑 Núcleo do Abismo:', STORY_PROGRESS.inventory['nucleo_abismo']
             };
             const skillMock = { nome: skill.nome, name: skill.nome, handler: skill.handler };
 
-            if (typeof window.eventoAplicarSkill === 'function') {
+            const animalHandler = window.STORY_ANIMAL_SKILLS?.[skill.handler];
+            if (typeof animalHandler === 'function'
+                && typeof window.applyStorySkill === 'function') {
+                console.log('[V11.5] Skill de ANIMAL via applyStorySkill:', skill.handler);
+                await window.applyStorySkill(enemyMock, skillMock);
+            } else if (typeof window.eventoAplicarSkill === 'function') {
                 await window.eventoAplicarSkill(enemyMock, skillMock);
             } else {
                 const h = window.NACAO_SKILL_HANDLERS?.[skill.handler]
-                       || window.STORY_ANIMAL_SKILLS?.[skill.handler]
-                       || window.EVENTO_SKILLS?.[skill.handler];
+                       || window.EVENTO_SKILLS?.[skill.handler]
+                       || (typeof window[skill.handler] === 'function' ? window[skill.handler] : null);
                 if (h) await h(enemyMock, skillMock);
             }
             console.log('[V11.5] ✅ Skill OK');
@@ -7811,4 +8146,74 @@ console.log('🌑 Núcleo do Abismo:', STORY_PROGRESS.inventory['nucleo_abismo']
     console.log('💡 Debug: window._debugCoopDefeatV121()');
     console.log('💡 Force: window._finalizarCoopDerrotaV121("teste")');
     console.log('═══════════════════════════════════════════════════');
+})();
+
+// =================================================================
+// coop.js — V12.2 — Monitor de turno (rede de segurança)
+// -----------------------------------------------------------------
+// Se a sala diz que é o MEU turno mas o tabuleiro/botões continuam
+// travados (replay que terminou depois do snapshot, snapshot fora de
+// ordem, #grid recriado etc.), destrava sozinho. Só age quando a sala
+// confirma que o turno é meu, então não atropela o turno do boss/P2.
+// =================================================================
+(function coopV122MonitorTurno() {
+    if (window._coopV122Monitor) return;
+    window._coopV122Monitor = true;
+
+    console.log('✅ [V12.2] Monitor de turno coop instalado.');
+
+    let ultimoAviso = 0;
+
+    setInterval(() => {
+        if (!window._coopMode) return;
+        if (coopPartidaConcluida || coopReplayRodando) return;
+        if (!coopRoomData) return;
+
+        const status = coopRoomData.status;
+        if (status === 'pausada' || status === 'concluida' || status === 'cancelada') return;
+
+        const turnoDe = coopRoomData.estadoJogo?.turnoDe;
+        if (!turnoDe) return;
+
+        const meuTurnoDe = coopRole === 'criador' ? 'criador' : 'oponente';
+        if (turnoDe !== meuTurnoDe) return;
+
+        // P2 não pode destravar no meio da execução do boss.
+        if (coopRole === 'oponente' && (coopBossTurnoArmado || coopBossRunning)) return;
+
+        const meuIdx = coopMeuIdx();
+        const p = players && players[meuIdx];
+        if (!p || p.dead || p.placeholder) return;
+
+        const gridEl = document.getElementById('grid');
+        const gridTravado = !!gridEl && gridEl.style.pointerEvents === 'none';
+
+        const btnPlay = document.getElementById('btnPlay');
+        const btnSkill = document.getElementById('btnSkill');
+        const botoesTravados = (btnPlay && btnPlay.disabled)
+            || (btnSkill && btnSkill.disabled && !p.skillUsed);
+
+        if (!gridTravado && !botoesTravados) return;
+
+        const agora = Date.now();
+        if (agora - ultimoAviso > 3000) {
+            ultimoAviso = agora;
+            console.log('[V12.2] É meu turno, mas o tabuleiro/botões estão travados. Destravando...');
+        }
+        coopDesbloquear();
+    }, 1000);
+
+    window._debugCoopTurnoV122 = function() {
+        console.group('═══ [V12.2] Monitor de turno ═══');
+        console.log('_coopMode:', window._coopMode);
+        console.log('coopRole:', coopRole);
+        console.log('status:', coopRoomData?.status);
+        console.log('turnoDe:', coopRoomData?.estadoJogo?.turnoDe);
+        console.log('coopReplayRodando:', coopReplayRodando);
+        console.log('bossTurnoArmado:', coopBossTurnoArmado, '| bossRunning:', coopBossRunning);
+        console.log('grid pointerEvents:', document.getElementById('grid')?.style.pointerEvents);
+        console.log('btnPlay.disabled:', document.getElementById('btnPlay')?.disabled);
+        console.log('btnSkill.disabled:', document.getElementById('btnSkill')?.disabled);
+        console.groupEnd();
+    };
 })();
