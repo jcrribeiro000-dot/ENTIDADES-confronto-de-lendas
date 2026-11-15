@@ -9229,8 +9229,15 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
                 }
             }
 
-            // Re-renderiza a tela do Evento
-            if (typeof renderEventoSemanalScreen === 'function') {
+            // Re-renderiza a tela do Evento SEM pular pro hub de eventos.
+            // window.renderEventoSemanalScreen foi trocado por renderEventsHub
+            // (raid-solo.js); a tela semanal real agora é renderSeteSeladosScreen.
+            if (window._eventHubRoute === 'selados'
+                && typeof window.renderEventosHubDestination === 'function') {
+                window.renderEventosHubDestination('selados');
+            } else if (typeof window.renderSeteSeladosScreen === 'function') {
+                window.renderSeteSeladosScreen();
+            } else if (typeof renderEventoSemanalScreen === 'function') {
                 renderEventoSemanalScreen();
             }
 
@@ -9403,9 +9410,10 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
 
         // Se está no Evento, força re-render
         if (titleTxt.includes('SEMANA DAS SOMBRAS') || titleTxt.includes('A SEMANA DAS SOMBRAS')) {
-            if (typeof renderEventoSemanalScreen === 'function') {
+            const renderSemanal = window.renderSeteSeladosScreen || renderEventoSemanalScreen;
+            if (typeof renderSemanal === 'function') {
                 console.log('[V35.0] Forçando re-render do Evento...');
-                renderEventoSemanalScreen();
+                renderSemanal();
             }
         }
     }, 300);
@@ -10038,8 +10046,9 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
     const _origVictory = window.handleStoryPhaseVictory;
     if (typeof _origVictory === 'function') {
         window.handleStoryPhaseVictory = function(phase, drops, finalScore, rankSnapshot) {
-            // ⭐ Drop do Núcleo (13-4 no Difícil)
-            if (phase?.id === '13-4' && storyCurrentDifficulty === 'dificil') {
+            // ⭐ Drop do Núcleo (13-4 no Difícil ou Pesadelo)
+            if (phase?.id === '13-4'
+                && (storyCurrentDifficulty === 'dificil' || storyCurrentDifficulty === 'pesadelo')) {
                 const atual = STORY_PROGRESS.inventory['nucleo_abismo'] || 0;
                 STORY_PROGRESS.inventory['nucleo_abismo'] = atual + 1;
                 if (typeof saveStoryProgress === 'function') saveStoryProgress();
@@ -10544,7 +10553,7 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
     console.log('═══════════════════════════════════════════════════');
     console.log('✅ [V36.0] Sistema de Stat Aleatório Nível 11');
     console.log('═══════════════════════════════════════════════════');
-    console.log('• Núcleo do Abismo dropa em 13-4 no Difícil');
+    console.log('• Núcleo do Abismo dropa em 13-4 no Difícil ou Pesadelo');
     console.log('• Ritual: nível 10 + Núcleo → ASCENSÃO (stat aleatório)');
     console.log('• Ritual: nível 11 + Núcleo → REROLL (substitui stat)');
     console.log('');
@@ -12188,7 +12197,8 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
         if (!STORY_PROGRESS.craftedWeapons.includes(uid)) return { ok: false, error: 'Você não possui esta instância.' };
 
         const expectedTipo = getArchetypeFromHeroClass(heroClass);
-        if (w.tipo !== expectedTipo) return { ok: false, error: `Classe incompatível.` };
+        const tiposPermitidos = Array.isArray(w.usableByTypes) ? w.usableByTypes : [w.tipo];
+        if (!tiposPermitidos.includes(expectedTipo)) return { ok: false, error: `Classe incompatível.` };
 
         for (const hc in STORY_PROGRESS.heroEquipment) {
             if (hc !== heroClass && STORY_PROGRESS.heroEquipment[hc].arma === uid) {
@@ -12701,7 +12711,8 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
         if (!STORY_PROGRESS.craftedWeapons.includes(uid)) return { ok: false, error: 'Você não possui esta instância.' };
 
         const expectedTipo = getArchetypeFromHeroClass(heroClass);
-        if (w.tipo !== expectedTipo) return { ok: false, error: `Classe incompatível.` };
+        const tiposPermitidos = Array.isArray(w.usableByTypes) ? w.usableByTypes : [w.tipo];
+        if (!tiposPermitidos.includes(expectedTipo)) return { ok: false, error: `Classe incompatível.` };
 
         for (const hc in STORY_PROGRESS.heroEquipment) {
             if (hc !== heroClass && STORY_PROGRESS.heroEquipment[hc].arma === uid) {
@@ -12769,7 +12780,7 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
         const eqAmulet = window.getAmuletById(eqAmuletUid);
 
         // Armas/Amuletos disponíveis (não equipados neste herói)
-        const allWeapons = (STORY_PROGRESS.craftedWeapons || []).map(uid => window.getWeaponById(uid)).filter(w => w && w.tipo === archetype && w.uid !== eqWeaponUid);
+        const allWeapons = (STORY_PROGRESS.craftedWeapons || []).map(uid => window.getWeaponById(uid)).filter(w => w && (Array.isArray(w.usableByTypes) ? w.usableByTypes.includes(archetype) : w.tipo === archetype) && w.uid !== eqWeaponUid);
         const allAmulets = (STORY_PROGRESS.craftedAmulets || []).map(uid => window.getAmuletById(uid)).filter(a => a && a.uid !== eqAmuletUid);
 
         // Conta itens iguais para mostrar (xN)
@@ -15575,8 +15586,10 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
     // --- 3. LÓGICA DE DURABILIDADE ---
     if (!STORY_PROGRESS.itemDurability) STORY_PROGRESS.itemDurability = {};
 
+    const getEventoBaseId = (uid) => String(uid || '').split('#')[0].split('@')[0];
+
     window.getDurabilidade = (itemId) => {
-        if (itemId === CORACAO_ID && STORY_PROGRESS.itemDurability[itemId] === undefined) return 100;
+        if (getEventoBaseId(itemId) === CORACAO_ID && STORY_PROGRESS.itemDurability[itemId] === undefined) return 100;
         return STORY_PROGRESS.itemDurability[itemId] || 0;
     };
 
@@ -15598,20 +15611,21 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
         window.applyDmg = function(target, amount) {
             if (target && players.includes(target) && !target.dead && (target.hp - amount <= 0)) {
                 const eq = (typeof getHeroEquipment === 'function') ? getHeroEquipment(target.class) : null;
-                if (eq && eq.amuleto === CORACAO_ID) {
-                    const dur = window.getDurabilidade(CORACAO_ID);
+                const amuletoUid = eq && eq.amuleto;
+                if (amuletoUid && getEventoBaseId(amuletoUid) === CORACAO_ID) {
+                    const dur = window.getDurabilidade(amuletoUid);
                     if (dur > 0 && !target._voidUsedThisBattle) {
                         target._voidUsedThisBattle = true;
                         target.hp = 1;
                         
                         const novaDur = Math.max(0, dur - 10);
-                        STORY_PROGRESS.itemDurability[CORACAO_ID] = novaDur;
+                        STORY_PROGRESS.itemDurability[amuletoUid] = novaDur;
                         if (typeof saveStoryProgress === 'function') saveStoryProgress();
                         
                         if (typeof showToast === 'function') showToast('🖤', `Sobreviveu! (${novaDur}% restante)`, '🖤');
                         if (typeof spawnFxAt === 'function') spawnFxAt('impact', 'fx-impact', target.x, target.y, { duration: 800, scale: 1.5 });
                         
-                        if (novaDur <= 0) window.quebrarItem(CORACAO_ID);
+                        if (novaDur <= 0) window.quebrarItem(amuletoUid);
                         if (typeof updateVisuals === 'function') updateVisuals();
                         if (typeof updateHeroCard === 'function') updateHeroCard();
                         return; 
@@ -15680,8 +15694,8 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
         let cardsHTML = LOJA_ITENS.map(item => {
             const podeComprar = qtdEssencia >= item.preco;
             let extraInfo = '';
-            if (item.tipo === 'amuleto_unico') {
-                const jaTem = (STORY_PROGRESS.craftedAmulets || []).includes(item.id);
+            if (item.tipo === 'amuleto_unico' && item.id === CORACAO_ID) {
+                const jaTem = (STORY_PROGRESS.craftedAmulets || []).some(uid => String(uid).split('#')[0].split('@')[0] === item.id);
                 if (jaTem) {
                     const dur = window.getDurabilidade(item.id);
                     extraInfo = `<div class="evento-shop-durability">Durabilidade: ${dur}%</div>`;
@@ -15719,7 +15733,7 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
                     </div>
                 </div>
                 <div class="evento-shop-grid">${cardsHTML}</div>
-                <div class="story-footer"><button class="story-back-btn" onclick="renderEventoSemanalScreen()">← VOLTAR AO EVENTO</button></div>
+                <div class="story-footer"><button class="story-back-btn" onclick="(window.renderSeteSeladosScreen || window.renderEventoSemanalScreen)()">← VOLTAR AO EVENTO</button></div>
             </div>
         `;
     };
@@ -15728,10 +15742,6 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
         const qtdAtual = STORY_PROGRESS.inventory[ESSENCIA_ID] || 0;
         if (qtdAtual < preco) {
             if (typeof showToast === 'function') showToast('❌', 'Essências insuficientes.', '❌');
-            return;
-        }
-        if (tipo === 'amuleto_unico' && (STORY_PROGRESS.craftedAmulets || []).includes(itemId)) {
-            if (typeof showToast === 'function') showToast('❌', 'Você já possui este item.', '❌');
             return;
         }
         const __perg7 = `Comprar este item por ${preco} Essências?`;
@@ -15756,10 +15766,13 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
             if (!Array.isArray(STORY_PROGRESS.craftedAmulets)) STORY_PROGRESS.craftedAmulets = [];
             if (!Array.isArray(STORY_PROGRESS.craftedWeapons)) STORY_PROGRESS.craftedWeapons = [];
             
-            if (tipo === 'arma') STORY_PROGRESS.craftedWeapons.push(itemId);
-            else {
-                STORY_PROGRESS.craftedAmulets.push(itemId);
-                STORY_PROGRESS.itemDurability[CORACAO_ID] = 100;
+            const gerarUidCompra = () => `${itemId}#${Date.now()}${Math.floor(Math.random() * 1000000)}`;
+            if (tipo === 'arma') {
+                STORY_PROGRESS.craftedWeapons.push(gerarUidCompra());
+            } else {
+                const uid = gerarUidCompra();
+                STORY_PROGRESS.craftedAmulets.push(uid);
+                STORY_PROGRESS.itemDurability[uid] = 100;
             }
         }
 

@@ -1427,9 +1427,12 @@
             const nacaoId = window._nacaoBatalha?.nacaoId;
             const nacaoCfgId = 'nacao_' + nacaoId;
             const cfg = (typeof EVENTO_BOSSES !== 'undefined') ? EVENTO_BOSSES[nacaoCfgId] : null;
-            if (cfg) {
-                const enemyId = Array.isArray(window.storyEnemiesRemaining) && window.storyEnemiesRemaining[0];
-                const enemy = enemyId && STORY_ENEMIES?.[enemyId];
+            const enemyId = Array.isArray(window.storyEnemiesRemaining) && window.storyEnemiesRemaining[0];
+            // Só sincroniza quando o inimigo atual é DESTA nação. Sem isso,
+            // um `_nacaoAtivo` antigo fazia o cfg.skills da nação virar as
+            // skills de um animal de outro evento (ex.: Sete Selados).
+            if (cfg && String(enemyId || '').startsWith('nacao_')) {
+                const enemy = STORY_ENEMIES?.[enemyId];
                 if (enemy && enemy.skill1 && enemy.skill2) {
                     cfg.skills = [enemy.skill1, enemy.skill2];
                 }
@@ -1619,9 +1622,10 @@
             if (!window._nacaoAtivo) return r;
             const nacaoId = window._nacaoBatalha?.nacaoId;
             const cfg = nacaoId && (typeof EVENTO_BOSSES !== 'undefined') ? EVENTO_BOSSES['nacao_' + nacaoId] : null;
-            if (cfg) {
-                const enemyId = Array.isArray(window.storyEnemiesRemaining) && window.storyEnemiesRemaining[0];
-                const enemy = enemyId && STORY_ENEMIES?.[enemyId];
+            const enemyId = Array.isArray(window.storyEnemiesRemaining) && window.storyEnemiesRemaining[0];
+            // Só sincroniza se o inimigo atual for um deus desta nação.
+            if (cfg && String(enemyId || '').startsWith('nacao_')) {
+                const enemy = STORY_ENEMIES?.[enemyId];
                 if (enemy && enemy.skill1 && enemy.skill2) cfg.skills = [enemy.skill1, enemy.skill2];
             }
             return r;
@@ -2145,7 +2149,9 @@
                     }
                 } else {
                     window._semanaTab = 'selados';
-                    if (typeof window.renderEventoSemanalScreen === 'function') {
+                    if (typeof window.renderSeteSeladosScreen === 'function') {
+                        window.renderSeteSeladosScreen();
+                    } else if (typeof window.renderEventoSemanalScreen === 'function') {
                         window.renderEventoSemanalScreen();
                     }
                 }
@@ -2975,9 +2981,11 @@
             const nacaoCfgId = 'nacao_' + nacaoId;
             const cfg = (typeof EVENTO_BOSSES !== 'undefined') ? EVENTO_BOSSES[nacaoCfgId] : null;
 
-            if (cfg) {
-                const enemyId = Array.isArray(window.storyEnemiesRemaining) && window.storyEnemiesRemaining[0];
-                const enemy = enemyId && STORY_ENEMIES?.[enemyId];
+            const enemyId = Array.isArray(window.storyEnemiesRemaining) && window.storyEnemiesRemaining[0];
+            // Mesma proteção do V2.1: não contaminar o cfg da nação com
+            // skills/atk de animais de outro evento.
+            if (cfg && String(enemyId || '').startsWith('nacao_')) {
+                const enemy = STORY_ENEMIES?.[enemyId];
                 if (enemy) {
                     if (enemy.skill1 && enemy.skill2) cfg.skills = [enemy.skill1, enemy.skill2];
                     if (typeof enemy.atk === 'number' && enemy.atk > 0) cfg.atk = enemy.atk;
@@ -5125,17 +5133,18 @@
         const preco = window._nacaoConfig.precoArma;
 
         const armasHTML = Object.values(window.NACAO_ARMAS).map(a => {
-            const jaTem = (STORY_PROGRESS.nacaoArmas || []).includes(a.id);
-            const pode = ess >= preco && !jaTem;
+            const ownedCount = (STORY_PROGRESS.nacaoArmas || []).filter(id => id === a.id).length;
+            const pode = ess >= preco;
             return `
-                <div class="nacao-shop-card ${jaTem?'owned':''}">
+                <div class="nacao-shop-card ${ownedCount?'owned':''}">
                     <div class="nacao-shop-icon">${a.emoji || '⚔️'}</div>
                     <div class="nacao-shop-name">${a.nome}</div>
+                    ${ownedCount ? `<div class="nacao-shop-meta">Possuídas: ${ownedCount}</div>` : ''}
                     <div class="nacao-shop-meta">+${a.atkBonus} ATK · ${a.elemento}</div>
                     <div class="nacao-shop-price">🌎 ${preco}</div>
                     <button class="nacao-shop-btn" ${pode?'':'disabled'}
                             onclick="window._nacaoComprarArma('${a.id}')">
-                        ${jaTem?'✅ ADQUIRIDA':(pode?'COMPRAR':'FALTA')}
+                        ${pode?'COMPRAR OUTRA':'FALTA ESSÊNCIA'}
                     </button>
                 </div>`;
         }).join('');
@@ -5160,7 +5169,6 @@
 
     window._nacaoComprarArma = function(id) {
         const a = window.NACAO_ARMAS[id]; if (!a) return;
-        if ((STORY_PROGRESS.nacaoArmas || []).includes(id)) return;
         const ess = STORY_PROGRESS.inventory[window._nacaoConfig.moedaId] || 0;
         const preco = window._nacaoConfig.precoArma;
         
@@ -5170,7 +5178,9 @@
         }
         STORY_PROGRESS.inventory[window._nacaoConfig.moedaId] -= preco;
         if (!Array.isArray(STORY_PROGRESS.nacaoArmas)) STORY_PROGRESS.nacaoArmas = [];
+        if (!Array.isArray(STORY_PROGRESS.craftedWeapons)) STORY_PROGRESS.craftedWeapons = [];
         STORY_PROGRESS.nacaoArmas.push(id);
+        STORY_PROGRESS.craftedWeapons.push(`${id}#${Date.now()}${Math.floor(Math.random() * 1000000)}`);
         if (typeof saveStoryProgress === 'function') saveStoryProgress();
         if (typeof showToast === 'function') showToast('🌎', `Arma: ${a.nome}`, '🌎');
         window.renderLojaNacoes();

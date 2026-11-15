@@ -312,7 +312,7 @@
                         <b>Onde vender:</b> Escambo (antigo Curandeiro) na Aldeia.` },
 
                 { id: 'itens_especiais', titulo: 'Itens especiais',
-                  html: `<b>🌑 Núcleo do Abismo:</b> dropa em 13-4 no Difícil. Usado na Ascensão do nível 10→11 no Ritual. Também comprável na Loja das Sombras (1500 Essências).
+                  html: `<b>🌑 Núcleo do Abismo:</b> dropa em 13-4 no Difícil ou Pesadelo. Usado na Ascensão do nível 10→11 no Ritual. Também comprável na Loja das Sombras (1500 Essências).
                         <br><br>
                         <b>🖤 Coração do Vazio:</b> amuleto lendário da Loja das Sombras (10000 Essências) OU drop do Pesadelo. Sobrevive com 1 HP (1× por batalha, só solo/história). Durabilidade: 100% → 90% → 80% ... a cada uso. Quebra em 0%.
                         <br><br>

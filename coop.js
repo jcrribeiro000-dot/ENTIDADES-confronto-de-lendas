@@ -5063,9 +5063,6 @@ console.log('✅ coop.js V8.5 (boss não renasce + skills sem duplicata + IA rod
     console.log('   • Som do boss_attack no replay');
     console.log('   • Unlock de áudio no primeiro clique');
 })();
-STORY_PROGRESS.inventory['nucleo_abismo'] = (STORY_PROGRESS.inventory['nucleo_abismo'] || 0) + 1;
-saveStoryProgress();
-console.log('🌑 Núcleo do Abismo:', STORY_PROGRESS.inventory['nucleo_abismo']);
 // =================================================================
 // ⭐ COOP FIX — capturar skills de evento/nação (eventoAplicarSkill)
 // -----------------------------------------------------------------

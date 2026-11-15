@@ -4109,8 +4109,11 @@
         }
         if (!base) return null;
         const baseAtk = base.atkBonus || 0;
+        const requestedWeaponType = base.requiredWeaponType || base.tipo;
         return {
             ...base,
+            tipo: base.tipo === 'rifle_mistico' ? requestedWeaponType : base.tipo,
+            classeOriginal: base.tipo,
             uid, baseId, id: uid, tier,
             baseAtkBonus: baseAtk,
             atkBonus: baseAtk + tier,
@@ -4600,7 +4603,9 @@
         }
 
         if (String(baseId).startsWith('arma_nacao_') || String(baseId).startsWith('amuleto_nacao_')) {
-            if (String(baseId).startsWith('arma_nacao_')) add('essencia_ancestral', 1000);
+            // Armas e amuletos de nação são drops do evento (não têm receita de craft).
+            // Mesmo assim devolvem a essência base + o investido nos upgrades.
+            add('essencia_ancestral', 1000);
             for (let t = 1; t <= tier; t++) add('essencia_ancestral', t === 1 ? 1000 : 10000);
             halve();
             return refund;

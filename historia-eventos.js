@@ -2278,6 +2278,38 @@
             return;
         }
 
+        // ⭐ Skills de ANIMAIS também podem chegar aqui (fallback de turno
+        // do coop / replay). Nesse caso o handler correto está em
+        // STORY_ANIMAL_SKILLS e precisa rodar com x/y do tabuleiro para
+        // respeitar alcance/área — nunca cair em dano global nos heróis.
+        const animalFn = (typeof STORY_ANIMAL_SKILLS !== 'undefined')
+            ? STORY_ANIMAL_SKILLS[skill.handler]
+            : null;
+        if (typeof animalFn === 'function') {
+            const currentId = (typeof storyEnemiesRemaining !== 'undefined')
+                ? storyEnemiesRemaining[0]
+                : null;
+            const currentEnemy = (typeof STORY_ENEMIES !== 'undefined' && currentId)
+                ? STORY_ENEMIES[currentId]
+                : null;
+            const atkAnimal = Number(currentEnemy?.atk) || Number(enemy?.atk) || 4;
+            const bossX = (typeof boss !== 'undefined' && boss) ? boss.x : (enemy?.x ?? 4);
+            const bossY = (typeof boss !== 'undefined' && boss) ? boss.y : (enemy?.y ?? 0);
+            const animalMock = {
+                ...(currentEnemy || {}),
+                ...(enemy || {}),
+                id: currentEnemy?.id || enemy?.id || currentId,
+                nome: currentEnemy?.name || currentEnemy?.nome || enemy?.nome || 'Animal',
+                name: currentEnemy?.name || currentEnemy?.nome || enemy?.nome || 'Animal',
+                atk: atkAnimal,
+                x: bossX,
+                y: bossY,
+            };
+            try { await animalFn(animalMock, skill); }
+            catch (e) { console.error('[evento] Erro em skill de animal', skill.handler, e); }
+            return;
+        }
+
         const fn = EVENTO_SKILLS[skill.handler];
         if (!fn) {
             console.warn('[evento] Handler não encontrado:', skill.handler);
@@ -2340,19 +2372,24 @@
             const enemyIdAtual = (typeof storyEnemiesRemaining !== 'undefined' && storyEnemiesRemaining.length > 0)
                 ? storyEnemiesRemaining[0] : null;
             const enemyAtual = enemyIdAtual ? STORY_ENEMIES[enemyIdAtual] : null;
-            const ehFaseBoss = !_eventoBatalha.isPesadelo
-                && enemyIdAtual
-                && (enemyIdAtual === _eventoBatalha.bossId
+            // É a fase do BOSS? Só nesse caso as skills de EVENTO_BOSSES
+            // podem ser usadas. Com a fila vazia (ex.: estado do coop ainda
+            // não sincronizou), só assume boss se a fase declarada for 'boss'.
+            const ehFaseBoss = _eventoBatalha.isPesadelo
+                || (enemyIdAtual && (
+                    enemyIdAtual === _eventoBatalha.bossId
                     || _eventoBatalha.faseId === 'boss'
                     || (enemyAtual && enemyAtual.isEvento)
-                    || String(enemyIdAtual).startsWith('nacao_'));
+                    || String(enemyIdAtual).startsWith('nacao_')
+                ))
+                || (!enemyIdAtual && _eventoBatalha.faseId === 'boss');
 
             if (!ehFaseBoss && enemyAtual && (enemyAtual.skill1 || enemyAtual.skill2)) {
                 const skillAnimal = Math.random() < 0.5 ? enemyAtual.skill1 : enemyAtual.skill2;
                 if (skillAnimal && typeof applyStorySkill === 'function') {
                     await applyStorySkill(enemyAtual, skillAnimal);
                 }
-            } else if (cfg) {
+            } else if (cfg && ehFaseBoss) {
                 let skill;
                 if (_eventoBatalha.isPesadelo) {
                     skill = { nome: 'Pesadelo', handler: 'evento_pesadelo_skill' };
@@ -2820,19 +2857,20 @@
             }
 
             // O inventário/equipamento lê craftedWeapons, não eventoArmas.
-            // Se a mesma base ficou pendente (save antigo), este drop a recupera
-            // uma vez; cópias já presentes continuam sendo exibidas normalmente.
-            const idsComUid = STORY_PROGRESS.craftedWeapons.map(id => String(id).split('#')[0]);
-            const temArmaNoInventario = idsComUid.includes(baseId);
-            const recuperadaAntes = STORY_PROGRESS._v1080_armasRecuperadas.includes(baseId);
-            if (!temArmaNoInventario && !recuperadaAntes) {
-                STORY_PROGRESS.craftedWeapons.push(
-                    `${baseId}#${Date.now()}${Math.floor(Math.random() * 1000000)}`
-                );
+            // Cada vitória concede uma CÓPIA nova (UID próprio): o sistema
+            // suporta múltiplas cópias da mesma base. Assim Difícil/Pesadelo
+            // também dão equipamento mesmo depois de já ter a arma do Normal.
+            const jaPossuia = STORY_PROGRESS.craftedWeapons
+                .some(id => String(id).split('#')[0] === baseId);
+            STORY_PROGRESS.craftedWeapons.push(
+                `${baseId}#${Date.now()}${Math.floor(Math.random() * 1000000)}`
+            );
+            // Marca a base como recuperada: desmanchar continua definitivo.
+            if (!STORY_PROGRESS._v1080_armasRecuperadas.includes(baseId)) {
+                STORY_PROGRESS._v1080_armasRecuperadas.push(baseId);
             }
-            if (!recuperadaAntes) STORY_PROGRESS._v1080_armasRecuperadas.push(baseId);
             resultado.arma = baseId;
-            if (temArmaNoInventario || recuperadaAntes) resultado.armaRepetida = true;
+            if (jaPossuia) resultado.armaRepetida = true;
         }
 
         if (drops.fragmento) {
@@ -3102,7 +3140,14 @@
         });
         document.querySelectorAll('.evento-sair-btn').forEach(el => el.remove());
 
-        if (typeof renderEventoSemanalScreen === 'function') {
+        // window.renderEventoSemanalScreen virou o hub de eventos (raid-solo.js).
+        // "VER SEMANA" deve voltar pra tela semanal do Sete Selados.
+        if (window._eventHubRoute === 'selados'
+            && typeof window.renderEventosHubDestination === 'function') {
+            window.renderEventosHubDestination('selados');
+        } else if (typeof window.renderSeteSeladosScreen === 'function') {
+            window.renderSeteSeladosScreen();
+        } else if (typeof renderEventoSemanalScreen === 'function') {
             renderEventoSemanalScreen();
         }
     }
@@ -4182,7 +4227,10 @@
         // Se a tela já estiver aberta, força a re-renderização
         const screen = document.getElementById('storyScreen');
         if (screen && screen.classList.contains('active') && screen.innerHTML.includes('SEMANA DAS SOMBRAS')) {
-            setTimeout(() => window.renderEventoSemanalScreen(), 100);
+            setTimeout(() => {
+                const renderSemanal = window.renderSeteSeladosScreen || window.renderEventoSemanalScreen;
+                if (typeof renderSemanal === 'function') renderSemanal();
+            }, 100);
         }
 
         console.log('✅ [V11.0] Relógio e Rejogabilidade do evento corrigidos e sincronizados.');
