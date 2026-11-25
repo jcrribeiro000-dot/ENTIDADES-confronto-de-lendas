@@ -136,9 +136,13 @@
                         <br>
                         • Não podem ser atravessados
                         <br>
-                        • São limpos por <b>Solo Sagrado</b>
+                        • Podem ser limpos de graça com um clique (a purificação é obrigatória e pausa o turno)
+                        <br>
+                        • O <b>Solo Sagrado</b> também limpa um tile, mas guarde-o para outro momento
                         <br><br>
-                        <b>Dica:</b> guarde o Solo Sagrado pro momento certo. Usar cedo pode te deixar sem resposta quando a corrupção cair.` },
+                        <b>Sem saída?</b> Se o herói ficar cercado (sem norte, sul, leste ou oeste), um <b>círculo vermelho pisca ao redor do boss</b>. Clique nele para <b>empurrar o boss 1 tile</b> na direção oposta e abrir caminho.
+                        <br><br>
+                        <b>Dica:</b> se estiver encurralado, a purificação gratuita só libera os tiles corrompidos ao seu lado — os que realmente abrem a saída.` },
 
                 { id: 'elementos', titulo: 'Elementos e fraqueza',
                   html: `Todo inimigo, herói e arma tem um dos 4 elementos. O ciclo de fraqueza é:
@@ -728,7 +732,7 @@
             icon: '💡',
             topics: [
                 { id: 'consumo', titulo: 'Recursos consumíveis em combate',
-                  html: `<b>Corrupção de tabuleiro:</b> limpa com Solo Sagrado. Guarde para o momento certo.
+                  html: `<b>Corrupção de tabuleiro:</b> a primeira limpeza de cada corrupção é grátis (e obrigatória). Guarde o Solo Sagrado para depois.
                         <br><br>
                         <b>Semente do Vento:</b> reorganiza o tabuleiro sem afetar corrompidos. Bom pra forçar tiles que você precisa.
                         <br><br>
@@ -741,7 +745,7 @@
                         <br><br>
                         • <b>Prepara o PA:</b> 9 tiles é o gatilho. Alinhe o caminho com o boss antes de confirmar
                         <br><br>
-                        • <b>Não desperdice o Solo Sagrado cedo:</b> guarde pro corrompimento do boss
+                        • <b>Use a purificação grátis:</b> a corrupção libera uma limpeza gratuita; guarde o Solo Sagrado para emergências
                         <br><br>
                         • <b>Combine elementos:</b> arma do seu elemento + boss fraco = até +2 dano base
                         <br><br>

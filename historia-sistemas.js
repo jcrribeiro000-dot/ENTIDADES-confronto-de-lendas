@@ -16309,8 +16309,291 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
         }
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // ⭐ V10.54 — ESCAPE DA CORRUPÇÃO
+    //   • A corrupção força uma purificação gratuita e pausa o turno.
+    //   • Se o herói ficar sem nenhuma casa ortogonal, o boss pode ser
+    //     empurrado 1 tile na direção oposta (clique no boss).
+    // ─────────────────────────────────────────────────────────────
+    window._corruptionPurificationPending = false;
+    window._purifyEligibleTiles = [];
+    window._purifyMode = null;
+    window._bossPushAvailable = false;
+    window._turnoRetidoAguardandoPurificacao = false;
+
+    function _escapeAtivo() {
+        if (window._coopMode || window._pvpMode) return false;
+        if (typeof tutorialMode !== 'undefined' && tutorialMode) return false;
+        return !!(window._storyMode || window._eventoAtivo);
+    }
+
+    function _heroiDaVez() {
+        if (typeof players === 'undefined' || !Array.isArray(players) || players.length === 0) return null;
+        const i = (typeof currentPlayerIdx !== 'undefined') ? currentPlayerIdx : -1;
+        if (i < 0 || i >= players.length) return null;
+        const p = players[i];
+        if (!p || p.dead) return null;
+        if (window._eventoAtivo && window._eventoTurnoJogador !== true) return null;
+        return p;
+    }
+
+    function _temMovimentoLegal(p) {
+        if (!p) return false;
+        const dirs = [[0, -1], [0, 1], [-1, 0], [1, 0]];
+        for (let i = 0; i < dirs.length; i++) {
+            const nx = p.x + dirs[i][0], ny = p.y + dirs[i][1];
+            if (nx < 0 || nx > 7 || ny < 0 || ny > 7) continue;
+            const idx = ny * 8 + nx;
+            if (Array.isArray(window._corruptedTiles) && window._corruptedTiles.includes(idx)) continue;
+            if (typeof isOccupied === 'function' && isOccupied(nx, ny, p.id)) continue;
+            return true;
+        }
+        return false;
+    }
+
+    function _corrompidosAdjacentes(p) {
+        const out = [];
+        if (!p || !Array.isArray(window._corruptedTiles)) return out;
+        const dirs = [[0, -1], [0, 1], [-1, 0], [1, 0]];
+        for (let i = 0; i < dirs.length; i++) {
+            const nx = p.x + dirs[i][0], ny = p.y + dirs[i][1];
+            if (nx < 0 || nx > 7 || ny < 0 || ny > 7) continue;
+            const idx = ny * 8 + nx;
+            if (window._corruptedTiles.includes(idx)) out.push(idx);
+        }
+        return out;
+    }
+
+    function _bossAdjacente(p) {
+        if (!p || !boss || boss.dead) return false;
+        return Math.abs(boss.x - p.x) + Math.abs(boss.y - p.y) === 1;
+    }
+
+    let _purifySig = '';
+    function _aplicarClassesPurificacao(lista) {
+        const set = new Set(Array.isArray(lista) ? lista : []);
+        const sig = Array.from(set).sort((a, b) => a - b).join(',');
+        const atuais = document.querySelectorAll('#grid .tile.purify-eligible').length;
+        if (sig === _purifySig && atuais === set.size) return;
+        _purifySig = sig;
+        document.querySelectorAll('#grid .tile').forEach((t, i) => {
+            t.classList.toggle('purify-eligible', set.has(i));
+        });
+    }
+
+    function _atualizarPromptPurificacao(modo) {
+        let el = document.getElementById('purifyPrompt');
+        if (!modo) {
+            if (el) el.remove();
+            return;
+        }
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'purifyPrompt';
+            document.body.appendChild(el);
+        }
+        if (el.dataset.escModo === modo) return;
+        el.dataset.escModo = modo;
+        el.className = 'purify-prompt' + (modo === 'rescue' ? ' rescue' : '');
+        el.innerHTML = (modo === 'rescue')
+            ? `<b>SEM SAÍDA!</b><span>Clique em um tile corrompido ao seu lado para abrir caminho.</span>`
+            : `<b>O TABULEIRO FOI CORROMPIDO!</b><span>Clique em um tile negro para purificá-lo (grátis).</span>`;
+    }
+
+    function _limparPurificacaoUI(limparPendente) {
+        window._purifyEligibleTiles = [];
+        window._purifyMode = null;
+        _purifySig = '';
+        document.querySelectorAll('#grid .tile.purify-eligible').forEach(t => t.classList.remove('purify-eligible'));
+        _atualizarPromptPurificacao(null);
+        if (limparPendente) window._corruptionPurificationPending = false;
+    }
+
+    function _mostrarAnelBoss() {
+        const board = document.getElementById('board');
+        if (!board || !boss || boss.dead) { _esconderAnelBoss(); return; }
+        let ring = document.getElementById('bossPushRing');
+        if (!ring) {
+            ring = document.createElement('div');
+            ring.id = 'bossPushRing';
+            ring.className = 'boss-push-ring';
+            board.appendChild(ring);
+        }
+        const s = (typeof getStep === 'function') ? getStep() : 64;
+        ring.style.left = (boss.x * s + 8) + 'px';
+        ring.style.top = (boss.y * s + 8) + 'px';
+        ring.style.width = s + 'px';
+        ring.style.height = s + 'px';
+        ring.style.display = 'block';
+        window._bossPushAvailable = true;
+
+        let hint = document.getElementById('bossPushHint');
+        if (!hint) {
+            hint = document.createElement('div');
+            hint.id = 'bossPushHint';
+            hint.className = 'boss-push-hint';
+            document.body.appendChild(hint);
+        }
+        hint.textContent = '👹 Clique no boss para empurrá-lo!';
+    }
+
+    function _esconderAnelBoss() {
+        window._bossPushAvailable = false;
+        const ring = document.getElementById('bossPushRing');
+        if (ring) ring.style.display = 'none';
+        const hint = document.getElementById('bossPushHint');
+        if (hint) hint.remove();
+    }
+
+    function _recalcularPurificacao(p) {
+        if (!_escapeAtivo()) { _limparPurificacaoUI(true); _esconderAnelBoss(); return; }
+        p = p || _heroiDaVez();
+        if (!p) { _esconderAnelBoss(); return; }
+
+        const corrompidos = Array.isArray(window._corruptedTiles) ? window._corruptedTiles : [];
+        if (corrompidos.length === 0) {
+            _limparPurificacaoUI(true);
+            _esconderAnelBoss();
+            return;
+        }
+
+        const encurralado = !_temMovimentoLegal(p);
+        const adjacentes = _corrompidosAdjacentes(p);
+        let modo = null;
+        let elegiveis = [];
+
+        if (window._corruptionPurificationPending) {
+            modo = 'forced';
+            // Se já está encurralado, purificar longe não resolve: só os vizinhos.
+            elegiveis = encurralado ? adjacentes.slice() : corrompidos.slice();
+            if (elegiveis.length === 0) elegiveis = corrompidos.slice();
+        } else if (encurralado && adjacentes.length > 0) {
+            modo = 'rescue';
+            elegiveis = adjacentes.slice();
+        }
+
+        window._purifyMode = modo;
+        window._purifyEligibleTiles = elegiveis;
+        _aplicarClassesPurificacao(elegiveis);
+        _atualizarPromptPurificacao(modo);
+
+        if (encurralado && _bossAdjacente(p)) _mostrarAnelBoss();
+        else _esconderAnelBoss();
+    }
+
+    function _purificarTile(idx, p) {
+        if (!Array.isArray(window._corruptedTiles) || !window._corruptedTiles.includes(idx)) return false;
+        window._corruptedTiles = window._corruptedTiles.filter(i => i !== idx);
+        try {
+            if (typeof STORY_PROGRESS !== 'undefined' && STORY_PROGRESS.achievementStats) {
+                if (typeof STORY_PROGRESS.achievementStats.corruptedCleared !== 'number') {
+                    STORY_PROGRESS.achievementStats.corruptedCleared = 0;
+                }
+                STORY_PROGRESS.achievementStats.corruptedCleared++;
+            }
+        } catch (e) {}
+        restaurarTile(idx);
+        if (typeof addLog === 'function') addLog(`✨ Corrupção purificada!`);
+        if (typeof playSfx === 'function') playSfx('skill1');
+        if (typeof spawnFxAt === 'function') spawnFxAt('impact', 'fx-impact', idx % 8, Math.floor(idx / 8), { duration: 600 });
+
+        _limparPurificacaoUI(true);
+        _esconderAnelBoss();
+        if (typeof saveAndRefresh === 'function') saveAndRefresh();
+
+        const retido = window._turnoRetidoAguardandoPurificacao;
+        window._turnoRetidoAguardandoPurificacao = false;
+
+        setTimeout(() => {
+            const aindaPreso = p && !_temMovimentoLegal(p);
+            if (aindaPreso && _bossAdjacente(p)) { _recalcularPurificacao(p); return; }
+            if (aindaPreso && _corrompidosAdjacentes(p).length > 0) { _recalcularPurificacao(p); return; }
+            if (retido && typeof manageTurns === 'function') { manageTurns(); return; }
+            _recalcularPurificacao(p);
+        }, 140);
+        return true;
+    }
+
+    function _empurrarBoss(p) {
+        if (!boss || boss.dead || !p) return false;
+        if (Math.abs(boss.x - p.x) + Math.abs(boss.y - p.y) !== 1) return false;
+        if (window._bossPushCooldown && Date.now() < window._bossPushCooldown) return false;
+
+        const dirx = boss.x - p.x;
+        const diry = boss.y - p.y;
+
+        const destinos = [];
+        destinos.push({ x: boss.x + dirx, y: boss.y + diry }); // direção oposta ao herói
+        if (dirx !== 0) {
+            destinos.push({ x: boss.x, y: boss.y + 1 });
+            destinos.push({ x: boss.x, y: boss.y - 1 });
+        } else {
+            destinos.push({ x: boss.x + 1, y: boss.y });
+            destinos.push({ x: boss.x - 1, y: boss.y });
+        }
+        destinos.push({ x: boss.x - dirx, y: boss.y - diry });
+
+        const livre = (c) => {
+            if (c.x < 0 || c.x > 7 || c.y < 0 || c.y > 7) return false;
+            if (c.x === p.x && c.y === p.y) return false;
+            if (typeof isOccupied === 'function' && isOccupied(c.x, c.y, -1)) return false;
+            return true;
+        };
+
+        const destino = destinos.find(livre);
+        if (!destino) {
+            if (typeof addLog === 'function') addLog(`⛔ O boss não tem para onde ser empurrado!`);
+            return false;
+        }
+
+        const antigo = { x: boss.x, y: boss.y };
+        boss.x = destino.x;
+        boss.y = destino.y;
+        window._bossPushCooldown = Date.now() + 350;
+
+        if (typeof updateVisuals === 'function') updateVisuals();
+        if (typeof updateAllSpriteDirections === 'function') updateAllSpriteDirections();
+        try { if (typeof playSfx === 'function') playSfx('atkg'); } catch (e) {}
+        if (typeof spawnFxAt === 'function') {
+            spawnFxAt('impact', 'fx-impact', boss.x, boss.y, { duration: 500 });
+            spawnFxAt('impact', 'fx-impact', antigo.x, antigo.y, { duration: 500 });
+        }
+        if (typeof addLog === 'function') addLog(`💥 ${p.name} empurrou ${boss.nome || 'o boss'}!`);
+        if (typeof saveAndRefresh === 'function') saveAndRefresh();
+
+        if (typeof path !== 'undefined') {
+            path.length = 0;
+            if (typeof renderPath === 'function') renderPath();
+        }
+        _esconderAnelBoss();
+        setTimeout(() => _recalcularPurificacao(p), 160);
+        return true;
+    }
+
+    function _tickEscape() {
+        if (typeof gameActive !== 'undefined' && !gameActive) {
+            if (window._corruptionPurificationPending || (Array.isArray(window._purifyEligibleTiles) && window._purifyEligibleTiles.length > 0)) {
+                window._corruptionPurificationPending = false;
+                window._turnoRetidoAguardandoPurificacao = false;
+                _limparPurificacaoUI(true);
+            }
+            _esconderAnelBoss();
+            return;
+        }
+        if (!_escapeAtivo()) { _esconderAnelBoss(); return; }
+        const p = _heroiDaVez();
+        if (!p) { _esconderAnelBoss(); return; }
+        _recalcularPurificacao(p);
+    }
+    setInterval(_tickEscape, 250);
+
     // Função central para limpar a corrupção (Ativada quando o Boss morre)
     window.limparCorrupcao = function() {
+        window._corruptionPurificationPending = false;
+        window._turnoRetidoAguardandoPurificacao = false;
+        window._bossPushCooldown = 0;
+        _limparPurificacaoUI(true);
+        _esconderAnelBoss();
         if (window._corruptedTiles.length > 0) {
             console.log('[V10.53] Limpando tabuleiro corrompido...');
             window._corruptedTiles.forEach(idx => restaurarTile(idx));
@@ -16325,16 +16608,15 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
         if (boss._corruptedTriggered) return;
         boss._corruptedTriggered = true;
 
-        if (typeof addLog === 'function') addLog(`⚠️ O TABULEIRO FOI CORROMPIDO! Use Solo Sagrado para limpar.`);
+        if (typeof addLog === 'function') addLog(`⚠️ O TABULEIRO FOI CORROMPIDO! Purifique um tile para continuar.`);
         if (typeof playSfx === 'function') playSfx('minoa2');
-        
+
         const board = document.getElementById('board');
         if (board) {
             board.style.animation = 'earthquakeAnim 0.8s ease-out';
             setTimeout(() => board.style.animation = '', 800);
         }
 
-        // ⭐ BANNER DE AVISO CENTRAL ⭐
         const oldBanner = document.getElementById('corruptionWarning');
         if (oldBanner) oldBanner.remove();
 
@@ -16345,7 +16627,7 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
         warning.id = 'corruptionWarning';
         warning.innerHTML = `
             <div style="font-family:'Cinzel Decorative', serif; color:#c39bd3; font-size:1.5rem; text-shadow: 0 0 15px #8e44ad;">O BOSS ESTÁ ENFURECIDO!</div>
-            <div style="font-family:'EB Garamond', serif; color:#d9c89a; font-size:1rem; font-style:italic; margin-top:5px;">O tabuleiro foi corrompido. Use o Solo Sagrado (✨) nos tiles negros para limpá-los.</div>
+            <div style="font-family:'EB Garamond', serif; color:#d9c89a; font-size:1rem; font-style:italic; margin-top:5px;">O tabuleiro foi corrompido. Escolha um tile negro para purificar (grátis).</div>
         `;
         warning.style.cssText = `
             position: absolute; top: 20%; left: 50%; transform: translate(-50%, -50%);
@@ -16378,6 +16660,30 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
             if (tile) {
                 tile.classList.add('tile-corrupted');
                 tile.innerHTML = `<div class="corruption-fx"></div>`;
+            }
+        }
+
+        // ⭐ V10.54 — purificação obrigatória (pausa o turno, limpeza grátis)
+        if (!window._coopMode) {
+            if (typeof skillActive !== 'undefined' && skillActive) {
+                skillActive = false;
+                document.querySelectorAll('#grid .tile').forEach(t => t.classList.remove('skill-mode'));
+            }
+            if (typeof path !== 'undefined' && Array.isArray(path) && path.length > 0) {
+                path.length = 0;
+                if (typeof renderPath === 'function') renderPath();
+            }
+            window._corruptionPurificationPending = true;
+            window._turnoRetidoAguardandoPurificacao = false;
+            const heroiAgora = _heroiDaVez();
+            if (heroiAgora) {
+                _recalcularPurificacao(heroiAgora);
+            } else {
+                window._purifyMode = 'forced';
+                window._purifyEligibleTiles = window._corruptedTiles.slice();
+                _aplicarClassesPurificacao(window._purifyEligibleTiles);
+                _atualizarPromptPurificacao('forced');
+                _esconderAnelBoss();
             }
         }
     };
@@ -16434,10 +16740,40 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
         };
     }
 
-    // 4. CLIQUE NO TILE (Solo Sagrado limpa, clique normal bloqueia)
+    // 4. CLIQUE NO TILE (purificação / empurrão do boss / Solo Sagrado)
     const _origSelect = window.handleSelect;
     if (typeof _origSelect === 'function') {
         window.handleSelect = function(idx) {
+            if (_escapeAtivo()) {
+                const pSel = _heroiDaVez();
+
+                // Não aceita cliques no meio de uma ação/movimento em andamento
+                if (pSel && typeof isExecutingAction !== 'undefined' && isExecutingAction) return;
+
+                // 4.1 — Empurrar o boss quando não há nenhuma saída (calculado na hora,
+                //        sem depender do tick visual de 250ms)
+                if (pSel && boss && !boss.dead && (boss.y * 8 + boss.x) === idx
+                    && _bossAdjacente(pSel) && !_temMovimentoLegal(pSel)) {
+                    if (_empurrarBoss(pSel)) return;
+                }
+
+                // 4.2 — Purificação gratuita (forçada ou de resgate)
+                //        Recalcula na hora se o clique veio antes do próximo tick.
+                if (pSel && Array.isArray(window._corruptedTiles) && window._corruptedTiles.includes(idx)
+                    && !(Array.isArray(window._purifyEligibleTiles) && window._purifyEligibleTiles.includes(idx))) {
+                    _recalcularPurificacao(pSel);
+                }
+                if (pSel && Array.isArray(window._purifyEligibleTiles) && window._purifyEligibleTiles.includes(idx)) {
+                    if (_purificarTile(idx, pSel)) return;
+                }
+
+                // 4.3 — Corrupção pendente: não deixa mover antes de purificar
+                if (pSel && window._corruptionPurificationPending) {
+                    if (typeof addLog === 'function') addLog(`🌪️ Purifique um tile corrompido para continuar!`);
+                    return;
+                }
+            }
+
             if (window._corruptedTiles && window._corruptedTiles.includes(idx)) {
                 const p = players[currentPlayerIdx];
                 
@@ -16455,12 +16791,54 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
                     if (typeof saveAndRefresh === 'function') saveAndRefresh();
                     return; 
                 } else {
-                    if (typeof addLog === 'function') addLog(`⛔ Este tile está corrompido! Ative o Solo Sagrado para limpá-lo.`);
+                    if (typeof addLog === 'function') addLog(`⛔ Este tile está corrompido! Purifique-o primeiro.`);
                     return;
                 }
             }
             return _origSelect.apply(this, arguments);
         };
+    }
+
+    // 4.4 — TRAVA O TURNO ENQUANTO A PURIFICAÇÃO ESTIVER PENDENTE
+    const _origManageEsc = window.manageTurns;
+    if (typeof _origManageEsc === 'function' && !_origManageEsc._escapeCorruption) {
+        const _innerManageEsc = _origManageEsc;
+        window.manageTurns = function() {
+            if (!window._coopMode && _escapeAtivo() && window._corruptionPurificationPending
+                && (typeof currentPlayerIdx !== 'undefined') && currentPlayerIdx >= 0) {
+                window._turnoRetidoAguardandoPurificacao = true;
+                if (typeof addLog === 'function') addLog(`🌪️ Turno pausado: purifique um tile corrompido!`);
+                return;
+            }
+            return _innerManageEsc.apply(this, arguments);
+        };
+        window.manageTurns._escapeCorruption = true;
+    }
+
+    const _origExecEsc = window.executeAction;
+    if (typeof _origExecEsc === 'function' && !_origExecEsc._escapeCorruption) {
+        const _innerExecEsc = _origExecEsc;
+        window.executeAction = async function() {
+            if (!window._coopMode && _escapeAtivo() && window._corruptionPurificationPending && _heroiDaVez()) {
+                if (typeof addLog === 'function') addLog(`🌪️ Purifique um tile corrompido antes de jogar o turno!`);
+                return;
+            }
+            return _innerExecEsc.apply(this, arguments);
+        };
+        window.executeAction._escapeCorruption = true;
+    }
+
+    const _origSkillEsc = window.activateSkill;
+    if (typeof _origSkillEsc === 'function' && !_origSkillEsc._escapeCorruption) {
+        const _innerSkillEsc = _origSkillEsc;
+        window.activateSkill = function() {
+            if (!window._coopMode && _escapeAtivo() && window._corruptionPurificationPending && _heroiDaVez()) {
+                if (typeof addLog === 'function') addLog(`🌪️ A corrupção precisa ser purificada primeiro!`);
+                return;
+            }
+            return _innerSkillEsc.apply(this, arguments);
+        };
+        window.activateSkill._escapeCorruption = true;
     }
 
     // 5. CSS
@@ -16502,6 +16880,79 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
             }
         `;
         document.head.appendChild(style);
+    }
+
+    // 6. CSS DO ESCAPE (purificação + empurrão do boss)
+    if (!document.getElementById('corruptionEscapeCSS')) {
+        const estiloEscape = document.createElement('style');
+        estiloEscape.id = 'corruptionEscapeCSS';
+        estiloEscape.textContent = `
+            .tile.tile-corrupted.purify-eligible {
+                cursor: pointer !important;
+            }
+            .tile.tile-corrupted.purify-eligible::after {
+                content: '';
+                position: absolute; inset: 0;
+                border: 3px solid rgba(125,255,176,.95);
+                box-shadow: inset 0 0 16px rgba(125,255,176,.75), 0 0 14px rgba(125,255,176,.85);
+                animation: purifyBlink .8s infinite alternate;
+                pointer-events: none;
+                z-index: 4;
+            }
+            @keyframes purifyBlink {
+                from { opacity: .2; }
+                to { opacity: 1; }
+            }
+            .purify-prompt {
+                position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+                z-index: 5000; pointer-events: none;
+                display: flex; flex-direction: column; align-items: center; gap: 3px;
+                background: linear-gradient(180deg, rgba(40,15,50,.96), rgba(20,5,20,.96));
+                border: 2px solid #8e44ad; border-radius: 8px;
+                padding: 10px 22px; text-align: center;
+                box-shadow: 0 8px 26px rgba(0,0,0,.8);
+                font-family: 'Cinzel Decorative', serif;
+                animation: purifyPromptIn .25s ease-out;
+            }
+            .purify-prompt b {
+                color: #c39bd3; font-size: 1rem; letter-spacing: .5px;
+                text-shadow: 0 0 12px #8e44ad;
+            }
+            .purify-prompt span {
+                color: #d9c89a; font-family: 'EB Garamond', serif;
+                font-size: .95rem; font-style: italic;
+            }
+            .purify-prompt.rescue { border-color: #d4ac0d; }
+            .purify-prompt.rescue b {
+                color: #f7dc6f;
+                text-shadow: 0 0 12px rgba(212,172,13,.85);
+            }
+            @keyframes purifyPromptIn {
+                from { opacity: 0; transform: translate(-50%, -10px); }
+                to { opacity: 1; transform: translate(-50%, 0); }
+            }
+            .boss-push-ring {
+                position: absolute; display: none; pointer-events: none; z-index: 250;
+                box-sizing: border-box; border-radius: 50%;
+                border: 4px solid rgba(255,72,72,.95);
+                box-shadow: 0 0 18px rgba(255,72,72,.95), inset 0 0 18px rgba(255,72,72,.6);
+                animation: bossPushBlink .65s infinite alternate;
+            }
+            @keyframes bossPushBlink {
+                from { opacity: .2; transform: scale(.9); }
+                to { opacity: 1; transform: scale(1.05); }
+            }
+            .boss-push-hint {
+                position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+                z-index: 5000; pointer-events: none;
+                background: rgba(30,5,5,.94); border: 2px solid #e74c3c; border-radius: 8px;
+                padding: 8px 18px; color: #ffb3b3;
+                font-family: 'Cinzel Decorative', serif; font-size: .95rem;
+                box-shadow: 0 8px 24px rgba(0,0,0,.8);
+                animation: purifyBlink .7s infinite alternate;
+            }
+        `;
+        document.head.appendChild(estiloEscape);
     }
 
     console.log('✅ [V10.53] Corrupção Pronta (Reset Ativo + Banner).');
