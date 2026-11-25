@@ -5225,6 +5225,17 @@ function handleStoryPhaseVictory(phase, drops, finalScore, rankSnapshot){
     const cid = parseInt(String(phase.id).split('-')[0]) || 1;
     const nextId = getNextPhaseId(phase.id, cid);
 
+    // [V199] Detecta replay ANTES de completePhase() registrar a vitória.
+    // Usa o progresso da dificuldade atual: a 1ª vitória em cada dificuldade
+    // continua pagando cheio; só repetir a mesma fase corta 50%.
+    const _diffId = (typeof storyCurrentDifficulty !== 'undefined' && storyCurrentDifficulty)
+        ? storyCurrentDifficulty
+        : (STORY_PROGRESS.difficulty || 'normal');
+    const _dp = STORY_PROGRESS.difficultyProgress && STORY_PROGRESS.difficultyProgress[_diffId];
+    const isReplay = !!(_dp && Array.isArray(_dp.completedPhases)
+        && _dp.completedPhases.includes(phase.id));
+    const rewardMult = isReplay ? 0.5 : 1;
+
     players.forEach(p => { if (!p.dead) p.hp = p.maxHp; });
     completePhase(cid, phase.id, nextId);
 
@@ -5251,12 +5262,15 @@ function handleStoryPhaseVictory(phase, drops, finalScore, rankSnapshot){
 
     const unlockedHeroes = checkHeroUnlocks();
 
+    // [V199] phase.reward já chega escalado por Conhecimento, líder e
+    // dificuldade (wrappers anteriores). O corte de replay é aplicado só
+    // no crédito final, para não anular o empilhamento desses bônus.
     const xp = (phase.reward && phase.reward.xp) || 0;
     const gr = (phase.reward && phase.reward.gold) || 0;
-    const isReplay = STORY_PROGRESS.phasesEverCompleted.filter(id => id === phase.id).length > 1;
-    const finalGold = isReplay ? Math.floor(gr * 0.5) : gr;
+    const finalXP = Math.floor(xp * rewardMult);
+    const finalGold = Math.floor(gr * rewardMult);
 
-    STORY_PROGRESS.totalXP += xp;
+    STORY_PROGRESS.totalXP += finalXP;
     addGold(finalGold);
 
     if (phase.isBoss && phase.enemies.length > 0) {
@@ -5265,7 +5279,7 @@ function handleStoryPhaseVictory(phase, drops, finalScore, rankSnapshot){
     }
     saveStoryProgress();
 
-    showStoryVictoryScreen(phase, drops, { xp, gold: finalGold }, {
+    showStoryVictoryScreen(phase, drops, { xp: finalXP, gold: finalGold }, {
         stars: effectiveStars,
         starsJustEarned: stars,
         score: finalScore,

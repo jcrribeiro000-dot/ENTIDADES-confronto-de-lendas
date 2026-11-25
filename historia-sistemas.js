@@ -9886,7 +9886,7 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
             const tierAmuleto = Number(amuleto?.tier)
                 || (typeof getTierFromUid === 'function' ? getTierFromUid(amuleto?.uid || amuleto?.id) : 0)
                 || 0;
-            const chanceCuraAmuleto = [0.50, 0.60, 0.80][Math.max(0, Math.min(2, tierAmuleto))];
+            const chanceCuraAmuleto = [0.50, 0.60, 0.70][Math.max(0, Math.min(2, tierAmuleto))];
             const curaAmuleto = curaAmuletoBase > 0 && Math.random() < chanceCuraAmuleto
                 ? curaAmuletoBase : 0;
             const curaTotal = curaAscensao + curaAmuleto;

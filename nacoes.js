@@ -7367,20 +7367,27 @@
     if (window._fixEstrelasNoNacoes) return;
     window._fixEstrelasNoNacoes = true;
 
+    // [V199] Limiares por dificuldade: quanto maior a dificuldade,
+    // melhor a performance necessária para 3/2 estrelas.
+    const STAR_THRESHOLDS = {
+        normal:   { three: 0.70, two: 0.30 },
+        dificil:  { three: 0.80, two: 0.45 },
+        pesadelo: { three: 0.92, two: 0.70 },
+    };
+
     window.calcularEstrelas = function(score, maxScore) {
         if (!maxScore || maxScore <= 0) return 1;
         const ratio = score / maxScore;
-        let stars = 1;
-        if (ratio >= 0.70) stars = 3;
-        else if (ratio >= 0.30) stars = 2;
-        const diff = (typeof STORY_DIFFICULTIES !== 'undefined'
-                   && typeof storyCurrentDifficulty !== 'undefined')
-            ? STORY_DIFFICULTIES[storyCurrentDifficulty]
-            : null;
-        if (diff && diff.starsBonus > 0) stars = Math.min(3, stars + diff.starsBonus);
-        return stars;
+        let diffId = (typeof storyCurrentDifficulty !== 'undefined' && storyCurrentDifficulty)
+            ? storyCurrentDifficulty
+            : ((typeof STORY_PROGRESS !== 'undefined' && STORY_PROGRESS.difficulty) || 'normal');
+        if (!STAR_THRESHOLDS[diffId]) diffId = 'normal';
+        const t = STAR_THRESHOLDS[diffId];
+        if (ratio >= t.three) return 3;
+        if (ratio >= t.two) return 2;
+        return 1;
     };
-    console.log('✅ [NACOES FIX] calcularEstrelas restaurado (0.70/0.30)');
+    console.log('✅ [V199] calcularEstrelas: Normal 70/30 · Difícil 80/45 · Pesadelo 92/70');
 })();
 // ═══════════════════════════════════════════════════════════
 // FIX DEFINITIVO — calculateFinalScore ignora _storyMode

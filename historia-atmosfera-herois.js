@@ -4474,7 +4474,7 @@ const STORY_DIFFICULTIES = {
         hpMult: 1.5,
         atkMult: 1.3,
         rewardMult: 1.5,
-        starsBonus: 1,
+        starsBonus: 0,
         color: '#e67e22',
         unlockedBy: 'zerar',  // requer ter zerado o jogo no modo anterior
     },
@@ -4486,7 +4486,7 @@ const STORY_DIFFICULTIES = {
         hpMult: 2.2,
         atkMult: 1.6,
         rewardMult: 2.5,
-        starsBonus: 2,
+        starsBonus: 0,
         color: '#a83232',
         unlockedBy: 'dificil',  // requer ter zerado no Difícil
     },
@@ -5460,11 +5460,20 @@ console.log('💡 Zeradas:', STORY_PROGRESS.clearedDifficulties || []);
     window.calcularMaxScorePossivel = function(cid, phase) {
         if (!phase || !phase.enemies || phase.enemies.length === 0) return 100;
 
+        // [V199] Usa o MESMO HP da dificuldade que o score real usa
+        // (boss.maxHp já vem multiplicado). Sem isso o ratio inflava
+        // 1,56x no Difícil e 2,31x no Pesadelo e qualquer limiar falhava.
+        const diffIdAtual = (typeof storyCurrentDifficulty !== 'undefined' && storyCurrentDifficulty)
+            ? storyCurrentDifficulty : 'normal';
+        const diffAtual = (typeof STORY_DIFFICULTIES !== 'undefined')
+            ? STORY_DIFFICULTIES[diffIdAtual] : null;
+        const hpMult = diffAtual ? (diffAtual.hpMult || 1) : 1;
+
         // Soma o HP de TODOS os inimigos da fase
         let somaHp = 0;
         phase.enemies.forEach(enemyId => {
             const enemy = STORY_ENEMIES[enemyId];
-            if (enemy) somaHp += enemy.hp || 30;
+            if (enemy) somaHp += Math.ceil((enemy.hp || 30) * hpMult);
         });
 
         // Cada inimigo gera um score próprio.

@@ -1510,7 +1510,7 @@
         },
         pesadelo: {
             id: 'pesadelo', nome: 'Pesadelo', icon: '💀',
-            hpMult: 2.2, atkMult: 1.6, xpMult: 3.0, ouroMult: 3.0,
+            hpMult: 3.2, atkMult: 2.0, xpMult: 3.0, ouroMult: 3.0,
             dropArma: 0.20, dropItem: 0.20,
             color: '#a83232',
         },
