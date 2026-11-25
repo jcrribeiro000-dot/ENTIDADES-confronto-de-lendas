@@ -1671,6 +1671,12 @@
     }
 
     function _spawnFx(key, cls, x, y, opts) {
+        // [FX-ID] Redireciona o FX genérico para a identidade temática da skill.
+        // A área continua sendo exatamente a que o handler já calculou.
+        const id = window._skillFxIdentityCurrent;
+        if (id && typeof window.playSkillFxTile === 'function') {
+            try { window.playSkillFxTile(id, x, y, opts || {}); return; } catch (e) {}
+        }
         if (typeof spawnFxAt === 'function') spawnFxAt(key, cls, x, y, opts || {});
     }
 
@@ -2316,8 +2322,13 @@
             _dmgGlobal(enemy.atk);
             return;
         }
+        const tokFx = (typeof window._skillFxBegin === 'function')
+            ? window._skillFxBegin(skill.handler) : null;
         try { await fn(enemy, skill); }
         catch (e) { console.error('[evento] Erro em', skill.handler, e); }
+        finally {
+            if (tokFx !== null && typeof window._skillFxEnd === 'function') window._skillFxEnd(tokFx);
+        }
     }
 
     // ==============================================================

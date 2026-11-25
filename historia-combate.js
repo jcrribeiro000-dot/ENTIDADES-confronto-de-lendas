@@ -4134,6 +4134,10 @@
                 background: rgba(10, 6, 2, 0.5);
             }
             .battle-hero-modal-sprite { width: 48px; height: 48px; object-fit: contain; }
+            .battle-hero-modal-sprite-fallback {
+                width: 48px; height: 48px; place-items: center;
+                font-size: 2rem; flex: 0 0 48px;
+            }
             .battle-hero-modal-name {
                 font-family: 'Cinzel', serif;
                 color: #e8b923; font-size: 1.1rem;
@@ -4560,7 +4564,21 @@
         overlay.className = 'battle-hero-modal-overlay';
         overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
 
-        const spriteSrc = (typeof SPRITES !== 'undefined' && SPRITES[heroClass]) || '';
+        // SPRITES só cobre os heróis base; os novos heróis estão em SPRITES_STORY
+        // com chave heroi_X. Sem isso o modal escondia a imagem (onerror) e
+        // mostrava só o nome — parecia "só emoji" dentro da batalha.
+        const spriteSrc = (function resolverSpriteHeroi(cls) {
+            if (typeof SPRITES !== 'undefined' && SPRITES[cls]) return SPRITES[cls];
+            const story = window.SPRITES_STORY || {};
+            if (story[cls]) return story[cls];
+            const norm = s => String(s).toLowerCase()
+                .replace(/[àáâãäèéêëìíîïòóôõöùúûüçñ]/g, '')
+                .replace(/[^a-z0-9]/g, '');
+            const alvo = norm(cls);
+            const key = Object.keys(story).find(k =>
+                k.indexOf('heroi_') === 0 && alvo.indexOf(norm(k.slice(6))) === 0);
+            return key ? story[key] : '';
+        })(heroClass);
         const elColor = { FOGO:'#e74c3c', AGUA:'#3498db', TERRA:'#27ae60', AR:'#f1c40f' }[p.element] || '#c8b787';
 
         const statsHTML = `
@@ -4590,8 +4608,8 @@
         const equipHTML = (weapon || amulet) ? `
             <div class="hero-details-section">
                 <div class="hero-details-section-title">⚔️ EQUIPAMENTO</div>
-                ${weapon ? `<div class="battle-hero-modal-line">⚔️ <b>${weapon.nome}</b> — +${weapon.atkBonus} ATK · ${weapon.elemento === 'ANY' ? '✨ Abissal' : weapon.elemento}</div>` : ''}
-                ${amulet ? `<div class="battle-hero-modal-line">🧿 <b>${amulet.nome}</b></div>` : ''}
+                ${weapon ? `<div class="battle-hero-modal-line">${(typeof window.getWeaponIcon === 'function') ? window.getWeaponIcon(weapon.uid || equip.arma, 'small') : '⚔️'} <b>${weapon.nome}</b> — +${weapon.atkBonus} ATK · ${weapon.elemento === 'ANY' ? '✨ Abissal' : weapon.elemento}</div>` : ''}
+                ${amulet ? `<div class="battle-hero-modal-line">${(typeof window.getAmuletIcon === 'function') ? window.getAmuletIcon(amulet.uid || equip.amuleto, 'small') : '🧿'} <b>${amulet.nome}</b></div>` : ''}
             </div>
         ` : '';
 
@@ -4632,7 +4650,8 @@
         overlay.innerHTML = `
             <div class="battle-hero-modal-panel">
                 <div class="battle-hero-modal-header">
-                    <img src="${spriteSrc}" class="battle-hero-modal-sprite" onerror="this.style.display='none'">
+                    <img src="${spriteSrc}" class="battle-hero-modal-sprite" onerror="this.style.display='none';var f=this.parentElement.querySelector('.battle-hero-modal-sprite-fallback');if(f)f.style.display='grid'">
+                    <span class="battle-hero-modal-sprite-fallback" style="display:none">🧍</span>
                     <div class="battle-hero-modal-name">
                         ${heroData.displayName || heroClass}
                         <span style="font-size:0.75rem; color:${elColor}; margin-left:6px;">${p.element || ''}</span>
@@ -4884,16 +4903,23 @@
             // Captura ANTES (para calcular delta de essência)
             const essenciaAntes = (STORY_PROGRESS?.inventory?.['essencia_sombria'] || 0);
 
-            // ⭐ ROLL CORAÇÃO DO VAZIO (só Pesadelo, só vitória no boss final)
+            // ⭐ ROLL CORAÇÃO DO VAZIO — qualquer boss do Sete Selados.
+            // Antes exigia isPesadelo, então Difícil/Normal nunca dropavam
+            // amuleto nenhum no evento semanal.
             if (vitoria && !saindo
-                && window._eventoBatalha?.isPesadelo
-                && window._eventoBatalha?.faseId === 'boss') {
+                && window._eventoAtivo
+                && window._eventoBatalha?.faseId === 'boss'
+                && !window._nacaoAtivo) {
 
                 const diffId = STORY_PROGRESS.eventoDificuldade || 'normal';
                 const diff = (typeof EVENTO_DIFICULDADES !== 'undefined')
                     ? EVENTO_DIFICULDADES[diffId] : null;
-                // dropItem: 5% / 10% / 20% (mesma chance dos fragmentos raros)
-                const chance = diff?.dropItem ?? 0.05;
+                const isPesadelo = !!window._eventoBatalha?.isPesadelo;
+                // Pesadelo mantém 5/10/20%; nos bosses normais o amuleto é
+                // mais raro que a arma (60% da chance dela).
+                const chance = isPesadelo
+                    ? (diff?.dropItem ?? 0.05)
+                    : Math.max(0.03, (diff?.dropArma ?? 0.05) * 0.6);
 
                 if (Math.random() < chance) {
                     if (!Array.isArray(STORY_PROGRESS.craftedAmulets)) {
@@ -4915,7 +4941,7 @@
                         if (typeof showToast === 'function') {
                             showToast('🖤', 'Coração do Vazio dropado!', '🖤');
                         }
-                        console.log('[V10.80] Coração Vazio dropado do Pesadelo!');
+                        console.log('[V10.80] Coração Vazio dropado do Sete Selados!');
                     } else {
                         console.log('[V10.80] Coração Vazio já possuído. Drop ignorado.');
                     }
@@ -5168,7 +5194,17 @@
         }
 
         // ────────────────────────────────────────────────────────
-        // 3. FALLBACK → emoji
+        // 3. SPRITE EMBUTIDO NO ITEM (equipamentos de raid são
+        //    registrados depois de assets.js e ficam só em .sprite)
+        // ────────────────────────────────────────────────────────
+        const spriteDoItem = STORY_WEAPONS?.[baseId]?.sprite || EVENTO_ARMAS?.[baseId]?.sprite;
+        if (spriteDoItem && String(spriteDoItem).trim() !== '') {
+            const emojiItem = STORY_WEAPONS?.[baseId]?.emoji || EVENTO_ARMAS?.[baseId]?.emoji || '⚔️';
+            return `<img src="${spriteDoItem}" class="${cls}" alt="${baseId}" onerror="this.outerHTML='${emojiItem}'">`;
+        }
+
+        // ────────────────────────────────────────────────────────
+        // 4. FALLBACK → emoji
         // ────────────────────────────────────────────────────────
         const w = (typeof STORY_WEAPONS !== 'undefined') ? STORY_WEAPONS[baseId] : null;
         const evt = (typeof EVENTO_ARMAS !== 'undefined') ? EVENTO_ARMAS[baseId] : null;
@@ -5210,7 +5246,14 @@
             }
         }
 
-        // 2. Fallback emoji
+        // 2. Sprite embutido no item (amuleto de raid registrado depois)
+        const spriteDoItem = STORY_AMULETS?.[baseId]?.sprite;
+        if (spriteDoItem && String(spriteDoItem).trim() !== '') {
+            const emojiItem = STORY_AMULETS?.[baseId]?.emoji || '🧿';
+            return `<img src="${spriteDoItem}" class="${cls}" alt="${baseId}" onerror="this.outerHTML='${emojiItem}'">`;
+        }
+
+        // 3. Fallback emoji
         const a = (typeof STORY_AMULETS !== 'undefined') ? STORY_AMULETS[baseId] : null;
         const emoji = a?.emoji || '🧿';
         const fs = size === 'large' ? '2em' : size === 'small' ? '0.85em' : '1em';
@@ -9315,23 +9358,45 @@ if (heroAgora.class === 'Anhanga-Mirim' && heroAgora.hp < heroAgora.maxHp) {
             ? { x: target.x, y: target.y, dead: target.dead, id: target.id }
             : null;
 
-        // 1. Overlay "PODER ANCESTRAL"
+        // 1. Overlay "PODER ANCESTRAL" + assinatura do herói [FX-ID]
         if (typeof showPoderAncestralEffect === 'function') {
             try { showPoderAncestralEffect(); } catch(e) {}
         }
+        if (typeof window.showSkillSignature === 'function') {
+            try { window.showSkillSignature(active, paKey, element); } catch(e) {}
+        }
         await _sleep(300);
 
-        // 2. Som
-        try { if (typeof playSfx === 'function') playSfx('skill1'); } catch(e) {}
+        // 2. Som (usa o som temático quando houver mapa [FX-ID])
+        const identFx = (typeof window.getSkillFx === 'function') ? window.getSkillFx(paKey) : null;
+        try {
+            if (typeof playSfx === 'function') playSfx((identFx && identFx.sound) || 'skill1');
+        } catch(e) {}
 
         // 3. Calcula tiles afetados
         const paTiles = getPATiles(active, paKey, targetSnapshot);
 
-        // 4. ⭐ FX LEVE (1 pulso por tile, sem linha/coluna inteira)
-        paTiles.forEach((idx, i) => {
-            const tx = idx % 8, ty = Math.floor(idx / 8);
-            _fxLeveTile(tx, ty, element, i * 40);
-        });
+        // 4. ⭐ FX: temático por tile quando mapeado; senão pulso leve legado
+        if (identFx && typeof window.playSkillCinematic === 'function') {
+            try {
+                window.playSkillCinematic(paKey, paTiles, {
+                    element,
+                    origin: { x: active.x, y: active.y },
+                    target: targetSnapshot,
+                });
+            } catch (e) {
+                console.warn('[FX-ID] fallback para FX leve:', e);
+                paTiles.forEach((idx, i) => {
+                    const tx = idx % 8, ty = Math.floor(idx / 8);
+                    _fxLeveTile(tx, ty, element, i * 40);
+                });
+            }
+        } else {
+            paTiles.forEach((idx, i) => {
+                const tx = idx % 8, ty = Math.floor(idx / 8);
+                _fxLeveTile(tx, ty, element, i * 40);
+            });
+        }
 
         await _sleep(400);
 

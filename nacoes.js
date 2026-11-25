@@ -404,7 +404,14 @@
     // ═══════════════════════════════════════════════════════════
     const _sleep = (ms) => new Promise(r => setTimeout(r, ms));
     const _log = (m) => { if (typeof addLog === 'function') addLog(m); };
-    const _fx = (k, c, x, y, o) => { if (typeof spawnFxAt === 'function') spawnFxAt(k, c, x, y, o || {}); };
+    const _fx = (k, c, x, y, o) => {
+        // [FX-ID] Redireciona para a identidade temática sem mudar o tile.
+        const id = window._skillFxIdentityCurrent;
+        if (id && typeof window.playSkillFxTile === 'function') {
+            try { window.playSkillFxTile(id, x, y, o || {}); return; } catch (e) {}
+        }
+        if (typeof spawnFxAt === 'function') spawnFxAt(k, c, x, y, o || {});
+    };
     const _dmg = (t, a) => { if (typeof applyDmg === 'function') applyDmg(t, a); };
     const _alive = () => (typeof players !== 'undefined' ? players.filter(p => p && !p.dead) : []);
 
@@ -1564,23 +1571,38 @@
                     }
                 }
 
-                // Amuleto
-                const chAmu = b.isPesadeloNacao ? CONFIG.dropPesadeloAmuleto : (CONFIG.dropAmuleto[diff] || 0.10);
-                if (Math.random() < chAmu && nacaoId !== 'pesadelo') {
-                    const amuId = 'amuleto_nacao_' + nacaoId;
-                    if (!STORY_PROGRESS.nacaoAmuletos.includes(amuId)) {
-                        STORY_PROGRESS.nacaoAmuletos.push(amuId);
-                        if (!Array.isArray(STORY_PROGRESS.craftedAmulets)) STORY_PROGRESS.craftedAmulets = [];
-                        STORY_PROGRESS.craftedAmulets.push(`${amuId}#${Date.now()}${Math.floor(Math.random() * 1000000)}`);
-                        _log(`🧿 AMULETO dropado: ${AMULETOS[amuId]?.nome || amuId}!`);
-                        lootNotifications.push({
-                            name: AMULETOS[amuId]?.nome || amuId,
-                            quantity: '+1',
-                            iconHTML: typeof window.getAmuletIcon === 'function'
-                                ? window.getAmuletIcon(amuId, 'large')
-                                : window.getRewardIconHTML(amuId, '🧿', 'large'),
-                        });
-                    }
+            }
+
+            // ⭐ Amuleto: rola em QUALQUER fase de boss das Nações.
+            // Antes ficava dentro do bloco de fase 3 e ainda exigia
+            // `nacaoId !== 'pesadelo'` — por isso o Pesadelo nunca dropava
+            // e o config dropPesadeloAmuleto era código morto.
+            if (!Array.isArray(STORY_PROGRESS.nacaoAmuletos)) STORY_PROGRESS.nacaoAmuletos = [];
+            const chAmu = b.isPesadeloNacao
+                ? (CONFIG.dropPesadeloAmuleto || 0.25)
+                : (CONFIG.dropAmuleto[diff] || 0.10) * (faseId === '3' ? 1 : 0.6);
+
+            if (Math.random() < chAmu) {
+                let amuId = b.isPesadeloNacao ? null : 'amuleto_nacao_' + nacaoId;
+                if (b.isPesadeloNacao) {
+                    const pendentes = Object.keys(AMULETOS)
+                        .filter(id => id.indexOf('amuleto_nacao_') === 0
+                            && !STORY_PROGRESS.nacaoAmuletos.includes(id));
+                    amuId = pendentes[Math.floor(Math.random() * pendentes.length)] || null;
+                }
+
+                if (amuId && !STORY_PROGRESS.nacaoAmuletos.includes(amuId)) {
+                    STORY_PROGRESS.nacaoAmuletos.push(amuId);
+                    if (!Array.isArray(STORY_PROGRESS.craftedAmulets)) STORY_PROGRESS.craftedAmulets = [];
+                    STORY_PROGRESS.craftedAmulets.push(`${amuId}#${Date.now()}${Math.floor(Math.random() * 1000000)}`);
+                    _log(`🧿 AMULETO dropado: ${AMULETOS[amuId]?.nome || amuId}!`);
+                    lootNotifications.push({
+                        name: AMULETOS[amuId]?.nome || amuId,
+                        quantity: '+1',
+                        iconHTML: typeof window.getAmuletIcon === 'function'
+                            ? window.getAmuletIcon(amuId, 'large')
+                            : window.getRewardIconHTML(amuId, '🧿', 'large'),
+                    });
                 }
             }
 
@@ -3415,18 +3437,25 @@
                 if (typeof handler === 'function') {
                     console.log(`%c[V2.7 ✅] Handler chamado: ${skill.handler} (atk=${enemy.atk})`,
                         'color:#27ae60;font-weight:bold;');
+                    const tokFx = (typeof window._skillFxBegin === 'function')
+                        ? window._skillFxBegin(skill.handler) : null;
                     try {
                         return await handler(enemy, skill);
                     } catch (e) {
                         console.error(`[V2.7] Handler ${skill.handler} falhou:`, e);
                         return;
+                    } finally {
+                        if (tokFx !== null && typeof window._skillFxEnd === 'function') window._skillFxEnd(tokFx);
                     }
                 }
 
                 // Handler não registrado → fallback SEGURO 3×3 (nunca dano direto em 1 herói)
                 console.warn(`[V2.7] Handler ausente: ${skill.handler}. Fallback 3×3 no boss.`);
                 const c = (typeof boss !== 'undefined' && boss) ? { x: boss.x, y: boss.y } : { x: 4, y: 0 };
-                if (typeof spawnFxAt === 'function') {
+                if (typeof window.playSkillFxTile === 'function') {
+                    try { window.playSkillFxTile(skill.handler, c.x, c.y, { duration: 800, scale: 1.5 }); }
+                    catch (e) { /* fallback abaixo */ }
+                } else if (typeof spawnFxAt === 'function') {
                     spawnFxAt('impact', 'fx-impact', c.x, c.y, { duration: 800, scale: 1.5 });
                 }
                 if (typeof players !== 'undefined') {

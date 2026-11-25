@@ -273,10 +273,12 @@ const STORY_RAID_CONFIG = {
         armas:{tacape:'tacape_lampiao', flecha:'flecha_lampiao', cajado:'cajado_lampiao'},
         passiva:{ id:'solo_sagrado', soloSagradoPorQuadrado:1, maxSoloSagrado:2 },
         skills:[
-            { id:'tiro', nome:'Tiro Certeiro', handler:'raid_lampiao_tiro',
-              danoBase:5, danoBonusElemento:0.5, elementoPerigo:'FOGO', distancia:3, tipo:'projetil' },
+            { id:'tiro', nome:'Tiro de Espingarda', handler:'raid_lampiao_tiro',
+              danoBase:5, danoBonusElemento:0.5, elementoPerigo:'FOGO', 
+              telegraph:true, descricao:'Marca uma coluna dupla aleatória. Dano no próximo turno.' },
             { id:'peixeira', nome:'Golpe de Peixeira', handler:'raid_lampiao_peixeira',
-              danoBase:6, danoBonusElemento:0.5, elementoPerigo:'FOGO', tipo:'corpo_a_corpo', alcance:1 },
+              danoBase:6, danoBonusElemento:0.5, elementoPerigo:'FOGO', 
+              telegraph:false, descricao:'Corta a linha dupla do boss. Dano imediato.' },
         ],
     },
 };
@@ -841,6 +843,24 @@ function raidApplySkillImpact(tiles, options) {
     }
 
     const scale = options?.impactScale || 1.25;
+
+    // [FX-ID] Substitui impact+shockwave genérico pelo efeito temático da skill.
+    const idFx = (options?.skillId && typeof window.getSkillFx === 'function')
+        ? window.getSkillFx(options.skillId) : null;
+    if (idFx && typeof window.playSkillCinematic === 'function') {
+        try {
+            const b = (typeof raidGetBossPrimario === 'function') ? raidGetBossPrimario() : null;
+            const c = (b && typeof raidGetBossCentro === 'function') ? raidGetBossCentro(b) : null;
+            window.playSkillCinematic(options.skillId, tiles || [], {
+                playSound: false,
+                origin: c ? { x: Math.floor(c.x), y: Math.floor(c.y) } : null,
+            });
+            return;
+        } catch (e) {
+            console.warn('[FX-ID] fallback raid impact:', e);
+        }
+    }
+
     (tiles || []).forEach((tile, index) => {
         setTimeout(() => {
             if (typeof spawnFxAt === 'function') {
@@ -859,6 +879,10 @@ function raidApplySkillImpact(tiles, options) {
 
 async function raidTelegraphSkill(skill, tiles, options) {
     options = options || {};
+    // [FX-ID] identifica a skill; o som continua sendo tocado pelo handler.
+    if (!options.skillId && skill) {
+        options.skillId = skill.handler || skill.id || skill.key || '';
+    }
     if (skill?._raidResolve) {
         const pending = window._raidPendingSkill;
         const markedTiles = pending?.tiles || skill._raidTiles || tiles;
@@ -902,6 +926,10 @@ async function raidTelegraphSkill(skill, tiles, options) {
             element.setAttribute('aria-label', `Área ameaçada por ${skill.nome || 'habilidade do chefe'}`);
         }
     });
+    // [FX-ID] Aviso temático fraco sobre os tiles já marcados.
+    if (typeof window.playSkillTelegraph === 'function') {
+        try { window.playSkillTelegraph(options.skillId, uniqueTiles); } catch (e) {}
+    }
     if (typeof addLog === 'function') {
         addLog(`⚠️ ${skill.nome || 'O chefe prepara um ataque'}! A área marcada é perigosa — mova-se antes da próxima ação do chefe.`);
     }
@@ -1529,55 +1557,77 @@ RAID_SKILLS['raid_pesadelo_14_legados'] = async function(enemy, skill) {
 // =================================================================
 // HANDLERS — RAID MENSAL (LAMPIÃO)
 // =================================================================
+
+// TIRO — Telegrafada: marca coluna dupla aleatória (x, x+1) do topo à base (y=0..7)
+// Primeiro turno: telegraph marca perigo. Próximo turno: resolve e aplica dano.
 RAID_SKILLS['raid_lampiao_tiro'] = async function(enemy, skill) {
     raidTocarSom('raid_lampiao_tiro');
     if (typeof addLog === 'function') addLog(`${raidEmoji('lampiao')} ${skill.nome}!`);
 
-    const b = raidGetBossPrimario();
-    const c = raidGetBossCentro(b);
-    const cx = Math.floor(c.x), cy = Math.floor(c.y);
-
-    // Tiro em linha reta até distância 3
+    // Escolhe coluna inicial aleatória (0-6 para caber x e x+1)
+    const col = Math.floor(Math.random() * 7);
     const tiles = [];
-    const dirs = [{dx:1,dy:0},{dx:-1,dy:0},{dx:0,dy:1},{dx:0,dy:-1}];
-    const dir = dirs[Math.floor(Math.random() * dirs.length)];
-    for (let i = 1; i <= 3; i++) {
-        const nx = cx + dir.dx * i, ny = cy + dir.dy * i;
-        if (nx < 0 || nx >= 8 || ny < 0 || ny >= 8) break;
-        tiles.push({ x: nx, y: ny });
+    for (let y = 0; y < 8; y++) {
+        tiles.push({ x: col, y });
+        tiles.push({ x: col + 1, y });
     }
 
+    // Telegraph: marca tiles e aguarda próximo turno
+    // Se _raidResolve=true (próximo turno), raidTelegraphSkill retorna tiles e aplica impacto
+    // Se _raidResolve=false (primeiro turno), marca perigo, guarda em _raidPendingSkill, retorna null
     const marcados = await raidTelegraphSkill(skill, tiles, {
-        impactScale: 1.5, impactEffect: 'flame_short', impactClass: 'fx-flame-short',
+        impactScale: 1.4,
+        impactEffect: 'shot_warning',
+        impactClass: 'fx-shot-warning',
     });
-    if (!marcados) return;
+    if (!marcados) return; // Primeiro turno: telegraph ativo, sai sem dano
+    // Próximo turno: marcados contém os tiles, aplica dano
     raidApplyDmgEmTiles(marcados, skill.danoBase || 5, skill);
 };
 
+// PEIXEIRA — Imediata: atinge a linha dupla do boss (y, y+1) em todo o tabuleiro (x=0..7)
+// Dano aplicado AGORA (skill._raidTelegraph=false). Sprite da peixeira gira pros 2 lados.
 RAID_SKILLS['raid_lampiao_peixeira'] = async function(enemy, skill) {
     raidTocarSom('raid_lampiao_peixeira');
     if (typeof addLog === 'function') addLog(`${raidEmoji('lampiao')} ${skill.nome}!`);
 
     const b = raidGetBossPrimario();
     const c = raidGetBossCentro(b);
-    const cx = Math.floor(c.x), cy = Math.floor(c.y);
+    const by = Math.floor(c.y); // linha superior do boss (size 2 = y e y+1)
 
-    // Área 3x3 ao redor do boss (corpo a corpo)
+    // Linha dupla do boss: y e y+1, todo tabuleiro (x=0..7)
     const tiles = [];
-    for (let dx = -1; dx <= 1; dx++) {
-        for (let dy = -1; dy <= 1; dy++) {
-            const nx = cx + dx, ny = cy + dy;
-            if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) {
-                tiles.push({ x: nx, y: ny });
-            }
-        }
+    for (let x = 0; x < 8; x++) {
+        tiles.push({ x, y: by });
+        if (by + 1 < 8) tiles.push({ x, y: by + 1 });
     }
 
+    // Força telegraph=false para dano imediato (sem aguardar próximo turno)
+    skill._raidTelegraph = false;
+
+    // Telegraph com telegraph=false = dano imediato (raidTelegraphSkill aplica impacto e retorna tiles)
     const marcados = await raidTelegraphSkill(skill, tiles, {
-        impactScale: 1.7, impactEffect: 'slash', impactClass: 'fx-slash',
+        impactScale: 1.7,
+        impactEffect: 'slash',
+        impactClass: 'fx-slash',
     });
     if (!marcados) return;
     raidApplyDmgEmTiles(marcados, skill.danoBase || 6, skill);
+
+    // Efeito visual extra: sprite da peixeira gira pros 2 lados
+    if (typeof spawnFxAt === 'function') {
+        marcados.forEach((tile, i) => {
+            setTimeout(() => {
+                spawnFxAt('slash', 'fx-slash', tile.x, tile.y, {
+                    duration: 500,
+                    scale: 1.3,
+                    rotation: tile.y === by ? -90 : 90, // gira pros 2 lados (esq/dir)
+                });
+            }, i * 12);
+        });
+    }
+
+    if (typeof updateVisuals === 'function') updateVisuals();
 };
 
 function raidPesadeloSussurro() {
@@ -2100,8 +2150,17 @@ function raidAbrirModalEntrada(raidId, tipo) {
                 coopCriarSala(0, RAID_COOP_PREFIX + raidId);
             }
         } else {
-            // Solo: cria a sala automaticamente e entra como P1
-            raidIniciarSoloViaCoop(raidId);
+            // Solo: cria a sala automaticamente e entra como P1.
+            // Este caminho antigo não passava difficulty nem marcava o
+            // contexto regional, então sempre caía em Normal e os hooks
+            // de vitória/conhecimento não rodavam.
+            const difficulty = window._regionalRaidDifficulty || 'normal';
+            if (typeof RAID_DATA !== 'undefined'
+                && Array.isArray(RAID_DATA)
+                && RAID_DATA.some(r => r.id === raidId)) {
+                window._regionalRaidContext = true;
+            }
+            raidIniciarSoloViaCoop(raidId, { difficulty });
         }
     };
 }
@@ -2148,7 +2207,12 @@ async function raidIniciarSoloViaCoop(raidId, options = {}) {
     const raidMensalConfig = cfg.raidMensal && typeof window.getRaidMensalConfig === 'function'
         ? window.getRaidMensalConfig() : null;
     const attemptKey = raidMensalConfig?.monthKey || weekKey;
-    if ((raidMensalConfig ? attempt?.month === attemptKey : attempt?.week === weekKey) && !isResume) {
+    const tentativaConsumida = raidMensalConfig
+        ? attempt?.month === attemptKey
+        : attempt?.week === weekKey;
+    // Só o anfitrião (ou o raid solo) consome/valida a tentativa.
+    // O convidado pode entrar mesmo já tendo usado a própria tentativa.
+    if (tentativaConsumida && !isResume && isCoopHost) {
         uiAviso(raidMensalConfig
             ? 'Você já usou sua tentativa mensal contra o Lampião.'
             : 'Esta Raid já teve sua tentativa semanal consumida, independentemente da dificuldade.');
@@ -2179,7 +2243,7 @@ async function raidIniciarSoloViaCoop(raidId, options = {}) {
         return;
     }
 
-    if (!isResume) {
+    if (!isResume && isCoopHost) {
         if (!STORY_PROGRESS.raidAttempts || typeof STORY_PROGRESS.raidAttempts !== 'object') {
             STORY_PROGRESS.raidAttempts = {};
         }
@@ -2516,11 +2580,18 @@ async function raidExecutarAcao(active) {
     const info = CLASS_DB[active.class] || { atk: 2, min: 0 };
     const heroData = STORY_HERO_CLASSES[active.class] || { role: 'Guerreiro' };
     const usedPath = [...path];
+
+    // Bônus de nível 11 (alcance/PA/formas/elemento) antes só eram lidos
+    // pelo wrapper de executeAction — o raid ataca por aqui e ignorava tudo.
+    const levelBonus = (typeof getHeroBonusFromLevel === 'function')
+        ? (getHeroBonusFromLevel(active.class) || {}) : {};
+    const minTiles = Math.max(0, (info.min || 0) + (levelBonus.range || 0));
+
     const lampiaoConfig = raidGetConfig('lampiao');
     const lampiaoActive = window.raidAtual === 'lampiao';
     const sacredBonus = lampiaoActive ? (window._lampiaoSoloSagradoBonus || 0) : 0;
     const baseThreshold = parseInt(document.getElementById('bravely_tiles')?.value) || 9;
-    const threshold = Math.max(1, baseThreshold - sacredBonus);
+    const threshold = Math.max(1, baseThreshold - sacredBonus + (levelBonus.paThreshold || 0));
     const isBravely = usedPath.length >= threshold;
     let lampiaoQuadradoBonus = 0;
 
@@ -2536,9 +2607,6 @@ async function raidExecutarAcao(active) {
         }
     }
 
-    let levelBonus = { atk: 0 };
-    if (typeof getHeroBonusFromLevel === 'function') levelBonus = getHeroBonusFromLevel(active.class) || levelBonus;
-
     let weaponElementBonus = 0;
     if (typeof getHeroEquipment === 'function' && typeof getWeaponById === 'function') {
         const eq = getHeroEquipment(active.class);
@@ -2552,9 +2620,39 @@ async function raidExecutarAcao(active) {
         }
     }
 
+    // Formas e elemento do nível 11 entram como bônus de ATK, igual à história.
+    let stat11AtkBonus = 0;
+    if (shape && (levelBonus.formAtk || 0) > 0) stat11AtkBonus += levelBonus.formAtk;
+    if (usedPath.length > 0 && (levelBonus.bonusElemento || 0) > 0
+        && grid[usedPath[0]] === active.element) {
+        stat11AtkBonus += levelBonus.bonusElemento;
+    }
+
     const titleAtkBonus = active.titleBonus?.ATK || 0;
     const tileBonus = (usedPath.length > 0 && grid[usedPath[0]] === active.element) ? 1 : 0;
-    const totalAtk = info.atk + (active.bonusAtk || 0) + (levelBonus.atk || 0) + tileBonus + skillAtkBonus + titleAtkBonus + weaponElementBonus;
+
+    // Passivas de ATK (Curupira/Kianumanka) também valem no golpe de raid.
+    // O golpe normal não passa por applyDmg, então o multiplicador da história
+    // nunca era aplicado aqui.
+    let passiveMult = 1;
+    const passive = STORY_HERO_CLASSES[active.class]?.passive;
+    const bPassiva = (typeof raidGetBossPrimario === 'function') ? raidGetBossPrimario() : null;
+    if (bPassiva && !bPassiva.dead) {
+        const tilesBoss = (typeof raidGetOccupiedTiles === 'function')
+            ? raidGetOccupiedTiles(bPassiva) : [{ x: bPassiva.x, y: bPassiva.y }];
+        if ((active.class === 'Curupira' || passive === 'curupira_adjacente')
+            && tilesBoss.some(t => Math.abs(active.x - t.x) + Math.abs(active.y - t.y) <= 1)) {
+            passiveMult = 1.5;
+        }
+        if ((active.class === 'Kianumanka-Manã' || passive === 'kianumanka_fogo')
+            && tilesBoss.some(t => grid[t.y * 8 + t.x] === 'FOGO')) {
+            passiveMult = 1.5;
+        }
+    }
+
+    const totalAtk = Math.floor((info.atk + (active.bonusAtk || 0) + (levelBonus.atk || 0)
+        + tileBonus + skillAtkBonus + titleAtkBonus + weaponElementBonus + stat11AtkBonus)
+        * passiveMult);
 
     // A janela de piso perfeito começa quando o boss inicia seu turno e termina
     // quando o primeiro herói completa a próxima ação: assim os dois heróis de
@@ -2606,8 +2704,8 @@ async function raidExecutarAcao(active) {
             await raidSleep(100);
         }
         const b = raidGetBossPrimario();
-        if (usedPath.length >= (info.min || 0) && b && !b.dead) {
-            const extra = usedPath.length - (info.min || 0);
+        if (usedPath.length >= minTiles && b && !b.dead) {
+            const extra = usedPath.length - minTiles;
             if (heroData.role === 'Arqueiro') {
                 if (typeof spawnArrowProjectile === 'function') await spawnArrowProjectile(active, { x: b.x, y: b.y });
                 if (typeof playSfx === 'function') playSfx('atka');
@@ -3752,4 +3850,47 @@ console.log('⚔️ Modo RAID pronto. Aldeia → ⚔️ RAID');
     console.log('   • manageTurns original bloqueado');
     console.log('   • tokenBoss original REMOVIDO');
     console.log('   • updateVisuals sincroniza raidBossToken');
+})();
+
+// =================================================================
+// Passivas defensivas dos heróis em RAID
+// -----------------------------------------------------------------
+// Em história/coop essas passivas são vistas dentro de executeAction/
+// applyDmg. O raid substitui o combate e não passava por nenhum deles,
+// então "Resistência Tribal", "Aura de Medo" e "Ressurreição" ficavam
+// só no texto do modal. Aqui elas passam a valer no dano recebido.
+// =================================================================
+(function installRaidHeroPassives() {
+    if (window._raidHeroPassivesV1) return;
+    window._raidHeroPassivesV1 = true;
+    if (typeof window.applyDmg !== 'function') return;
+
+    const _applyDmgRaid = window.applyDmg;
+    window.applyDmg = function(target, amount) {
+        if (window._raidMode && target && Array.isArray(players)
+            && players.indexOf(target) !== -1 && !target.dead) {
+            const passive = (typeof STORY_HERO_CLASSES !== 'undefined')
+                ? STORY_HERO_CLASSES[target.class]?.passive : null;
+
+            if (passive === 'tupinamba_resistencia') {
+                amount = Math.max(0, Number(amount) - 1);
+            }
+            if (passive === 'matinta_medo') {
+                const b = (typeof raidGetBossPrimario === 'function') ? raidGetBossPrimario() : null;
+                if (b && !b.dead
+                    && Math.abs(target.x - b.x) + Math.abs(target.y - b.y) <= 1) {
+                    amount = Math.max(0, Number(amount) - 1);
+                }
+            }
+            if (passive === 'negrinho_revive' && !target._negrinhoReviveUsed
+                && Number(amount) >= target.hp && target.hp > 0) {
+                target._negrinhoReviveUsed = true;
+                if (Math.random() < 0.5) {
+                    amount = target.hp - 1;
+                    if (typeof addLog === 'function') addLog('⭐ Ressurreição! Negrinho sobrevive com 1 HP.');
+                }
+            }
+        }
+        return _applyDmgRaid.call(this, target, amount);
+    };
 })();
