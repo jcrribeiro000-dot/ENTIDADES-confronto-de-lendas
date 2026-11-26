@@ -8721,7 +8721,7 @@ if (heroAgora.class === 'Anhanga-Mirim' && heroAgora.hp < heroAgora.maxHp) {
 //   7. ~450ms total (300 voo + 150 impacto) — não arrasta
 //
 // Fallback:
-//   • Sem _storyMode/_eventoAtivo → delega pro original
+//   • Sem _storyMode/_eventoAtivo/_raidMode → delega pro original
 //   • PvP/Coop → delega (sincronização própria)
 //   • Sem board ou sem active/target → delega
 //
@@ -8915,8 +8915,10 @@ if (heroAgora.class === 'Anhanga-Mirim' && heroAgora.hp < heroAgora.maxHp) {
     // FUNÇÃO PRINCIPAL
     // ═══════════════════════════════════════════════════════════
     window.spawnArrowProjectile = async function(active, target) {
-        // Fora do história/evento → original
-        if (!window._storyMode && !window._eventoAtivo) {
+        // [V201] Fora de história/evento/RAID → original.
+        // A raid também usa a animação nova: antes caía no .arrow-fx antigo
+        // do entidades.js porque _storyMode e _eventoAtivo são falsos nela.
+        if (!window._storyMode && !window._eventoAtivo && !window._raidMode) {
             if (typeof _orig === 'function') return _orig.apply(this, arguments);
             return Promise.resolve();
         }

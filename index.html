@@ -3485,20 +3485,39 @@
             }
             
             .game-main {
+                /* [V201] Referência de largura pro board: o content-box do main.
+                   Usar 100vw aqui contaria a barra de rolagem e o board vazaria. */
+                container-type: inline-size;
                 flex-direction: column;
                 align-items: center;
-                padding: 8px;
+                padding: 8px 4px; /* [V201] 4px lateral: tabuleiro usa a largura toda */
                 gap: 10px;
                 overflow: visible;
             }
             
-            /* BOARD ocupa largura total */
+            /* [V201] BOARD ocupa a largura útil real:
+               100cqw = largura do content-box do .game-main (sem scrollbar).
+               Desconta 22px da moldura e 7 gaps, dividido por 8.
+               O min() com a altura evita que o board empurre os botões/ações. */
             .board-area {
+                --tile-size: clamp(24px,
+                    min(calc((100cqw - 22px - (var(--gap) * 7)) * 0.125),
+                        calc((100vh - 300px) * 0.125)),
+                    68px);
                 width: 100%;
                 max-width: 100%;
                 flex-shrink: 0;
                 gap: 12px;
                 order: 1;
+            }
+
+            /* Eventos têm banner + badge + botão extra: reserva mais altura
+               para os outros elementos continuarem cabendo na tela. */
+            body:has(.evento-banner) .board-area {
+                --tile-size: clamp(24px,
+                    min(calc((100cqw - 22px - (var(--gap) * 7)) * 0.125),
+                        calc((100vh - 360px) * 0.125)),
+                    68px);
             }
             
             /* Botões logo abaixo do board */
