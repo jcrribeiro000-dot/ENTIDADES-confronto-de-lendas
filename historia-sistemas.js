@@ -7130,8 +7130,15 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
         const cfg = (bossId === 'pesadelo') ? EVENTO_PESADELO : EVENTO_BOSSES[bossId];
         if (!cfg) return;
         const diff = EVENTO_DIFICULDADES[diffId || 'normal'];
-        const xpBase = faseId === 'boss' ? cfg.recompensaXP : Math.floor(cfg.recompensaXP / 5);
-        const ouroBase = faseId === 'boss' ? cfg.recompensaOuro : Math.floor(cfg.recompensaOuro / 5);
+        // [V202] Usa o mesmo fator por fase do crédito oficial.
+        const fatorFase = typeof window.eventoFatorRecompensaFase === 'function'
+            ? window.eventoFatorRecompensaFase(faseId) : 1;
+        const xpBase = faseId === 'boss'
+            ? cfg.recompensaXP
+            : Math.floor(Math.floor(cfg.recompensaXP / 5) * fatorFase);
+        const ouroBase = faseId === 'boss'
+            ? cfg.recompensaOuro
+            : Math.floor(Math.floor(cfg.recompensaOuro / 5) * fatorFase);
         console.log(`📊 ${cfg.nome} - Fase ${faseId} (${diff.nome}):`);
         console.log(`   XP base: ${xpBase}, XP final: ${Math.floor(xpBase * diff.xpMult)}`);
         console.log(`   Ouro base: ${ouroBase}, Ouro final: ${Math.floor(ouroBase * diff.ouroMult)}`);
@@ -7932,8 +7939,15 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
         if (drops && drops.fragmento) dropsFormatados.push({ id: drops.fragmento, qty: 1 });
 
         // Calcula XP/Ouro (a mesma lógica que já rodou no eventoFinalizarPartida)
-        const xpBase = faseId === 'boss' ? cfg.recompensaXP : Math.floor(cfg.recompensaXP / 5);
-        const ouroBase = faseId === 'boss' ? cfg.recompensaOuro : Math.floor(cfg.recompensaOuro / 5);
+        // [V202] Fator por fase compartilhado: 1,00 / 1,25 / 1,50 / 1,75.
+        const fatorFase = typeof window.eventoFatorRecompensaFase === 'function'
+            ? window.eventoFatorRecompensaFase(faseId) : 1;
+        const xpBase = faseId === 'boss'
+            ? cfg.recompensaXP
+            : Math.floor(Math.floor(cfg.recompensaXP / 5) * fatorFase);
+        const ouroBase = faseId === 'boss'
+            ? cfg.recompensaOuro
+            : Math.floor(Math.floor(cfg.recompensaOuro / 5) * fatorFase);
         const xpGanho = Math.floor(xpBase * diff.xpMult);
         const ouroGanho = Math.floor(ouroBase * diff.ouroMult);
 

@@ -340,6 +340,21 @@
     };
 
     // ==============================================================
+    // [V202] XP/Ouro progressivo por fase dos Sete Selados
+    // --------------------------------------------------------------
+    // A fila de cada fase tem 1, 2, 3 ou 4 inimigos, mas o crédito era
+    // sempre cfg.recompensaXP/5 e cfg.recompensaOuro/5 (idêntico em todas).
+    // Fator gradual e moderado: +25% por inimigo extra, sem dobrar/triplicar.
+    //   fase 1 -> 1,00 | fase 2 -> 1,25 | fase 3 -> 1,50 | fase 4 -> 1,75
+    // Fase boss retorna 1 (o crédito do boss continua 100% do cfg).
+    // ==============================================================
+    function eventoFatorRecompensaFase(faseId) {
+        const n = parseInt(faseId, 10);
+        if (!Number.isFinite(n) || n < 1) return 1;
+        return 1 + (Math.min(4, n) - 1) * 0.25;
+    }
+
+    // ==============================================================
     // 5. ANIMAIS DO EVENTO (com +10 HP / +1 ATK)
     // --------------------------------------------------------------
     // Mapa: animalId → { hpBonus, atkBonus }
@@ -1440,6 +1455,7 @@
     window.isFaseEventoConcluida = isFaseEventoConcluida;
     window.garantirEstruturaEvento = garantirEstruturaEvento;
     window.EVENTO_ANIMAL_BONUS = EVENTO_ANIMAL_BONUS;
+    window.eventoFatorRecompensaFase = eventoFatorRecompensaFase; // [V202] usado também pela tela de vitória
 
     // ==============================================================
     // 22. LOG FINAL
@@ -2967,8 +2983,15 @@
                 : (typeof EVENTO_BOSSES !== 'undefined' ? EVENTO_BOSSES[bossId] : null);
             const diff = _eventoBatalha.dificuldade;
             if (cfg && diff) {
-                const xpBase = faseId === 'boss' ? cfg.recompensaXP : Math.floor(cfg.recompensaXP / 5);
-                const ouroBase = faseId === 'boss' ? cfg.recompensaOuro : Math.floor(cfg.recompensaOuro / 5);
+                // [V202] Fases 1..4: 1/5 do prêmio do boss × fator da fase.
+                // Boss/Pesadelo: 100% do cfg, como antes.
+                const fatorFase = eventoFatorRecompensaFase(faseId);
+                const xpBase = faseId === 'boss'
+                    ? cfg.recompensaXP
+                    : Math.floor(Math.floor(cfg.recompensaXP / 5) * fatorFase);
+                const ouroBase = faseId === 'boss'
+                    ? cfg.recompensaOuro
+                    : Math.floor(Math.floor(cfg.recompensaOuro / 5) * fatorFase);
                 STORY_PROGRESS.totalXP = (STORY_PROGRESS.totalXP || 0) + Math.floor(xpBase * diff.xpMult);
                 STORY_PROGRESS.gold = (STORY_PROGRESS.gold || 0) + Math.floor(ouroBase * diff.ouroMult);
             }

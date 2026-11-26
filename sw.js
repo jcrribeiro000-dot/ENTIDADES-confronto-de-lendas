@@ -1,4 +1,4 @@
-const CACHE = 'entidades-v201';
+const CACHE = 'entidades-v206';
 const ASSETS = [
   './',
   './index.html',
@@ -24,7 +24,10 @@ const ASSETS = [
   './selo-novo.js',
   './navegacao-voltar.js',
   './tutorial-fases.js',
-  './fx-identidade.js'
+  './fx-identidade.js',
+  './temas-catalogo.js',
+  './calendario-tematico.js',
+  './auras-tematicas.js'
 ];
 
 self.addEventListener('install', (e) => {
