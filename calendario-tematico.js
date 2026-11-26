@@ -79,6 +79,8 @@
                 diarias: 0,
                 recompensa: null,
                 recompensaCreditada: false,
+                recompensaPendente: false,
+                resgatadaEm: null,
                 ba: null,
                 semanas: {},
                 auras: [],
@@ -91,6 +93,11 @@
         c.auras = Array.isArray(c.auras) ? c.auras : [];
         c.atos = c.atos || {};
         c.historico = Array.isArray(c.historico) ? c.historico : [];
+        if (typeof c.recompensaPendente !== 'boolean') {
+            // Compatibilidade: saves antigos com missão concluída e não creditada.
+            c.recompensaPendente = !!(c.recompensaCreditada === false && c.missao && c.missao.concluidaEm);
+        }
+        if (c.recompensaCreditada) c.recompensaPendente = false;
         return c;
     }
     window.calendarioGarantir = garantirCheckin;
@@ -131,6 +138,83 @@
         return sortearPonderado(RECOMPENSAS, seedData(d) >>> 3);
     }
 
+    // A recompensa é sorteada no início do dia, mas só é creditada quando o
+    // jogador clica em RECEBER. Tudo o que será dado fica preparado no save:
+    // assim a prévia e o crédito são sempre idênticos, mesmo noutro momento.
+    function dataDeStr(s) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(s || '')) return new Date();
+        const p = s.split('-').map(Number);
+        return new Date(p[0], p[1] - 1, p[2]);
+    }
+
+    function nomeMaterial(id) {
+        try {
+            if (typeof STORY_MATERIALS !== 'undefined' && STORY_MATERIALS[id]) {
+                return STORY_MATERIALS[id].name || STORY_MATERIALS[id].nome || id;
+            }
+        } catch (e) {}
+        return String(id);
+    }
+
+    function emojiMaterial(id) {
+        try {
+            if (typeof STORY_MATERIALS !== 'undefined' && STORY_MATERIALS[id]) {
+                return STORY_MATERIALS[id].emoji || '📦';
+            }
+        } catch (e) {}
+        return '📦';
+    }
+
+    function prepararRecompensa(base, dia) {
+        const rec = Object.assign({}, base || {}); // nunca mutar RECOMPENSAS
+        const ref = dataDeStr(dia);
+        const fmt = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+        const detalhes = [];
+
+        if (rec.ouro)   detalhes.push({ icone: '🪙', texto: fmt(rec.ouro) + ' de ouro' });
+        if (rec.xp)     detalhes.push({ icone: '⭐', texto: fmt(rec.xp) + ' de XP' });
+        if (rec.ess)    detalhes.push({ icone: '🖤', texto: fmt(rec.ess) + ' de essência sombria' });
+        if (rec.nucleo) detalhes.push({ icone: '💀', texto: rec.nucleo + '× Núcleo do Abismo' });
+        if (rec.chave)  detalhes.push({ icone: '🔑', texto: rec.chave + '× Chave do Sete Selados' });
+
+        if (rec.qtd) {
+            const seed = seedData(ref) >>> 5;
+            rec.materiais = [];
+            for (let i = 0; i < rec.qtd; i++) rec.materiais.push(MAT_COMUNS[(seed + i) % MAT_COMUNS.length]);
+            const contagem = {};
+            rec.materiais.forEach(id => { contagem[id] = (contagem[id] || 0) + 1; });
+            Object.keys(contagem).forEach(id => {
+                detalhes.push({ icone: emojiMaterial(id), texto: contagem[id] + '× ' + nomeMaterial(id) });
+            });
+        }
+
+        if (rec.raro) {
+            rec.materialRaro = MAT_RAROS[seedData(ref) % MAT_RAROS.length];
+            detalhes.push({ icone: emojiMaterial(rec.materialRaro), texto: '1× ' + nomeMaterial(rec.materialRaro) + ' (raro)' });
+        }
+
+        if (rec.item) {
+            const arms = (typeof window.STORY_WEAPONS !== 'undefined') ? window.STORY_WEAPONS : {};
+            rec.itemId = itemAleatorioDe(arms, seedData(ref) >>> 7);
+            let nome = rec.itemId || 'item de evento antigo';
+            let icone = '⚔️';
+            try {
+                const arm = (typeof getWeaponById === 'function') ? getWeaponById(rec.itemId) : (arms[rec.itemId] || null);
+                if (arm) { nome = arm.nome || nome; icone = arm.emoji || icone; }
+            } catch (e) {}
+            detalhes.push({ icone, texto: '1× ' + nome + ' (item de evento antigo)' });
+        }
+
+        rec.detalhes = detalhes;
+        return rec;
+    }
+
+    function prepararSeNecessario(c) {
+        if (!c || !c.recompensa || Array.isArray(c.recompensa.detalhes)) return false;
+        c.recompensa = prepararRecompensa(c.recompensa, c.diaAtual || hojeStr());
+        return true;
+    }
+
     // ─────────────────────────────────────────────────────────────
     // CRÉDITOS
     // ─────────────────────────────────────────────────────────────
@@ -166,14 +250,15 @@
         if (rec.ess) addInv('essencia_sombria', rec.ess);
         if (rec.nucleo) addInv('nucleo_abismo', rec.nucleo);
         if (rec.chave) darChaves(rec.chave);
-        if (rec.qtd) {
+        if (Array.isArray(rec.materiais)) rec.materiais.forEach(id => addInv(id, 1));
+        else if (rec.qtd) {
             const seed = seedData() >>> 5;
             for (let i = 0; i < rec.qtd; i++) addInv(MAT_COMUNS[(seed + i) % MAT_COMUNS.length], 1);
         }
-        if (rec.raro) addInv(MAT_RAROS[seedData() % MAT_RAROS.length], 1);
+        if (rec.raro) addInv(rec.materialRaro || MAT_RAROS[seedData() % MAT_RAROS.length], 1);
         if (rec.item) {
             const arms = (typeof window.STORY_WEAPONS !== 'undefined') ? window.STORY_WEAPONS : {};
-            const id = itemAleatorioDe(arms, seedData() >>> 7);
+            const id = rec.itemId || itemAleatorioDe(arms, seedData() >>> 7);
             if (id) {
                 if (!Array.isArray(STORY_PROGRESS.craftedWeapons)) STORY_PROGRESS.craftedWeapons = [];
                 STORY_PROGRESS.craftedWeapons.push(uid(id));
@@ -239,11 +324,14 @@
     }
 
     function completarMissao(c) {
-        if (!c.missao || c.missao.concluidaEm || c.recompensaCreditada) return;
+        if (!c.missao || c.missao.concluidaEm || c.recompensaCreditada || c.recompensaPendente) return;
         c.missao.concluidaEm = Date.now();
         if (!c.recompensa) c.recompensa = getRecompensaDoDia();
-        creditarRecompensaDiaria(c.recompensa);
-        c.recompensaCreditada = true;
+        prepararSeNecessario(c);
+        // A missão só libera o resgate; o crédito acontece em resgatarRecompensa().
+        c.recompensaPendente = true;
+        c.recompensaCreditada = false;
+        c.resgatadaEm = null;
         c.diarias = (c.diarias || 0) + 1;
         c.historico.push({ dia: hojeStr(), missao: c.missao.id, recompensa: c.recompensa.texto });
         if (c.historico.length > 90) c.historico = c.historico.slice(-90);
@@ -255,11 +343,12 @@
                 const premio = sortearPonderado(PREMIOS_BAU, (seedData() ^ (c.diarias * 7919)) >>> 0);
                 c.ba = { prontoEm: Date.now(), premioId: premio.id, girado: false, resgatadoEm: null };
             }
-            aviso('🎁 BAÚ DESBLOQUEADO!', 'Abra o Calendário para girar', '🎁');
+            aviso('🎁 BAÚ DESBLOQUEADO!', 'Resgate a recompensa e abra o baú no Calendário', '🎁');
         } else {
-            aviso('✅ MISSÃO DIÁRIA CONCLUÍDA', c.recompensa.texto, c.missao.icone);
+            aviso('✅ MISSÃO DIÁRIA CONCLUÍDA', 'Resgate sua recompensa no Calendário', c.missao.icone);
         }
         som('win');
+        atualizarIndicador();
         renderizarSeAberto();
     }
 
@@ -333,9 +422,13 @@
             const base = getMissaoDoDia();
             c.diaAtual = hoje;
             c.missao = { id: base.id, tipo: base.tipo, meta: base.meta, progresso: 0, dia: hoje, concluidaEm: null, texto: base.texto, icone: base.icone };
-            c.recompensa = getRecompensaDoDia();
+            c.recompensa = prepararRecompensa(getRecompensaDoDia(), hoje);
             c.recompensaCreditada = false;
+            c.recompensaPendente = false;
+            c.resgatadaEm = null;
             salvar();
+        } else if (prepararSeNecessario(c)) {
+            salvar(); // migra saves antigos para o formato com prévia detalhada
         }
         return c;
     }
@@ -352,6 +445,8 @@
           dia: c.diaAtual,
             missao: c.missao,
             recompensaTexto: c.recompensa ? c.recompensa.texto : '',
+            recompensaPendente: !!(c.recompensaPendente && !c.recompensaCreditada),
+            recompensaCreditada: !!c.recompensaCreditada,
             diarias: c.diarias || 0,
             faltam: Math.max(0, DIAS_PARA_BAU - (c.diarias || 0)),
             bau: c.ba,
@@ -385,6 +480,43 @@
         return true;
     };
 
+    function temRecompensaParaResgatar() {
+        const c = garantirCheckin();
+        return !!(c && c.recompensaPendente && !c.recompensaCreditada
+            && c.missao && c.missao.concluidaEm
+            && c.diaAtual === hojeStr() && c.missao.dia === c.diaAtual);
+    }
+    window.calendarioTemRecompensa = temRecompensaParaResgatar;
+    window.calendarioRecompensaPendente = function () {
+        const c = garantirCheckin();
+        if (!c || !c.recompensa) return null;
+        prepararSeNecessario(c);
+        return {
+            texto: c.recompensa.texto,
+            detalhes: (c.recompensa.detalhes || []).map(d => Object.assign({}, d)),
+            pendente: temRecompensaParaResgatar(),
+            creditada: !!c.recompensaCreditada,
+            resgatadaEm: c.resgatadaEm || null,
+        };
+    };
+
+    function resgatarRecompensa() {
+        const c = garantirMissaoDoDia();
+        if (!c || !temRecompensaParaResgatar()) return false;
+        const rec = Object.assign({}, c.recompensa); // exatamente o que foi mostrado na prévia
+        creditarRecompensaDiaria(rec);
+        c.recompensaCreditada = true;
+        c.recompensaPendente = false;
+        c.resgatadaEm = Date.now();
+        salvar();
+        som('win');
+        aviso('🎁 RECOMPENSA RECEBIDA', rec.texto, '📅');
+        atualizarIndicador();
+        renderizarSeAberto();
+        return true;
+    }
+    window.calendarioResgatarRecompensa = resgatarRecompensa;
+
     function resgatarBau() {
         const c = garantirCheckin();
         if (!c || !c.ba || !c.ba.girado || c.ba.resgatadoEm) return false;
@@ -405,7 +537,12 @@
     const CSS = `
     <style id="calendarioV206CSS">
       #btnCalendarioV206{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;flex:0 0 auto;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:linear-gradient(135deg,#2b2350,#3b2c6e);color:#fff;font-size:14px;line-height:1;cursor:pointer;box-shadow:0 3px 12px rgba(0,0,0,.35)}
+      #btnCalendarioV206{position:relative}
       #btnCalendarioV206:hover{filter:brightness(1.15)}
+      #btnCalendarioV206.pendente{border-color:#ffd54f;box-shadow:0 0 0 2px rgba(255,213,79,.35),0 3px 14px rgba(255,179,0,.55);animation:cal-piscar 1.1s ease-in-out infinite}
+      #btnCalendarioV206.pendente::after{content:'!';position:absolute;top:-5px;right:-5px;width:15px;height:15px;border-radius:50%;background:#ff3d00;color:#fff;font-size:11px;font-weight:900;line-height:15px;text-align:center;border:1px solid #fff}
+      @keyframes cal-piscar{0%,100%{transform:scale(1);filter:brightness(1)}50%{transform:scale(1.12);filter:brightness(1.45)}}
+      @media(prefers-reduced-motion:reduce){#btnCalendarioV206.pendente{animation:none;box-shadow:0 0 0 2px rgba(255,213,79,.5)}}
       .cal-overlay{position:fixed;inset:0;z-index:60000;display:none;align-items:center;justify-content:center;padding:14px;background:rgba(3,4,10,.82)}
       .cal-overlay.active{display:flex}
       .cal-panel{width:min(560px,96vw);max-height:92vh;overflow:auto;border-radius:20px;border:1px solid rgba(255,255,255,.16);box-shadow:0 20px 70px rgba(0,0,0,.7);color:#fff;padding:16px;position:relative}
@@ -418,6 +555,9 @@
       .cal-barra{height:9px;border-radius:9px;background:rgba(0,0,0,.45);overflow:hidden;margin-top:9px}
       .cal-barra i{display:block;height:100%;background:linear-gradient(90deg,#7c4dff,#00e5ff);width:0}
       .cal-pequeno{font-size:11px;opacity:.8;margin-top:6px}
+      .cal-detalhes{display:grid;gap:5px;margin-top:9px;padding:9px;border-radius:10px;background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.1)}
+      .cal-detalhe{display:flex;gap:8px;align-items:center;font-size:12px}
+      .cal-detalhe span:first-child{width:20px;text-align:center}
       .cal-linha{display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:12px;margin:5px 0}
       .cal-btn{border:0;border-radius:12px;padding:10px 14px;font-weight:900;cursor:pointer;background:linear-gradient(135deg,#ffb300,#ff6f00);color:#1a1200}
       .cal-btn:disabled{opacity:.45;cursor:default}
@@ -469,6 +609,10 @@
         const semana = tema ? (c.semanas[tema.id] || { dias: [] }) : { dias: [] };
         const diasSemana = Array.isArray(semana.dias) ? semana.dias.length : 0;
         const premio = c.ba ? PREMIOS_BAU.find(p => p.id === c.ba.premioId) : null;
+        const pendente = temRecompensaParaResgatar();
+        const creditada = !!c.recompensaCreditada;
+        const detalhes = (c.recompensa && Array.isArray(c.recompensa.detalhes)) ? c.recompensa.detalhes : [];
+        atualizarIndicador();
 
         let html = '<button class="cal-fechar" onclick="window.calendarioFechar()">✕</button>';
         html += '<h3>' + (tema ? tema.icone + ' Calendário de Anhangá — ' + tema.nome : '📅 Calendário de Anhangá') + '</h3>';
@@ -478,7 +622,21 @@
         html += '<div class="cal-barra"><i style="width:' + pct + '%"></i></div>';
         html += '<div class="cal-pequeno">' + (feita ? '✅ Concluída hoje' : prog + ' / ' + m.meta) + '</div></div>';
 
-        html += '<div class="cal-card"><div class="cal-linha"><span>🎁 Recompensa de hoje</span><b>' + (feita ? c.recompensa.texto : '??? surpresa') + '</b></div>';
+        html += '<div class="cal-card"><div class="cal-linha"><span>🎁 Recompensa de hoje</span><b>' + (!feita ? '??? surpresa' : (pendente ? 'PRONTA PARA RESGATE' : (creditada ? 'RECEBIDA' : c.recompensa.texto))) + '</b></div>';
+        if (!feita) {
+            html += '<div class="cal-pequeno">Conclua a missão para revelar e resgatar.</div>';
+        } else {
+            if (detalhes.length) {
+                html += '<div class="cal-detalhes">';
+                detalhes.forEach(d => { html += '<div class="cal-detalhe"><span>' + d.icone + '</span><span>' + d.texto + '</span></div>'; });
+                html += '</div>';
+            }
+            if (pendente) {
+                html += '<div class="cal-linha" style="margin-top:9px"><span>Você receberá tudo acima</span><button class="cal-btn cal-receber" onclick="window.calendarioResgatarRecompensa()">RECEBER</button></div>';
+            } else if (creditada) {
+                html += '<div class="cal-pequeno">✅ Recebida' + (c.resgatadaEm ? ' hoje' : '') + ' · ' + c.recompensa.texto + '</div>';
+            }
+        }
         html += '<div class="cal-linha"><span>📆 Missões concluídas</span><b>' + (c.diarias || 0) + ' / ' + DIAS_PARA_BAU + '</b></div>';
         html += '<div class="cal-barra"><i style="width:' + Math.round(((c.diarias || 0) / DIAS_PARA_BAU) * 100) + '%"></i></div></div>';
 
@@ -581,9 +739,22 @@
     // ─────────────────────────────────────────────────────────────
     // BOTÃO NA ALDEIA + SELO DE VERSÃO NO PERFIL
     // ─────────────────────────────────────────────────────────────
+    function atualizarIndicador() {
+        const b = document.querySelector('#btnCalendarioV206');
+        if (!b) return;
+        const pendente = temRecompensaParaResgatar();
+        b.classList.toggle('pendente', pendente);
+        const titulo = pendente ? 'Recompensa diária para resgatar — clique no calendário' : 'Calendário de Anhangá';
+        b.title = titulo;
+        b.setAttribute('aria-label', titulo);
+    }
+    window.calendarioAtualizarIndicador = atualizarIndicador;
+
     function injetarBotao() {
         injetarCSS();
-        if (document.getElementById('btnCalendarioV206')) return;
+        const jaExiste = !!document.getElementById('btnCalendarioV206');
+        atualizarIndicador();
+        if (jaExiste) return;
         const hosts = ['.modern-ald-header', '.aldeia-top-bar', '#aldeiaVisualWrap'];
         let host = null;
         for (const sel of hosts) {
@@ -598,6 +769,7 @@
         b.setAttribute('aria-label', 'Calendário de Anhangá');
         b.onclick = abrirPainel;
         host.appendChild(b);
+        atualizarIndicador();
     }
 
     function injetarVersaoPerfil() {
@@ -639,7 +811,7 @@
     injetarCSS();
     instalarHooksUI();
     document.addEventListener('DOMContentLoaded', () => setTimeout(garantirUI, 200));
-    setTimeout(() => { try { garantirMissaoDoDia(); } catch (e) {} garantirUI(); }, 120);
+    setTimeout(() => { try { garantirMissaoDoDia(); } catch (e) {} garantirUI(); atualizarIndicador(); }, 120);
 
     // A aldeia troca window.renderAldeiaScreen durante o init dela (que espera
     // SPRITES_STORY). Reinstalamos o hook e reinserimos o botão caso isso ocorra.
