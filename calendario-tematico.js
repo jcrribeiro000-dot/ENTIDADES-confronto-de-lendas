@@ -404,9 +404,8 @@
     // ─────────────────────────────────────────────────────────────
     const CSS = `
     <style id="calendarioV206CSS">
-      #btnCalendarioV206{display:inline-flex;align-items:center;gap:6px;padding:7px 11px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:linear-gradient(135deg,#2b2350,#3b2c6e);color:#fff;font-weight:800;font-size:12px;cursor:pointer;box-shadow:0 3px 12px rgba(0,0,0,.35)}
+      #btnCalendarioV206{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;flex:0 0 auto;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:linear-gradient(135deg,#2b2350,#3b2c6e);color:#fff;font-size:14px;line-height:1;cursor:pointer;box-shadow:0 3px 12px rgba(0,0,0,.35)}
       #btnCalendarioV206:hover{filter:brightness(1.15)}
-      #btnCalendarioV206 .cal-badge{background:#e53935;color:#fff;border-radius:99px;padding:0 5px;font-size:10px;margin-left:2px}
       .cal-overlay{position:fixed;inset:0;z-index:60000;display:none;align-items:center;justify-content:center;padding:14px;background:rgba(3,4,10,.82)}
       .cal-overlay.active{display:flex}
       .cal-panel{width:min(560px,96vw);max-height:92vh;overflow:auto;border-radius:20px;border:1px solid rgba(255,255,255,.16);box-shadow:0 20px 70px rgba(0,0,0,.7);color:#fff;padding:16px;position:relative}
@@ -594,7 +593,9 @@
         if (!host) return;
         const b = document.createElement('button');
         b.id = 'btnCalendarioV206';
-        b.innerHTML = '📅 Calendário<span class="cal-badge">' + VERSAO + '</span>';
+        b.innerHTML = '📅';
+        b.title = 'Calendário de Anhangá';
+        b.setAttribute('aria-label', 'Calendário de Anhangá');
         b.onclick = abrirPainel;
         host.appendChild(b);
     }
@@ -602,7 +603,7 @@
     function injetarVersaoPerfil() {
         injetarCSS();
         document.querySelectorAll('.perfil-versao-v206').forEach(el => el.remove());
-        const alvos = ['.profile-name', '.modern-profile-name', '.profile-leader-title'];
+        const alvos = ['#storyScreen .profile-name', '#storyScreen .profile-leader-title'];
         for (const sel of alvos) {
             const el = document.querySelector(sel);
             if (!el) continue;
