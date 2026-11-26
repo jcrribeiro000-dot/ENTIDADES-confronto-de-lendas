@@ -855,7 +855,42 @@
 
         if (!Array.isArray(STORY_PROGRESS.titlesOwned))   STORY_PROGRESS.titlesOwned = [];
         if (typeof STORY_PROGRESS.activeTitle === 'undefined') STORY_PROGRESS.activeTitle = null;
+
+        _migrarResgate();
     }
+
+    // ─────────────────────────────────────────────────────────────
+    // [V200] RESGATE MANUAL
+    // -----------------------------------------------------------------
+    // Antes do V200 toda conquista creditava ouro/XP/itens no unlock.
+    // Esses saves antigos JA receberam a recompensa: marca-se como
+    // resgatada uma única vez para não pagar de novo. Só desbloqueios
+    // novos ficam com claimedAt = null (pendente de clique no painel).
+    // ─────────────────────────────────────────────────────────────
+    function _migrarResgate() {
+        if (typeof STORY_PROGRESS === 'undefined' || !STORY_PROGRESS) return;
+        if (!STORY_PROGRESS.achievements || typeof STORY_PROGRESS.achievements !== 'object') return;
+        if (STORY_PROGRESS.achievementClaimVersion === 2) return;
+
+        for (const id in STORY_PROGRESS.achievements) {
+            const entry = STORY_PROGRESS.achievements[id];
+            if (!entry || typeof entry !== 'object') continue;
+            if (!('claimedAt' in entry)) entry.claimedAt = entry.unlockedAt || Date.now();
+        }
+        STORY_PROGRESS.achievementClaimVersion = 2;
+    }
+
+    function isClaimed(id) {
+        const e = STORY_PROGRESS?.achievements?.[id];
+        return !!(e && e.claimedAt);
+    }
+    function isClaimPending(id) {
+        return isUnlocked(id) && !isClaimed(id);
+    }
+    window.isAchievementClaimed = isClaimed;
+    window.isAchievementClaimPending = isClaimPending;
+    // Garante estrutura/migração antes de qualquer render da tela.
+    window._conquistasMigrar = function() { _garantirEstrutura(); };
 
     // ─────────────────────────────────────────────────────────────
     // UNLOCK
@@ -895,18 +930,9 @@
         const a = _achLista().find(x => x.id === id);
         if (!a) return false;
 
-        STORY_PROGRESS.achievements[id] = { unlockedAt: Date.now() };
-        _darRecompensas(a.recompensa);
-
-        // Desbloqueia título se houver
-        for (const tid in TITULOS) {
-            if (TITULOS[tid].conquista === id) {
-                if (!STORY_PROGRESS.titlesOwned.includes(tid)) {
-                    STORY_PROGRESS.titlesOwned.push(tid);
-                    if (!STORY_PROGRESS.activeTitle) STORY_PROGRESS.activeTitle = tid;
-                }
-            }
-        }
+        // [V200] Só registra o desbloqueio. Recompensa e título ficam
+        // pendentes até o jogador clicar em RESGATAR no painel.
+        STORY_PROGRESS.achievements[id] = { unlockedAt: Date.now(), claimedAt: null };
 
         // Toast + som
         if (!opts.silent) {
@@ -918,7 +944,7 @@
                     ? window._conquistasIconHTML('trophy')
                     : '🏆';
                 if (typeof showToast === 'function') {
-                    showToast(`🏆 CONQUISTA! ${a.secreta && !isUnlocked(id) ? '' : ''}`, a.nome, icone);
+                    showToast('🏆 CONQUISTA!', a.nome + ' — resgate no painel', icone);
                 }
                 // Toast extra pra lendário (mensagem mais chamativa)
                 if (a.raridade === 'lendario' && typeof showToast === 'function') {
@@ -935,6 +961,54 @@
         return true;
     }
     window.unlockAchievement = unlockAchievement;
+
+    // Entrega efetiva: chamada SOMENTE pelo resgate manual.
+    function _entregarRecompensa(a) {
+        if (!a) return;
+        _darRecompensas(a.recompensa);
+
+        // Título cosmético acompanha o resgate da conquista.
+        if (!TITULOS) return;
+        for (const tid in TITULOS) {
+            if (TITULOS[tid].conquista === a.id) {
+                if (!STORY_PROGRESS.titlesOwned.includes(tid)) {
+                    STORY_PROGRESS.titlesOwned.push(tid);
+                    if (!STORY_PROGRESS.activeTitle) STORY_PROGRESS.activeTitle = tid;
+                }
+            }
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // [V200] RESGATAR — crédito uma única vez, disparado pelo botão
+    // do próprio card de conquista.
+    // ─────────────────────────────────────────────────────────────
+    function resgatarConquista(id) {
+        _garantirEstrutura();
+        const a = _achLista().find(x => x.id === id);
+        const entry = STORY_PROGRESS?.achievements?.[id];
+        if (!a || !entry || entry.claimedAt) return false;
+
+        _entregarRecompensa(a);
+        entry.claimedAt = Date.now();
+
+        try {
+            if (typeof saveStoryProgress === 'function') saveStoryProgress();
+        } catch(e) {}
+
+        try {
+            if (typeof showToast === 'function') showToast('🎁 RESGATADO', a.nome, '🎁');
+            if (typeof playSfx === 'function') playSfx(SONS?.[a.raridade] || 'win');
+        } catch(e) {}
+
+        // Redesenha a mesma tela: o botão vira "RESGATADO" na hora.
+        try {
+            if (typeof window.renderConquistasScreen === 'function') window.renderConquistasScreen();
+        } catch(e) {}
+
+        return true;
+    }
+    window.resgatarConquista = resgatarConquista;
 
     // ─────────────────────────────────────────────────────────────
     // CHECK (itera as 70)
@@ -1515,6 +1589,16 @@
         return { desbloqueadas, total: ACH.length };
     };
 
+    // [V200] Quantas recompensas estão esperando clique no painel.
+    window.contarResgatesPendentes = function() {
+        const ACH = window.ACHIEVEMENTS || [];
+        let n = 0;
+        for (const a of ACH) {
+            if (window.isAchievementClaimPending && window.isAchievementClaimPending(a.id)) n++;
+        }
+        return n;
+    };
+
     // ─────────────────────────────────────────────────────────────
     // Helpers de recompensa
     // ─────────────────────────────────────────────────────────────
@@ -1543,6 +1627,8 @@
     // ─────────────────────────────────────────────────────────────
     function _renderCard(a) {
         const unlocked = window.isAchievementUnlocked && window.isAchievementUnlocked(a.id);
+        const pendente = unlocked && typeof window.isAchievementClaimPending === 'function'
+            && window.isAchievementClaimPending(a.id);
         const meta = (window.CONQUISTAS_CATEGORIAS || {})[a.categoria] || {};
         const cor = meta.cor || '#c9a227';
         const ehSecreta = a.secreta === true;
@@ -1586,8 +1672,19 @@
             }
         }
 
+        // [V200] Resgate manual no próprio card.
+        let claimHTML = '';
+        if (pendente) {
+            claimHTML = `
+                <div class="conq-claim-row">
+                    <button class="conq-claim-btn" onclick="window.resgatarConquista('${a.id}')">🎁 RESGATAR</button>
+                </div>`;
+        } else if (unlocked) {
+            claimHTML = `<div class="conq-claim-row"><span class="conq-claim-done">✅ RESGATADO</span></div>`;
+        }
+
         return `
-            <div class="conq-card conq-card-${a.raridade} ${unlocked ? 'conq-unlocked' : 'conq-locked'}" style="--conq-cor:${cor};">
+            <div class="conq-card conq-card-${a.raridade} ${unlocked ? 'conq-unlocked' : 'conq-locked'} ${pendente ? 'conq-pendente' : ''}" style="--conq-cor:${cor};">
                 ${seloHTML}
                 <div class="conq-card-header">
                     <span class="conq-icon">${window._conquistasIconHTML(meta.emojiKey || 'trophy', 'large')}</span>
@@ -1599,6 +1696,7 @@
                 <div class="conq-desc">${desc}</div>
                 ${progHTML}
                 ${_renderRecompensa(a)}
+                ${claimHTML}
                 <div class="conq-footer">
                     <span class="conq-raridade ${rarClass}">${rarLabel}</span>
                     ${dataHTML}
@@ -1613,8 +1711,12 @@
         const screen = document.getElementById('storyScreen');
         if (!screen) return;
 
+        // Garante a migração única mesmo se a tela abrir antes do engine.
+        if (typeof window._conquistasMigrar === 'function') window._conquistasMigrar();
+
         const ACH = window.ACHIEVEMENTS || [];
         const { desbloqueadas, total } = window.contarConquistas();
+        const pendentes = window.contarResgatesPendentes();
 
         // Filtros
         const filtroCat = window._conquistasFiltro || 'todos';
@@ -1625,12 +1727,16 @@
         if (filtroCat !== 'todos') lista = lista.filter(a => a.categoria === filtroCat);
         if (filtroStatus === 'desbloqueadas') lista = lista.filter(a => window.isAchievementUnlocked(a.id));
         if (filtroStatus === 'bloqueadas') lista = lista.filter(a => !window.isAchievementUnlocked(a.id));
+        if (filtroStatus === 'pendentes') lista = lista.filter(a => window.isAchievementClaimPending?.(a.id));
 
-        // Ordena: desbloqueadas primeiro, depois raridade (lendário, raro, comum), depois nome
+        // Ordena: pendentes de resgate, depois desbloqueadas, depois bloqueadas;
+        // dentro de cada grupo, raridade (lendário, raro, comum) e nome.
         const rarPeso = { lendario: 3, raro: 2, comum: 1 };
+        const ordem = x => window.isAchievementClaimPending?.(x.id)
+            ? -1 : (window.isAchievementUnlocked(x.id) ? 0 : 1);
         lista.sort((a, b) => {
-            const ua = window.isAchievementUnlocked(a.id) ? 0 : 1;
-            const ub = window.isAchievementUnlocked(b.id) ? 0 : 1;
+            const ua = ordem(a);
+            const ub = ordem(b);
             if (ua !== ub) return ua - ub;
             const pa = rarPeso[a.raridade] || 0;
             const pb = rarPeso[b.raridade] || 0;
@@ -1660,6 +1766,7 @@
         // Filtros HTML — status
         const statusFiltrosHTML = [
             ['todas', 'Todas'],
+            ['pendentes', 'Para resgatar'],
             ['desbloqueadas', 'Desbloqueadas'],
             ['bloqueadas', 'Bloqueadas'],
         ].map(([id, label]) =>
@@ -1671,7 +1778,7 @@
             <div class="story-container">
                 <div class="story-header">
                     <h1 class="story-title">🏆 CONQUISTAS</h1>
-                    <p class="story-subtitle">${desbloqueadas} de ${total} conquistas desbloqueadas</p>
+                    <p class="story-subtitle">${desbloqueadas} de ${total} conquistas desbloqueadas${pendentes > 0 ? ` · <span class="conq-pendente-contador">🎁 ${pendentes} para resgatar</span>` : ''}</p>
                     <div class="conq-counter-bar">
                         <div class="conq-counter-fill" style="width:${total > 0 ? (desbloqueadas/total*100) : 0}%;"></div>
                     </div>
@@ -1945,6 +2052,48 @@
             .conq-rw-icon {
                 display: inline-flex;
                 align-items: center;
+            }
+
+            /* ─── Resgate manual [V200] ─── */
+            .conq-pendente {
+                border-color: #e8b923;
+                box-shadow: 0 0 14px rgba(232,185,35,0.28);
+            }
+            .conq-claim-row {
+                display: flex;
+                justify-content: center;
+            }
+            .conq-claim-btn {
+                width: 100%;
+                padding: 8px 10px;
+                background: linear-gradient(180deg, rgba(232,185,35,0.28), transparent 45%),
+                            linear-gradient(135deg, #8a6a2e, #4a3418);
+                color: #fff5dc;
+                border: 2px solid #e8b923;
+                border-radius: 4px;
+                font-family: 'Cinzel', serif;
+                font-weight: 700;
+                font-size: 0.78rem;
+                letter-spacing: 1.2px;
+                cursor: pointer;
+                transition: all 0.15s;
+            }
+            .conq-claim-btn:hover {
+                color: #fff;
+                border-color: #ffe07a;
+                box-shadow: 0 0 14px rgba(232,185,35,0.45);
+                transform: translateY(-1px);
+            }
+            .conq-claim-done {
+                font-family: 'Cinzel', serif;
+                color: #8ac070;
+                font-size: 0.72rem;
+                font-weight: 700;
+                letter-spacing: 1px;
+            }
+            .conq-pendente-contador {
+                color: #e8b923;
+                font-weight: 700;
             }
 
             /* Footer */
