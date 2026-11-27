@@ -16183,7 +16183,8 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
 
     // 2. MONITOR CONTÍNUO DE HP (Bypassa o problema do applyDmg)
     setInterval(() => {
-        if (!window._storyMode && !window._eventoAtivo) return;
+        // ⭐ V10.55: raid também entra (o guard _corruptedTriggered evita duplicar).
+        if (!window._storyMode && !window._eventoAtivo && !window._raidMode) return;
         if (!boss || boss.dead) return;
         if (boss._corruptedTriggered) return;
 
@@ -16335,15 +16336,29 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
     window._bossPushAvailable = false;
     window._turnoRetidoAguardandoPurificacao = false;
 
+    function _raidAtivo() {
+        return !!window._raidMode;
+    }
+
     function _escapeAtivo() {
-        if (window._coopMode || window._pvpMode) return false;
+        if (window._pvpMode) return false;
         if (typeof tutorialMode !== 'undefined' && tutorialMode) return false;
+        // ⭐ V10.55: a raid também usa o escape da corrupção (antes só ato/evento).
+        // Coop puro continua fora (turno compartilhado); raid roda sobre o coop,
+        // mas precisa da purificação gratuita por clique no tile corrompido.
+        if (_raidAtivo()) return true;
+        if (window._coopMode) return false;
         return !!(window._storyMode || window._eventoAtivo);
     }
 
     function _heroiDaVez() {
         if (typeof players === 'undefined' || !Array.isArray(players) || players.length === 0) return null;
-        const i = (typeof currentPlayerIdx !== 'undefined') ? currentPlayerIdx : -1;
+        let i = (typeof currentPlayerIdx !== 'undefined') ? currentPlayerIdx : -1;
+        // ⭐ V10.55: no coop/raid o índice é publicado em window; o let global
+        // do entidades.js pode ficar em -1 (turno do boss).
+        if ((i < 0 || i >= players.length) && typeof window.currentPlayerIdx === 'number') {
+            i = window.currentPlayerIdx;
+        }
         if (i < 0 || i >= players.length) return null;
         const p = players[i];
         if (!p || p.dead) return null;
@@ -16699,12 +16714,21 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
                 _atualizarPromptPurificacao('forced');
                 _esconderAnelBoss();
             }
+        } else if (_raidAtivo()) {
+            // ⭐ V10.55: na raid (coop) não travamos o turno, mas o jogador
+            // precisa ver/purificar os tiles corrompidos normalmente.
+            window._purifyMode = 'forced';
+            window._purifyEligibleTiles = window._corruptedTiles.slice();
+            _aplicarClassesPurificacao(window._purifyEligibleTiles);
+            _atualizarPromptPurificacao('forced');
+            _esconderAnelBoss();
         }
     };
 
     // 1. MONITOR DE VIDA (Só checa o HP)
     setInterval(() => {
-        if (!window._storyMode && !window._eventoAtivo) return;
+        // ⭐ V10.55: a raid também corrompe o tabuleiro em 50% de HP.
+        if (!window._storyMode && !window._eventoAtivo && !_raidAtivo()) return;
         if (!boss || boss.dead) return;
 
         const enemyId = (typeof storyEnemiesRemaining !== 'undefined' && storyEnemiesRemaining.length > 0) 
@@ -16773,12 +16797,19 @@ console.log('✅ [V22.0-P2] Lógica de falas carregada.');
 
                 // 4.2 — Purificação gratuita (forçada ou de resgate)
                 //        Recalcula na hora se o clique veio antes do próximo tick.
-                if (pSel && Array.isArray(window._corruptedTiles) && window._corruptedTiles.includes(idx)
-                    && !(Array.isArray(window._purifyEligibleTiles) && window._purifyEligibleTiles.includes(idx))) {
-                    _recalcularPurificacao(pSel);
-                }
-                if (pSel && Array.isArray(window._purifyEligibleTiles) && window._purifyEligibleTiles.includes(idx)) {
-                    if (_purificarTile(idx, pSel)) return;
+                //        ⭐ V10.55: na raid não há pending (coop), mas o clique
+                //        continua purificando de graça como nos atos/eventos.
+                if (pSel && Array.isArray(window._corruptedTiles) && window._corruptedTiles.includes(idx)) {
+                    if (!_raidAtivo()
+                        && !(Array.isArray(window._purifyEligibleTiles) && window._purifyEligibleTiles.includes(idx))) {
+                        _recalcularPurificacao(pSel);
+                    }
+                    if (_raidAtivo() && !(Array.isArray(window._purifyEligibleTiles) && window._purifyEligibleTiles.includes(idx))) {
+                        window._purifyEligibleTiles = window._corruptedTiles.slice();
+                    }
+                    if (Array.isArray(window._purifyEligibleTiles) && window._purifyEligibleTiles.includes(idx)) {
+                        if (_purificarTile(idx, pSel)) return;
+                    }
                 }
 
                 // 4.3 — Corrupção pendente: não deixa mover antes de purificar
